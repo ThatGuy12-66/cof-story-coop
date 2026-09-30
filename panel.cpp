@@ -712,6 +712,42 @@ void Panel::drawTexturedRect( int x0, int y0, int x1, int y1 )
 	surfaceBase->drawTexturedRect( x0, y0, x1, y1 );
 }
 
+int *vgui::CofPanelAccess::screenOrigin( Panel *panel )
+{
+	return panel->screenOrigin;
+}
+
+int *vgui::CofPanelAccess::clipRect( Panel *panel )
+{
+	return panel->clipRect;
+}
+
+const int *vgui::CofPanelAccess::size( Panel *panel )
+{
+	return panel->size;
+}
+
+vgui::Panel *vgui::CofPanelAccess::parent( Panel *panel )
+{
+	return panel->parent;
+}
+
+static vgui::PanelSolveFn g_panelSolveHook = nullptr;
+
+void vgui::Panel_SetSolveHook( PanelSolveFn fn )
+{
+	g_panelSolveHook = fn;
+}
+
+static vgui::PanelPaintFilterFn g_panelSkipTraverse = nullptr;
+static vgui::PanelPaintFilterFn g_panelSkipBackground = nullptr;
+
+void vgui::Panel_SetPaintFilters( PanelPaintFilterFn skipTraverse, PanelPaintFilterFn skipBackground )
+{
+	g_panelSkipTraverse = skipTraverse;
+	g_panelSkipBackground = skipBackground;
+}
+
 void Panel::solve()
 {
 	screenOrigin[0] = origin[0];
@@ -741,10 +777,18 @@ void Panel::solve()
 		clipRect[2] = Q_min( clipRect[2], parent->clipRect[2] );
 		clipRect[3] = Q_min( clipRect[3], parent->clipRect[3] );
 	}
+
+	// Cry of Fear in-game UI scaling, see Panel_SetSolveHook()
+	if( g_panelSolveHook )
+		g_panelSolveHook( this );
 }
 
 void Panel::paintTraverse( bool repaint )
 {
+	// Cry of Fear (cof_panel_transparent), see Panel_SetPaintFilters()
+	if( visible && g_panelSkipTraverse && g_panelSkipTraverse( this ))
+		return;
+
 	if( visible )
 	{
 		if( pendingRepaint )
@@ -797,6 +841,10 @@ void Panel::paintTraverse( bool repaint )
 void Panel::paintBackground()
 {
 	int r, g, b, a, w, h;
+
+	// Cry of Fear (cof_panel_transparent), see Panel_SetPaintFilters()
+	if( g_panelSkipBackground && g_panelSkipBackground( this ))
+		return;
 
 	getPaintSize( w, h );
 	getBgColor( r, g, b, a );

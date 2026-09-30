@@ -34,6 +34,14 @@ void Scissor::setRect( int x0, int y0, int x1, int y1 )
 	rect[3] = Q_max( y0, y1 );
 }
 
+void Scissor::getRect( int *out ) const
+{
+	out[0] = rect[0];
+	out[1] = rect[1];
+	out[2] = rect[2];
+	out[3] = rect[3];
+}
+
 bool Scissor::clip( const vpoint_t &topLeft, const vpoint_t &bottomRight, vpoint_t &clippedTopLeft, vpoint_t &clippedBottomRight ) const
 {
 	if( !enabled )

@@ -8,6 +8,7 @@
 using namespace vgui;
 
 static int staticFontId = 100;
+static vgui::TextSubstituteFn g_textSubstituteHook = nullptr;
 static Dar<vgui::BaseFontPlat*> staticFontPlatDar;
 
 // a debugging font, just draws boxes with character number inside
@@ -152,6 +153,47 @@ private:
 	int tall, scale, wide;
 };
 
+static vgui::FontSubstituteFn g_fontSubstituteHook = nullptr;
+static vgui::FontCreatedFn g_fontCreatedHook = nullptr;
+
+int vgui::Font_AllocId( void )
+{
+	return staticFontId++;
+}
+
+void vgui::Font_SetSubstituteHook( FontSubstituteFn fn )
+{
+	g_fontSubstituteHook = fn;
+}
+
+void vgui::Font_SetCreatedHook( FontCreatedFn fn )
+{
+	g_fontCreatedHook = fn;
+}
+
+void vgui::Text_SetSubstituteHook( TextSubstituteFn fn )
+{
+	g_textSubstituteHook = fn;
+}
+
+const char *vgui::Text_Substitute( const char *str )
+{
+	if( !str || !g_textSubstituteHook )
+		return str;
+
+	const char *sub = g_textSubstituteHook( str );
+
+	return sub ? sub : str;
+}
+
+vgui::Font *vgui::Font_Active( Font *font )
+{
+	if( !font || !g_fontSubstituteHook )
+		return font;
+
+	return g_fontSubstituteHook( font );
+}
+
 void vgui::Font_Reset( void )
 {
 	staticFontPlatDar.setCount( 0 );
@@ -207,6 +249,12 @@ void Font::init( const char *newName, void *pFileData, int fileDataLen, int tall
 			id = staticFontId++;
 		}
 	}
+
+	// Cry of Fear engine-rasterised VGUI fonts: a font built from file data is
+	// one of the game's bitmap strips, and the engine has just latched which
+	// scheme that strip belonged to
+	if( g_fontCreatedHook )
+		g_fontCreatedHook( this, pFileData != nullptr );
 }
 
 void Font::getCharRGBA( int ch, int rgbaX, int rgbaY, int rgbaWide, int rgbaTall, unsigned char *rgba )
@@ -227,7 +275,11 @@ void Font::getTextSize( const char *str, int &wide, int &tall )
 	if( !str )
 		return;
 
-	tall = getTall();
+	// the engine may have substituted a font of its own for this one; every
+	// metric below has to come from whichever is really going to be drawn
+	Font *active = Font_Active( this );
+
+	tall = active->getTall();
 
 	for( int i = 0, xx = 0;; i++ )
 	{
@@ -238,12 +290,16 @@ void Font::getTextSize( const char *str, int &wide, int &tall )
 
 		if( ch == '\n' )
 		{
-			tall += getTall();
+			tall += active->getTall();
 			xx = 0;
 		}
 
 		int a, b, c;
-		getCharABCwide( ch, a, b, c );
+		// the cast is load bearing: a plain char sign-extends 0x80..0xFF to a
+		// negative int, and a font whose getCharABCwide() indexes a 256-entry
+		// table without masking would then read outside it. Harmless only as
+		// long as every font masks, which an engine-supplied one need not
+		active->getCharABCwide( (unsigned char)ch, a, b, c );
 		xx += a + b + c;
 
 		if( xx > wide )

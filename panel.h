@@ -23,11 +23,24 @@ class FocusChangeSignal;
 class LayoutInfo;
 class FocusNavGroup;
 
+// Cry of Fear in-game UI scaling (milestone 4): the anchor pass in the platform
+// layer works on solved coordinates directly. Panel's size is ABI-fixed - the
+// game library allocates its own subclasses - so the class carries no state of
+// its own for this and the pass reaches the solved members through here.
+struct CofPanelAccess
+{
+	static int *screenOrigin( Panel *panel );
+	static int *clipRect( Panel *panel );
+	static const int *size( Panel *panel );
+	static Panel *parent( Panel *panel );
+};
+
 class CLASSEXPORT Panel
 {
 	friend class App;
 	friend class Image;
 	friend class SurfaceBase;
+	friend struct CofPanelAccess;
 public:
 	Panel( int x, int y, int w, int h );
 	Panel();
@@ -203,6 +216,26 @@ private:
 	bool paintEnabled;
 };
 CHECK_STRUCT_SIZE( Panel, 188, 264, 264 );
+
+// Cry of Fear in-game UI scaling (milestone 4). The platform layer may install
+// a hook that runs at the end of Panel::solve(), after screenOrigin and
+// clipRect have been computed and before any child is solved, and may move the
+// panel so it stays anchored to the screen edge it was laid out against.
+// Because solve() is the single place absolute coordinates are produced, and
+// both painting (getAbsExtents) and hit testing (screenToLocal) read them, the
+// drawn position and the mouse target can never disagree.
+// Panel's size is ABI-fixed, so the hook works on the public members directly
+// instead of the class carrying any new state.
+typedef void ( *PanelSolveFn )( Panel *panel );
+void Panel_SetSolveHook( PanelSolveFn fn );
+
+// Cry of Fear (cof_panel_transparent): the platform layer may skip painting a
+// visible panel's whole subtree (skipTraverse, checked at the top of
+// paintTraverse) or only its background fill (skipBackground, checked in
+// Panel::paintBackground). Both return true to skip. The panel stays visible,
+// laid out and hit-testable; only its pixels are left out.
+typedef bool ( *PanelPaintFilterFn )( Panel *panel );
+void Panel_SetPaintFilters( PanelPaintFilterFn skipTraverse, PanelPaintFilterFn skipBackground );
 
 class CLASSEXPORT FocusNavGroup
 {

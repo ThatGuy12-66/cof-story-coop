@@ -107,6 +107,14 @@ private:
 };
 CHECK_STRUCT_SIZE( BitmapTGA, 48, 64, 64 );
 
+// Cry of Fear (cof_panel_transparent): the platform layer may watch every
+// BitmapTGA being built and adjust the colour a Bitmap is drawn with. The
+// class sizes are ABI-fixed (the game library allocates them), so this is a
+// pair of free hooks, not new members.
+typedef void ( *BitmapCreatedFn )( Bitmap *bitmap );
+typedef void ( *BitmapPaintFn )( Bitmap *bitmap, Panel *panel, int &r, int &g, int &b, int &a );
+void Bitmap_SetHooks( BitmapCreatedFn created, BitmapPaintFn paint );
+
 class CLASSEXPORT TextImage : public Image
 {
 public:

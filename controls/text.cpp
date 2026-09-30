@@ -10,6 +10,14 @@
 
 namespace vgui
 {
+// Cry of Fear on-screen keyboard: see text.h
+static void (*s_cofOskHook)( TextEntry *entry, int event, bool hidden ) = nullptr;
+
+void TextEntry_SetCofOskHook( void (*hook)( TextEntry *entry, int event, bool hidden ))
+{
+	s_cofOskHook = hook;
+}
+
 TextEntry::TextEntry( const char *str, int x, int y, int w, int h ) : Panel( x, y, w, h ),
 	cursorPos( 0 ), hideText( false ), cursorBlinkRate( 400 ), font( nullptr )
 {
@@ -18,11 +26,17 @@ TextEntry::TextEntry( const char *str, int x, int y, int w, int h ) : Panel( x, 
 	resetCursorBlink();
 	setText( str, strlen( str ));
 	addInputSignal( this );
-	addFocusChangeSignal( makeFocusChangeHandler([this]( bool, Panel * )
+	addFocusChangeSignal( makeFocusChangeHandler([this]( bool lost, Panel * )
 	{
 		resetCursorBlink();
 		doSelectNone();
+
+		if( s_cofOskHook )
+			s_cofOskHook( this, lost ? 0 : 1, hideText );
 	}));
+
+	if( s_cofOskHook )
+		s_cofOskHook( this, 3, hideText );
 }
 
 void TextEntry::setText( const char *text, int len )
@@ -196,12 +210,15 @@ void TextEntry::setTextHidden( bool hide )
 {
 	hideText = hide;
 	repaint();
+
+	if( s_cofOskHook )
+		s_cofOskHook( this, 4, hideText );
 }
 
 void TextEntry::paintBackground()
 {
 	Font *f = font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 );
-	int text_h = f->getTall();
+	int text_h = Font_Active( f )->getTall();
 
 	{
 		int x, y;
@@ -295,7 +312,7 @@ bool TextEntry::getSelectedPixelRange( int &x, int &y )
 
 int TextEntry::cursorToPixelSpace( int at )
 {
-	Font *f = font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 );
+	Font *f = Font_Active( font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 ));
 
 	int x = 0;
 	for( int i = 0; i < line.getCount(); i++ )
@@ -306,7 +323,9 @@ int TextEntry::cursorToPixelSpace( int at )
 		int a, b, c;
 		if( hideText )
 			f->getCharABCwide( '*', a, b, c );
-		else f->getCharABCwide( line[i], a, b, c );
+		// cast: see the note in Font::getTextSize(), a signed char would index
+		// a 256-entry width table with a negative number
+		else f->getCharABCwide( (unsigned char)line[i], a, b, c );
 
 		x += a + b + c;
 	}
@@ -341,6 +360,10 @@ void TextEntry::mousePressed( MouseCode, Panel* )
 	resetCursorBlink();
 	requestFocus();
 	repaint();
+
+	// a click on the entry that already has the focus opens the keyboard again
+	if( s_cofOskHook )
+		s_cofOskHook( this, 2, hideText );
 }
 
 void TextEntry::mouseDoublePressed( MouseCode, Panel* )
@@ -544,9 +567,11 @@ void TextGrid::paintBackground()
 	Font *font = getApp()->getScheme()->getFont( Scheme::SF_PRIMARY2 );
 
 	int a, b, c;
-	font->getCharABCwide( 'W', a, b, c );
+	Font *activeFont = Font_Active( font );
+
+	activeFont->getCharABCwide( 'W', a, b, c );
 	int w = a + b + c;
-	int h = font->getTall();
+	int h = activeFont->getTall();
 	drawSetTextFont( Scheme::SF_PRIMARY2 );
 
 	int red, green, blue, alpha;

@@ -252,7 +252,7 @@ int EditPanel::getVisibleLineCount()
 
 	Font *f = font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 );
 
-	return h / f->getTall();
+	return h / Font_Active( f )->getTall();
 }
 
 void EditPanel::setCursorBlink( bool state )
@@ -301,7 +301,8 @@ void EditPanel::paintBackground()
 void EditPanel::paint()
 {
 	Font *f = font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 );
-	int lineHeight = f->getTall();
+	Font *af = Font_Active( f );
+	int lineHeight = af->getTall();
 	int y = 0;
 
 	drawSetTextFont( f );
@@ -322,7 +323,8 @@ void EditPanel::paint()
 			if( line == cursorPos[1] && col == cursorPos[0] )
 				caretX = x;
 
-			f->getCharABCwide( ch, a, b, c );
+			// cast: see the note in Font::getTextSize()
+			af->getCharABCwide( (unsigned char)ch, a, b, c );
 			drawPrintChar( x, y, ch );
 			x += a + b + c;
 		}
@@ -331,7 +333,7 @@ void EditPanel::paint()
 		{
 			int a, b, c;
 
-			f->getCharABCwide( ' ', a, b, c );
+			af->getCharABCwide( ' ', a, b, c );
 			caretX = x + ( cursorPos[0] - lineDar->getCount() ) * ( a + b + c );
 		}
 
@@ -422,7 +424,7 @@ int EditPanel::spatialCharOffsetBetweenTwoLines( Dar<char> *src, Dar<char> *dst,
 	if( !src || !dst )
 		return x;
 
-	Font *f = font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 );
+	Font *f = Font_Active( font ? font : getApp()->getScheme()->getFont( Scheme::SF_PRIMARY1 ));
 
 	int pixelX = 0;
 
@@ -430,7 +432,8 @@ int EditPanel::spatialCharOffsetBetweenTwoLines( Dar<char> *src, Dar<char> *dst,
 	{
 		int a, b, c;
 
-		f->getCharABCwide( (*src)[i], a, b, c );
+		// cast: see the note in Font::getTextSize()
+		f->getCharABCwide( (unsigned char)(*src)[i], a, b, c );
 		pixelX += a + b + c;
 	}
 
@@ -440,7 +443,8 @@ int EditPanel::spatialCharOffsetBetweenTwoLines( Dar<char> *src, Dar<char> *dst,
 	{
 		int a, b, c;
 
-		f->getCharABCwide( (*dst)[col], a, b, c );
+		// cast: see the note in Font::getTextSize()
+		f->getCharABCwide( (unsigned char)(*dst)[col], a, b, c );
 		cur += a + b + c;
 		col++;
 	}

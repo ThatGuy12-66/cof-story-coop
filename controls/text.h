@@ -62,6 +62,12 @@ protected:
 };
 CHECK_STRUCT_SIZE( TextEntry, 244, 344, 336 );
 
+// Cry of Fear on-screen keyboard (platform/xash3d-fwgs/cofosk.cpp): told when
+// a TextEntry is constructed (3), gets (1) or loses (0) the key focus, is
+// clicked (2) or starts or stops hiding its text (4); hidden = it shows
+// asterisks. Not part of the VGUI1 interface.
+void TextEntry_SetCofOskHook( void (*hook)( TextEntry *entry, int event, bool hidden ));
+
 class CLASSEXPORT TextGrid : public Panel
 {
 public:

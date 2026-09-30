@@ -228,6 +228,15 @@ void Image::doPaint(Panel *p)
 	panel = nullptr;
 }
 
+static vgui::BitmapCreatedFn g_bitmapCreatedHook = nullptr;
+static vgui::BitmapPaintFn g_bitmapPaintHook = nullptr;
+
+void vgui::Bitmap_SetHooks( BitmapCreatedFn created, BitmapPaintFn paint )
+{
+	g_bitmapCreatedHook = created;
+	g_bitmapPaintHook = paint;
+}
+
 Bitmap::Bitmap() :
 	id( 0 ),
 	uploaded( false ),
@@ -260,6 +269,10 @@ void Bitmap::paint( Panel *p )
 
 	int r, g, b, a;
 	c.getColor( r, g, b, a );
+
+	// Cry of Fear (cof_panel_transparent), see Bitmap_SetHooks()
+	if( g_bitmapPaintHook )
+		g_bitmapPaintHook( this, p, r, g, b, a );
 
 	drawSetTexture( id );
 	drawSetColor( r, g, b, a );
@@ -298,6 +311,10 @@ void Bitmap::setRGBA(int x, int y, unsigned char r, unsigned char g, unsigned ch
 BitmapTGA::BitmapTGA(InputStream *is, bool invertAlpha)
 {
 	loadTGA( is, invertAlpha );
+
+	// Cry of Fear (cof_panel_transparent), see Bitmap_SetHooks()
+	if( g_bitmapCreatedHook )
+		g_bitmapCreatedHook( this );
 }
 
 bool BitmapTGA::loadTGA( InputStream *is, bool invertAlpha )
@@ -503,13 +520,17 @@ void TextImage::paint( Panel *p )
 	Font *f = getFont();
 	drawSetTextFont( f );
 
-	int x = 0, y = 0, tall = f->getTall();
+	Font *af = Font_Active( f );
+	int x = 0, y = 0, tall = af->getTall();
 	for( int i = 0; ; i++ )
 	{
-		int ch = text[i];
+		// the cast is load bearing: text is char*, so a byte in 0x80..0xFF
+		// would sign-extend to a negative int and index a 256-entry width table
+		// out of bounds in any font that does not mask. See Font::getTextSize()
+		int ch = (unsigned char)text[i];
 
 		int a, b, c;
-		f->getCharABCwide( ch, a, b, c );
+		af->getCharABCwide( ch, a, b, c );
 		int len = a + b + c;
 
 		if( !ch )
@@ -527,9 +548,9 @@ void TextImage::paint( Panel *p )
 
 		if( ch == ' ' )
 		{
-			int ch2 = text[i + 1];
+			int ch2 = (unsigned char)text[i + 1];
 
-			f->getCharABCwide( ' ', a, b, c );
+			af->getCharABCwide( ' ', a, b, c );
 
 			if( ch2 != '\0' && ch2 != '\n' && ch2 != '\r' )
 			{
@@ -547,12 +568,12 @@ void TextImage::paint( Panel *p )
 		int word;
 		for( word = 1; ; word++ )
 		{
-			int ch2 = text[i + word];
+			int ch2 = (unsigned char)text[i + word];
 
 			if( ch2 == '\0' || ch2 == '\n' || ch2 == '\r' || ch2 == ' ' )
 				break;
 
-			f->getCharABCwide( ch2, a, b, c );
+			af->getCharABCwide( ch2, a, b, c );
 			len += a + b + c;
 		}
 
@@ -564,9 +585,9 @@ void TextImage::paint( Panel *p )
 
 		for( int j = 0; j < word; j++ )
 		{
-			ch = text[i + j];
+			ch = (unsigned char)text[i + j];
 
-			f->getCharABCwide( ch, a, b, c );
+			af->getCharABCwide( ch, a, b, c );
 			drawPrintChar( x, y, ch );
 
 			x += a + b + c;
@@ -608,7 +629,7 @@ void TextImage::getTextSize( int &w, int &h )
 	if( f == nullptr )
 		return;
 
-	f->getTextSize( text, w, h );
+	Font_Active( f )->getTextSize( text, w, h );
 }
 
 void TextImage::getTextSizeWrapped( int &wide, int &tall )
@@ -625,14 +646,15 @@ void TextImage::getTextSizeWrapped( int &wide, int &tall )
 	getSize( wrapWide, wrapTall );
 
 	Font *f = getFont();
-	int x = 0, y = 0, lineTall = f->getTall();
+	Font *af = Font_Active( f );
+	int x = 0, y = 0, lineTall = af->getTall();
 
 	for( int i = 0; ; i++ )
 	{
-		int ch = text[i];
+		int ch = (unsigned char)text[i];
 
 		int a, b, c;
-		f->getCharABCwide( ch, a, b, c );
+		af->getCharABCwide( ch, a, b, c );
 		int len = a + b + c;
 
 		if( !ch )
@@ -650,9 +672,9 @@ void TextImage::getTextSizeWrapped( int &wide, int &tall )
 
 		if( ch == ' ' )
 		{
-			int ch2 = text[i + 1];
+			int ch2 = (unsigned char)text[i + 1];
 
-			f->getCharABCwide( ' ', a, b, c );
+			af->getCharABCwide( ' ', a, b, c );
 
 			if( ch2 != '\0' && ch2 != '\n' && ch2 != '\r' )
 			{
@@ -670,12 +692,12 @@ void TextImage::getTextSizeWrapped( int &wide, int &tall )
 		int word;
 		for( word = 1; ; word++ )
 		{
-			int ch2 = text[i + word];
+			int ch2 = (unsigned char)text[i + word];
 
 			if( ch2 == '\0' || ch2 == '\n' || ch2 == '\r' || ch2 == ' ' )
 				break;
 
-			f->getCharABCwide( ch2, a, b, c );
+			af->getCharABCwide( ch2, a, b, c );
 			len += a + b + c;
 		}
 
@@ -687,9 +709,9 @@ void TextImage::getTextSizeWrapped( int &wide, int &tall )
 
 		for( int j = 0; j < word; j++ )
 		{
-			ch = text[i + j];
+			ch = (unsigned char)text[i + j];
 
-			f->getCharABCwide( ch, a, b, c );
+			af->getCharABCwide( ch, a, b, c );
 
 			if( x + a + b + c > wide )
 				wide = x + a + b + c;
@@ -714,6 +736,26 @@ Font *TextImage::getFont()
 
 void TextImage::setText( int len, const char *str )
 {
+	// Cry of Fear language packs (cof_language): every client label and
+	// TextPanel lands here before it is measured or wrapped, so this is where
+	// the pack's table replaces the English caption. Text_Substitute() hands
+	// back `str` itself when there is nothing to replace, so the stock path
+	// is byte for byte unchanged; a replacement may be longer than the
+	// buffer the caller sized for the English text.
+	if( str )
+	{
+		const char *sub = Text_Substitute( str );
+
+		if( sub != str )
+		{
+			int need = (int)strlen( sub ) + 1;
+
+			str = sub;
+			if( len < need )
+				len = need;
+		}
+	}
+
 	if( len > textBufferSize )
 	{
 		delete[] text;
