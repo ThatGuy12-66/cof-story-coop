@@ -31,16 +31,10 @@ static byte *CoF_RetailPlayer( sv_client_t *cl )
 	return SV_CoF_StoryEntityPrivate( cl->edict, COF_RETAIL_PLAYER_NEED );
 }
 
-// Descriptor paths as the game ships them: letters, digits, '_', '-', '.', '/'.
-// Anything else is refused before it reaches a console command or a file path.
+// The same safe-name rule the ledger applies (sv_cof_descriptor.h), plus our buffer size.
 static qboolean CoF_RetailSafeDescriptor( const char *d )
 {
-	const char *c;
-	if( !d || !d[0] || Q_strlen( d ) >= COF_RETAIL_ITEM || Q_strstr( d, ".." )) return false;
-	for( c = d; *c; c++ )
-		if( !(( *c >= 'a' && *c <= 'z' ) || ( *c >= 'A' && *c <= 'Z' ) || ( *c >= '0' && *c <= '9' ) ||
-			*c == '_' || *c == '-' || *c == '.' || *c == '/' )) return false;
-	return true;
+	return CoF_DescriptorSafe( d ) && Q_strlen( d ) < COF_RETAIL_ITEM;
 }
 
 // The descriptor file's classname and nice_name, loaded once per session.

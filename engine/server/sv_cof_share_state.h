@@ -16,14 +16,19 @@
 #define COF_SHARE_NAME 64
 #define COF_SHARE_EVENTS 16
 #define COF_SHARE_CONFIRM 1.0 // an issued give or take shows in the inventory within this
-#define COF_SHARE_RETRY 5.0 // then it waits this long before trying again
+#define COF_SHARE_RETRY 5.0 // then that item waits this long; other items go on
+#define COF_SHARE_BACKOFF 8 // items one player can have waiting at once
 
 enum { COF_SHARE_NONE, COF_SHARE_GIVE, COF_SHARE_TAKE, COF_SHARE_ROOM };
-enum { COF_SHARE_CMD_OTHER, COF_SHARE_CMD_DROP };
-enum { COF_SHARE_FOUND, COF_SHARE_USED, COF_SHARE_DROPPED, COF_SHARE_DELIVERED, COF_SHARE_REMOVED };
+enum { COF_SHARE_CMD_OTHER, COF_SHARE_CMD_DROP, COF_SHARE_CMD_COMBINE };
+enum { COF_SHARE_FOUND, COF_SHARE_USED, COF_SHARE_DROPPED, COF_SHARE_DELIVERED, COF_SHARE_REMOVED, COF_SHARE_COMBINED, COF_SHARE_STALLED };
+// What a loss outside a respawn means: used up for everyone, dropped by this
+// player, or combined into this player's own weapon (the item stays shared).
+enum { COF_SHARE_LOSS_USED, COF_SHARE_LOSS_DROPPED, COF_SHARE_LOSS_PERSONAL };
 
 typedef struct { char name[COF_SHARE_NAME]; int finder; } cof_share_item_t;
 typedef struct { int count; cof_share_item_t items[COF_SHARE_ITEMS]; } cof_share_set_t;
+typedef struct { char name[COF_SHARE_NAME]; double until; } cof_share_backoff_t;
 
 typedef struct
 {
@@ -34,7 +39,9 @@ typedef struct
 	cof_share_set_t room_told; // already told to make room for these
 	int pending; // COF_SHARE_GIVE or COF_SHARE_TAKE awaiting the inventory
 	char pending_name[COF_SHARE_NAME];
-	double pending_until, retry_after;
+	double pending_until;
+	cof_share_backoff_t backoff[COF_SHARE_BACKOFF]; // items whose give/take never showed
+	cof_share_set_t stalled; // reported once until they go through
 } cof_share_player_t;
 
 typedef struct { int kind, slot, userid; char name[COF_SHARE_NAME]; } cof_share_event_t;
@@ -127,8 +134,8 @@ static void CoF_ShareUsed( cof_share_state_t *s, int slot, const char *name )
 
 // One player's inventory changed from p->held to held. ignore_losses: the
 // player is dead or was just respawned (the Spawn wipe is not a use).
-// dropping: the change came from an inventorydrop command.
-static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_SLOTS][COF_SHARE_NAME], int ignore_losses, int dropping )
+// loss: what the other losses mean (COF_SHARE_LOSS_*).
+static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_SLOTS][COF_SHARE_NAME], int ignore_losses, int loss )
 {
 	cof_share_player_t *p = &s->players[slot];
 	int i, j, kept;
@@ -141,13 +148,14 @@ static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_
 		if( p->pending == COF_SHARE_TAKE && !strcmp( p->pending_name, name ))
 		{
 			p->pending = COF_SHARE_NONE;
+			CoF_ShareSetRemove( &p->stalled, name );
 			CoF_ShareEvent( s, COF_SHARE_REMOVED, slot, name );
 		}
 		else if( ignore_losses ) continue;
-		else if( dropping )
+		else if( loss != COF_SHARE_LOSS_USED )
 		{
 			CoF_ShareSetAdd( &p->set_down, name, 0 );
-			CoF_ShareEvent( s, COF_SHARE_DROPPED, slot, name );
+			CoF_ShareEvent( s, loss == COF_SHARE_LOSS_DROPPED ? COF_SHARE_DROPPED : COF_SHARE_COMBINED, slot, name );
 		}
 		else CoF_ShareUsed( s, slot, name );
 	}
@@ -158,6 +166,7 @@ static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_
 		if( p->pending == COF_SHARE_GIVE && !strcmp( p->pending_name, name ))
 		{
 			p->pending = COF_SHARE_NONE;
+			CoF_ShareSetRemove( &p->stalled, name );
 			CoF_ShareEvent( s, COF_SHARE_DELIVERED, slot, name );
 			continue; // a late delivery must not bring back an item used up meanwhile
 		}
@@ -186,11 +195,11 @@ static void CoF_ShareObserve( cof_share_state_t *s, int slot, int userid, int al
 		memset( p, 0, sizeof( *p ));
 		p->userid = userid;
 		p->alive = alive;
-		CoF_ShareApply( s, slot, held, 0, 0 );
+		CoF_ShareApply( s, slot, held, 0, COF_SHARE_LOSS_USED );
 		return;
 	}
 	respawned = alive && !p->alive; // CBasePlayer::Spawn wiped the inventory
-	CoF_ShareApply( s, slot, held, respawned || !alive, 0 );
+	CoF_ShareApply( s, slot, held, respawned || !alive, COF_SHARE_LOSS_USED );
 	if( respawned )
 	{
 		memset( &p->set_down, 0, sizeof( p->set_down ));
@@ -201,7 +210,9 @@ static void CoF_ShareObserve( cof_share_state_t *s, int slot, int userid, int al
 
 static int CoF_ShareCommandKind( const char *command )
 {
-	return !strcmp( command, "inventorydrop" ) ? COF_SHARE_CMD_DROP : COF_SHARE_CMD_OTHER;
+	if( !strcmp( command, "inventorydrop" )) return COF_SHARE_CMD_DROP;
+	if( !strcmp( command, "inventorycombine" )) return COF_SHARE_CMD_COMBINE;
+	return COF_SHARE_CMD_OTHER;
 }
 
 // After a game client command from this player. The glue refreshed the look
@@ -210,9 +221,40 @@ static int CoF_ShareCommandKind( const char *command )
 static void CoF_ShareCommand( cof_share_state_t *s, int slot, int kind, char slots[COF_SHARE_SLOTS][COF_SHARE_NAME] )
 {
 	char held[COF_SHARE_SLOTS][COF_SHARE_NAME];
+	int i, loss = kind == COF_SHARE_CMD_DROP ? COF_SHARE_LOSS_DROPPED : COF_SHARE_LOSS_USED;
 	if( slot < 0 || slot >= COF_SHARE_PLAYERS || !s->players[slot].userid ) return;
 	CoF_ShareStoryOnly( held, slots );
-	CoF_ShareApply( s, slot, held, !s->players[slot].alive, kind == COF_SHARE_CMD_DROP );
+	if( kind == COF_SHARE_CMD_COMBINE )
+	{
+		// A combine that yields no new story item (taclight + Glock, battery +
+		// phone, CombineInventoryItems 100E3020) upgraded the combiner's own
+		// weapon: the partner keeps their copy for their own weapon.
+		loss = COF_SHARE_LOSS_PERSONAL;
+		for( i = 0; i < COF_SHARE_SLOTS; i++ )
+			if( held[i][0] && !CoF_ShareHolds( &s->players[slot], held[i] )) loss = COF_SHARE_LOSS_USED;
+	}
+	CoF_ShareApply( s, slot, held, !s->players[slot].alive, loss );
+}
+
+static int CoF_ShareBackingOff( const cof_share_player_t *p, const char *name, double now )
+{
+	int i;
+	for( i = 0; i < COF_SHARE_BACKOFF; i++ )
+		if( now < p->backoff[i].until && !strcmp( p->backoff[i].name, name )) return 1;
+	return 0;
+}
+
+// This item waits until `until`; it takes its own old entry or the one due soonest.
+static void CoF_ShareBackoff( cof_share_player_t *p, const char *name, double until )
+{
+	int i, pick = 0;
+	for( i = 0; i < COF_SHARE_BACKOFF; i++ )
+	{
+		if( !strcmp( p->backoff[i].name, name )) { pick = i; break; }
+		if( p->backoff[i].until < p->backoff[pick].until ) pick = i;
+	}
+	CoF_ShareCopy( p->backoff[pick].name, name );
+	p->backoff[pick].until = until;
 }
 
 // The next step toward the desired state for one player. free_slots: usable
@@ -228,12 +270,13 @@ static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double
 	if( p->pending )
 	{
 		if( now < p->pending_until ) return COF_SHARE_NONE;
-		p->pending = COF_SHARE_NONE; // never confirmed: back off, then retry
-		p->retry_after = now + COF_SHARE_RETRY;
+		// Never confirmed: this item backs off and is reported once; the rest go on.
+		CoF_ShareBackoff( p, p->pending_name, now + COF_SHARE_RETRY );
+		if( CoF_ShareSetAdd( &p->stalled, p->pending_name, 0 )) CoF_ShareEvent( s, COF_SHARE_STALLED, slot, p->pending_name );
+		p->pending = COF_SHARE_NONE;
 	}
-	if( now < p->retry_after ) return COF_SHARE_NONE;
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // copies of items the party used up
-		if( p->held[i][0] && CoF_ShareSetFind( &s->party, p->held[i] ) < 0 )
+		if( p->held[i][0] && CoF_ShareSetFind( &s->party, p->held[i] ) < 0 && !CoF_ShareBackingOff( p, p->held[i], now ))
 		{
 			CoF_ShareCopy( out, p->held[i] );
 			return COF_SHARE_TAKE;
@@ -241,7 +284,7 @@ static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double
 	for( i = 0; i < s->party.count; i++ )
 	{
 		const char *name = s->party.items[i].name;
-		if( CoF_ShareHolds( p, name ) || CoF_ShareSetFind( &p->set_down, name ) >= 0 ) continue;
+		if( CoF_ShareHolds( p, name ) || CoF_ShareSetFind( &p->set_down, name ) >= 0 || CoF_ShareBackingOff( p, name, now )) continue;
 		if( free_slots > 0 )
 		{
 			CoF_ShareCopy( out, name );
@@ -265,6 +308,21 @@ static void CoF_ShareIssued( cof_share_state_t *s, int slot, int action, const c
 	p->pending = action;
 	CoF_ShareCopy( p->pending_name, name );
 	p->pending_until = now + COF_SHARE_CONFIRM;
+}
+
+// A new map restarts the server clock, so timers from the previous map would
+// hold the queue for as long as that map took. Anything still in flight is
+// settled by the next look (a landed give reads as picked back up, a landed
+// take as used up), so it is simply forgotten.
+static void CoF_ShareNewMap( cof_share_state_t *s )
+{
+	int i;
+	for( i = 0; i < COF_SHARE_PLAYERS; i++ )
+	{
+		s->players[i].pending = COF_SHARE_NONE;
+		s->players[i].pending_until = 0;
+		memset( s->players[i].backoff, 0, sizeof( s->players[i].backoff ));
+	}
 }
 
 static int CoF_ShareFinder( const cof_share_state_t *s, const char *name )

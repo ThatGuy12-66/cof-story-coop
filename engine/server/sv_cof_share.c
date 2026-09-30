@@ -14,12 +14,13 @@
 #endif
 
 static cof_share_state_t cof_share;
-static int cof_share_command_slot = -1, cof_share_command_kind;
+static int cof_share_command_slot = -1, cof_share_command_kind, cof_share_generation = -1;
 
 void SV_CoF_ShareReset( void )
 {
 	CoF_ShareReset( &cof_share );
 	cof_share_command_slot = -1;
+	cof_share_generation = -1;
 }
 
 static int CoF_ShareClientSlot( const sv_client_t *cl )
@@ -45,7 +46,8 @@ static const char *CoF_ShareName( int userid )
 
 static void CoF_ShareDrain( void )
 {
-	static const char *phases[] = { "item-found", "item-used", "item-dropped", "item-delivered", "item-removed" };
+	// Indexed by the COF_SHARE_* event kinds in sv_cof_share_state.h.
+	static const char *phases[] = { "item-found", "item-used", "item-dropped", "item-delivered", "item-removed", "item-combined", "item-stalled" };
 	int i, j;
 	for( i = 0; i < cof_share.event_count; i++ )
 	{
@@ -87,6 +89,11 @@ void SV_CoF_ShareFrame( void )
 {
 	char slots[COF_SHARE_SLOTS][COF_SHARE_NAME], item[COF_SHARE_NAME];
 	int i, alive, action;
+	if( svs.spawncount != cof_share_generation )
+	{
+		CoF_ShareNewMap( &cof_share ); // sv.time restarted with the new map
+		cof_share_generation = svs.spawncount;
+	}
 	for( i = 0; i < svs.maxclients && i < COF_SHARE_PLAYERS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
