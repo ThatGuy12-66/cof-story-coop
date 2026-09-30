@@ -19,11 +19,81 @@ GNU General Public License for more details.
 #include "cl_tent.h"
 #include "pm_local.h"
 #include "studio.h"
+#include <stddef.h>
 
 #define MAX_FORWARD			6	// forward probes for set idealpitch
 #define MIN_CORRECTION_DISTANCE	0.25f	// use smoothing if error is > this
 #define MIN_PREDICTION_EPSILON	0.5f	// complain if error is > this and we have cl_showerror set
 #define MAX_PREDICTION_ERROR		64.0f	// above this is assumed to be a teleport, don't smooth, etc.
+
+/*
+ * Experimental compatibility path for the Steam Cry of Fear client DLL.
+ *
+ * The shipped client uses the historical playermove_t callback offsets: its
+ * PM_Init and PM_Move callbacks read physinfo and every field after it four
+ * bytes later than the current layout.  Keep the engine's native object and
+ * translate only at those two DLL entrypoints.  The missing historical field
+ * is not identified, so this is an opt-in diagnostic adapter rather than a
+ * general ABI guarantee.
+ */
+#define COF_CLIENT_PMOVE_LEGACY_SHIFT 4
+typedef union cof_client_pmove_legacy_storage_s
+{
+	playermove_t align;
+	byte bytes[sizeof( playermove_t ) + COF_CLIENT_PMOVE_LEGACY_SHIFT];
+} cof_client_pmove_legacy_storage_t;
+
+static qboolean cof_client_pmove_legacy_enabled;
+static cof_client_pmove_legacy_storage_t cof_client_pmove_legacy_storage;
+
+static playermove_t *CL_CoF_LegacyPMove( void )
+{
+	return (playermove_t *)cof_client_pmove_legacy_storage.bytes;
+}
+
+/* mirrors of the server-side adapter, see engine/server/sv_pmove.c */
+static int cof_client_pmove_touchfix_latched;
+static playermove_t *cof_client_pmove_legacy_active;
+static CVAR_DEFINE_AUTO( cof_pmove_legacy_hullsync_cl, "1", 0, "CoF client playermove adapter: mirror usehull/origin/velocity into the engine pmove object while the client DLL runs" );
+static CVAR_DEFINE_AUTO( cof_pmove_legacy_touchfix_cl, "1", 0, "CoF client playermove adapter: insert the legacy four-byte gap before numtouch instead of physinfo" );
+
+static size_t CL_CoF_LegacyTail( void )
+{
+	return cof_client_pmove_touchfix_latched ? offsetof( playermove_t, numtouch ) : offsetof( playermove_t, physinfo );
+}
+
+static void CL_CoF_SyncLegacyToNative( void )
+{
+	playermove_t *legacy = cof_client_pmove_legacy_active;
+
+	if( legacy == NULL || cof_pmove_legacy_hullsync_cl.value == 0.0f )
+		return;
+
+	clgame.pmove->usehull = legacy->usehull;
+	VectorCopy( legacy->origin, clgame.pmove->origin );
+	VectorCopy( legacy->velocity, clgame.pmove->velocity );
+}
+
+static void CL_CoF_CopyToLegacyPMove( void )
+{
+	const size_t tail = CL_CoF_LegacyTail();
+	playermove_t *legacy = CL_CoF_LegacyPMove();
+
+	memcpy( legacy, clgame.pmove, tail );
+	memset( (byte *)legacy + tail, 0, COF_CLIENT_PMOVE_LEGACY_SHIFT );
+	memcpy( (byte *)legacy + tail + COF_CLIENT_PMOVE_LEGACY_SHIFT,
+		(byte *)clgame.pmove + tail, sizeof( playermove_t ) - tail );
+}
+
+static void CL_CoF_CopyFromLegacyPMove( void )
+{
+	const size_t tail = CL_CoF_LegacyTail();
+	playermove_t *legacy = CL_CoF_LegacyPMove();
+
+	memcpy( clgame.pmove, legacy, tail );
+	memcpy( (byte *)clgame.pmove + tail,
+		(byte *)legacy + tail + COF_CLIENT_PMOVE_LEGACY_SHIFT, sizeof( playermove_t ) - tail );
+}
 
 /*
 =============
@@ -655,31 +725,37 @@ cl_entity_t *CL_GetWaterEntity( const float *rgflPos )
 
 static int GAME_EXPORT pfnTestPlayerPosition( float *pos, pmtrace_t *ptrace )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_TestPlayerPosition( clgame.pmove, pos, ptrace, NULL );
 }
 
 static void GAME_EXPORT pfnStuckTouch( int hitent, pmtrace_t *tr )
 {
+	CL_CoF_SyncLegacyToNative();
 	PM_StuckTouch( clgame.pmove, hitent, tr );
 }
 
 static int GAME_EXPORT pfnTruePointContents( float *p )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_TruePointContents( clgame.pmove, p );
 }
 
 static pmtrace_t GAME_EXPORT pfnPlayerTrace( float *start, float *end, int traceFlags, int ignore_pe )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_PlayerTraceExt( clgame.pmove, start, end, traceFlags, clgame.pmove->numphysent, clgame.pmove->physents, ignore_pe, NULL );
 }
 
 static void *pfnHullForBsp( physent_t *pe, float *offset )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_HullForBsp( pe, clgame.pmove, offset );
 }
 
 static float GAME_EXPORT pfnTraceModel( physent_t *pe, float *start, float *end, trace_t *trace )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_TraceModel( clgame.pmove, pe, start, end, trace );
 }
 
@@ -699,11 +775,13 @@ static void GAME_EXPORT pfnPlaybackEventFull( int flags, int clientindex, word e
 
 static pmtrace_t GAME_EXPORT pfnPlayerTraceEx( float *start, float *end, int traceFlags, pfnIgnore pmFilter )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_PlayerTraceExt( clgame.pmove, start, end, traceFlags, clgame.pmove->numphysent, clgame.pmove->physents, -1, pmFilter );
 }
 
 static int GAME_EXPORT pfnTestPlayerPositionEx( float *pos, pmtrace_t *ptrace, pfnIgnore pmFilter )
 {
+	CL_CoF_SyncLegacyToNative();
 	return PM_TestPlayerPosition( clgame.pmove, pos, ptrace, pmFilter );
 }
 
@@ -721,6 +799,21 @@ CL_InitClientMove
 void CL_InitClientMove( void )
 {
 	Pmove_Init ();
+	cof_client_pmove_legacy_enabled = (Sys_CheckParm( "-cof-pmove-legacy" ) != 0);
+	if( cof_client_pmove_legacy_enabled )
+	{
+		static qboolean cof_client_pmove_cvars_registered;
+
+		if( !cof_client_pmove_cvars_registered )
+		{
+			Cvar_RegisterVariable( &cof_pmove_legacy_hullsync_cl );
+			Cvar_RegisterVariable( &cof_pmove_legacy_touchfix_cl );
+			cof_client_pmove_cvars_registered = true;
+		}
+		cof_client_pmove_touchfix_latched = cof_pmove_legacy_touchfix_cl.value != 0.0f ? 1 : 0;
+	}
+	if( cof_client_pmove_legacy_enabled )
+		Con_Reportf( S_WARN "experimental CoF client legacy playermove adapter enabled\n" );
 
 	clgame.pmove->server = false;	// running at client
 	clgame.pmove->movevars = &clgame.movevars;
@@ -771,7 +864,18 @@ void CL_InitClientMove( void )
 	clgame.pmove->PM_TraceSurface = pfnTraceSurface;
 
 	// initalize pmove
-	clgame.dllFuncs.pfnPlayerMoveInit( clgame.pmove );
+	if( cof_client_pmove_legacy_enabled )
+	{
+		CL_CoF_CopyToLegacyPMove();
+		cof_client_pmove_legacy_active = CL_CoF_LegacyPMove();
+		clgame.dllFuncs.pfnPlayerMoveInit( CL_CoF_LegacyPMove() );
+		cof_client_pmove_legacy_active = NULL;
+		CL_CoF_CopyFromLegacyPMove();
+	}
+	else
+	{
+		clgame.dllFuncs.pfnPlayerMoveInit( clgame.pmove );
+	}
 }
 
 static void CL_SetupPMove( playermove_t *pmove, const local_state_t *from, const usercmd_t *ucmd, qboolean runfuncs, double time )
@@ -925,7 +1029,18 @@ static void CL_RunUsercmd( local_state_t *from, local_state_t *to, usercmd_t *u,
 		CL_SetupPMove( clgame.pmove, from, &cmd, runfuncs, *time );
 
 		// motor!
-		clgame.dllFuncs.pfnPlayerMove( clgame.pmove, false );
+		if( cof_client_pmove_legacy_enabled )
+		{
+			CL_CoF_CopyToLegacyPMove();
+			cof_client_pmove_legacy_active = CL_CoF_LegacyPMove();
+			clgame.dllFuncs.pfnPlayerMove( CL_CoF_LegacyPMove(), false );
+			cof_client_pmove_legacy_active = NULL;
+			CL_CoF_CopyFromLegacyPMove();
+		}
+		else
+		{
+			clgame.dllFuncs.pfnPlayerMove( clgame.pmove, false );
+		}
 
 		// copy results back to client
 		CL_FinishPMove( clgame.pmove, to );

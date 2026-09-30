@@ -26,6 +26,7 @@ GNU General Public License for more details.
 #include "common.h"
 #include "library.h"
 #include "platform/platform.h"
+#include "cof_language.h"
 
 #if XASH_WIN32
 #include <direct.h>
@@ -99,6 +100,11 @@ static uint32_t FS_MountFlags( void )
 void FS_Rescan_f( void )
 {
 	g_fsapi.Rescan( FS_MountFlags(), ui_language.string );
+
+	// Cry of Fear language packs: a rescan rebuilds the whole search path from
+	// gameinfo, so the active pack's overlay has to go back on top of it. This
+	// is also how a pack is mounted in the first place - see cof_language.c.
+	CoF_Lang_Remount();
 }
 
 static void FS_LoadVFSConfig( const char *gamedir )
@@ -402,6 +408,12 @@ void FS_Init( void )
 	Cvar_RegisterVariable( &fs_mount_addon );
 	Cvar_RegisterVariable( &fs_mount_l10n );
 	Cvar_RegisterVariable( &ui_language );
+
+	// Cry of Fear language packs. Registered here so cof_language exists
+	// before any config is exec'd; the pack itself is applied from Host_Main
+	// just before the game libraries load (CoF_Lang_EarlyApply) and again
+	// from Host_Frame whenever cof_language changes.
+	CoF_Lang_Init();
 
 	if( !Sys_GetParmFromCmdLine( "-dll", host.gamedll ))
 		host.gamedll[0] = 0;

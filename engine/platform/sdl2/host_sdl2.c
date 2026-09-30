@@ -272,6 +272,10 @@ SDLash_EventFilter
 */
 static void SDLash_EventHandler( SDL_Event *event )
 {
+	// Cry of Fear: which device the player is using (cof_last_input), from the
+	// real events only (cof_gamepad.c)
+	CL_CoF_InputEvent( event );
+
 	switch ( event->type )
 	{
 	/* Mouse events */
@@ -429,9 +433,17 @@ SDLash_RunEvents
 void Platform_RunEvents( void )
 {
 	SDL_Event event;
+	const double cof_t0 = Sys_DoubleTime( );
+	int cof_events = 0;
 
 	while( host.status != HOST_CRASHED && !host.shutdown_issued && SDL_PollEvent( &event ) )
+	{
 		SDLash_EventHandler( &event );
+		cof_events++;
+	}
+
+	// Cry of Fear: input counters for cof_pad_measure (cof_gamepad.c)
+	CL_CoF_NoteEventLoop( Sys_DoubleTime( ) - cof_t0, cof_events );
 
 #if XASH_PSVITA
 	PSVita_InputUpdate();

@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "server.h"			// LUMP_ error codes
 #include "swaplib.h"
 #include "ref_common.h"
+#include "cof_language.h"
 #if defined( HAVE_OPENMP )
 #include <omp.h>
 #endif // HAVE_OPENMP
@@ -2318,9 +2319,28 @@ static void Mod_LoadEntities( model_t *mod, const dbspmodel_t *bmod )
 		Q_strncpy( entfilename, mod->name, sizeof( entfilename ));
 		COM_ReplaceExtension( entfilename, ".ent", sizeof( entfilename ));
 
+		// Cry of Fear language packs: the pack carries the translated entity
+		// strings as its own maps/<map>.ent, at a path of its own rather than
+		// beside the .bsp. It wins over a gamedir patch of the same name, and
+		// the "newer than the bsp" rule is skipped for it - the pack is data
+		// we install, not something a mapper left lying about, and a file copy
+		// that did not preserve timestamps would otherwise silently disable
+		// the whole translation.
+		char packent[MAX_QPATH];
+
+		if( CoF_Lang_EntPatch( entfilename, packent, sizeof( packent )))
+		{
+			if(( entpatch = FS_LoadFile( packent, &entpatchsize, true )) != NULL )
+			{
+				Con_Printf( "^2Read entity patch:^7 %s\n", packent );
+				entdatasize = entpatchsize;
+				entdata = entpatch;
+			}
+		}
+
 		// make sure that entity patch is never than bsp
 		int ft1 = FS_FileTime( mod->name, false );
-		int ft2 = FS_FileTime( entfilename, true );
+		int ft2 = entpatch ? -1 : FS_FileTime( entfilename, true );
 
 		if( ft2 != -1 )
 		{
@@ -2334,6 +2354,21 @@ static void Mod_LoadEntities( model_t *mod, const dbspmodel_t *bmod )
 				entdatasize = entpatchsize;
 				entdata = entpatch;
 			}
+		}
+
+		// Cry of Fear language packs: a pack without its own maps/<map>.ent
+		// may carry maps/<map>.entpatch instead - only the translated
+		// key/value pairs - which is applied to whatever entity string the
+		// map loads now (the BSP lump or a gamedir .ent). See cof_entpatch.c.
+		size_t patchedsize;
+		byte *patched = (byte *)CoF_Lang_ApplyEntityPatch( entfilename, entdata, entdatasize, &patchedsize );
+
+		if( patched )
+		{
+			Mem_Free( entpatch );
+			entpatch = patched;
+			entdata = (char *)patched;
+			entdatasize = patchedsize;
 		}
 	}
 
@@ -2613,6 +2648,18 @@ static qboolean Mod_SearchForTextureReplacement( char *out, size_t size, const c
 {
 	const char *subdirs[] = { modelname, "common" };
 
+	// Cry of Fear language packs: the pack's repainted signs and posters are
+	// a language override, not an "HD materials" opt-in, so they come first
+	// and do not need host_allow_materials. Every repainted miptex of a given
+	// name is byte-identical across the maps that use it (see the pack's
+	// README), so the pack keeps one file per texture name rather than a
+	// per-map materials/maps/<map>.bsp/ tree.
+	if( CoF_Lang_TextureReplacement( out, size, texname, type ))
+		return true;
+
+	if( !Mod_AllowMaterials( ))
+		return false;
+
 	for( int i = 0; i < ARRAYSIZE( subdirs ); i++ )
 	{
 		if( Q_snprintf( out, size, "materials/%s/%s%s.tga", subdirs[i], texname, type ) < 0 )
@@ -2825,7 +2872,9 @@ static void Mod_LoadTextureData( model_t *mod, dbspmodel_t *bmod, int textureInd
 	if( safemtname[0] == '*' )
 		safemtname[0] = '!'; // replace unexpected symbol
 
-	if( Mod_AllowMaterials( ))
+	// the language-pack probe inside Mod_SearchForTextureReplacement runs
+	// whether or not materials are allowed, so the gate has to let it through
+	if( Mod_AllowMaterials( ) || CoF_Lang_Active( ))
 	{
 #if !XASH_DEDICATED
 		if( Mod_SearchForTextureReplacement( texpath, sizeof( texpath ), mod->name, safemtname, "" ))

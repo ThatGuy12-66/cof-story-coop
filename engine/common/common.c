@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "const.h"
 #include "client.h"
 #include "library.h"
+#include "cof_language.h"
 
 static const char *const file_exts[] =
 {
@@ -618,6 +619,15 @@ byte *GAME_EXPORT COM_LoadFileForMe( const char *filename, int *pLength )
 	string name;
 	Q_strncpy( name, filename, sizeof( name ));
 	COM_FixSlashes( name );
+
+	// Cry of Fear language packs: the game DLLs load part of their own text
+	// (hints.txt, inventoryitems/) through here rather than with the CRT
+	{
+		char packname[MAX_SYSPATH];
+
+		if( CoF_Lang_GameFile( name, packname, sizeof( packname )))
+			Q_strncpy( name, packname, sizeof( name ));
+	}
 
 	fs_offset_t iLength;
 	byte *pfile = g_fsapi.LoadFileMalloc( name, &iLength, false );

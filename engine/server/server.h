@@ -417,6 +417,10 @@ extern convar_t		sv_voice_singleplayer;
 extern convar_t		sv_maxvelocity;
 extern convar_t		sv_stepsize;
 extern convar_t		sv_skyname;
+extern convar_t		cof_default_skyname;
+// Cry of Fear: put cof_default_skyname in place of the stock "desert" default
+// of sv_skyname before the entity lump is parsed. Defined in sv_main.c.
+void SV_CoF_ApplyDefaultSkyName( void );
 extern convar_t		sv_skycolor_r;
 extern convar_t		sv_skycolor_g;
 extern convar_t		sv_skycolor_b;
@@ -676,12 +680,28 @@ void SV_SetLogAddress_f( void );
 // sv_save.c
 //
 qboolean SV_SaveGame( const char *pName );
+qboolean SV_CoFMenuSave( int slot );
+// Cry of Fear quick save (engine/client/cof_quicksave.c): SAVE/cofquick.sav
+// through the same root-SAVE transaction as the pause-menu saves
+#define COF_QUICKSAVE_NAME "cofquick"
+qboolean SV_CoFQuickSave( void );
+qboolean SV_CoFQuickSaveExists( void );
 qboolean SV_LoadGame( const char *pName );
+qboolean SV_CoFSaveDelete( const char *pName );
 int SV_LoadGameState( char const *level );
 void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char *start, qboolean background );
 const char *SV_GetLatestSave( void );
 void SV_InitSaveRestore( void );
 void SV_ClearGameState( void );
+// Session-local story transition tickets survive SV_DeactivateServer, never a session reset.
+qboolean SV_CoF_TransitionActive( void );
+qboolean SV_CoF_TransitionRestoredClient( const sv_client_t *cl );
+void SV_CoF_TransitionClientReady( sv_client_t *cl );
+void SV_CoF_TransitionClientDrop( sv_client_t *cl );
+void SV_CoF_TransitionReset( qboolean clear_history );
+qboolean SV_CoF_TransitionValidate( const char *map, const char *landmark );
+qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origin );
+int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max );
 
 //
 // sv_pmove.c

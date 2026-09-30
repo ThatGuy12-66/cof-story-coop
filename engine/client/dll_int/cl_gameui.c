@@ -25,6 +25,16 @@ static void 	UI_UpdateUserinfo( void );
 
 gameui_static_t	gameui;
 
+// Cry of Fear unified UI: the volume of the menu library's own sounds, and of
+// nothing else. The menu DLL reaches the mixer through exactly one function,
+// EngFuncs::PlayLocalSound -> pfnPlaySound below, so scaling there cannot touch
+// a sound the game DLL, the client DLL, a map or the "play"/"playvol" console
+// commands start. Archived, because it is a preference; 1.0 is the stock
+// behaviour and Cry of Fear's theme defaults it to 0.5 once through the menu's
+// own ui_cof_scene_defaults marker (3rdparty/mainui/Theme.cpp).
+static CVAR_DEFINE_AUTO( ui_sound_volume, "1.0", FCVAR_ARCHIVE, "volume of the menu's own UI sounds, 0..1 (game sounds are not affected)" );
+static qboolean ui_sound_volume_registered = false;
+
 static void UI_ToggleAllowConsole_f( void )
 {
 	host.allow_console = host.allow_console_init = true;
@@ -43,10 +53,41 @@ void UI_UpdateMenu( float realtime )
 	// if some deferred cmds is waiting
 	if( UI_IsVisible() && !COM_StringEmptyOrNULL( host.deferred_cmd ))
 	{
-		Cbuf_AddText( host.deferred_cmd );
-		host.deferred_cmd[0] = '\0';
-		Cbuf_Execute();
-		return;
+		// Cry of Fear unified UI (cof_ui_deferred_cmd_guard, default on).
+		//
+		// host.deferred_cmd can only be written by pfnClientCmd before
+		// cls.initialized, i.e. while CL_LoadProgs() is running HUD_Init
+		// (engine/client/cl_main.c: CL_LoadProgs is called before
+		// cls.initialized = true). Cry of Fear's HUD_Init issues
+		// "map c_game_menu1" there, so that string sits in the buffer for the
+		// whole session and detonates the first frame the engine menu is
+		// visible: from gameplay it throws the running save away, and on the
+		// unified main menu it replaces mainui's map_background with a real
+		// map and hands focus back to the game.
+		//
+		// A boot-time client command that is still pending once the engine
+		// menu is up has missed its moment; running it late is never what the
+		// client meant. Drop it and say so. Set the cvar to 0 for the stock
+		// behaviour.
+		if( cof_ui_deferred_cmd_guard.value )
+		{
+			char	report[sizeof( host.deferred_cmd )];
+			size_t	len;
+
+			Q_strncpy( report, host.deferred_cmd, sizeof( report ));
+			for( len = Q_strlen( report ); len > 0 && ( report[len - 1] == '\n' || report[len - 1] == '\r' ); len-- )
+				report[len - 1] = '\0';
+
+			Con_Reportf( "[cof-ui] dropped stale deferred client command \"%s\"\n", report );
+			host.deferred_cmd[0] = '\0';
+		}
+		else
+		{
+			Cbuf_AddText( host.deferred_cmd );
+			host.deferred_cmd[0] = '\0';
+			Cbuf_Execute();
+			return;
+		}
 	}
 
 	// don't show menu while level is loaded
@@ -689,10 +730,28 @@ pfnPlaySound
 */
 static void GAME_EXPORT pfnPlaySound( const char *szSound )
 {
+	float volume;
+
 	if( COM_StringEmptyOrNULL( szSound ))
 		return;
 
-	S_StartLocalSound( szSound, VOL_NORM, false );
+	// Cry of Fear unified UI (ui_sound_volume): the engine's local-sound path
+	// already carries a per-call volume - S_StartLocalSound( name, volume, ... )
+	// hands it straight to S_StartSound as fvol, which becomes the channel's
+	// master_vol - so the menu's sounds are simply scaled here instead of being
+	// routed through the "playvol" command. This is the menu DLL's only entry
+	// into the mixer, so no game sound can be affected by it.
+	volume = ui_sound_volume.value;
+
+	if( volume < 0.0f ) volume = 0.0f;
+	if( volume > 1.0f ) volume = 1.0f;
+
+	volume *= VOL_NORM;
+
+	Con_Reportf( "[cof-ui] menu sound \"%s\" -> S_StartLocalSound volume %.2f (ui_sound_volume %.2f)\n",
+		szSound, volume, ui_sound_volume.value );
+
+	S_StartLocalSound( szSound, volume, false );
 }
 
 /*
@@ -976,10 +1035,15 @@ release prev search on a next call
 char **GAME_EXPORT CL_GetFilesList( const char *pattern, int *numFiles, int gamedironly )
 {
 	static search_t	*t = NULL;
+	const qboolean cof_root_save_list = Cvar_VariableInteger( "cof_save_root_compat" ) && GI &&
+		!Q_stricmp( GI->gamefolder, "cryoffear" ) && pattern &&
+		!Q_stricmp( pattern, "save/*.sav" );
 
 	if( t ) Mem_Free( t ); // release prev search
 
-	t = FS_Search( pattern, true, gamedironly );
+	/* CoF root-save compatibility: remap only the exact GameUI save list. */
+	t = cof_root_save_list ? FS_Search( "SAVE/*.sav", true, false ) :
+		FS_Search( pattern, true, gamedironly );
 	if( !t )
 	{
 		if( numFiles ) *numFiles = 0;
@@ -1349,6 +1413,16 @@ qboolean UI_LoadProgs( void )
 	string dllpath;
 
 	if( gameui.hInstance ) UI_UnloadProgs();
+
+	// Cry of Fear unified UI (ui_sound_volume). Registered here, not lazily in
+	// pfnPlaySound: UI_LoadProgs runs from CL_Init, and Host_Init execs
+	// config.cfg only afterwards, so an archived value the user chose reaches
+	// this cvar. Guarded because the menu library can be reloaded.
+	if( !ui_sound_volume_registered )
+	{
+		Cvar_RegisterVariable( &ui_sound_volume );
+		ui_sound_volume_registered = true;
+	}
 
 	// setup globals
 	gameui.globals = &gpGlobals;

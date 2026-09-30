@@ -37,6 +37,7 @@ GNU General Public License for more details.
 #include "render_api.h"	// decallist_t
 #include "tests.h"
 #include "library.h"
+#include "cof_language.h"
 #include "platform/platform.h"
 
 host_parm_t host;	// host parms
@@ -665,6 +666,7 @@ void Host_Frame( double time )
 	if( host.framecount == 0 )
 		Con_DPrintf( "Time to first frame: %.3f seconds\n", t1 - host.starttime );
 
+	CoF_Lang_Frame ();   // Cry of Fear language pack, applied when cof_language changes
 	Host_InputFrame ();  // input frame
 	Host_ClientBegin (); // begin client
 	Host_GetCommands (); // dedicated in
@@ -1237,6 +1239,10 @@ int EXPORT Host_Main( int argc, char **argv, const char *progname, int bChangeGa
 	{
 		Cvar_Get( "host_allow_changegame", "0", FCVAR_READ_ONLY, "allows to change games" );
 	}
+
+	// Cry of Fear language packs: before the game libraries load, so what the
+	// client reads at init already comes from the pack
+	CoF_Lang_EarlyApply();
 
 	SV_Init();
 	CL_Init();

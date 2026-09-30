@@ -1206,6 +1206,8 @@ draw beam loop
 */
 void CL_DrawBeams( int fTrans, BEAM *active_beams )
 {
+	if( cof_gl_trace.value ) GL_CheckForErrorsNamed_( "beams_before_server", __FILE__, __LINE__ );
+
 	pglShadeModel( GL_SMOOTH );
 	pglDepthMask( fTrans ? GL_FALSE : GL_TRUE );
 
@@ -1226,6 +1228,8 @@ void CL_DrawBeams( int fTrans, BEAM *active_beams )
 		r_stats.c_view_beams_count++;
 	}
 
+	if( cof_gl_trace.value ) GL_CheckForErrorsNamed_( "beams_after_server", __FILE__, __LINE__ );
+
 	RI.currentbeam = NULL;
 
 	// draw temporary entity beams
@@ -1239,6 +1243,8 @@ void CL_DrawBeams( int fTrans, BEAM *active_beams )
 
 		R_BeamDraw( pBeam, gp_cl->time -   gp_cl->oldtime );
 	}
+
+	if( cof_gl_trace.value ) GL_CheckForErrorsNamed_( "beams_after_temp", __FILE__, __LINE__ );
 
 	pglShadeModel( GL_FLAT );
 	pglDepthMask( GL_TRUE );

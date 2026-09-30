@@ -2285,6 +2285,15 @@ void CL_ParseUserMessage( sizebuf_t *msg, int svc_num, connprotocol_t proto )
 			clgame.msg[i].name, iSize, clgame.msg[i].number );
 	}
 
+	// Cry of Fear unified UI (cof_ui_death_menu, default on): the GAME OVER
+	// screen is a user message, not a command - "VGUIMenu" with a first byte of
+	// 35. Open our own death page before the client DLL is told, so the page is
+	// already up on the frame the client would start fading its panel in. The
+	// message is still delivered below; the panel is kept off the screen by
+	// cof_ui_input_gate, not by hiding the message from the client.
+	CL_CoF_DeathUserMessage( clgame.msg[i].name, iSize, pbuf );
+	CL_CoF_HudRemakeMessage( clgame.msg[i].name, iSize, pbuf );
+
 	if( clgame.msg[i].func )
 	{
 		clgame.msg[i].func( clgame.msg[i].name, iSize, pbuf );
@@ -2432,6 +2441,11 @@ qboolean CL_ParseCommonHLMessage( sizebuf_t *msg, connprotocol_t proto, int svc_
 		if( !Q_strnicmp( s, "disconnect", 10 ) && cls.signon != SIGNONS )
 			break; // too early
 #endif
+		// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on): hl.dll
+		// returns to the main menu with CLIENT_COMMAND( player, "map
+		// c_game_menu1" ), which arrives here as a stufftext
+		if( CL_CoF_MenuMapRedirect( s, "server svc_stufftext" ))
+			break;
 
 		Cbuf_AddFilteredText( s );
 		break;

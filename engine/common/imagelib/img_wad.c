@@ -160,8 +160,31 @@ qboolean Image_LoadFNT( const char *name, const byte *buffer, fs_offset_t filesi
 
 	if( numcolors == 768 || numcolors == 256 )
 	{
+		// Cry of Fear unified UI, milestone 4. A .fnt whose palette is the
+		// identity grey ramp - pal[i] == (i,i,i) for all 256 entries - is not a
+		// colour-keyed bitmap, it is an 8-bit coverage mask: the pixel value is
+		// the glyph's antialiasing. LUMP_MASKED would flatten every partly
+		// covered pixel to fully opaque and key out only index 255, which turns
+		// a smooth outline into a hard halo. LUMP_GRADIENT is the decode that
+		// already exists for exactly this shape: one colour, taken from the last
+		// palette entry (white here), with alpha = the index.
+		//
+		// No shipped font has that palette, so every existing .fnt keeps the
+		// masked behaviour byte for byte. scripts/make-cof-console-font.py in
+		// this project writes the ramp deliberately.
+		qboolean ramp = true;
+
+		for( int i = 0; i < 256; i++ )
+		{
+			if( pal[i * 3 + 0] != i || pal[i * 3 + 1] != i || pal[i * 3 + 2] != i )
+			{
+				ramp = false;
+				break;
+			}
+		}
+
 		// g-cont. make sure that is didn't hit anything
-		Image_GetPaletteLMP( pal, LUMP_MASKED );
+		Image_GetPaletteLMP( pal, ramp ? LUMP_GRADIENT : LUMP_MASKED );
 		image.flags |= IMAGE_HAS_ALPHA; // fonts always have transparency
 	}
 	else

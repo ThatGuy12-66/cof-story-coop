@@ -35,6 +35,7 @@ GNU General Public License for more details.
 #include "world.h"
 #include "ref_common.h"
 #include "voice.h"
+#include "vgui_api.h"
 #include "q_client.h"
 
 //=============================================================================
@@ -717,6 +718,27 @@ extern convar_t	hud_fontscale;
 extern convar_t hud_fontrender;
 extern convar_t	hud_scale;
 extern convar_t hud_scale_minimal_width;
+extern convar_t cof_ui_scale;
+extern convar_t cof_ui_scale_sprites;
+extern convar_t cof_ui_scale_user;
+extern convar_t cof_ui_inter_fonts;
+extern convar_t cof_text_codepage;
+extern convar_t cof_hud_text_height_pct;
+extern convar_t cof_hud_text_font;
+extern convar_t cof_hud_text_style;
+extern convar_t cof_hud_text_backing;
+extern convar_t cof_hud_text_y;
+extern convar_t cof_hud_text_y_shift;
+extern convar_t cof_hud_text_trace;
+extern convar_t cof_hud_msg_y_pct;
+// Cry of Fear engine HUD text (milestone 4b): the per-line backing strip and
+// the vertical correction, both in engine/client/dll_int/cl_game.c
+int  CL_CoF_HudTextYOffset( void );
+void CL_CoF_HudTextReset( void );
+void CL_CoF_HudTextFlush( void );
+// the shipped glyph height of the game's own HUD font on this display, 0 when
+// unknown; written by SCR_LoadCreditsFont, read by the vertical correction
+extern float cls_cof_hud_text_shipped;
 extern convar_t	r_showtextures;
 extern convar_t	r_showtextures_zoom;
 extern convar_t	cl_bmodelinterp;
@@ -1128,6 +1150,7 @@ void Con_ClearNotify( void );
 void Con_DrawDebug( void );
 void Con_RunConsole( void );
 qboolean Con_GetInputRect( int *x, int *y, int *w, int *h );
+void Con_MouseMove( int x, int y ); // CoF milestone 3b: styled console close button hover/click
 void Con_DrawConsole( void );
 void Con_DrawVersion( void );
 int Con_UtfProcessChar( int in );
@@ -1244,6 +1267,8 @@ void CL_PlayVideo_f( void );
 //
 int Key_IsDown( int keynum );
 void Key_Event( int key, int down );
+// where a bind's expanded command text goes; see input/in_keys.c
+void Key_QueueBindText( const char *text );
 void Key_Init( void );
 void Key_WriteBindings( file_t *f );
 const char *Key_GetBinding( int keynum );
@@ -1271,6 +1296,86 @@ client_textmessage_t *CL_TextMessageParse( poolhandle_t mempool, char *pMemFile,
 
 extern rgba_t g_color_table[8];
 extern triangleapi_t gTriApi;
+extern convar_t cof_skip_client_hud_redraw;
+extern convar_t cof_skip_vgui_paint;
+extern convar_t cof_ui_input_gate;
+extern convar_t cof_ui_deferred_cmd_guard;
+qboolean CL_CoF_UIGateActive( void );
+
+// Cry of Fear in-game UI scaling (cof_ui_scale, milestone 4), cl_main.c
+void CL_CoF_UIReset( void );
+void CL_CoF_UIPinLayout( void );
+float CL_CoF_UIScale( void );
+qboolean CL_CoF_UITransform( float *scale, int *layoutWide, int *layoutTall, int *screenWide, int *screenTall );
+void CL_CoF_UIScaleRect( float *x, float *y, float *w, float *h );
+void CL_CoF_UIScaleHudRect( float *x, float *y, float *w, float *h );
+qboolean CL_CoF_HudScaleBlocked( void );
+float CL_CoF_UIScaleUser( void );
+void CL_CoF_CheckUIScaleChanged( void );
+void CL_CoF_FontLatch( const char *scheme );
+int CL_CoF_FontRoleLatch( char *buf, int size );
+qboolean CL_CoF_FontDesc( const char *role, cof_vgui_font_t *out );
+const byte *CL_CoF_FontFile( int semibold, int *size );
+int CL_CoF_FontProbe( char *text, int size, char *role, int roleSize );
+void CL_CoF_UIRootSize( int *width, int *height );
+// Cry of Fear unified UI (cof_ui_death_menu): the GAME OVER user message hook,
+// defined in cl_main.c and called from CL_ParseUserMessage
+qboolean CL_CoF_DeathUserMessage( const char *name, int size, const byte *buf );
+void CL_CoF_DeathPump( void );
+void CL_CoF_DeathForget( void );
+qboolean CL_CoF_DeathMenuActive( void );
+extern convar_t cof_vid_restart_background;
+extern convar_t cof_vid_skip_redundant_vidinit;
+void CL_CoF_VidModeChanged( void );
+void CL_CoF_VidRestartForget( void );
+// Cry of Fear sky reset (cof_sky_reset_per_map): a failed sky load makes the
+// client write "gl_customsky 0", which would otherwise kill the sky for the
+// whole session. Defined in cl_main.c; the setter hook is called from the
+// client's Cvar_SetValue callback in cl_game.c and the reset from R_SetupSky.
+void CL_CoF_SkyClientCvarSet( const char *name, float value );
+void CL_CoF_SkyResetPerMap( void );
+// Cry of Fear "Aim down sights: Hold / Toggle" (cof_ads_toggle). The game's
+// ironsights_toggle is kept at its working toggle (CL_CoF_ADSSync, every client
+// frame from CL_UpdateClientData) and Hold is emulated by the engine: the key
+// path hands a key bound to "+attack3" to CL_CoF_ADSHoldKey while
+// CL_CoF_ADSHoldActive(). All in cl_main.c.
+extern convar_t cof_ads_toggle;
+void CL_CoF_ADSSync( void );
+qboolean CL_CoF_ADSHoldActive( void );
+void CL_CoF_ADSHoldKey( int key, qboolean down );
+// Cry of Fear chapter title card rule (cof_hud_chapter_rule_hide), asked by
+// the client's pfnFillRGBA / pfnFillRGBABlend in dll_int/cl_game.c.
+extern convar_t cof_hud_chapter_rule_hide;
+// Cry of Fear on-screen keyboard, the engine half (cof_osk.c): the last input
+// device, the game's text entries reported by the support library, the
+// game's panels painted under the menu's keyboard. VGui_CoF_OskCall is in
+// vgui/vgui_draw.c.
+void CL_CoF_OskInit( void );
+void CL_CoF_OskNoteKey( int key, int down );
+void CL_CoF_OskEntry( int event, int hidden, const char *text );
+qboolean CL_CoF_OskFrame( void );
+qboolean CL_CoF_OskOverGame( void );
+int VGui_CoF_OskCall( int op, char *buf, int size );
+// Cry of Fear Enter hook (cof_enter_hook.c): client.dll's
+// GetAsyncKeyState(VK_RETURN) answered for a gamepad
+void CL_CoF_EnterInit( void );
+void CL_CoF_EnterOskDismiss( void ); // discard confirmation through release
+
+// Optional Remake HUD: observes unchanged game data and draw calls.
+void CL_CoF_HudRemakeInit( void );
+void CL_CoF_HudRemakeReset( void );
+void CL_CoF_HudRemakeMessage( const char *name, int size, const byte *data );
+void CL_CoF_HudRemakeBegin( void );
+void CL_CoF_HudRemakeAmmo( void );
+void CL_CoF_HudRemakeBars( void );
+int CL_CoF_HudRemakeTexture( const byte *hash );
+qboolean CL_CoF_HudRemakeQuad( int kind, int alpha );
+void CL_CoF_HudRemakeVguiBegin( void );
+qboolean CL_CoF_HudRemakeVguiQuad( int kind, qboolean textured, float x, float y, float w, float h, const byte *color );
+qboolean CL_CoF_HudRemakeSprite( const char *name, const wrect_t *rc, int mode, int texture,
+    float x,float y,float w,float h,float s1,float t1,float s2,float t2,const byte *color );
+void CL_CoF_EnterHookModule( void *hInstance, const char *name );
+qboolean CL_CoF_EnterKeyEvent( int key, int down );
 extern net_api_t gNetApi;
 
 #endif//CLIENT_H

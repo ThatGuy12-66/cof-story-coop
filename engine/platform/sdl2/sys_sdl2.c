@@ -127,6 +127,20 @@ void SDLash_Init( void )
 		SDL_setenv( "SDL_GAMECONTROLLER_IGNORE_DEVICES", "0x28DE/0x11FF", 1 );
 	}
 
+#if XASH_WIN32
+	// Cry of Fear: Enhanced (cof-window-name.patch): SDL's window class is
+	// registered under the project's name instead of "SDL_app", for tools
+	// that tell games apart by it. Must happen before the video subsystem
+	// registers the default; the style is SDL's own default,
+	// CS_BYTEALIGNCLIENT | CS_OWNDC.
+	{
+		char game[64];
+
+		if( Sys_GetParmFromCmdLine( "-game", game ) && !Q_stricmp( game, "cryoffear" ))
+			SDL_RegisterApp( "CryOfFearEnhanced", 0x1000 | 0x0020, NULL );
+	}
+#endif // XASH_WIN32
+
 	if( SDL_Init( SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_EVENTS ) )
 	{
 		Sys_Warn( "SDL_Init failed: %s", SDL_GetError() );

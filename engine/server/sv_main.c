@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "server.h"
+#include "sv_cof_story.h"
 #include "net_encode.h"
 #include "platform/platform.h"
 
@@ -100,6 +101,7 @@ static CVAR_DEFINE_AUTO( sv_zmax, "4096", FCVAR_MOVEVARS|FCVAR_SPONLY, "maximum 
 CVAR_DEFINE_AUTO( sv_wateramp, "0", FCVAR_MOVEVARS|FCVAR_UNLOGGED, "world waveheight factor" );
 static CVAR_DEFINE( sv_footsteps, "mp_footsteps", "1", FCVAR_SERVER|FCVAR_MOVEVARS, "play foot steps for players" );
 CVAR_DEFINE_AUTO( sv_skyname, "desert", FCVAR_MOVEVARS|FCVAR_UNLOGGED, "skybox name (can be dynamically changed in-game)" );
+CVAR_DEFINE_AUTO( cof_default_skyname, "black", FCVAR_ARCHIVE, "Cry of Fear: skybox for a map whose worldspawn has no \"skyname\" key, replacing the stock engine default \"desert\", which the game does not ship (empty = stock behaviour)" );
 static CVAR_DEFINE_AUTO( sv_rollangle, "0", FCVAR_MOVEVARS|FCVAR_UNLOGGED|FCVAR_ARCHIVE, "how much to tilt the view when strafing" );
 static CVAR_DEFINE_AUTO( sv_rollspeed, "200", FCVAR_MOVEVARS|FCVAR_UNLOGGED, "how much strafing is necessary to tilt the view" );
 CVAR_DEFINE_AUTO( sv_skycolor_r, "0", FCVAR_MOVEVARS|FCVAR_UNLOGGED, "skylight red component value" );
@@ -175,6 +177,47 @@ static qboolean SV_HasActivePlayers( void )
 			return true;
 	}
 	return false;
+}
+
+/*
+===================
+SV_CoF_ApplyDefaultSkyName
+
+Cry of Fear: 56 of the 235 shipped maps have no "skyname" key in worldspawn
+(measured from the entity lumps; c_unlockables, c_nightmare1..4, c_lobby,
+c_loadgame, c_difficulty_settings and 48 more). SV_SpawnEntities resets
+sv_skyname per map, so those maps ask for the stock engine default "desert" -
+and the game ships gfx/env/black*, gfx/env/blue22* and gfx/env/sorgard* and
+nothing called desert, loose or in any of its 22 WADs. Under real GoldSrc the
+fallback game directory valve/ supplied desert*.tga and the load succeeded; a
+standalone Cry of Fear gamedir has no such fallback.
+
+The consequence is not cosmetic. The client's own sky loader turns its sky pass
+off when a face is missing, and a failed load leaves its "loaded" flag at 0
+while its cached skybox name still names the last skybox that DID load, so the
+next map asking for that same skybox is early-returned and never draws a sky at
+all. See the long note in engine\client\cl_main.c.
+
+So the default is replaced, for Cry of Fear only, by cof_default_skyname
+("black" - the skybox 167 of the 235 maps use, and the one the client itself
+hardcodes for multiplayer). Called from SV_SpawnEntities right after
+Cvar_Reset( "sv_skyname" ) and therefore BEFORE the entity lump is parsed, so a
+map that does carry a skyname still wins. Set cof_default_skyname to the empty
+string for stock behaviour.
+===================
+*/
+void SV_CoF_ApplyDefaultSkyName( void )
+{
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return;
+
+	if( COM_StringEmptyOrNULL( cof_default_skyname.string ))
+		return; // stock behaviour on request
+
+	if( !Q_stricmp( sv_skyname.string, cof_default_skyname.string ))
+		return;
+
+	Cvar_DirectSet( &sv_skyname, cof_default_skyname.string );
 }
 
 /*
@@ -562,6 +605,8 @@ SV_IsSimulating
 */
 static qboolean SV_IsSimulating( void )
 {
+	if( SV_CoF_TransitionActive() && sv.paused )
+		return false; // includes dedicated servers while the party signs on
 	if( Host_IsDedicated( ))
 		return true; // always active for dedicated servers
 
@@ -577,6 +622,11 @@ static qboolean SV_IsSimulating( void )
 
 	// allow to freeze everything in singleplayer
 	if( svs.maxclients <= 1 && sv.playersonly )
+		return false;
+
+	// Cry of Fear panel pause (cof_panel_pause): a safe in-play panel stops
+	// the single-player world the same way the engine menu does
+	if( svs.maxclients <= 1 && CL_CoF_PanelPaused( ))
 		return false;
 
 	if( !sv.paused && CL_IsInGame( ))
@@ -698,6 +748,7 @@ void Host_ServerFrame( void )
 
 	// let everything in the world think and move
 	if( !SV_RunGameFrame ()) return;
+	SV_CoF_StoryFrame();
 
 	// send messages back to the clients that had packets read this frame
 	SV_SendClientMessages ();
@@ -863,6 +914,8 @@ void SV_Init( void )
 	Cvar_Get( "sv_precache_meshes", "1", FCVAR_ARCHIVE, "cache SOLID_CUSTOM meshes before level loading" );	// Paranoia 2 cvar
 	Cvar_Get( "servercfgfile", "server.cfg", 0, "name of dedicated server configuration file" );
 	Cvar_Get( "lservercfgfile", "listenserver.cfg", 0, "name of listen server configuration file" );
+	Cvar_Get( "cof_trace_menu_load", "0", 0, "trace Cry of Fear cofload/save dispatch (diagnostic)" );
+	Cvar_Get( "cof_save_root_compat", "0", 0, "use Cry of Fear's runtime-root SAVE directory (opt-in)" );
 
 	Cvar_RegisterVariable( &sv_zmax );
 	Cvar_RegisterVariable( &sv_wateramp );
@@ -873,6 +926,7 @@ void SV_Init( void )
 	Cvar_RegisterVariable( &sv_skyvec_y );
 	Cvar_RegisterVariable( &sv_skyvec_z );
 	Cvar_RegisterVariable( &sv_skyname );
+	Cvar_RegisterVariable( &cof_default_skyname );
 	Cvar_RegisterVariable( &sv_footsteps );
 	Cvar_RegisterVariable( &sv_wateralpha );
 	Cvar_RegisterVariable( &sv_minupdaterate );
@@ -991,6 +1045,7 @@ void SV_Init( void )
 	Cvar_RegisterVariable( &sv_allow_testpacket );
 	Cvar_RegisterVariable( &sv_expose_player_list );
 	Cvar_RegisterVariable( &sv_query_rate_limit );
+	SV_CoF_StoryInit();
 
 	// when we in developer-mode automatically turn cheats on
 	if( host_developer.value ) Cvar_SetValue( "sv_cheats", 1.0f );
@@ -1034,7 +1089,14 @@ void SV_FinalMessage( const char *message, qboolean reconnect )
 
 	if( reconnect )
 	{
-		if( svs.maxclients <= 1 )
+		if( SV_CoF_TransitionActive() )
+		{
+			// Keep each authenticated netchannel and userid. Generic reconnect
+			// creates a new connection and cannot safely identify saved players.
+			MSG_BeginServerCmd( &msg, svc_stufftext );
+			MSG_WriteString( &msg, "cof_story_changelevel\n" );
+		}
+		else if( svs.maxclients <= 1 )
 		{
 			MSG_BeginServerCmd( &msg, svc_changing );
 			MSG_WriteOneBit( &msg, GameState->loadGame );
@@ -1095,6 +1157,8 @@ before Sys_Quit or Sys_Error
 */
 void SV_Shutdown( const char *finalmsg )
 {
+	SV_CoF_TransitionReset( true );
+	SV_CoF_StoryShutdown();
 	// already freed
 	if( !SV_Initialized( ))
 	{

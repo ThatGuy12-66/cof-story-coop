@@ -364,11 +364,30 @@ static void NetGraph_DrawTextFields( int x, int y, int w, wrect_t rect, int coun
 	static int	lastout;
 	cl_font_t *font = Con_GetFont( 0 );
 	rgba_t		colors = { 0.9 * 255, 0.9 * 255, 0.7 * 255, 255 };
-	int		ptx = Q_max( x + w - NETGRAPH_LERP_HEIGHT - 1, 1 );
-	int		pty = Q_max( rect.top + rect.bottom - NETGRAPH_LERP_HEIGHT - 3, 1 );
 	int		out, i = ( cls.netchan.outgoing_sequence - 1 ) & NET_TIMINGS_MASK;
 	int		j = cls.netchan.incoming_sequence & NET_TIMINGS_MASK;
 	int		last_y = y - net_graphheight.value;
+	// milestone 4 (cof_text_autoscale): every number below - the row pitch, the
+	// "ms" column, where the block starts - was a constant tuned to the stock
+	// 8x12 glyphs. Once the console font is sized from the render height the
+	// rows overlap, the two fields collide, the block runs off the bottom of
+	// the screen and the right-hand "%i/s" labels run off its right edge. All
+	// four are now derived from the font and clamped to the screen.
+	float		fscale = ( font && font->valid && font->scale > 0.0f ) ? font->scale : 1.0f;
+	int		charH = ( font && font->valid ) ? font->charHeight : 12;
+	int		row = Q_max( 15, (int)( 15 * fscale ));
+	int		mscol = Q_max( 75, (int)( 75 * fscale ));
+	// the labels start at the graph's left edge, which is net_graphwidth
+	// (192 px) from the right edge of the screen - enough for the stock glyphs
+	// and nothing else. Keep the graph where it is and slide only the text
+	// block left far enough for the longest line to fit.
+	int		tx = x;
+	// how many label rows this graph type draws, so the block can be lifted far
+	// enough for the last one to stay on screen
+	int		rows = ( graphtype > 2 ) ? 4 : 3;
+	int		ptx = Q_max( x + w - NETGRAPH_LERP_HEIGHT - 1, 1 );
+	int		pty = Q_max( rect.top + rect.bottom - NETGRAPH_LERP_HEIGHT - 3, 1 );
+	int		ty;
 
 	if( count > 0 )
 	{
@@ -387,35 +406,66 @@ static void NetGraph_DrawTextFields( int x, int y, int w, wrect_t rect, int coun
 
 	CL_SetFontRendermode( font );
 
+	if( font && font->valid )
+	{
+		// the two widest things drawn below: the longest label line, and the
+		// "fps" line plus the "ms" column that sits mscol to its right
+		int	labelw = 0, msw = 0;
+
+		CL_DrawStringLen( font, "out:  1234 99.99 kb/s", &labelw, NULL, FONT_DRAW_NORENDERMODE );
+		CL_DrawStringLen( font, "9999 ms", &msw, NULL, FONT_DRAW_NORENDERMODE );
+		labelw = Q_max( labelw, mscol + msw );
+
+		if( labelw <= 0 )
+			labelw = Q_max( 1, font->charWidths['0'] ) * 21;
+
+		// the right-hand cl_cmdrate/cl_updaterate "%i/s" labels are placed from
+		// the graph's own geometry, so they need the same clamp in both axes
+		CL_DrawStringLen( font, "9999/s", &msw, NULL, FONT_DRAW_NORENDERMODE );
+		msw = Q_max( 1, msw );
+		ptx = Q_max( 1, Q_min( ptx, refState.width - msw ));
+		pty = Q_max( 1, Q_min( pty, refState.height - charH ));
+
+		// and the label block has to end before that column starts, or the two
+		// overlap once the glyphs are big enough for both to have been moved
+		if( tx + labelw > ptx )
+			tx = Q_max( 0, ptx - labelw - Q_max( 2, font->charWidths[' ' ] ));
+	}
+
+	// lift the whole block until its last row fits above the bottom edge
+	ty = y - net_graphheight.value;
+	ty = Q_min( ty, refState.height - charH - row * ( rows - 1 ));
+	ty = Q_max( 0, ty );
+
 	if( framerate > 0.0f )
 	{
-		y -= net_graphheight.value;
+		y = ty;
 
-		CL_DrawStringf( font, x, y, colors, FONT_DRAW_NORENDERMODE, "%.1f fps" , 1.0f / framerate);
+		CL_DrawStringf( font, tx, y, colors, FONT_DRAW_NORENDERMODE, "%.1f fps" , 1.0f / framerate);
 
 		if( avg > 1.0f )
-			CL_DrawStringf( font, x + 75, y, colors, FONT_DRAW_NORENDERMODE, "%i ms" , (int)avg );
+			CL_DrawStringf( font, tx + mscol, y, colors, FONT_DRAW_NORENDERMODE, "%i ms" , (int)avg );
 
-		y += 15;
+		y += row;
 
 		out = netstat_cmdinfo[i].size;
 		if( !out ) out = lastout;
 		else lastout = out;
 
-		CL_DrawStringf( font, x, y, colors, FONT_DRAW_NORENDERMODE,
+		CL_DrawStringf( font, tx, y, colors, FONT_DRAW_NORENDERMODE,
 			"in :  %i %.2f kb/s", netstat_graph[j].msgbytes, cls.netchan.flow[FLOW_INCOMING].avgkbytespersec );
-		y += 15;
+		y += row;
 
-		CL_DrawStringf( font, x, y, colors, FONT_DRAW_NORENDERMODE,
+		CL_DrawStringf( font, tx, y, colors, FONT_DRAW_NORENDERMODE,
 			"out:  %i %.2f kb/s", out, cls.netchan.flow[FLOW_OUTGOING].avgkbytespersec );
-		y += 15;
+		y += row;
 
 		if( graphtype > 2 )
 		{
 			int	loss = (int)(( packet_loss + PACKETLOSS_AVG_FRAC ) - 0.01f );
 			int	choke = (int)(( packet_choke + PACKETCHOKE_AVG_FRAC ) - 0.01f );
 
-			CL_DrawStringf( font, x, y, colors, FONT_DRAW_NORENDERMODE, "loss: %i choke: %i", loss, choke );
+			CL_DrawStringf( font, tx, y, colors, FONT_DRAW_NORENDERMODE, "loss: %i choke: %i", loss, choke );
 		}
 	}
 

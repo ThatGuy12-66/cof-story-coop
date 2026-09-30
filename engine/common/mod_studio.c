@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "server.h"
+#include "cof_language.h"
 #include "studio.h"
 #include "r_studioint.h"
 #include "library.h"
@@ -1154,6 +1155,9 @@ void Mod_LoadStudioModel( model_t *mod, void *buffer, size_t buffersize, qboolea
 			byte *in, *out;
 			size_t size1, size2;
 
+			// Cry of Fear language packs: repainted textures, see below
+			CoF_Lang_StudioTextures( mod->name, thdr, size2_len );
+
 			// TODO: Mod_StudioLoadTextures will crash if passed a merged studio model!
 			ref.dllFuncs.Mod_StudioLoadTextures( mod, thdr );
 			textures_loaded = true;
@@ -1188,6 +1192,12 @@ void Mod_LoadStudioModel( model_t *mod, void *buffer, size_t buffersize, qboolea
 		mod->cache.data = Mem_Calloc( mod->mempool, phdr->length );
 		memcpy( mod->cache.data, buffer, phdr->length );
 		phdr = mod->cache.data;
+
+		// Cry of Fear language packs: the pack's repainted embedded textures
+		// (signs, newspapers, phone screens), written into this private copy
+		// before the renderer uploads them; `buffer` itself stays as read
+		// because it is what the model CRC is computed from
+		CoF_Lang_StudioTextures( mod->name, phdr, phdr->length );
 
 #if !XASH_DEDICATED
 		if( !Host_IsDedicated( ))

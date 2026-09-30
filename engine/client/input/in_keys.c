@@ -41,6 +41,43 @@ typedef struct keyname_s
 // as no limit is imposed by client.dll API, this can be safely extended
 // if needed
 static enginekey_t keys[265];
+static CVAR_DEFINE_AUTO( cof_panel_escape, "1", FCVAR_ARCHIVE, "Cry of Fear: Escape closes the open game pane before opening pause (0 restores engine-first Escape)" );
+static qboolean cof_panel_escape_down[ARRAYSIZE(keys)];
+
+// Capture the complete physical press, even if closing the pane changes key_dest.
+static qboolean Key_CoF_PanelEscape( int key, qboolean down, const char *binding )
+{
+ if(cof_panel_escape_down[key])
+ {
+  if(!down) cof_panel_escape_down[key]=false;
+  keys[key].gamedown=false; keys[key].repeats=0;
+  VGui_CoF_ForgetKey(key);
+  return true;
+ }
+ if(!down || !cof_panel_escape.value || cls.key_dest!=key_game || cls.state!=ca_active || cl.background ||
+  !GI || Q_stricmp(GI->gamefolder,"cryoffear") || !VGui_IsActive()) return false;
+ if(key!=K_ESCAPE && !(key==K_START_BUTTON && binding && !Q_stricmp(binding,"cancelselect"))) return false;
+ qboolean reporting=false;
+ unsigned int classes=CL_CoF_PanelsOnScreen(&reporting);
+ if(!reporting || !classes) return false;
+ cof_panel_escape_down[key]=true;
+ keys[key].gamedown=false; keys[key].repeats=0;
+ VGui_CoF_ForgetKey(key);
+ char info[256];
+ if(VGui_CoF_PanelAction(COF_VGUI_PANEL_BACK,info,sizeof(info))) return true;
+ if(classes==COF_PANEL_INVENTORY)
+ {
+  clgame.dllFuncs.pfnKey_Event(true,key,"+inventory");
+  clgame.dllFuncs.pfnKey_Event(false,key,"+inventory");
+ }
+ else
+ {
+  clgame.dllFuncs.pfnKey_Event(true,K_ESCAPE,"cancelselect");
+  clgame.dllFuncs.pfnKey_Event(false,K_ESCAPE,"cancelselect");
+ }
+ return true; // never open pause on the same physical press that was offered to a pane
+}
+
 
 // where the menu or the client edits the text, in render coordinates
 static struct
@@ -166,6 +203,9 @@ static const keyname_t keynames[] =
 { "INTERNATIONAL8", K_INTERNATIONAL + 7,   ""                },
 { "INTERNATIONAL9", K_INTERNATIONAL + 8,   ""                },
 };
+
+// cof_key_probe: see Key_QueueBindText below
+static qboolean key_probe_immediate;
 
 static CVAR_DEFINE_AUTO( key_rotate, "0", FCVAR_ARCHIVE|FCVAR_FILTERABLE, "rotate arrow keys (0-3)" );
 
@@ -555,6 +595,59 @@ qboolean Cmd_GetKeysList( const char *s, char *completedname, int length, qboole
 */
 /*
 ===================
+Key_CoFProbe_f
+
+cof_key_probe <key> <1|0> - deliver one key press or release straight into
+Key_Event, the same entry point the platform layer uses.
+
+This project may not inject OS keyboard or mouse input (a worker's injected
+keystrokes once landed in the user's editor), and Key_Event is internal, so
+there was no way to exercise a *bound key* from a cfg at all: running the bound
+command by hand goes through Cbuf and skips everything Key_Event does (the
+client's key hook, the bind expansion with its key number, the release of a
+button bound to a "+command"). This command closes that gap and nothing else:
+it does not synthesise mouse motion, it does not touch the platform event
+queue, it is restricted, so a server cannot reach it, and it only runs with
+"developer" set. Used to verify the aim-down-sights modes (cof_ads_toggle).
+===================
+*/
+static void Key_CoFProbe_f( void )
+{
+	int	key, down;
+
+	if( !host_developer.value )
+	{
+		Con_Printf( "cof_key_probe is a developer command: set \"developer 1\" first\n" );
+		return;
+	}
+
+	if( Cmd_Argc( ) != 3 )
+	{
+		Con_Printf( S_USAGE "cof_key_probe <key> <1|0> : deliver a key event to the engine's own key path\n" );
+		return;
+	}
+
+	key = Key_StringToKeynum( Cmd_Argv( 1 ));
+
+	if( key == -1 || key >= ARRAYSIZE( keys ))
+	{
+		Con_Printf( "cof_key_probe: \"%s\" isn't a valid key\n", Cmd_Argv( 1 ));
+		return;
+	}
+
+	down = Q_atoi( Cmd_Argv( 2 )) != 0;
+
+	Con_Printf( "[cof-key-probe] %s %s (bind \"%s\", key_dest %i)\n",
+		Key_KeynumToString( key ), down ? "down" : "up",
+		keys[key].binding ? keys[key].binding : "", (int)cls.key_dest );
+
+	key_probe_immediate = true;
+	Key_Event( key, down );
+	key_probe_immediate = false;
+}
+
+/*
+===================
 Key_Init
 ===================
 */
@@ -566,6 +659,7 @@ void Key_Init( void )
 	Cmd_AddRestrictedCommand( "unbindall", Key_Unbindall_f, "removes all commands from all keys in bindmap" );
 	Cmd_AddRestrictedCommand( "resetkeys", Key_Reset_f, "reset all keys to their default values" );
 	Cmd_AddCommand( "bindlist", Key_Bindlist_f, "display current key bindings" );
+	Cmd_AddRestrictedCommand( "cof_key_probe", Key_CoFProbe_f, "developer: deliver a key press (1) or release (0) to the engine key path, without any OS input" );
 	Cmd_AddCommand( "makehelp", Key_EnumCmds_f, "write help.txt that contains all console cvars and cmds" );
 
 	// setup default binding. "unbindall" from config.cfg will be reset it
@@ -573,7 +667,42 @@ void Key_Init( void )
 		Key_SetBinding( keynames[i].keynum, keynames[i].binding );
 
 	Cvar_RegisterVariable( &key_rotate );
+	Cvar_RegisterVariable( &cof_panel_escape );
 
+	// Cry of Fear on-screen keyboard, the engine half (cof_osk.c)
+	CL_CoF_OskInit();
+
+	// Cry of Fear Enter hook (cof_enter_hook.c)
+	CL_CoF_EnterInit();
+}
+
+/*
+===================
+Key_QueueBindText
+
+Where a bind's expanded "+cmd"/"-cmd" text goes.
+
+Normally the end of the command buffer, exactly as upstream does it. The one
+exception is cof_key_probe, which delivers a key event from INSIDE the command
+buffer: a plain Cbuf_AddText would then queue the bind behind the whole rest of
+the test script - typically a few hundred "wait"s - and the command would not
+run until the script had finished, which is neither what a real key press does
+nor anything a test can observe. While the probe is running the text is
+inserted at the head of the buffer instead, which is where a key pressed on
+this frame lands.
+
+MEASURED, 2026-09-22 (stage1/ads-toggle-20260922/evidence): with Cbuf_AddText
+the probe's "+attack3 243" never reached the client before the test script's
+own "quit" (ads5.log, every cof_ads_status still at fov 90); with the insert
+the client zooms on the frame the press was delivered (ads6.log,
+stage1/m5b-integration-20260922/evidence/adsn*.log).
+===================
+*/
+void Key_QueueBindText( const char *text )
+{
+	if( key_probe_immediate )
+		Cbuf_InsertText( text );
+	else Cbuf_AddText( text );
 }
 
 /*
@@ -593,20 +722,26 @@ static void Key_AddKeyCommands( int key, const char *kb, qboolean down )
 		if( kb[i] == ';' || !kb[i] )
 		{
 			*buttonPtr = '\0';
-			if( button[0] == '+' )
+			if( button[0] == '+' && !Q_stricmp( button, "+attack3" ) && CL_CoF_ADSHoldActive( ))
+			{
+				// Cry of Fear "Aim down sights: Hold": the aim key's press
+				// and release each become one toggle pulse (cl_main.c)
+				CL_CoF_ADSHoldKey( key, down );
+			}
+			else if( button[0] == '+' )
 			{
 				char cmd[1024];
 
 				// button commands add keynum as a parm
 				if( down ) Q_snprintf( cmd, sizeof( cmd ), "%s %i\n", button, key );
 				else Q_snprintf( cmd, sizeof( cmd ), "-%s %i\n", button + 1, key );
-				Cbuf_AddText( cmd );
+				Key_QueueBindText( cmd );
 			}
 			else if( down )
 			{
 				// down-only command
-				Cbuf_AddText( button );
-				Cbuf_AddText( "\n" );
+				Key_QueueBindText( button );
+				Key_QueueBindText( "\n" );
 			}
 
 			buttonPtr = button;
@@ -698,7 +833,24 @@ void GAME_EXPORT Key_Event( int key, int down )
 {
 	key = Key_Rotate( key );
 
+    // Finish a pane-owned press before OSK/Enter can acquire its repeat/release.
+    // Fresh presses still use the normal OSK/Enter priority below.
+    if( key>=0 && key<ARRAYSIZE(keys) && cof_panel_escape_down[key] )
+    {
+        keys[key].down=down?true:false;
+        Key_CoF_PanelEscape(key,down,keys[key].binding);
+        return;
+    }
+
 	if( OSK_KeyEvent( key, down ) )
+		return;
+
+	// Cry of Fear on-screen keyboard: was the last key a gamepad's (cof_osk.c)
+	CL_CoF_OskNoteKey( key, down );
+
+	// Cry of Fear Enter hook: START while the game polls Windows for Enter
+	// (the computer, a Press Enter card) is that Enter (cof_enter_hook.c)
+	if( CL_CoF_EnterKeyEvent( key, down ))
 		return;
 
 	// key was pressed before engine was run
@@ -708,6 +860,9 @@ void GAME_EXPORT Key_Event( int key, int down )
 	const char *kb = keys[key].binding;
 	keys[key].down = down ? true : false;
 
+	if( Key_CoF_PanelEscape( key, down, kb ))
+		return;
+
 #ifdef HACKS_RELATED_HLMODS
 	if(( cls.key_dest == key_game ) && ( cls.state == ca_cinematic ) && ( key != K_ESCAPE || !down ))
 	{
@@ -716,6 +871,57 @@ void GAME_EXPORT Key_Event( int key, int down )
 		return;
 	}
 #endif
+	// Cry of Fear unified UI: after optional pane-first handling above, Escape
+	// reaches the engine so the engine menu can be opened, even while a client
+	// VGUI panel is up. client.dll's TeamFortressViewport::KeyInput answers
+	// "handled" for K_ESCAPE whenever one of its panels is visible (the 3D menu,
+	// the keypad, the computer, the save selector, the phone), and the client
+	// first-refusal block below would then return before CL_Escape_f is reached,
+	// leaving the engine menu unreachable from those screens.
+	//
+	// This branch is deliberately narrow: only K_ESCAPE, only key down, only
+	// while the game itself has focus, and only with the gate enabled. Every
+	// other key keeps the upstream client-first behaviour, including the CoF
+	// computer-input workaround for FWGS issue #1923 below. Neither the client
+	// nor the VGUI support library is offered this key, so the client's own
+	// escape handling cannot fire a second time alongside the engine menu.
+	//
+	// Cry of Fear gamepad (cof_gamepad.c): START gets the same bypass while a
+	// clickable CoF panel is open, since the panel swallows it otherwise.
+	if( cof_ui_input_gate.value && down && cls.key_dest == key_game && ( key == K_ESCAPE || CL_CoF_PadStartAsEscape( key, kb )))
+	{
+		if( r_showtextures.value )
+		{
+			// close texture atlas, same as the generic escape handler below
+			Cvar_DirectSet( &r_showtextures, "0" );
+			return;
+		}
+
+		keys[key].repeats++;
+
+		// ignore autorepeat, otherwise holding escape flips the menu open and shut
+		if( keys[key].repeats > 1 )
+			return;
+
+		keys[key].gamedown = false;
+
+		// neither the client nor the support library saw this press, so make
+		// sure the matching release is not delivered to a CoF panel either
+		VGui_CoF_ForgetKey( key );
+
+		Con_Reportf( "[cof-ui] escape routed to the engine, client key handling bypassed\n" );
+
+		CL_Escape_f();
+		return;
+	}
+
+	// Cry of Fear gamepad (cof_gamepad.c): on an open CoF panel A / X click
+	// at the gamepad cursor and the close key closes the inventory; such a
+	// press, and its release, never reach the client or the key's binding
+	// (the release is matched in any key_dest, the pause menu may be up by then)
+	if(( cls.key_dest == key_game || !down ) && CL_CoF_PadKeyEvent( key, down ))
+		return;
+
 	// distribute the key down event to the apropriate handler
 	if( cls.key_dest == key_game && ( down || keys[key].gamedown ))
 	{
@@ -991,6 +1197,8 @@ void GAME_EXPORT Key_ClearStates( void )
 		keys[i].repeats = 0;
 		keys[i].gamedown = 0;
 	}
+
+	memset( cof_panel_escape_down, 0, sizeof( cof_panel_escape_down ));
 
 	// ensure that only actual mouse buttons are released
 	IN_ClearMouseState();

@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #endif // XASH_SDL
 
 #include "common.h"
+#include "cof_text_style.h"
 #include "client.h"
 #include "const.h"
 #include "triangleapi.h"
@@ -37,6 +38,7 @@ GNU General Public License for more details.
 #include "vgui_draw.h"
 #include "sound.h"		// SND_STOP_LOOPING
 #include "platform/platform.h"
+#include "cof_language.h"
 
 #define MAX_LINELENGTH	80
 #define TEXT_MSGNAME	"TextMessage"
@@ -301,6 +303,11 @@ void CL_CenterPrint( const char *text, float y )
 
 	clgame.centerPrint.totalWidth = 0;
 	clgame.centerPrint.time = cl.mtime[0]; // allow pause for centerprint
+
+	// Cry of Fear language packs: a centre print is text from the game DLLs
+	// (pfnCenterPrint, svc_centerprint); it is drawn one UTF-8 character at
+	// a time below, so the table's engine-font UTF-8 variant goes in here
+	text = CoF_Lang_StringEngineFont( text, true );
 	Q_strncpy( clgame.centerPrint.message, text, sizeof( clgame.centerPrint.message ));
 
 	CL_DrawStringLen( font,
@@ -366,16 +373,44 @@ static void SPR_AdjustTexCoords( int texnum, float width, float height, float *s
 
 /*
 ====================
+Cry of Fear in-game UI scaling: telling a HUD widget from a screen overlay
+
+Both go through pfnSPR_Draw at the sprite's own native size, so the API does
+not separate them. Their size does. Measured on Cry of Fear, the whole HUD
+sprite set is small - 16x16 to 32x128 - and the one screen overlay,
+sprites/subtle_noise.spr, is 256x256 tiled across the whole screen. Anchoring
+those tiles individually to their own nearest screen edge makes them overlap
+and bands the picture (evidence/h3-spr-2560-hud.png in
+stage1/ui-m4-scaling-20260922 is what that looks like).
+
+A HUD sprite authored for a 640x480 layout is never bigger than this, so the
+cap costs nothing and cannot be fooled by how often a sprite is drawn.
+cof_ui_scale_sprites 0 turns the whole sprite path back to native size, and 2
+traces every draw with its sprite name and rectangle.
+====================
+*/
+#define COF_SPRITE_MAX_WIDGET	128	// design pixels, per axis
+
+/*
+====================
 SPR_DrawGeneric
 
 draw hudsprite routine
 ====================
 */
-static void SPR_DrawGeneric( int frame, float x, float y, float width, float height, const wrect_t *prc )
+static void SPR_DrawGeneric( int frame, float x, float y, float width, float height, const wrect_t *prc, int mode )
 {
 	float	s1, s2, t1, t2;
 
-	if( width == -1 && height == -1 )
+	// Cry of Fear in-game UI scaling: only a sprite drawn at its own natural
+	// size is a HUD widget. pfnSPR_Draw / DrawHoles / DrawAdditive all pass
+	// -1,-1 and get the sprite's own pixels; pfnSPR_DrawGeneric is the one that
+	// takes an explicit width and height, and that is what the client stretches
+	// its screen-covering darkness overlay with, tile by tile. Anchoring those
+	// tiles individually tears the overlay into visibly offset bands.
+	qboolean cof_hud_widget = ( width == -1 && height == -1 );
+
+	if( cof_hud_widget )
 	{
 		int	w, h;
 
@@ -418,8 +453,36 @@ static void SPR_DrawGeneric( int frame, float x, float y, float width, float hei
 	if( !CL_Scissor( &clgame.ds.scissor, &x, &y, &width, &height, &s1, &t1, &s2, &t2 ))
 		return;
 
+	// Cry of Fear in-game UI scaling: the classic HUD sprite path - ammo digits,
+	// crosshair, damage indicators - anchored to the screen edge it was drawn
+	// against so a magnified corner element stays in its corner
+	if( cof_hud_widget )
+	{
+		// Measured on Cry of Fear (evidence/k2-trace-2560.log in
+		// stage1/ui-m4-scaling-20260922): the HUD widgets are
+		// cof_ammohud.spr 20x24, cof_mag_cross.spr 16x16,
+		// cof_glock_mag_icon.spr 32x32 and cof_glock_mag.spr 32x128, each
+		// drawn once a frame, while subtle_noise.spr is 256x256 and drawn 60
+		// times a frame as a grid over the whole screen. A HUD sprite in a
+		// 640x480 design is never larger than this; a screen overlay tile
+		// always is.
+		qboolean widget = ( width <= COF_SPRITE_MAX_WIDGET && height <= COF_SPRITE_MAX_WIDGET );
+
+		if( cof_ui_scale_sprites.value > 1.0f )
+		{
+			Con_Reportf( "[cof-spr] %s %.0f,%.0f %.0fx%.0f%s\n",
+				clgame.ds.pSprite ? clgame.ds.pSprite->name : "?", x, y, width, height,
+				widget ? "" : " (overlay tile, left alone)" );
+		}
+
+		if( widget )
+			CL_CoF_UIScaleHudRect( &x, &y, &width, &height );
+	}
+
 	// scale for screen sizes
 	SPR_AdjustSize( &x, &y, &width, &height );
+	if( CL_CoF_HudRemakeSprite( cof_hud_widget && clgame.ds.pSprite ? clgame.ds.pSprite->name : NULL,
+		prc, mode, texnum, x,y,width,height,s1,t1,s2,t2,clgame.ds.spriteColor )) return;
 	ref.dllFuncs.Color4ub( clgame.ds.spriteColor[0], clgame.ds.spriteColor[1], clgame.ds.spriteColor[2], clgame.ds.spriteColor[3] );
 	ref.dllFuncs.R_DrawStretchPic( x, y, width, height, s1, t1, s2, t2, texnum );
 }
@@ -896,11 +959,29 @@ static void CL_DrawLoadingOrPaused( int tex )
 
 void CL_DrawHUD( int state )
 {
+	// Cry of Fear unified UI: while the engine menu or the console owns input
+	// the client DLL's own redraw callback is not run, so no CoF HUD, overlay
+	// or 3D-menu artwork can appear underneath the unified stack. Everything
+	// the engine itself draws (screen fade, crosshair, centerprint, pause icon)
+	// is left alone.
+	const qboolean cof_gate = CL_CoF_UIGateActive();
+
+	// Cry of Fear in-game UI scaling: the HUD scale control is live
+	CL_CoF_CheckUIScaleChanged();
+
+	// Cry of Fear engine HUD text: the collect list is per frame. Cleared here
+	// rather than only in the flush, so a frame in which the client was gated
+	// off cannot leave anything behind for the next one.
+	CL_CoF_HudTextReset();
+
 	if( state == CL_ACTIVE && !cl.video_prepped )
 		state = CL_LOADING;
 
 	if( state == CL_ACTIVE && cl.paused )
 		state = CL_PAUSED;
+
+	if( state == CL_ACTIVE || state == CL_PAUSED )
+		CL_CoF_HudRemakeBegin();
 
 	switch( state )
 	{
@@ -909,14 +990,18 @@ void CL_DrawHUD( int state )
 			CL_DrawScreenFade ();
 		CL_DrawCrosshair ();
 		CL_DrawCenterPrint ();
-		clgame.dllFuncs.pfnRedraw( cl.time, cl.intermission );
+		if( !cof_skip_client_hud_redraw.value && !cof_gate )
+			clgame.dllFuncs.pfnRedraw( cl.time, cl.intermission );
+		CL_CoF_HudRemakeAmmo();
 		if( cl.intermission ) CL_DrawScreenFade ();
 		break;
 	case CL_PAUSED:
 		CL_DrawScreenFade ();
 		CL_DrawCrosshair ();
 		CL_DrawCenterPrint ();
-		clgame.dllFuncs.pfnRedraw( cl.time, cl.intermission );
+		if( !cof_skip_client_hud_redraw.value && !cof_gate )
+			clgame.dllFuncs.pfnRedraw( cl.time, cl.intermission );
+		CL_CoF_HudRemakeAmmo();
 		if( showpause.value )
 		{
 			if( !cls.pauseIcon )
@@ -935,6 +1020,12 @@ void CL_DrawHUD( int state )
 		}
 		break;
 	}
+
+	// Cry of Fear engine HUD text: everything the client asked to draw through
+	// pfnDrawCharacter this frame, one backing strip per line and then its
+	// glyphs. Last, so the strip cannot land on top of the text it is under.
+	CL_CoF_HudRemakeAmmo(); // close collection for loading/changelevel passes too
+	CL_CoF_HudTextFlush();
 }
 
 static void CL_ClearUserMessage( char *pszName, int svc_num )
@@ -1479,7 +1570,7 @@ pfnSPR_Draw
 static void GAME_EXPORT pfnSPR_Draw( int frame, int x, int y, const wrect_t *prc )
 {
 	ref.dllFuncs.GL_SetRenderMode( kRenderTransAlpha );
-	SPR_DrawGeneric( frame, x, y, -1, -1, prc );
+	SPR_DrawGeneric( frame, x, y, -1, -1, prc, kRenderTransAlpha );
 }
 
 /*
@@ -1497,7 +1588,7 @@ static void GAME_EXPORT pfnSPR_DrawHoles( int frame, int x, int y, const wrect_t
 	pglBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 	pglEnable( GL_BLEND );
 #endif
-	SPR_DrawGeneric( frame, x, y, -1, -1, prc );
+	SPR_DrawGeneric( frame, x, y, -1, -1, prc, kRenderTransColor );
 
 #if 1
 	ref.dllFuncs.GL_SetRenderMode( kRenderNormal );
@@ -1522,7 +1613,7 @@ static void GAME_EXPORT pfnSPR_DrawAdditive( int frame, int x, int y, const wrec
 	pglBlendFunc( GL_ONE, GL_ONE );
 #endif
 
-	SPR_DrawGeneric( frame, x, y, -1, -1, prc );
+	SPR_DrawGeneric( frame, x, y, -1, -1, prc, kRenderTransAdd );
 
 #if 1 // REFTODO
 	ref.dllFuncs.GL_SetRenderMode( kRenderNormal );
@@ -1624,6 +1715,78 @@ static client_sprite_t *SPR_GetList( char *psz, int *piCount )
 
 /*
 =============
+CL_CoF_ChapterRuleHidden
+
+Cry of Fear chapter title card (cof_hud_chapter_rule_hide, default 1).
+
+The card is the chapter title in the chaptertitle VGUI scheme with a thin white
+rule under it. The title is a VGUI Label and goes through the milestone-4
+surface transform; the rule does not - the client draws it with pfnFillRGBA
+in raw screen pixels. At the user's HUD scale the title moved and the rule
+stayed, so the rule crosses the glyphs. User decision (2026-09-22): do not
+re-place it, suppress it.
+
+MEASURED (stage1/m5b-integration-20260922/evidence/chap-*-show*.log, c_bridge,
+cof_hud_text_trace 1, every client pfnFillRGBA logged): the card draws exactly
+one fill of its own, a white 2 px rule that grows in 16 px steps (15, 31, 47 ...
+447) to its full 463 px while the title types out, at a fixed place relative to
+the screen centre, and fades out with the card (alpha 223..228):
+
+	1920x1080   729,561    = 960-231, 540+21
+	2560x1440   1049,741   = 1280-231, 720+21
+	3840x2160   1689,1101  = 1920-231, 1080+21
+
+So the match is: pure white, 2 px tall, at most 463 px wide, at
+(width/2 - 231, height/2 + 21) of the screen the client is told about - every
+frame of the growth, not only the finished "463x2 rgba 255,255,255,228". The
+alpha is not matched (it fades). The client's other pfnFillRGBA users (fades,
+the vignette, the letterbox bars) are screen-covering rectangles and cannot
+match.
+=============
+*/
+#define COF_CHAPTER_RULE_W	463	// full width
+#define COF_CHAPTER_RULE_H	2
+#define COF_CHAPTER_RULE_DX	231	// left edge, pixels left of the screen centre
+#define COF_CHAPTER_RULE_DY	21	// top edge, pixels below the screen centre
+
+static qboolean CL_CoF_ChapterRuleHidden( int x, int y, int w, int h, int r, int g, int b, int a )
+{
+	static qboolean	reported;
+	int		cx, cy;
+
+	if( cof_hud_text_trace.value != 0.0f )
+		Con_Reportf( "[cof-fill] %i,%i %ix%i rgba %i,%i,%i,%i\n", x, y, w, h, r, g, b, a );
+
+	if( !cof_hud_chapter_rule_hide.value )
+		return false;
+
+	if( h != COF_CHAPTER_RULE_H || w <= 0 || w > COF_CHAPTER_RULE_W || r != 255 || g != 255 || b != 255 )
+		return false;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return false;
+
+	// the screen size the client placed it with (hud_scale is ignored for
+	// Cry of Fear, so this is the render size); one pixel of slack for odd
+	// widths and heights, where the client's own halving may round the
+	// other way
+	cx = clgame.scrInfo.iWidth / 2 - COF_CHAPTER_RULE_DX;
+	cy = clgame.scrInfo.iHeight / 2 + COF_CHAPTER_RULE_DY;
+
+	if( abs( x - cx ) > 1 || abs( y - cy ) > 1 )
+		return false;
+
+	if( !reported )
+	{
+		reported = true;
+		Con_Reportf( "[cof-ui] chapter card rule %i,%i %ix%i suppressed (cof_hud_chapter_rule_hide 1)\n", x, y, w, h );
+	}
+
+	return true;
+}
+
+/*
+=============
 CL_FillRGBA
 
 =============
@@ -1637,9 +1800,71 @@ static void GAME_EXPORT CL_FillRGBA( int x, int y, int w, int h, int r, int g, i
 	b = bound( 0, b, 255 );
 	a = bound( 0, a, 255 );
 
+	if( CL_CoF_ChapterRuleHidden( x, y, w, h, r, g, b, a ))
+		return;
+
+	// NOT scaled by cof_ui_scale, deliberately: the Cry of Fear client uses
+	// pfnFillRGBA for screen-covering effects - fades, the vignette, the
+	// letterbox bars - built out of several adjoining rectangles. Anchoring
+	// each of those to its own nearest screen edge tears the effect into
+	// visibly offset bands (measured, stage1/ui-m4-scaling-20260922). Its HUD
+	// widgets are VGUI panels and scale through VGUI_DrawQuad instead.
 	SPR_AdjustSize( &x_, &y_, &w_, &h_ );
 
 	ref.dllFuncs.FillRGBA( kRenderTransAdd, x_, y_, w_, h_, r, g, b, a );
+}
+
+/*
+=============
+CL_CoF_LoadFile
+
+Cry of Fear engine-rasterised VGUI fonts: the engfunc the client loads its
+bitmap font strips through, wrapped so the scheme name in
+"gfx\vgui\fonts\<res>_<scheme>.tga" is latched for the font object the
+client builds a moment later. That is the only thing that tells one of its
+fonts from another - it constructs every single one of them as
+Font( "Arial", <tga bytes>, tall = 20, weight = 700 ). Everything else about
+this call is the stock engfunc.
+=============
+*/
+void CL_CoF_PanelImageLoad( const char *filename ); // cof_panel_transparency.c
+
+static byte *GAME_EXPORT CL_CoF_LoadFile( const char *filename, int usehunk, int *pLength )
+{
+	const char	*name;
+
+	if( !COM_StringEmptyOrNULL( filename ) && Q_stristr( filename, "vgui" ) &&
+		Q_stristr( filename, "fonts" ) &&
+		( name = COM_FileWithoutPath( filename )) != NULL &&
+		!Q_stricmp( COM_FileExtension( name ), "tga" ))
+	{
+		const char	*underscore = Q_strchr( name, '_' );
+		qboolean	bucket = ( underscore != NULL && underscore != name );
+
+		// "<res>_<scheme>.tga" and nothing else: the part before the underscore
+		// has to be the resolution bucket, or this is one of the game's many
+		// other vgui images and the role it would latch would be nonsense
+		for( const char *p = name; bucket && p < underscore; p++ )
+		{
+			if( *p < '0' || *p > '9' )
+				bucket = false;
+		}
+
+		if( bucket && underscore[1] )
+		{
+			string	scheme;
+
+			Q_strncpy( scheme, underscore + 1, sizeof( scheme ));
+			COM_StripExtension( scheme );
+			CL_CoF_FontLatch( scheme );
+		}
+	}
+
+	// Cry of Fear world behind the panels: the name of the VGUI picture the
+	// BitmapTGA built next comes from (the backgroundtoall.tga plate)
+	CL_CoF_PanelImageLoad( filename );
+
+	return COM_LoadFile( filename, usehunk, pLength );
 }
 
 /*
@@ -1666,7 +1891,22 @@ int GAME_EXPORT CL_GetScreenInfo( SCREENINFO *pscrinfo )
 	clgame.scrInfo.iSize = sizeof( clgame.scrInfo );
 	clgame.scrInfo.iFlags = SCRINFO_SCREENFLASH;
 
-	if( hud_scale.value >= 320.0f && hud_scale.value >= hud_scale_minimal_width.value )
+	// Cry of Fear in-game UI scaling (milestone 4): hud_scale is POISON for this
+	// game and is disabled for it outright. The Cry of Fear client builds its
+	// own renderer's viewport and projection from the same gHUD.m_scrinfo it
+	// lays its panels out from, so a virtual screen size here zooms and shifts
+	// the 3D view, in game and on the menu background map alike - verified in
+	// the user's runtime with hud_scale 2, and measured again in
+	// stage1/ui-m4-scaling-20260922 (the 3D view correlates at 0.68 against a
+	// stock frame, where cof_ui_scale correlates at 0.999). The engine menu no
+	// longer offers the control for this game either, but a stale archived
+	// value in an existing config.cfg would otherwise still break the renderer.
+	// cof_ui_scale is the supported way to scale this game's UI.
+	if( CL_CoF_HudScaleBlocked( ))
+	{
+		scale_factor = 0.0f;
+	}
+	else if( hud_scale.value >= 320.0f && hud_scale.value >= hud_scale_minimal_width.value )
 	{
 		scale_factor = refState.width / hud_scale.value;
 		apply_scale_factor = scale_factor > 1.0f;
@@ -1792,6 +2032,28 @@ static int GAME_EXPORT pfnServerCmd( const char *szCmdString )
 	if( COM_StringEmptyOrNULL( szCmdString ))
 		return 0;
 
+	// CoF's original engine handles the client's tape-save request locally.
+	if( Cvar_VariableInteger( "cof_save_root_compat" ) && GI &&
+		!Q_stricmp( GI->gamefolder, "cryoffear" ) && SV_Active() &&
+		CL_Active() && cl.maxclients == 1 && !cls.demoplayback &&
+		!Q_strncmp( szCmdString, "savehack cofsave", 16 ))
+	{
+		const char *slot = szCmdString + 16;
+		if( *slot >= '1' && *slot <= '5' )
+		{
+			const char *tail = slot + 1;
+			while( *tail == ' ' || *tail == '\t' || *tail == '\r' || *tail == '\n' )
+				tail++;
+			if( !*tail )
+			{
+				char command[32];
+				Q_snprintf( command, sizeof( command ), "save cofsave%c\n", *slot );
+				Cbuf_AddText( command );
+				return 1;
+			}
+		}
+	}
+
 	// just like the client typed "cmd xxxxx" at the console
 	MSG_BeginClientCmd( &cls.netchan.message, clc_stringcmd );
 	MSG_WriteString( &cls.netchan.message, szCmdString );
@@ -1812,12 +2074,19 @@ static int GAME_EXPORT pfnClientCmd( const char *szCmdString )
 
 	if( cls.initialized )
 	{
+		// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on): the
+		// client's to3dmenu command and its Unlockables / difficulty / server
+		// panels ask for the main menu by loading c_game_menu1. Send them back
+		// to the engine menu over the background map instead.
+		if( CL_CoF_MenuMapRedirect( szCmdString, "client pfnClientCmd" ))
+			return 1;
+
 		Cbuf_AddText( szCmdString );
 		Cbuf_AddText( "\n" );
 	}
 	else
 	{
-		// will exec later
+		// too early to redirect: cof_ui_deferred_cmd_guard owns this buffer
 		Q_strncat( host.deferred_cmd, szCmdString, sizeof( host.deferred_cmd ));
 		Q_strncat( host.deferred_cmd, "\n", sizeof( host.deferred_cmd ));
 	}
@@ -1884,8 +2153,33 @@ pfnPlaySoundByName
 */
 static void GAME_EXPORT pfnPlaySoundByName( const char *szSound, float volume )
 {
+	// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on): the client
+	// brings its own main-menu panel up without asking for a level change at
+	// all - the Unlockables gallery's MAIN MENU button is the measured case -
+	// and this click is the only thing the engine gets to see of it. The sound
+	// still plays; the return to our menu is queued, see cl_main.c.
+	CL_CoF_MenuPanelSound( szSound, volume );
+
 	int hSound = S_RegisterSound( szSound );
 	S_StartSound( NULL, cl.viewentity, CHAN_ITEM, hSound, volume, ATTN_NORM, PITCH_NORM, SND_STOP_LOOPING );
+}
+
+/*
+=============
+pfnCvarSetValue
+
+The client DLL's own Cvar_SetValue callback. Stock behaviour is the engine's
+Cvar_SetValue and nothing else; the wrapper exists so the engine can tell a
+write that came from the client apart from one the user typed or a config
+exec'd, which is what the Cry of Fear sky reset needs (cof_sky_reset_per_map,
+see cl_main.c). The write itself is never blocked.
+=============
+*/
+static void GAME_EXPORT pfnCvarSetValue( const char *name, float value )
+{
+	CL_CoF_SkyClientCvarSet( name, value );
+
+	Cvar_SetValue( name, value );
 }
 
 /*
@@ -1935,6 +2229,332 @@ client_textmessage_t *CL_TextMessageGet( const char *pName )
 }
 
 /*
+====================
+Cry of Fear engine HUD text, milestone 4b
+
+Two problems the user reported about the text the client draws through
+pfnDrawCharacter - the cutscene subtitles, the "You got the Lantern" and
+"Picked up a glock magazine" pickup notifications, the yellow SIMON: / MAN:
+dialogue lines: it sits too high, and it is too light to read over the scene.
+
+The height half is cof_hud_text_font plus cof_hud_text_backing (below); the
+position half is CL_CoF_HudTextYOffset().
+
+None of this is a client-side layout change. The client measures and positions
+its own text from gHUD.m_scrinfo.charWidths[] / iCharHeight, which the engine
+fills in from cls.creditsFont, and it emits one pfnDrawCharacter per glyph at
+an absolute screen position. So the engine's only lever at this boundary is
+the stream of glyph draws itself, and that is exactly what this works on.
+
+THE BACKING STRIP. A strip cannot be drawn when the first glyph of a line
+arrives, because the line's extent is not known until its last glyph has been
+drawn - and by then drawing a strip would paint over the text. So the glyphs
+are not drawn when they arrive: they are collected into a per-frame list,
+grouped by their baseline y (one group per line, which is what a client that
+lays out a paragraph produces), and the whole list is flushed at the end of
+CL_DrawHUD - strip first, glyphs second, one group at a time.
+
+DRAW ORDER. The flush is the last thing CL_DrawHUD does, so this text ends up
+above the rest of the client's HUD instead of wherever in pfnRedraw's own
+sequence it happened to be emitted. That is the intended order for overlay
+text and it is the only order in which a backing strip can work at all. It
+changes nothing for the VGUI layer, which the engine paints in a separate pass
+(VGui_Paint), so the notes, the pager, the inventory and the boss bar are
+untouched by everything here.
+
+NOT DEFERRED: UTF-8 mode. Con_UtfProcessChar is a state machine over the byte
+stream, so resolving a glyph at collect time and again at flush time would
+decode the sequence twice. hud_utf8 is off for this game - the whole Cry of
+Fear text pipeline is 8-bit, which is why cof_text_codepage exists - so the
+deferral simply steps aside when it is on, and tab stops are drawn directly
+too, because their advance depends on the pen position at draw time.
+====================
+*/
+#define COF_HUDTEXT_MAX_GLYPHS	1024
+#define COF_HUDTEXT_MAX_LINES	48
+
+typedef struct
+{
+	int	x, y;
+	int	number;
+	rgba_t	color;
+} cof_hudtext_glyph_t;
+
+typedef struct
+{
+	int	y;			// the baseline the whole line shares
+	int	minx, maxx;		// ink extent, for the strip
+	int	first, count;		// slice of cof_hudtext.glyphs
+} cof_hudtext_line_t;
+
+static struct
+{
+	cof_hudtext_glyph_t	glyphs[COF_HUDTEXT_MAX_GLYPHS];
+	cof_hudtext_line_t	lines[COF_HUDTEXT_MAX_LINES];
+	int			numGlyphs;
+	int			numLines;
+	qboolean		reported_full;
+} cof_hudtext;
+
+/*
+====================
+CL_CoF_HudTextBackingActive
+====================
+*/
+static qboolean CL_CoF_HudStyleActive( void )
+{
+	return cof_hud_text_style.value && hud_utf8.value == 0.0f && GI && !Q_stricmp( GI->gamefolder, "cryoffear" );
+}
+
+static int CL_CoF_DrawStyledHudChar( int x, int y, int number, const rgba_t color, cl_font_t *font, int flags, int pass )
+{
+	int ink[4]; rgba_t draw;
+	CoF_TextStyleColor( color[0], color[1], color[2], color[3], 1, ink );
+	if( pass == 1 )
+	{
+		for( int i = 0; i < 4; i++ ) draw[i] = (byte)ink[i];
+		return CL_DrawCharacter( x, y, number, draw, font, flags );
+	}
+	for( int tap = 0; tap < 5; tap++ )
+	{
+		float dx, dy; int weight;
+		CoF_TextShadowTap( font->charHeight, tap, &dx, &dy, &weight );
+		draw[0] = 24; draw[1] = 25; draw[2] = 27;
+		draw[3] = (byte)( ink[3] * weight / 255 );
+		if( draw[3] ) CL_DrawCharacter( x + dx, y + dy, number, draw, font, flags );
+	}
+	return 0;
+}
+
+static qboolean CL_CoF_HudTextDeferActive( void )
+{
+	// the trace reconstructs whole lines out of the same list, so it needs the
+	// collection even when no strip is wanted
+	if( cof_hud_text_backing.value <= 0.0f && cof_hud_text_trace.value == 0.0f && !CL_CoF_HudStyleActive( ))
+		return false;
+
+	if( hud_utf8.value != 0.0f )
+		return false;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return false;
+
+	return cls.creditsFont.valid;
+}
+
+/*
+====================
+CL_CoF_HudTextYOffset
+
+How far down to push everything the client draws through pfnDrawCharacter.
+
+WHY ANY OFFSET IS NEEDED. The client positions this text itself, and its
+formula is a function of the font metrics the engine handed it. Growing the
+HUD font for a 1440p or 2160p display therefore moves the text as a side
+effect - upward, because the client subtracts the block height from a screen
+fraction. cof_hud_text_height_pct is what makes the text readable; this is what
+keeps it where it was while doing so.
+
+    correction = ( charHeight - shippedHeight ) * cof_hud_text_y_shift
+
+where shippedHeight is the height the game's own gfx/creditsfont.fnt has on
+this display (cls_cof_hud_text_shipped, written by SCR_LoadCreditsFont) and
+cof_hud_text_y_shift is how many line heights of the block sit above the
+anchor in the client's own formula. At the shipped size the correction is
+exactly zero, which is what keeps 1920x1080 with the stock metrics a no-op.
+
+cof_hud_text_y is a plain user offset in percent of the render height on top,
+so a player who wants the subtitles lower still does not need a rebuild.
+====================
+*/
+int CL_CoF_HudTextYOffset( void )
+{
+	float	off = 0.0f;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return 0;
+
+	if( cof_hud_text_y_shift.value != 0.0f && cls_cof_hud_text_shipped > 0.0f && cls.creditsFont.valid )
+	{
+		float grown = (float)cls.creditsFont.charHeight - cls_cof_hud_text_shipped;
+
+		if( grown > 0.0f )
+			off += grown * bound( 0.0f, cof_hud_text_y_shift.value, 8.0f );
+	}
+
+	if( cof_hud_text_y.value != 0.0f && ref.initialized && refState.height > 0 )
+		off += refState.height * bound( -50.0f, cof_hud_text_y.value, 50.0f ) * 0.01f;
+
+	return (int)( off + ( off >= 0.0f ? 0.5f : -0.5f ));
+}
+
+/*
+====================
+CL_CoF_HudTextDefer
+
+Collect one glyph instead of drawing it. Returns false when the caller has to
+draw it itself after all (feature off, tab stop, list full).
+====================
+*/
+static qboolean CL_CoF_HudTextDefer( int x, int y, int number, const rgba_t color )
+{
+	cof_hudtext_line_t	*line = NULL;
+	cof_hudtext_glyph_t	*glyph;
+	cl_font_t		*font = &cls.creditsFont;
+	int			w, i;
+
+	if( number == '\t' )
+		return false;	// advance depends on the pen position, see the header
+
+	number &= 255;
+
+	if( number <= 32 || !font->charWidths[number] )
+		return true;	// nothing to draw, and the caller returns the advance
+
+	if( cof_hudtext.numGlyphs >= COF_HUDTEXT_MAX_GLYPHS )
+	{
+		if( !cof_hudtext.reported_full )
+		{
+			cof_hudtext.reported_full = true;
+			Con_Reportf( S_WARN "[cof-hudtext] more than %i glyphs in one frame, drawing the rest without a backing strip\n",
+				COF_HUDTEXT_MAX_GLYPHS );
+		}
+		return false;
+	}
+
+	w = font->charWidths[number];
+
+	// the line this glyph belongs to: same baseline y. Searched from the end
+	// because a client lays a paragraph out one line at a time
+	for( i = cof_hudtext.numLines - 1; i >= 0; i-- )
+	{
+		if( cof_hudtext.lines[i].y == y )
+		{
+			line = &cof_hudtext.lines[i];
+			break;
+		}
+	}
+
+	if( line == NULL )
+	{
+		if( cof_hudtext.numLines >= COF_HUDTEXT_MAX_LINES )
+			return false;
+
+		line = &cof_hudtext.lines[cof_hudtext.numLines++];
+		line->y = y;
+		line->minx = x;
+		line->maxx = x + w;
+		line->first = cof_hudtext.numGlyphs;
+		line->count = 0;
+	}
+	else
+	{
+		// the slices have to stay contiguous: a glyph for an older line after
+		// a newer line has started cannot be appended to it
+		if( line->first + line->count != cof_hudtext.numGlyphs )
+			return false;
+
+		if( x < line->minx ) line->minx = x;
+		if( x + w > line->maxx ) line->maxx = x + w;
+	}
+
+	glyph = &cof_hudtext.glyphs[cof_hudtext.numGlyphs++];
+	glyph->x = x;
+	glyph->y = y;
+	glyph->number = number;
+	Vector4Copy( color, glyph->color );
+	line->count++;
+
+	return true;
+}
+
+/*
+====================
+CL_CoF_HudTextFlush
+
+Called at the end of CL_DrawHUD: one strip per collected line, then that
+line's glyphs over it. The padding is derived from the glyph height so it
+tracks the display the same way everything else in milestone 4 does, and it is
+the same shape the menu's own GAME OVER backing uses (a plain translucent
+black rectangle, UI_ThemeDeathBacking in the menu library).
+====================
+*/
+void CL_CoF_HudTextReset( void )
+{
+	cof_hudtext.numGlyphs = 0;
+	cof_hudtext.numLines = 0;
+}
+
+void CL_CoF_HudTextFlush( void )
+{
+	cl_font_t	*font = &cls.creditsFont;
+	rgba_t		backing;
+	int		padx, pady, i, j;
+
+	if( cof_hudtext.numGlyphs == 0 )
+	{
+		cof_hudtext.numLines = 0;
+		return;
+	}
+
+	padx = Q_max( 2, font->charHeight / 2 );
+	pady = Q_max( 1, font->charHeight / 6 );
+
+	backing[0] = backing[1] = backing[2] = 0;
+	backing[3] = (byte)bound( 0, (int)cof_hud_text_backing.value, 255 );
+
+	for( i = 0; i < cof_hudtext.numLines; i++ )
+	{
+		const cof_hudtext_line_t *line = &cof_hudtext.lines[i];
+
+		if( line->count <= 0 )
+			continue;
+
+		if( cof_hud_text_trace.value != 0.0f )
+		{
+			char	text[COF_HUDTEXT_MAX_GLYPHS + 1];
+			int	n = Q_min( line->count, (int)sizeof( text ) - 1 );
+
+			for( j = 0; j < n; j++ )
+			{
+				int ch = cof_hudtext.glyphs[line->first + j].number;
+
+				text[j] = ( ch >= 32 && ch < 127 ) ? (char)ch : '.';
+			}
+			text[n] = '\0';
+
+			Con_Printf( "[cof-hudtext] line y=%i (%.2f%% of %i) x=%i..%i charH=%i rgb=%i,%i,%i \"%s\"\n",
+				line->y, refState.height > 0 ? line->y * 100.0f / refState.height : 0.0f,
+				refState.height, line->minx, line->maxx, font->charHeight,
+				cof_hudtext.glyphs[line->first].color[0],
+				cof_hudtext.glyphs[line->first].color[1],
+				cof_hudtext.glyphs[line->first].color[2], text );
+		}
+
+		if( backing[3] != 0 )
+		{
+			ref.dllFuncs.FillRGBA( kRenderTransTexture,
+				line->minx - padx, line->y - pady,
+				( line->maxx - line->minx ) + padx * 2,
+				font->charHeight + pady * 2,
+				backing[0], backing[1], backing[2], backing[3] );
+		}
+
+		for( int pass = CL_CoF_HudStyleActive( ) ? 0 : 1; pass < 2; pass++ )
+		for( j = 0; j < line->count; j++ )
+		{
+			const cof_hudtext_glyph_t *glyph = &cof_hudtext.glyphs[line->first + j];
+			if( CL_CoF_HudStyleActive( ))
+				CL_CoF_DrawStyledHudChar( glyph->x, glyph->y, glyph->number, glyph->color, font, FONT_DRAW_HUD, pass );
+			else CL_DrawCharacter( glyph->x, glyph->y, glyph->number, glyph->color, font, FONT_DRAW_HUD );
+		}
+	}
+
+	cof_hudtext.numGlyphs = 0;
+	cof_hudtext.numLines = 0;
+}
+
+/*
 =============
 pfnDrawCharacter
 
@@ -1949,6 +2569,29 @@ static int GAME_EXPORT pfnDrawCharacter( int x, int y, int number, int r, int g,
 	if( hud_utf8.value )
 		flags |= FONT_DRAW_UTF8;
 
+	// Cry of Fear engine HUD text: put it back where the shipped font size
+	// would have put it, before anything else looks at the coordinate
+	y += CL_CoF_HudTextYOffset();
+
+	// ... and collect it, so the backing strip can be drawn under the line
+	if( CL_CoF_HudTextDeferActive( ) && CL_CoF_HudTextDefer( x, y, number, color ))
+	{
+		cl_font_t *font = &cls.creditsFont;
+		int idx = number & 255;
+
+		if( idx == ' ' )
+			return font->charWidths[' '];
+		if( idx <= 32 || !font->valid )
+			return 0;
+
+		return font->charWidths[idx];
+	}
+
+	if( CL_CoF_HudStyleActive( ))
+	{
+		CL_CoF_DrawStyledHudChar( x, y, number, color, &cls.creditsFont, flags, 0 );
+		return CL_CoF_DrawStyledHudChar( x, y, number, color, &cls.creditsFont, flags, 1 );
+	}
 	return CL_DrawCharacter( x, y, number, color, &cls.creditsFont, flags );
 }
 
@@ -1966,7 +2609,7 @@ int GAME_EXPORT pfnDrawConsoleString( int x, int y, char *string )
 	Vector4Copy( clgame.ds.textColor, color );
 	Vector4Set( clgame.ds.textColor, 255, 255, 255, 255 );
 
-	return x + CL_DrawString( x, y, string, color, font, FONT_DRAW_UTF8 | FONT_DRAW_HUD );
+	return x + CL_DrawString( x, y, string, color, font, FONT_DRAW_UTF8 | FONT_DRAW_HUD | FONT_DRAW_COF_LANG );
 }
 
 /*
@@ -1997,7 +2640,7 @@ void GAME_EXPORT pfnDrawConsoleStringLen( const char *pText, int *length, int *h
 	cl_font_t *font = Con_GetFont( con_fontsize.value );
 
 	if( height ) *height = font->charHeight;
-	CL_DrawStringLen( font, pText, length, NULL, FONT_DRAW_UTF8 | FONT_DRAW_HUD );
+	CL_DrawStringLen( font, pText, length, NULL, FONT_DRAW_UTF8 | FONT_DRAW_HUD | FONT_DRAW_COF_LANG );
 }
 
 /*
@@ -2965,7 +3608,7 @@ static void GAME_EXPORT pfnSPR_DrawGeneric( int frame, int x, int y, const wrect
 	pglEnable( GL_BLEND );
 	pglBlendFunc( blendsrc, blenddst ); // g-cont. are params is valid?
 #endif
-	SPR_DrawGeneric( frame, x, y, width, height, prc );
+	SPR_DrawGeneric( frame, x, y, width, height, prc, kRenderNormal );
 }
 
 /*
@@ -3010,7 +3653,7 @@ pfnDrawString
 static int GAME_EXPORT pfnDrawString( int x, int y, const char *str, int r, int g, int b )
 {
 	rgba_t color = { r, g, b, 255 };
-	int flags = FONT_DRAW_HUD | FONT_DRAW_NOLF;
+	int flags = FONT_DRAW_HUD | FONT_DRAW_NOLF | FONT_DRAW_COF_LANG;
 
 	if( hud_utf8.value )
 		SetBits( flags, FONT_DRAW_UTF8 );
@@ -3027,7 +3670,7 @@ pfnDrawStringReverse
 static int GAME_EXPORT pfnDrawStringReverse( int x, int y, const char *str, int r, int g, int b )
 {
 	rgba_t color = { r, g, b, 255 };
-	int flags = FONT_DRAW_HUD | FONT_DRAW_NOLF;
+	int flags = FONT_DRAW_HUD | FONT_DRAW_NOLF | FONT_DRAW_COF_LANG;
 
 	if( hud_utf8.value )
 		SetBits( flags, FONT_DRAW_UTF8 );
@@ -3116,6 +3759,10 @@ static void GAME_EXPORT CL_FillRGBABlend( int x, int y, int w, int h, int r, int
 	b = bound( 0, b, 255 );
 	a = bound( 0, a, 255 );
 
+	if( CL_CoF_ChapterRuleHidden( x, y, w, h, r, g, b, a ))
+		return;
+
+	// not scaled by cof_ui_scale, see the note in CL_FillRGBA above
 	SPR_AdjustSize( &x_, &y_, &w_, &h_ );
 
 	ref.dllFuncs.FillRGBA( kRenderTransTexture, x_, y_, w_, h_, r, g, b, a );
@@ -3794,7 +4441,7 @@ static cl_enginefunc_t gEngfuncs =
 	pfnGetViewAngles,
 	pfnSetViewAngles,
 	CL_GetMaxClients,
-	Cvar_SetValue,
+	pfnCvarSetValue,
 	Cmd_Argc,
 	Cmd_Argv,
 	Con_Printf,
@@ -3836,7 +4483,7 @@ static cl_enginefunc_t gEngfuncs =
 	pfnSetScreenFade,
 	VGui_GetPanel,
 	VGui_ViewportPaintBackground,
-	COM_LoadFile,
+	CL_CoF_LoadFile,
 	pfnParseFile,
 	COM_FreeFile,
 	&gTriApi,
@@ -3897,6 +4544,10 @@ static cl_enginefunc_t gEngfuncs =
 void CL_UnloadProgs( void )
 {
 	if( !clgame.hInstance ) return;
+
+	// Cry of Fear in-game UI scaling: the pinned layout size belongs to this
+	// client library's one layout pass and must not outlive it
+	CL_CoF_UIReset();
 
 	CL_FreeEdicts();
 	CL_FreeTempEnts();
@@ -4067,6 +4718,19 @@ qboolean CL_LoadProgs( const char *name )
 	if( uses_sdl2 )
 		CL_CheckLoadedSDL2( name );
 #endif
+
+	// Cry of Fear language packs: patch the client DLL's single
+	// KERNEL32!CreateFileW import so its txtfiles/, notes/ and
+	// inventoryitems/ reads can be redirected into the active pack.
+	// Installed unconditionally and inert until a pack is active, because
+	// the library is loaded before config.cfg has been exec'd.
+	// See engine/common/cof_language.c.
+	CoF_Lang_HookModule( clgame.hInstance, name );
+
+	// Cry of Fear Enter hook: the computer login and the Press Enter cards ask
+	// Windows for Enter directly; answer them for a gamepad
+	// (engine/client/cof_enter_hook.c)
+	CL_CoF_EnterHookModule( clgame.hInstance, name );
 
 	// delayed vgui initialization for internal support
 	if( try_internal_vgui_support && VGui_LoadProgs( clgame.hInstance ))

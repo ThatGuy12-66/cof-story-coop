@@ -89,7 +89,9 @@ static CVAR_DEFINE_AUTO( joy_gyro_roll, "0.0", FCVAR_ARCHIVE | FCVAR_FILTERABLE,
 static CVAR_DEFINE_AUTO( joy_gyro_pitch_deadzone, "0.5", FCVAR_ARCHIVE | FCVAR_FILTERABLE, "gyroscope pitch axis deadzone (deg/s)" );
 static CVAR_DEFINE_AUTO( joy_gyro_yaw_deadzone, "0.5", FCVAR_ARCHIVE | FCVAR_FILTERABLE, "gyroscope yaw axis deadzone (deg/s)" );
 static CVAR_DEFINE_AUTO( joy_gyro_roll_deadzone, "0.5", FCVAR_ARCHIVE | FCVAR_FILTERABLE, "gyroscope roll axis deadzone (deg/s)" );
-static CVAR_DEFINE_AUTO( joy_gyro_enable, "1", FCVAR_ARCHIVE | FCVAR_FILTERABLE, "enables aiming with gamepad gyroscope" );
+// Cry of Fear: gyro aiming is an opt-in (Options > Controls); cof_gamepad.c
+// also switches it off once for profiles that saved upstream's default of 1
+static CVAR_DEFINE_AUTO( joy_gyro_enable, "0", FCVAR_ARCHIVE | FCVAR_FILTERABLE, "enables aiming with gamepad gyroscope" );
 static CVAR_DEFINE_AUTO( joy_debug, "0", 0, "visualize gamepad axes and buttons" );
 static CVAR_DEFINE_AUTO( joy_have_touchpads, "0", FCVAR_READ_ONLY, "tells how many trackpads current active gamepad has" );
 static CVAR_DEFINE_AUTO( joy_touchpad_left_mode, "0", FCVAR_ARCHIVE | FCVAR_FILTERABLE, "left trackpad mode: off (0), look (1) or move (2)" );
@@ -118,6 +120,32 @@ Joy_IsActive
 qboolean Joy_IsActive( void )
 {
 	return joy_enable.value;
+}
+
+/*
+============
+Joy_CoF_AxisValue
+
+Cry of Fear: Enhanced (cof_gamepad.c): the current value of an engine axis,
+after the stick deadzone, for the panel virtual cursor and its trace
+============
+*/
+short Joy_CoF_AxisValue( engineAxis_t axis )
+{
+	if( axis < 0 || axis >= MAX_AXES )
+		return 0;
+
+	return joyaxis[axis].val;
+}
+
+// the same before the stick deadzone (cof_pad_move_mode shapes the left stick
+// itself, with a radial deadzone)
+short Joy_CoF_AxisRaw( engineAxis_t axis )
+{
+	if( axis < 0 || axis >= MAX_AXES )
+		return 0;
+
+	return joyaxis[axis].rawval;
 }
 
 /*
@@ -210,6 +238,32 @@ static void Joy_ProcessTrigger( const engineAxis_t engineAxis, short value )
 	// update axis values
 	joyaxis[engineAxis].prevval = joyaxis[engineAxis].val;
 	joyaxis[engineAxis].val = value;
+
+	// Cry of Fear: a pressed trigger is a state with hysteresis, so a finger
+	// resting near the threshold gives one press and one release, not a key
+	// edge for every jitter of the analogue value (cof_pad_trigger_hyst in
+	// cof_gamepad.c; 0 = the plain threshold below)
+	if( trigButton && CL_CoF_TriggerHysteresis( ) > 0.0f )
+	{
+		static qboolean trigdown[MAX_AXES];
+		const int hyst = (int)( CL_CoF_TriggerHysteresis( ) * SHRT_MAX );
+		const int press = Q_min( trigThreshold + hyst, SHRT_MAX - 1 );
+		const int release = Q_max( trigThreshold - hyst, 1 );
+
+		if( !trigdown[engineAxis] && value > press )
+		{
+			trigdown[engineAxis] = true;
+			CL_CoF_NoteTriggerEdge( engineAxis, true, value, trigThreshold );
+			Key_Event( trigButton, true );
+		}
+		else if( trigdown[engineAxis] && value < release )
+		{
+			trigdown[engineAxis] = false;
+			CL_CoF_NoteTriggerEdge( engineAxis, false, value, trigThreshold );
+			Key_Event( trigButton, false );
+		}
+		return;
+	}
 
 	if( joyaxis[engineAxis].val > trigThreshold &&
 		joyaxis[engineAxis].prevval <= trigThreshold ) // ignore random press
@@ -319,6 +373,10 @@ void Joy_AxisMotionEvent( engineAxis_t engineAxis, short value )
 
 	if( value == joyaxis[engineAxis].val )
 		return; // it is not an update
+
+	// Cry of Fear: a stick or trigger pushed well past its deadzone makes the
+	// gamepad the last input device (cof_gamepad.c)
+	CL_CoF_NotePadAxis( engineAxis, value );
 
 	if( engineAxis >= JOY_AXIS_RT )
 		Joy_ProcessTrigger( engineAxis, value );
@@ -506,8 +564,13 @@ void Joy_FinalizeMove( float *fw, float *side, float *dpitch, float *dyaw )
 		ClearBits( joy_axis_binding.flags, FCVAR_CHANGED );
 	}
 
+	// Cry of Fear: cof_pad_move_mode 1/2 shapes the left stick like the movement
+	// keys (cof_gamepad.c); 0 = the engine's own proportional move below
+	if( !CL_CoF_PadMoveShape( fw, side, joy_forward.value, joy_side.value ))
+	{
 	*fw     -= joy_forward.value * (float)joyaxis[JOY_AXIS_FWD ].val/(float)SHRT_MAX;  // must be form -1.0 to 1.0
 	*side   += joy_side.value    * (float)joyaxis[JOY_AXIS_SIDE].val/(float)SHRT_MAX;
+	}
 	*dpitch += joy_pitch.value * (float)joyaxis[JOY_AXIS_PITCH].val/(float)SHRT_MAX * host.realframetime;
 	*dyaw   -= joy_yaw.value   * (float)joyaxis[JOY_AXIS_YAW  ].val/(float)SHRT_MAX * host.realframetime;
 

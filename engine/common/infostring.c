@@ -349,6 +349,11 @@ static qboolean Info_IsKeyImportant( const char *key )
 		return true;
 	if( !Q_strcmp( key, "cl_nopred" ))
 		return true;
+	// Cry of Fear's client.dll registers enough userinfo cvars to leave a
+	// retail userinfo at 248/256 characters. A server password must evict
+	// cosmetic keys rather than be silently dropped ("invalid password").
+	if( !Q_strcmp( key, "password" ))
+		return true;
 	return false;
 }
 
@@ -436,7 +441,9 @@ qboolean Info_SetValueForStarKey( char *s, const char *key, const char *value, i
 		return true; // just clear variable
 
 	Q_snprintf( new, sizeof( new ), "\\%s\\%s", key, value );
-	if( Q_strlen( new ) + Q_strlen( s ) > maxsize )
+	// maxsize includes the terminator. An exact-capacity value would write
+	// its trailing NUL one byte past the caller's buffer (including userinfo).
+	if( Q_strlen( new ) + Q_strlen( s ) >= maxsize )
 	{
 		// no more room in buffer to add key/value
 		if( Info_IsKeyImportant( key ))
@@ -503,4 +510,3 @@ qboolean Info_SetValueForKeyf( char *s, const char *key, int maxsize, const char
 
 	return Info_SetValueForKey( s, key, value, maxsize );
 }
-

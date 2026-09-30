@@ -26,6 +26,8 @@ GNU General Public License for more details.
 #include "cursor_type.h"
 #include "platform/platform.h"
 
+static CVAR_DEFINE_AUTO( cof_pad_move_debug, "0", 0, "Cry of Fear movement diagnostics: 1 logs input and command snapshots four times per second; 0 disables" );
+
 static qboolean	in_mouseactive;				// false when not focus app
 static qboolean	in_mouseinitialized;
 static struct
@@ -365,6 +367,10 @@ static void IN_MouseMove( void )
 
 	// if the menu is visible, move the menu cursor
 	UI_MouseMove( x, y );
+
+	// CoF milestone 3b: the styled console window has a close button; it only
+	// remembers the position, nothing reads it unless that window is up
+	Con_MouseMove( x, y );
 }
 
 /*
@@ -461,6 +467,7 @@ IN_Init
 */
 void IN_Init( void )
 {
+	Cvar_RegisterVariable( &cof_pad_move_debug );
 	Cvar_RegisterVariable( &cl_forwardspeed );
 	Cvar_RegisterVariable( &cl_backspeed );
 	Cvar_RegisterVariable( &cl_sidespeed );
@@ -474,6 +481,8 @@ void IN_Init( void )
 		OSK_Init();
 
 		Joy_Init(); // common joystick support init
+
+		CL_CoF_PadInit(); // Cry of Fear gamepad cvars, before config.cfg runs
 
 		Touch_Init();
 
@@ -500,9 +509,39 @@ Common function for engine joystick movement
 #define R (1U << 3)	// Right
 #define T (1U << 4)	// Forward stop
 #define S (1U << 5)	// Side stop
+// Observational only: never alter input, commands, key state, or movement speed.
+static void IN_CoFMoveDiagnostic( const usercmd_t *cmd, float preForward, float preSide,
+    float forward, float side, uint flags )
+{
+    static double next;
+    if( !cof_pad_move_debug.value || !GI || Q_stricmp( GI->gamefolder, "cryoffear" )) return;
+    if( host.realtime < next ) return;
+    next = host.realtime + 0.25;
+    Con_Printf( "[cof move] mode=%.0f raw=%d,%d shaped=%.3f,%.3f speeds=%.1f,%.1f preEngine=%.1f,%.1f postEngine=%.1f,%.1f buttons=0x%04x pulseFlags=0x%02x gate=%d velocity=%.1f,%.1f,%.1f origin=%.1f,%.1f,%.1f\n",
+        Cvar_VariableValue( "cof_pad_move_mode" ), (int)Joy_CoF_AxisRaw( JOY_AXIS_FWD ), (int)Joy_CoF_AxisRaw( JOY_AXIS_SIDE ),
+        forward, side, cl_forwardspeed.value, cl_sidespeed.value, preForward, preSide,
+        cmd->forwardmove, cmd->sidemove, (unsigned)cmd->buttons, flags, (int)CL_CoF_UIGateActive(),
+        cl.simvel[0], cl.simvel[1], cl.simvel[2], cl.simorg[0], cl.simorg[1], cl.simorg[2] );
+}
+
 static void IN_JoyAppendMove( usercmd_t *cmd, float forwardmove, float sidemove )
 {
 	static uint moveflags = T | S;
+	const float preForward = cmd->forwardmove, preSide = cmd->sidemove;
+	// Cry of Fear: the client turns a second +forward (+back, +moveleft,
+	// +moveright) within 0.18 s into a dodge. A stick resting near the 0.7 /
+	// 0.9 thresholds used to press and release the key every few frames and
+	// dodge on its own; a pressed key is now released only below the
+	// threshold minus cof_joy_pulse_hysteresis. A deliberate double flick
+	// through the centre still emits pulses. CL_CoF_PadMoveCommand blocks
+	// their double-tap dodge unless cof_pad_no_doubletap is disabled.
+	const float hyst = CL_CoF_JoyPulseHysteresis( );
+	const uint oldflags = moveflags;
+	// the deflections that press the keys: 0.7 / 0.9, or the direction's
+	// sector with cof_pad_move_mode 1/2 (cof_gamepad.c)
+	float fthr = 0.7f, sthr = 0.9f;
+
+	CL_CoF_PadMoveKeyThresholds( &fthr, &sthr );
 
 	if( forwardmove ) cmd->forwardmove  = forwardmove * cl_forwardspeed.value;
 	if( sidemove ) cmd->sidemove  = sidemove * cl_sidespeed.value;
@@ -513,8 +552,8 @@ static void IN_JoyAppendMove( usercmd_t *cmd, float forwardmove, float sidemove 
 	}
 	else if( !( moveflags & T ) )
 	{
-		Cmd_ExecuteString( "-back" );
-		Cmd_ExecuteString( "-forward" );
+		CL_CoF_PadMoveCommand( "-back" );
+		CL_CoF_PadMoveCommand( "-forward" );
 		moveflags |= T;
 	}
 
@@ -524,54 +563,61 @@ static void IN_JoyAppendMove( usercmd_t *cmd, float forwardmove, float sidemove 
 	}
 	else if( !( moveflags & S ) )
 	{
-		Cmd_ExecuteString( "-moveleft" );
-		Cmd_ExecuteString( "-moveright" );
+		CL_CoF_PadMoveCommand( "-moveleft" );
+		CL_CoF_PadMoveCommand( "-moveright" );
 		moveflags |= S;
 	}
 
-	if ( forwardmove > 0.7f && !( moveflags & F ))
+	if ( forwardmove > fthr && !( moveflags & F ))
 	{
 		moveflags |= F;
-		Cmd_ExecuteString( "+forward" );
+		CL_CoF_PadMoveCommand( "+forward" );
 	}
-	else if ( forwardmove < 0.7f && ( moveflags & F ))
+	else if ( forwardmove < fthr - hyst && ( moveflags & F ))
 	{
 		moveflags &= ~F;
-		Cmd_ExecuteString( "-forward" );
+		CL_CoF_PadMoveCommand( "-forward" );
 	}
 
-	if ( forwardmove < -0.7f && !( moveflags & B ))
+	if ( forwardmove < -fthr && !( moveflags & B ))
 	{
 		moveflags |= B;
-		Cmd_ExecuteString( "+back" );
+		CL_CoF_PadMoveCommand( "+back" );
 	}
-	else if ( forwardmove > -0.7f && ( moveflags & B ))
+	else if ( forwardmove > -fthr + hyst && ( moveflags & B ))
 	{
 		moveflags &= ~B;
-		Cmd_ExecuteString( "-back" );
+		CL_CoF_PadMoveCommand( "-back" );
 	}
 
-	if ( sidemove > 0.9f && !( moveflags & R ))
+	if ( sidemove > sthr && !( moveflags & R ))
 	{
 		moveflags |= R;
-		Cmd_ExecuteString( "+moveright" );
+		CL_CoF_PadMoveCommand( "+moveright" );
 	}
-	else if ( sidemove < 0.9f && ( moveflags & R ))
+	else if ( sidemove < sthr - hyst && ( moveflags & R ))
 	{
 		moveflags &= ~R;
-		Cmd_ExecuteString( "-moveright" );
+		CL_CoF_PadMoveCommand( "-moveright" );
 	}
 
-	if ( sidemove < -0.9f && !( moveflags & L ))
+	if ( sidemove < -sthr && !( moveflags & L ))
 	{
 		moveflags |= L;
-		Cmd_ExecuteString( "+moveleft" );
+		CL_CoF_PadMoveCommand( "+moveleft" );
 	}
-	else if ( sidemove > -0.9f && ( moveflags & L ))
+	else if ( sidemove > -sthr + hyst && ( moveflags & L ))
 	{
 		moveflags &= ~L;
-		Cmd_ExecuteString( "-moveleft" );
+		CL_CoF_PadMoveCommand( "-moveleft" );
 	}
+
+	CL_CoF_PadMoveCorrectCommand( cmd, forwardmove, sidemove );
+
+	IN_CoFMoveDiagnostic( cmd, preForward, preSide, forwardmove, sidemove, moveflags );
+
+	if( moveflags != oldflags )
+		CL_CoF_PadTracePulses( oldflags, moveflags, forwardmove, sidemove );
 }
 
 static void IN_CollectInput( float *forward, float *side, float *pitch, float *yaw, qboolean includeMouse )
@@ -617,6 +663,17 @@ void IN_EngineAppendMove( float frametime, usercmd_t *cmd, qboolean active )
 	if( cls.key_dest != key_game || cl.paused || cl.intermission )
 		return;
 
+	// Cry of Fear: while a clickable CoF panel (inventory, note, keypad...) is
+	// open the client swallows every key, but these moves bypass it; the
+	// sticks drive the panel cursor instead (cof_gamepad.c). The zero move
+	// releases any +forward/... the stick was still holding.
+	if( CL_CoF_PadSuppressMove( ))
+	{
+		IN_JoyAppendMove( cmd, 0.0f, 0.0f );
+		CL_CoF_PadTraceMove( cmd->forwardmove, cmd->sidemove, true );
+		return;
+	}
+
 	if( active )
 	{
 		float forward = 0, side = 0, pitch = 0, yaw = 0;
@@ -625,6 +682,11 @@ void IN_EngineAppendMove( float frametime, usercmd_t *cmd, qboolean active )
 		IN_CollectInput( &forward, &side, &pitch, &yaw, false );
 
 		IN_JoyAppendMove( cmd, forward, side );
+		CL_CoF_PadTraceMove( cmd->forwardmove, cmd->sidemove, false );
+
+		// Cry of Fear: the quick turn (cof_quickturn) goes through the same
+		// view-angle path as the right stick
+		yaw += CL_CoF_QuickTurnYaw( );
 
 		if( pitch || yaw )
 		{
@@ -672,5 +734,8 @@ void Host_InputFrame( void )
 {
 	IN_Commands();
 
-	IN_MouseMove();
+	// Cry of Fear: the gamepad's panel cursor; while it owns the pointer the
+	// real mouse position is not pushed over it (cof_gamepad.c)
+	if( !CL_CoF_PadFrame( ))
+		IN_MouseMove();
 }

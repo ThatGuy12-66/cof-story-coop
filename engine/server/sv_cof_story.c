@@ -1,0 +1,239 @@
+/* Opt-in Cry of Fear story co-op adapter. GPL-3.0-or-later.
+ * The disk game DLL stays stock. Only its multiplayer transition veto is
+ * bypassed, after exact file and instruction verification. Landmark and
+ * world restoration remain the engine's responsibility.
+ */
+#include "common.h"
+#include "server.h"
+#include "library.h"
+#include "sv_cof_cheats.h"
+#include "sv_cof_story.h"
+#include "sv_cof_party.h"
+#if XASH_WIN32
+#include <windows.h>
+#endif
+
+static const byte cof_gate_original[6] = { 0x0f, 0x85, 0xb5, 0x01, 0x00, 0x00 };
+static const byte cof_gate_open[6] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+static byte *cof_gate;
+static void *cof_gate_instance;
+
+static qboolean CoF_StoryWriteGate( byte *p, const byte *expect, const byte *value )
+{
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	DWORD protect, ignored;
+	if( memcmp( p, expect, 6 ) || !VirtualProtect( p, 6, PAGE_EXECUTE_READWRITE, &protect )) return false;
+	memcpy( p, value, 6 );
+	FlushInstructionCache( GetCurrentProcess(), p, 6 );
+	VirtualProtect( p, 6, protect, &ignored );
+	return true;
+#else
+	return false;
+#endif
+}
+
+// Retail InstallGameRules allocates the multiplayer rules with a plain
+// operator new( 0xE4 ) and never initializes their vote-kick and lobby state.
+// A fresh heap hides that on the first map; after a story map change the
+// recycled block can hold a phantom "active" vote whose stale target-ID
+// pointer crashes the next rules Think. Zero that one allocation, still
+// through the DLL's own operator new so its delete stays matched.
+#define COF_RULES_NEW_CALL 0xAF79E // call operator new; add esp, 4 follows
+#define COF_OPERATOR_NEW 0x13E1E9
+static const byte cof_rules_new_original[6] = { 0xe8, 0x46, 0xea, 0x08, 0x00, 0x83 };
+static byte cof_rules_new_zeroed[6];
+static byte *cof_rules_new;
+
+static void CoF_StoryRestoreRules( void )
+{
+	if( cof_rules_new ) CoF_StoryWriteGate( cof_rules_new, cof_rules_new_zeroed, cof_rules_new_original );
+	cof_rules_new = NULL;
+}
+
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+static void *( __cdecl *cof_operator_new )( size_t size );
+
+static void * __cdecl CoF_StoryNewRules( size_t size )
+{
+	void *p = cof_operator_new( size );
+	if( p ) memset( p, 0, size );
+	return p;
+}
+
+static qboolean CoF_StoryZeroRules( byte *base )
+{
+	int32_t rel = (int32_t)((byte *)CoF_StoryNewRules - ( base + COF_RULES_NEW_CALL + 5 ));
+	cof_operator_new = (void *)( base + COF_OPERATOR_NEW );
+	cof_rules_new_zeroed[0] = 0xe8;
+	memcpy( cof_rules_new_zeroed + 1, &rel, sizeof( rel ));
+	cof_rules_new_zeroed[5] = cof_rules_new_original[5];
+	if( !CoF_StoryWriteGate( base + COF_RULES_NEW_CALL, cof_rules_new_original, cof_rules_new_zeroed )) return false;
+	cof_rules_new = base + COF_RULES_NEW_CALL;
+	return true;
+}
+#endif
+
+static void CoF_StoryCloseGate( void )
+{
+	if( cof_gate && cof_gate_instance == svgame.hInstance )
+	{
+		CoF_StoryWriteGate( cof_gate, cof_gate_open, cof_gate_original );
+		CoF_StoryRestoreRules();
+	}
+	cof_rules_new = NULL;
+	cof_gate = NULL;
+	cof_gate_instance = NULL;
+}
+
+qboolean SV_CoF_StoryCoopEnabled( void )
+{
+	if( !Cvar_VariableInteger( "cof_story_coop" ) || !GI || Q_stricmp( GI->gamefolder, "cryoffear" ) || svs.maxclients <= 1 || sv.background )
+	{
+		CoF_StoryCloseGate();
+		return false;
+	}
+	if( !SV_CoF_RetailDLLVerified() ) return false;
+	if( cof_gate && cof_gate_instance == svgame.hInstance )
+		return !memcmp( cof_gate, cof_gate_open, sizeof( cof_gate_open )) && cof_rules_new && !memcmp( cof_rules_new, cof_rules_new_zeroed, sizeof( cof_rules_new_zeroed ));
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	{
+		dll_user_t *lib = (dll_user_t *)svgame.hInstance;
+		byte *base;
+		IMAGE_DOS_HEADER *dos;
+		IMAGE_NT_HEADERS *nt;
+		if( !lib || !lib->hInstance || lib->custom_loader || lib->encrypted ) return false;
+		base = (byte *)lib->hInstance;
+		dos = (IMAGE_DOS_HEADER *)base;
+		if( dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 || dos->e_lfanew > 4096 ) return false;
+		nt = (IMAGE_NT_HEADERS *)( base + dos->e_lfanew );
+		if( nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_I386 || nt->OptionalHeader.SizeOfImage < COF_OPERATOR_NEW + 1 ) return false;
+		if( !CoF_StoryWriteGate( base + 0x109D60, cof_gate_original, cof_gate_open )) return false;
+		if( !CoF_StoryZeroRules( base ))
+		{
+			CoF_StoryWriteGate( base + 0x109D60, cof_gate_open, cof_gate_original );
+			return false;
+		}
+		cof_gate = base + 0x109D60;
+		cof_gate_instance = svgame.hInstance;
+		Con_Printf( "cofstory phase=gate-enabled landmark=preserved rules=zeroed\n" );
+		return true;
+	}
+#else
+	return false;
+#endif
+}
+
+static void CoF_StoryStatus_f( void )
+{
+	int i, j;
+	Con_Printf( "cofstory phase=status enabled=%d map=%s paused=%d generation=%d\n", SV_CoF_StoryCoopEnabled(), sv.name, sv.paused, svs.spawncount );
+	if( sv.state != ss_active || !SV_CoF_RetailDLLVerified() ) return;
+	for( i = 0; i < svs.maxclients; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		edict_t *p = cl->edict;
+		byte *pv;
+		if( cl->state != cs_spawned || !SV_IsValidEdict( p )) continue;
+		pv = SV_CoF_StoryEntityPrivate( p, 0x2250 );
+		Con_Printf( "cofstory phase=player slot=%d userid=%d ready=1 origin=%.3f,%.3f,%.3f door=%d hidden=%d flags=%d health=%.3f fakeclient=%d frozen=%d\n", i, cl->userid, p->v.origin[0], p->v.origin[1], p->v.origin[2], pv ? pv[0x1EA4] : -1, !!( p->v.effects & EF_NODRAW ), p->v.flags, p->v.health, !!( p->v.flags & FL_FAKECLIENT ), !!( p->v.flags & FL_FROZEN ));
+		if( pv )
+		{
+			for( j = 0; j < 7; j++ )
+			{
+				string_t id;
+				// Actual descriptor slots; index0 is unused by retail item assignment.
+				memcpy( &id, pv + 0x21FC + j * sizeof( id ), sizeof( id ));
+				Con_Printf( "cofstory phase=inventory-slot slot=%d userid=%d index=%d descriptor=\"%s\"\n", i, cl->userid, j, id ? SV_GetString( id ) : "" );
+			}
+		}
+		for( j = svs.maxclients + 1; j < svgame.numEntities; j++ )
+		{
+			edict_t *ent = SV_EdictNum( j );
+			const char *classname;
+			if( !SV_IsValidEdict( ent ) || ( ent->v.owner != p && ent->v.aiment != p )) continue;
+			classname = SV_GetString( ent->v.classname );
+			if( Q_strncmp( classname, "weapon_", 7 ) && Q_strncmp( classname, "item_", 5 ) && Q_strncmp( classname, "ammo_", 5 )) continue;
+			Con_Printf( "cofstory phase=inventory slot=%d userid=%d class=%s\n", i, cl->userid, classname );
+		}
+	}
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		const char *name;
+		if( !SV_IsValidEdict( ent )) continue;
+		name = SV_GetString( ent->v.targetname );
+		if( !Q_strcmp( SV_GetString( ent->v.classname ), "info_landmark" ))
+			Con_Printf( "cofstory phase=landmark name=%s origin=%.3f,%.3f,%.3f\n", name, ent->v.origin[0], ent->v.origin[1], ent->v.origin[2] );
+		if( Q_strncmp( name, "cof_probe_", 10 )) continue;
+		Con_Printf( "cofstory phase=fixture name=%s class=%s health=%.3f\n", name, SV_GetString( ent->v.classname ), ent->v.health );
+	}
+	Con_Printf( "cofstory phase=status-end\n" );
+}
+
+void SV_CoF_StoryInit( void )
+{
+	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
+	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
+}
+
+void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
+{
+	const char *model;
+	char path[MAX_QPATH];
+	char *cursor, *end, *value_start = NULL, *value_end = NULL;
+	size_t length, model_length;
+	int slot = (int)( cl - svs.clients );
+	if( !info || !size || slot < 0 || slot >= svs.maxclients || !SV_CoF_StoryCoopEnabled() ) return;
+	model = slot == 0 ? "cof_s1" : "cof_s2";
+	Q_snprintf( path, sizeof( path ), "models/player/%s/%s.mdl", model, model );
+	if( !FS_FileExists( path, false )) return;
+	length = Q_strnlen( info, size );
+	if( length == size ) return;
+	end = info + length;
+	model_length = Q_strlen( model );
+	cursor = info;
+	while( cursor < end )
+	{
+		char *key, *value;
+		size_t key_length;
+		if( *cursor == '\\' ) cursor++;
+		key = cursor;
+		while( cursor < end && *cursor != '\\' ) cursor++;
+		if( cursor == end ) return; // malformed pair; preserve the original
+		key_length = cursor - key;
+		value = ++cursor;
+		while( cursor < end && *cursor != '\\' ) cursor++;
+		if( !value_start && key_length == 5 && !memcmp( key, "model", 5 ))
+		{
+			value_start = value;
+			value_end = cursor;
+		}
+	}
+	// Do not use the generic setter's important-key eviction policy: a
+	// cosmetic model replacement must leave all userinfo intact if it cannot
+	// fit. Also match the whole key, preserving keys such as model_note.
+	if( value_start )
+	{
+		if( length - (value_end - value_start) + model_length >= size ) return;
+		memmove( value_start + model_length, value_end, end - value_end + 1 );
+		memcpy( value_start, model, model_length );
+	}
+	else
+	{
+		if( length + 7 + model_length >= size ) return;
+		memcpy( end, "\\model\\", 7 );
+		memcpy( end + 7, model, model_length + 1 );
+	}
+}
+
+void SV_CoF_StoryFrame( void )
+{
+	if( SV_CoF_StoryCoopEnabled() && sv.state == ss_active ) SV_CoF_PartyFrame();
+}
+
+void SV_CoF_StoryShutdown( void )
+{
+	SV_CoF_PartyShutdown();
+	CoF_StoryCloseGate();
+	SV_CoF_ClearValidation();
+}

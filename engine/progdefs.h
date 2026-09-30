@@ -110,6 +110,11 @@ typedef struct entvars_s
 
 	int		light_level;
 
+#if defined(XASH_COF_ENTVARS_LEGACY) && XASH_COF_ENTVARS_LEGACY
+	/* Experimental CoF ABI: field identity is not established; only the 4-byte boundary is verified. */
+	int		cof_legacy_unknown_0;
+#endif
+
 	int		sequence;		// animation sequence
 	int		gaitsequence;	// movement animation sequence for player (0 for none)
 	float		frame;		// % playback position in animation sequences (0..255)
@@ -174,7 +179,6 @@ typedef struct entvars_s
 	float		air_finished;
 	float		pain_finished;
 	float		radsuit_finished;
-
 	edict_t		*pContainingEntity;
 
 	int		playerclass;

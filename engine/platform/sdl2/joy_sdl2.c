@@ -193,6 +193,9 @@ static void SDLash_SetActiveGameController( SDL_JoystickID id )
 
 		Joy_SetCapabilities( have_gyro, num_touchpads );
 	}
+
+	// Cry of Fear: the pad in use, for the button style (cof_gamepad.c)
+	CL_CoF_PadActivated( g_current_gamepad );
 }
 
 static void SDLash_GameControllerAdded( int device_index )
@@ -310,7 +313,12 @@ void SDLash_HandleGameControllerEvent( SDL_Event *ev )
 	switch( ev->type )
 	{
 	case SDL_CONTROLLERAXISMOTION:
-		SDLash_SetActiveGameController( ev->caxis.which );
+		// Cry of Fear: an axis makes its pad the active one (rumble, gyro, the
+		// button style) only when it is pushed well past rest, so the resting
+		// noise of a second, unused pad cannot flip the active pad - and switch
+		// the gyro sensors and restart their calibration - on every event
+		if( g_current_gamepad_id < 0 || abs( ev->caxis.value ) > 8000 )
+			SDLash_SetActiveGameController( ev->caxis.which );
 		x = ev->caxis.axis;
 		if( x >= 0 && x < ARRAYSIZE( g_axis_mapping ))
 			Joy_AxisMotionEvent( g_axis_mapping[x], ev->caxis.value );
@@ -388,6 +396,11 @@ int Platform_JoyInit( void )
 {
 	SDL_SetHint( SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1" );
 	SDL_SetHint( SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1" );
+
+	// Cry of Fear: face buttons by position on every pad, Nintendo ones too (the
+	// bottom button is A_BUTTON); cof_pad_positional 0 switches back to SDL's
+	// by-label default at run time (cof_gamepad.c)
+	SDL_SetHint( SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0" );
 
 	Con_Reportf( "Joystick: SDL GameController API\n" );
 	if( SDL_WasInit( SDL_INIT_GAMECONTROLLER ) != SDL_INIT_GAMECONTROLLER &&

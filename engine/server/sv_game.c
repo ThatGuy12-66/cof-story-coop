@@ -23,6 +23,9 @@ GNU General Public License for more details.
 #include "const.h"
 #include "render_api.h"	// modelstate_t
 #include "ref_common.h" // decals
+#include "cof_language.h"
+#include "sv_cof_story.h"
+#include "sv_cof_party.h"
 
 // GameAPI functions declarations
 static int GAME_EXPORT pfnModelIndex( const char *m );
@@ -730,6 +733,9 @@ void SV_QueueChangeLevel( const char *level, const char *landname )
 		return;
 	}
 
+	if( smooth && SV_CoF_StoryCoopEnabled() && !SV_CoF_TransitionValidate( mapname, landname ))
+		return;
+
 	if( smooth && !FBitSet( flags, MAP_HAS_LANDMARK ))
 	{
 		if( sv_validate_changelevel.value )
@@ -741,7 +747,7 @@ void SV_QueueChangeLevel( const char *level, const char *landname )
 		}
 	}
 
-	if( svs.maxclients > 1 )
+	if( svs.maxclients > 1 && !SV_CoF_StoryCoopEnabled() )
 		smooth = false; // multiplayer doesn't support smooth transition
 
 	if( smooth && !Q_stricmp( sv.name, level ))
@@ -860,9 +866,18 @@ static char *SV_ReadEntityScript( const char *filename, int *flags )
 	// check for entfile too
 	Q_snprintf( entfilename, sizeof( entfilename ), "maps/%s.ent", filename );
 
+	// Cry of Fear language packs: the pack's own maps/<map>.ent wins, and is
+	// not subject to the "newer than the bsp" rule. See Mod_LoadEntities.
+	{
+		char packent[MAX_QPATH];
+
+		if( CoF_Lang_EntPatch( entfilename, packent, sizeof( packent )))
+			ents = (char *)FS_LoadFile( packent, NULL, true );
+	}
+
 	// make sure what entity patch is newer than bsp
 	ft1 = FS_FileTime( bspfilename, false );
-	ft2 = FS_FileTime( entfilename, true );
+	ft2 = ents ? -1 : FS_FileTime( entfilename, true );
 
 	if( ft2 != -1 && ft1 < ft2 )
 	{
@@ -879,6 +894,20 @@ static char *SV_ReadEntityScript( const char *filename, int *flags )
 		FS_Read( f, ents, lumplen );
 	}
 	FS_Close( f ); // all done
+
+	// Cry of Fear language packs: the same entity patch Mod_LoadEntities
+	// applies, so the map validity check sees the entities the map spawns
+	if( ents )
+	{
+		size_t patchedsize;
+		char *patched = CoF_Lang_ApplyEntityPatch( entfilename, ents, Q_strlen( ents ), &patchedsize );
+
+		if( patched )
+		{
+			Mem_Free( ents );
+			ents = patched;
+		}
+	}
 
 	return ents;
 }
@@ -935,6 +964,71 @@ uint SV_MapIsValid( const char *filename, const char *landmark_name )
 	}
 
 	return flags;
+}
+
+// Unlike the historical targetname-only validity check, a smooth story
+// transition requires exactly one actual info_landmark with a valid origin.
+qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origin )
+{
+	int flags, matches = 0;
+	char *entities = SV_ReadEntityScript( map, &flags ), *cursor;
+	char key[MAX_TOKEN], value[MAX_TOKEN], classname[MAX_TOKEN], name[MAX_TOKEN];
+	vec3_t position;
+	qboolean has_origin;
+	if( !entities ) return false;
+	cursor = entities;
+	while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
+	{
+		if( Q_strcmp( key, "{" )) break;
+		classname[0] = name[0] = 0;
+		has_origin = false;
+		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && Q_strcmp( key, "}" ))
+		{
+			cursor = COM_ParseFile( cursor, value, sizeof( value ));
+			if( !cursor ) break;
+			if( !Q_strcmp( key, "classname" )) Q_strncpy( classname, value, sizeof( classname ));
+			else if( !Q_strcmp( key, "targetname" )) Q_strncpy( name, value, sizeof( name ));
+			else if( !Q_strcmp( key, "origin" )) has_origin = sscanf( value, "%f %f %f", &position[0], &position[1], &position[2] ) == 3;
+		}
+		if( !Q_strcmp( classname, "info_landmark" ) && !Q_strcmp( name, landmark ) && has_origin )
+		{
+			VectorCopy( position, origin );
+			matches++;
+		}
+	}
+	Mem_Free( entities );
+	return matches == 1;
+}
+
+// Brush model numbers of the map's trigger_changelevel entities leading to one
+// destination/landmark pair: the party code uses them to tell who fired a
+// story exit. Their map/landmark keys live only in game private data.
+int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max )
+{
+	int flags, count = 0;
+	char *entities = SV_ReadEntityScript( map, &flags ), *cursor;
+	char key[MAX_TOKEN], value[MAX_TOKEN], classname[MAX_TOKEN], next[MAX_TOKEN], name[MAX_TOKEN], model[MAX_TOKEN];
+	if( !entities ) return 0;
+	cursor = entities;
+	while( count < max && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
+	{
+		if( Q_strcmp( key, "{" )) break;
+		classname[0] = next[0] = name[0] = model[0] = 0;
+		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && Q_strcmp( key, "}" ))
+		{
+			cursor = COM_ParseFile( cursor, value, sizeof( value ));
+			if( !cursor ) break;
+			if( !Q_strcmp( key, "classname" )) Q_strncpy( classname, value, sizeof( classname ));
+			else if( !Q_strcmp( key, "map" )) Q_strncpy( next, value, sizeof( next ));
+			else if( !Q_strcmp( key, "landmark" )) Q_strncpy( name, value, sizeof( name ));
+			else if( !Q_strcmp( key, "model" )) Q_strncpy( model, value, sizeof( model ));
+		}
+		if( !Q_strcmp( classname, "trigger_changelevel" ) && !Q_stricmp( next, destination ) &&
+			!Q_strcmp( name, landmark ) && model[0] == '*' )
+			models[count++] = Q_atoi( model + 1 );
+	}
+	Mem_Free( entities );
+	return count;
 }
 
 /*
@@ -1363,7 +1457,9 @@ static void GAME_EXPORT pfnChangeLevel( const char *level, const char *landmark 
 	// make sure we don't issue two changelevels
 	if( svs.spawncount == last_spawncount )
 		return;
-	last_spawncount = svs.spawncount;
+	// Story validation can reject a request without ending this map. Allow a
+	// later valid request; COM_ChangeLevel already serializes accepted requests.
+	if( !SV_CoF_StoryCoopEnabled() ) last_spawncount = svs.spawncount;
 	landname[0] ='\0';
 
 #ifdef HACKS_RELATED_HLMODS
@@ -1373,7 +1469,7 @@ static void GAME_EXPORT pfnChangeLevel( const char *level, const char *landmark 
 	if( !COM_StringEmptyOrNULL( landmark ))
 	{
 		text = (char *)landname;
-		while( *landmark && ((byte)*landmark) != ' ' )
+		while( *landmark && ((byte)*landmark) != ' ' && text < landname + sizeof( landname ) - 1 )
 			*text++ = *landmark++;
 		*text = '\0';
 	}
@@ -1911,10 +2007,14 @@ pfnSetOrigin
 */
 static void GAME_EXPORT pfnSetOrigin( edict_t *e, const float *rgflOrigin )
 {
+	vec3_t	previous;
+
 	if( !SV_IsValidEdict( e ))
 		return;
 
+	VectorCopy( e->v.origin, previous );
 	VectorCopy( rgflOrigin, e->v.origin );
+	SV_CoF_PartyNoteOrigin( e, previous ); // Cry of Fear: scripted teleports of one player
 	SV_LinkEdict( e, false );
 }
 
@@ -2320,9 +2420,21 @@ pfnServerCommand
 */
 static void GAME_EXPORT pfnServerCommand( const char* str )
 {
+	qboolean cofload = ( str && !Q_strnicmp( str, "load cofsave", 12 ) &&
+		str[12] >= '1' && str[12] <= '5' );
+	if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
+		Con_Reportf( "[cof-trace] hl pfnServerCommand: %s\n", str );
+
 	if( !SV_IsValidCmd( str ))
+	{
+		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
+			Con_Reportf( "[cof-trace] hl pfnServerCommand rejected\n" );
 		Con_Printf( S_ERROR "bad server command %s\n", str );
-	else Cbuf_AddText( str );
+	}
+	// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on): a game DLL
+	// asking for the 3D-menu map is asking to go back to the main menu
+	else if( !CL_CoF_MenuMapRedirect( str, "server pfnServerCommand" ))
+		Cbuf_AddText( str );
 }
 
 /*
@@ -5133,6 +5245,7 @@ void SV_SpawnEntities( const char *mapname )
 	Cvar_Reset( "sv_skyvec_y" );
 	Cvar_Reset( "sv_skyvec_z" );
 	Cvar_Reset( "sv_skyname" );
+	SV_CoF_ApplyDefaultSkyName();	// Cry of Fear: "desert" does not ship (see sv_main.c)
 
 	ent = SV_EdictNum( 0 );
 	if( ent->free ) SV_InitEdict( ent );
@@ -5157,6 +5270,9 @@ void SV_UnloadProgs( void )
 
 	if( !svgame.hInstance )
 		return;
+
+	SV_CoF_TransitionReset( true );
+	SV_CoF_StoryShutdown();
 
 	SV_DeactivateServer ();
 	Delta_Shutdown ();
@@ -5220,6 +5336,13 @@ qboolean SV_LoadProgs( const char *name )
 		Mem_FreePool(&svgame.mempool);
 		return false;
 	}
+
+	// Cry of Fear language packs: patch the server DLL's single
+	// KERNEL32!CreateFileW import so its txtfiles/ and notes/ reads can be
+	// redirected into the active pack. Installed unconditionally and inert
+	// until a pack is active, because the library is loaded long before
+	// cof_language is known. See engine/common/cof_language.c.
+	CoF_Lang_HookModule( svgame.hInstance, name );
 
 	// make sure what new dll functions is cleared
 	memset( &svgame.dllFuncs2, 0, sizeof( svgame.dllFuncs2 ));

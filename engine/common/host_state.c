@@ -52,6 +52,13 @@ void COM_NewGame( char const *pMapName )
 	if( UI_CreditsActive( ))
 		return;
 
+	// Cry of Fear (cof_mp3_stop_on_map, default on): the client's own
+	// irrKlang player is not part of any engine session, so a track started
+	// on the map we are leaving would keep playing over the new game.
+	// COM_ChangeLevel deliberately does NOT do this - Cry of Fear carries a
+	// track across an in-game level transition on purpose.
+	CL_CoF_StopMP3( "newgame" );
+
 	Q_strncpy( GameState->levelName, pMapName, sizeof( GameState->levelName ));
 	Host_SetNextState( STATE_LOAD_LEVEL );
 
@@ -74,6 +81,13 @@ void COM_LoadLevel( char const *pMapName, qboolean background )
 	if( UI_CreditsActive( ))
 		return;
 
+	// Cry of Fear (cof_mp3_stop_on_map, default on): the client's own
+	// irrKlang player is not part of any engine session, so a track started
+	// on the map we are leaving would keep playing over the new level.
+	// COM_ChangeLevel deliberately does NOT do this - Cry of Fear carries a
+	// track across an in-game level transition on purpose.
+	CL_CoF_StopMP3( "map" );
+
 	Q_strncpy( GameState->levelName, pMapName, sizeof( GameState->levelName ));
 	Host_SetNextState( STATE_LOAD_LEVEL );
 
@@ -95,6 +109,13 @@ void COM_LoadGame( char const *pMapName )
 
 	if( UI_CreditsActive( ))
 		return;
+
+	// Cry of Fear (cof_mp3_stop_on_map, default on): the client's own
+	// irrKlang player is not part of any engine session, so a track started
+	// on the map we are leaving would keep playing over the restored save.
+	// COM_ChangeLevel deliberately does NOT do this - Cry of Fear carries a
+	// track across an in-game level transition on purpose.
+	CL_CoF_StopMP3( "load" );
 
 	Q_strncpy( GameState->levelName, pMapName, sizeof( GameState->levelName ));
 	Host_SetNextState( STATE_LOAD_GAME );

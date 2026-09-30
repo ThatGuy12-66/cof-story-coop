@@ -28,6 +28,8 @@ void VGui_RunFrame( void );
 void VGui_MouseEvent( int key, int clicks );
 void VGui_MWheelEvent( int y );
 void VGui_KeyEvent( int key, int down );
+void VGui_CoF_ForgetKey( int key );
+int VGui_CoF_PanelAction( int action, char *info, int infoSize ); // Cry of Fear gamepad
 void VGui_MouseMove( int x, int y );
 qboolean VGui_IsActive( void );
 qboolean VGui_IsProvidedByClientDll( void );

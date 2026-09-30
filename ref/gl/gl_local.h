@@ -481,6 +481,7 @@ void Mod_SetOrthoBounds( const float *mins, const float *maxs );
 //
 #define GL_CheckForErrors() GL_CheckForErrors_( __FILE__, __LINE__ )
 void GL_CheckForErrors_( const char *filename, const int fileline );
+void GL_CheckForErrorsNamed_( const char *stage, const char *filename, const int fileline );
 const char *GL_ErrorString( int err ) RETURNS_NONNULL;
 
 //
@@ -723,6 +724,15 @@ extern convar_t	gl_msaa;
 extern convar_t	gl_stencilbits;
 extern convar_t	gl_overbright;
 extern convar_t gl_fog;
+extern convar_t cof_gl_trace;
+extern convar_t cof_solid_entity_trace;
+extern convar_t cof_skyline_trace;
+extern convar_t cof_skip_client_transparent_triangles;
+extern convar_t cof_skip_client_normal_triangles;
+extern convar_t cof_custom_renderfx_opaque;
+extern convar_t cof_viewmodel_fov;
+extern convar_t cof_sprite_quiet_frames;
+extern convar_t cof_sprite_trace;
 extern convar_t	gl_litwater_force;
 
 extern convar_t	r_lighting_ambient;

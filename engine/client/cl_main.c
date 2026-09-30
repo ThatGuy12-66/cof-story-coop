@@ -65,6 +65,12 @@ static CVAR_DEFINE_AUTO( cl_fixtimerate, "7.5", 0, "time in msec to client clock
 CVAR_DEFINE_AUTO( hud_fontscale, "1.0", FCVAR_ARCHIVE|FCVAR_LATCH, "scale hud font texture" );
 CVAR_DEFINE_AUTO( hud_fontrender, "0", FCVAR_ARCHIVE, "hud font render mode (0: additive, 1: holes, 2: trans)" );
 CVAR_DEFINE_AUTO( hud_scale, "0", FCVAR_ARCHIVE|FCVAR_LATCH, "scale hud at current resolution" );
+CVAR_DEFINE_AUTO( cof_skip_client_hud_redraw, "0", 0, "skip client HUD_Redraw callback (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_skip_vgui_paint, "0", 0, "skip VGUI support Paint callback (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_ui_input_gate, "1", 0, "unified UI gate: while the menu or console has focus the client neither paints its HUD/VGUI layer nor receives input, and escape always reaches the engine" );
+CVAR_DEFINE_AUTO( cof_ui_deferred_cmd_guard, "1", 0, "unified UI gate: drop the client DLL's boot-time deferred console commands instead of running them the first time the engine menu becomes visible" );
+CVAR_DEFINE_AUTO( cof_vid_restart_background, "1", 0, "video mode change: restart the menu background map afterwards so the client's per-level setup is rebuilt (0 = stock behaviour)" );
+CVAR_DEFINE_AUTO( cof_vid_skip_redundant_vidinit, "0", 0, "video mode change: skip the client VidInit callback when the render size did not change, e.g. a pure windowed/fullscreen toggle (off by default)" );
 CVAR_DEFINE_AUTO( hud_scale_minimal_width, "640", FCVAR_ARCHIVE|FCVAR_LATCH, "if hud_scale results in a HUD virtual screen smaller than this value, it won't be applied" );
 CVAR_DEFINE_AUTO( cl_solid_players, "1", 0, "Make all players not solid (can't traceline them)" );
 CVAR_DEFINE_AUTO( cl_updaterate, "20", FCVAR_USERINFO|FCVAR_ARCHIVE, "refresh rate of server messages" );
@@ -84,6 +90,39 @@ CVAR_DEFINE_AUTO( cl_trace_events, "0", FCVAR_CHEAT, "enable events tracing (goo
 static CVAR_DEFINE_AUTO( cl_nat, "0", 0, "show servers running under NAT" );
 CVAR_DEFINE_AUTO( hud_utf8, "0", FCVAR_ARCHIVE, "Use utf-8 encoding for hud text" );
 CVAR_DEFINE_AUTO( ui_renderworld, "0", FCVAR_ARCHIVE, "render world when UI is visible" );
+static CVAR_DEFINE_AUTO( cof_ui_menu_map_redirect, "1", 0, "unified UI gate: turn a client- or server-issued \"map c_game_menu1\" into a return to the engine menu over the background map (0 = stock behaviour)" );
+// Cry of Fear co-op bridge, see CL_CoF_NoteSessionEnd
+static CVAR_DEFINE_AUTO( cof_ui_remote_end_menu, "1", 0, "Cry of Fear co-op: when a session with a remote server ends (server shut down, kicked, timed out, connection refused or failed, or our own disconnect) bring the engine menu back over the background map instead of the console over black; needs cof_ui_menu_map_redirect (0 = stock behaviour)" );
+static CVAR_DEFINE_AUTO( cof_ui_death_menu, "1", 0, "unified UI gate: open the engine menu's own death page when the game DLL sends the Cry of Fear GAME OVER screen (0 = stock behaviour, the client's own panel)" );
+static CVAR_DEFINE_AUTO( cof_ui_death_keep_running, "1", 0, "unified UI gate: keep the world simulating and audible behind the GAME OVER page, the way the original death screen did (0 = the page pauses the game like every other menu)" );
+static CVAR_DEFINE_AUTO( cof_mp3_stop_on_map, "1", 0, "run the client's \"stopmp3\" command before a fresh map, newgame, save load or disconnect, so the client's own MP3 player does not bleed across the transition (changelevel is deliberately untouched)" );
+CVAR_DEFINE_AUTO( cof_hud_chapter_rule_hide, "1", 0, "Cry of Fear: do not draw the chapter title card's decorative rule (the client's pfnFillRGBA 463x2 white hairline, placed in raw screen pixels, which the scaled title no longer lines up with). 0 = draw it as the game does" );
+static CVAR_DEFINE_AUTO( cof_sky_reset_per_map, "1", 0,"restore the client's \"gl_customsky\" on every map load when the client turned it off after a failed sky load, so one map's missing sky faces do not disable the sky for the rest of the session (0 = stock behaviour)" );
+// "Aim down sights: Hold / Toggle" (see CL_CoF_ADSHoldKey): Toggle is the
+// game's own ironsights, Hold is emulated by the engine on top of them
+CVAR_DEFINE_AUTO( cof_ads_toggle, "1", FCVAR_ARCHIVE, "Cry of Fear aim down sights: 1 = a press toggles ironsights (the game's own behaviour), 0 = hold the aim key to aim, release to leave (the engine drives the game's toggle for you, so firing while aimed works with every weapon)" );
+// Milestone 4, in-game UI scaling. Archived, unlike the gate cvars above,
+// because these are display preferences that have to survive a restart. Both
+// are live: nothing the client computed has to change for them to take effect.
+CVAR_DEFINE_AUTO( cof_ui_scale, "0", FCVAR_ARCHIVE, "Cry of Fear in-game UI scale, in percent of the client's own pixel layout (0 = automatic from the render height, 100 = stock size)" );
+CVAR_DEFINE_AUTO( cof_ui_scale_user, "1.0", FCVAR_ARCHIVE, "user multiplier on top of cof_ui_scale, applied to the whole in-game UI and to the engine HUD text together (1.0 = automatic size, 1.5 = half again as large). This is the menu's \"HUD scale\" control" );
+CVAR_DEFINE_AUTO( cof_ui_scale_sprites, "1", FCVAR_ARCHIVE, "let cof_ui_scale also scale the client's classic HUD sprites (ammo counter, icons); 0 leaves the engine sprite path at native size" );
+CVAR_DEFINE_AUTO( cof_ui_inter_fonts, "1", FCVAR_ARCHIVE, "rasterise the client's VGUI text from the shipped Inter faces at a size derived from the render height; 0 restores the game's own fixed-size bitmap font strips, 2 also traces every scheme latch and size decision" );
+CVAR_DEFINE_AUTO( cof_font_probe, "", 0, "developer: draw this string in the top-left corner with an engine-rasterised VGUI font, to check a code page without loading a map. Prefix with \"<role> \" to pick a scheme, e.g. \"chaptertitle Hello\"" );
+CVAR_DEFINE_AUTO( cof_text_codepage, "1252", FCVAR_ARCHIVE, "code page the engine-rasterised VGUI fonts decode text bytes with: 1252 (Western), 1250 (Central European, Polish) or 1251 (Cyrillic). Language packs set this" );
+CVAR_DEFINE_AUTO( cof_hud_text_height_pct, "1.76", FCVAR_ARCHIVE, "target height of the engine HUD font (hints, subtitles, pickup text) as a percentage of the render height, never below the shipped size; 0 = stock fixed bitmap size" );
+// Milestone 4b, the engine HUD text legibility round. All archived: they are
+// display preferences. cof_hud_text_font needs a font reload, the other two are
+// pure draw-time state and take effect on the next frame.
+CVAR_DEFINE_AUTO( cof_hud_text_style, "1", FCVAR_ARCHIVE, "Cry of Fear transient text: Inter Bold, muted grey and soft shadow; 0 restores the earlier face and colours; background remains independent" );
+CVAR_DEFINE_AUTO( cof_hud_text_font, "1", FCVAR_ARCHIVE, "draw the engine HUD text (hints, subtitles, pickup notifications) from the generated Inter SemiBold atlas fonts/cof_hudtext*.fnt instead of the game's own thin gfx/creditsfont.fnt; 0 = the game's font" );
+CVAR_DEFINE_AUTO( cof_hud_text_backing, "0", FCVAR_ARCHIVE, "alpha, 0-255, of the translucent dark strip drawn behind each line of engine HUD text; 0 = no strip" );
+CVAR_DEFINE_AUTO( cof_hud_text_y, "0", FCVAR_ARCHIVE, "extra vertical offset for the engine HUD text, as a percentage of the render height; positive moves it down. Added on top of the automatic correction, see cof_hud_text_y_shift" );
+CVAR_DEFINE_AUTO( cof_hud_text_y_shift, "0", 0, "correction for the engine HUD text position, in glyph-growth units: how many extra glyph heights the client's own vertical formula would have taken off the anchor. MEASURED 0 for Cry of Fear, whose messages use an absolute screen fraction and ignore the block height (see docs/cof-hud-text-legibility.md); 0.5 would be a centred block, 1.0 a bottom-aligned one" );
+CVAR_DEFINE_AUTO( cof_hud_msg_y_pct, "78", FCVAR_ARCHIVE, "where the client's in-game message text (item pickups, cutscene subtitles) sits, as a percentage of the render height. The client centres that panel on the screen, so 50 restores its own placement and 78 puts the text in the lower quarter, where the original game had it" );
+CVAR_DEFINE_AUTO( cof_hud_text_trace, "0", 0, "developer: log every line of engine HUD text with its position, extent and colour, once per frame" );
+// cof-coop-bridge: the co-op lobby's two hint lines, see docs/cof-coop-bridge.md
+static CVAR_DEFINE_AUTO( cof_vgui_text_overflow, "1", 0, "Cry of Fear: a centred line of client VGUI text (strip-backed roles) that is wider than its own label on both sides may draw across its parent panel instead of being cut off at the label's edges, e.g. the co-op lobby hints under the Inter fonts (0 = cut, as before)" );
 static CVAR_DEFINE_AUTO( cl_maxframetime, "0", 0, "set deadline timer for client rendering to catch freezes" );
 CVAR_DEFINE_AUTO( cl_fixmodelinterpolationartifacts, "1", 0, "try to fix up models interpolation on a moving platforms (monsters on trains for example)" );
 
@@ -106,6 +145,50 @@ client_t		cl;
 client_static_t	cls;
 clgame_static_t	clgame;
 
+// Cry of Fear video mode change hook: a background-map restart is queued
+static qboolean	cof_vid_restart_pending;
+
+// Cry of Fear unified UI: the map name of the last background map the engine
+// was asked to start, and the map whose level changes the redirect intercepts
+static char	cof_menu_background_map[MAX_QPATH];
+#define COF_MENU_MAP		"c_game_menu1"
+// Cry of Fear unified UI: the client's own main-menu panel, CGameMenu. Some of
+// its callers never ask for a level change at all - the Unlockables gallery's
+// MAIN MENU button just calls setVisible( true ) on that panel in place, on
+// whatever map is loaded - so the level-change hooks above cannot see them.
+// The one thing those arms do reach the engine with is this click sound, and
+// the 0.5 volume belongs to CGameMenu's own methods alone; see
+// docs/cof-ui-menu-map-redirect.md for the measured call sites.
+#define COF_MENU_PANEL_SOUND	"ui/3d_click.wav"
+#define COF_MENU_PANEL_VOLUME	0.5f
+// the map a panel return was already queued on, so the second click the same
+// press produces cannot queue it twice; it clears itself on the next level
+static char	cof_menu_panel_map[MAX_QPATH];
+// Cry of Fear unified UI: one-shot latch, set whenever the return sequence has
+// just been queued and consumed by the "disconnect" that is part of it. It is
+// what keeps CL_CoF_Disconnect_f from arming a second background map on top of
+// the one the redirect (or the menu's own Quit to menu, which ends up here too)
+// already asked for.
+static qboolean	cof_menu_return_armed;
+// one console command line; cmd.c's own MAX_CMD_LINE is private to that file
+#define COF_MENU_CMD_MAX	2048
+
+// Cry of Fear unified UI: the death screen. Measured in the shipped binaries
+// (docs/cof-ui-death-flow.md): hl.dll's player-death path sends the "VGUIMenu"
+// user message with a first byte of 35, and client.dll's
+// CClientViewport::ShowVGUIMenu maps index 35 onto CGameOver, the GAME OVER
+// panel with its LOAD GAME and EXIT links. Nothing else in either DLL sends
+// index 35, and no console command or stufftext is involved at all.
+#define COF_DEATH_USERMSG	"VGUIMenu"
+#define COF_DEATH_MENU_INDEX	35
+#define COF_DEATH_MENU_CMD	"menu_cofdeath"
+// true from the moment the death page was asked for until the session is torn
+// down, so a repeated message cannot stack a second page
+static qboolean	cof_death_menu_open;
+// the message arrives inside CL_ParseServerMessage; the page is opened from the
+// next Host_ClientFrame instead, see CL_CoF_DeathPump
+static qboolean	cof_death_menu_pending;
+
 //======================================================================
 int GAME_EXPORT CL_Active( void )
 {
@@ -126,12 +209,2240 @@ qboolean CL_IsInGame( void )
 	if( cl.background || cl.maxclients > 1 )
 		return true; // always active for multiplayer or background map
 
+	// Cry of Fear death page (cof_ui_death_keep_running): the one engine menu
+	// the world must keep running behind. See CL_CoF_DeathWorldLive.
+	if( CL_CoF_DeathWorldLive( ))
+		return true;
+
 	return ( cls.key_dest == key_game ); // active if not menu or console
+}
+
+/*
+====================
+CL_CoF_UIGateActive
+
+Cry of Fear unified UI gate (cof_ui_input_gate, default on).
+
+True whenever the engine menu, the console or the chat line owns input, that
+is whenever key_dest is not key_game. While it is true the client DLL must
+neither paint its HUD/VGUI layer nor receive keyboard and mouse input, so the
+engine menu and the console are the only interactive surface on screen. It
+goes false again as soon as the game regains focus, which restores the client
+HUD and the client's VGUI panels unchanged.
+
+Unlike CL_IsInGame() this deliberately does not special-case background maps
+or multiplayer: the point is focus ownership, not server simulation.
+====================
+*/
+qboolean CL_CoF_UIGateActive( void )
+{
+	static qboolean	reported;
+	qboolean	active;
+
+	if( !cof_ui_input_gate.value )
+		active = false;
+	else active = ( cls.key_dest != key_game );
+
+	// developer-level trace of the transitions, so a capture can prove when the
+	// client layer was suppressed and when it came back
+	if( active != reported )
+	{
+		reported = active;
+		Con_Reportf( "[cof-ui] input gate %s (key_dest=%d)\n", active ? "engaged" : "released", cls.key_dest );
+	}
+
+	return active;
+}
+
+/*
+====================
+Cry of Fear in-game UI scaling (cof_ui_scale, milestone 4)
+====================
+
+Every Cry of Fear in-game surface - the inventory panel, the HUD bars, the
+phone, the notes - is a fixed pixel layout. The client asks the engine for the
+screen size exactly once, inside CHud::VidInit, builds its whole VGUI panel
+tree from it inside CClientViewport's constructor, and never lays it out again
+(measured in stage1/ingame-ui-scaling-20260922/RESULTS.md, section 2). Its
+bitmap font strips stop growing at the 1024 bucket and its bucket table caps at
+1600, so nothing in that UI has scaled with the display since 2012.
+
+The obvious lever - lie to the client about the screen size through
+clgame.scrInfo, the way hud_scale does - is NOT usable here, and this is the
+single most important fact about this feature. The Cry of Fear client builds
+its own renderer's viewport and projection from the same gHUD.m_scrinfo it lays
+its panels out from, so a virtual screen size zooms and shifts the 3D view,
+in game and on the menu background map alike. Verified in the user's runtime
+with hud_scale 2. clgame.scrInfo therefore stays at the real render size and
+this feature never touches it.
+
+Instead the transform lives entirely in the engine's VGUI surface layer, which
+the client's 3D rendering does not go through:
+
+  device = ( layout + anchorOffset ) * scale
+
+  scale  = clamp( render_height / 1080, 1, 4 )      cof_ui_scale 0, automatic
+         = clamp( cof_ui_scale / 100,   1, 4 )      otherwise
+
+The automatic law keeps the client's fixed pixel layout at exactly the fraction
+of the screen it occupies at 1920x1080: an element of p layout pixels is drawn
+p*scale device pixels tall, so p*scale/height == p/1080 for every height. It is
+continuous in the render height with no per-resolution cases, and it stays at 1
+below 1080p, because shrinking a fixed pixel design only makes an already 8 px
+label smaller.
+
+`anchorOffset` is what keeps the result usable. A single scale about the screen
+centre would push the bottom-left HUD bars off the screen; a scale about the
+origin would push the centred inventory off the right edge. So each top-level
+client UI surface is anchored, per axis, to whichever screen edge it was laid
+out against (centre when it sits symmetrically), and its whole subtree inherits
+that anchor - see CofUI_SolvePanel() in the VGUI support library, which applies
+the offset to the panel's solved screen origin so that painting AND hit testing
+move together by construction.
+
+Two sizes feed it:
+
+* `layout`, pinned at the client's first VidInit, is the screen size the
+  client's frozen layout was built for. It never changes for the session.
+* the render size, read live.
+
+That is also the fix for the frozen-layout shift (the inventory panel in the
+lower-right quarter after a video mode change): the anchors are recomputed from
+the *current* render size against the *pinned* layout size every frame, so a
+layout built for 1920x1080 and then shown at 1280x720 is simply re-centred and
+re-anchored instead of being left at the old screen centre.
+*/
+#define COF_UI_REFERENCE_HEIGHT	1080.0f
+
+static struct
+{
+	qboolean	layout_pinned;
+	int		layout_width, layout_height;
+	qboolean	reported;
+	float		reported_scale;
+	qboolean	hud_scale_reported;
+} cof_ui;
+
+/*
+====================
+CL_CoF_UIReset
+
+Forget the pinned layout size. Called when the client library goes away, so a
+gamedir switch or a client reload starts a fresh session.
+====================
+*/
+void CL_CoF_UIReset( void )
+{
+	memset( &cof_ui, 0, sizeof( cof_ui ));
+}
+
+/*
+====================
+CL_CoF_UIPinLayout
+
+The screen size the client's one and only layout pass was made at. Called from
+SCR_VidInit just before the client's pfnVidInit, so the very first call pins
+the size the client is about to read from pfnGetScreenInfo.
+====================
+*/
+void CL_CoF_UIPinLayout( void )
+{
+	if( cof_ui.layout_pinned )
+		return;
+
+	if( !ref.initialized || refState.width <= 0 || refState.height <= 0 )
+		return;
+
+	cof_ui.layout_pinned = true;
+	cof_ui.layout_width = refState.width;
+	cof_ui.layout_height = refState.height;
+}
+
+/*
+====================
+CL_CoF_UIScale
+
+The scale factor, or 1.0 when the transform is inactive (a non-Cry of Fear
+game, cof_ui_scale 100, or a screen the law leaves at native size).
+====================
+*/
+float CL_CoF_UIScale( void )
+{
+	float	scale;
+
+	if( !cof_ui.layout_pinned || !ref.initialized || refState.height <= 0 )
+		return 1.0f;
+
+	// gated on the Cry of Fear client, like the rest of the cof_* stack
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return 1.0f;
+
+	if( cof_ui_scale.value == 0.0f )
+		scale = (float)refState.height / COF_UI_REFERENCE_HEIGHT;
+	else scale = cof_ui_scale.value * 0.01f;
+
+	// the user's own multiplier on top of the automatic size. It is applied
+	// here, and to the engine HUD text target in SCR_HudTextTargetHeight(), so
+	// the bars, the panels and the text all grow by the same factor together
+	scale *= CL_CoF_UIScaleUser();
+
+	scale = bound( 1.0f, scale, 4.0f );
+
+	if( !cof_ui.reported || fabs( scale - cof_ui.reported_scale ) > 0.0005f )
+	{
+		cof_ui.reported = true;
+		cof_ui.reported_scale = scale;
+
+		Con_Reportf( "[cof-ui] UI scale %.3f: layout %ix%i drawn on %ix%i (cof_ui_scale %g, cof_ui_scale_user %.2f)\n",
+			scale, cof_ui.layout_width, cof_ui.layout_height,
+			refState.width, refState.height, cof_ui_scale.value, CL_CoF_UIScaleUser( ));
+	}
+
+	return scale;
+}
+
+/*
+====================
+CL_CoF_UIScaleUser
+
+The menu's "HUD scale" control: Auto (1.0), 125, 150, 200 percent. Clamped so
+a hand-edited config cannot produce something unusable.
+====================
+*/
+float CL_CoF_UIScaleUser( void )
+{
+	return bound( 1.0f, cof_ui_scale_user.value, 2.0f );
+}
+
+/*
+====================
+CL_CoF_CheckUIScaleChanged
+
+cof_ui_scale, cof_ui_scale_user and cof_hud_text_height_pct are live: the menu
+applies them without a restart. The surface transform picks a change up on its
+own, because it is re-read every frame, but the engine HUD font has to be
+reloaded at the new size and the client has to re-read charWidths[]/iCharHeight
+from pfnGetScreenInfo, which it only does in its own VidInit. SCR_VidInit()
+does both. Called once per frame from CL_DrawHUD().
+
+Note that the client's VGUI panel tree is NOT rebuilt by this - its constructor
+is guarded and runs once per session - which is exactly why the surface
+transform anchors against the pinned layout size instead.
+====================
+*/
+void CL_CoF_CheckUIScaleChanged( void )
+{
+	if( !FBitSet( cof_ui_scale.flags, FCVAR_CHANGED ) &&
+		!FBitSet( cof_ui_scale_user.flags, FCVAR_CHANGED ) &&
+		!FBitSet( cof_hud_text_font.flags, FCVAR_CHANGED ) &&
+		!FBitSet( cof_hud_text_style.flags, FCVAR_CHANGED ) &&
+		!FBitSet( cof_hud_text_height_pct.flags, FCVAR_CHANGED ))
+		return;
+
+	ClearBits( cof_ui_scale.flags, FCVAR_CHANGED );
+	ClearBits( cof_ui_scale_user.flags, FCVAR_CHANGED );
+	ClearBits( cof_hud_text_height_pct.flags, FCVAR_CHANGED );
+	// cof_hud_text_font is deliberately NOT cleared here: SCR_VidInit() below
+	// reads it to decide whether the atlas has to be reloaded, and clears it
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return;
+
+	Con_Reportf( "[cof-ui] scale cvars changed, re-deriving\n" );
+	SCR_VidInit();
+}
+
+/*
+====================
+CL_CoF_UITransform
+
+The whole transform, for the VGUI support library: the scale, the pinned layout
+size the client's panels live in, and the current render size the anchors are
+measured against. False means "draw exactly as the stock engine would".
+====================
+*/
+qboolean CL_CoF_UITransform( float *scale, int *layoutWide, int *layoutTall, int *screenWide, int *screenTall )
+{
+	float	s = CL_CoF_UIScale();
+
+	if( scale ) *scale = s;
+	if( layoutWide ) *layoutWide = cof_ui.layout_width;
+	if( layoutTall ) *layoutTall = cof_ui.layout_height;
+	if( screenWide ) *screenWide = refState.width;
+	if( screenTall ) *screenTall = refState.height;
+
+	// the anchor pass still has work to do at scale 1 whenever the render size
+	// has moved away from the size the client laid out at: that is the frozen
+	// layout shift, and re-anchoring is what fixes it
+	if( s != 1.0f )
+		return true;
+
+	if( !cof_ui.layout_pinned )
+		return false;
+
+	return ( cof_ui.layout_width != refState.width || cof_ui.layout_height != refState.height );
+}
+
+/*
+====================
+CL_CoF_UIScaleRect
+
+Scale one VGUI quad from the client's layout pixels to device pixels.
+====================
+*/
+void CL_CoF_UIScaleRect( float *x, float *y, float *w, float *h )
+{
+	float	scale = CL_CoF_UIScale();
+
+	if( scale == 1.0f )
+		return;
+
+	if( x ) *x *= scale;
+	if( y ) *y *= scale;
+	if( w ) *w *= scale;
+	if( h ) *h *= scale;
+}
+
+/*
+====================
+CL_CoF_HudScaleBlocked
+
+True while hud_scale must be ignored: the Cry of Fear client cannot survive a
+virtual screen size, see the comment at the call site in CL_GetScreenInfo().
+Reports once so a config with a stale value is visible in a log.
+====================
+*/
+qboolean CL_CoF_HudScaleBlocked( void )
+{
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return false;
+
+	if( hud_scale.value != 0.0f && !cof_ui.hud_scale_reported )
+	{
+		cof_ui.hud_scale_reported = true;
+
+		Con_Printf( S_WARN "hud_scale %g ignored: it breaks the Cry of Fear client's own 3D view. Use cof_ui_scale instead.\n",
+			hud_scale.value );
+	}
+
+	return true;
+}
+
+/*
+====================
+CL_CoF_UIScaleHudRect
+
+The other half of the transform: the client's classic Half-Life HUD, drawn
+through the engine's own sprite engfuncs instead of through VGUI.
+
+Measured (stage1/ui-m4-scaling-20260922): the Cry of Fear client never calls
+pfnSPR_Draw at all - it uses pfnSPR_Set (68 sites), pfnSPR_DrawHoles (41) and
+pfnSPR_DrawAdditive (17), which all funnel through SPR_DrawGeneric here. What
+lives on this path is the ammo counter (CHudAmmo::Draw at client VA 100177C0,
+which reads ScreenWidth/ScreenHeight 22 times and positions every digit from
+them through CHud::DrawHudNumber at 10072160), the weapon selection menu, the
+pickup history icons, the secondary ammo readout, the status icons, the train
+controls and the logo sprite.
+
+NOT on this path, despite the obvious guess: the boss health bar is a FreeVGUI
+panel (CBossBar at gViewPort+0x1418) and is scaled by the VGUI pass instead,
+and CHudHealth, CHudBattery and CHudFlashlight are all 16-byte stubs in this
+client - the visible health, stamina and flashlight indicators are FreeVGUI
+panels inside CHUDControl.
+
+These are NOT in the frozen VGUI layout space. The client re-reads
+pfnGetScreenInfo in CHud::VidInit, which does run on every video mode change -
+only CClientViewport's constructor is guarded - so HUD sprite coordinates
+always follow the live render size. So the anchor is measured against the
+render size, and the result is a plain anchored scale about the screen:
+
+  low edge   (left / top)      device = pos * scale
+  centre                       device = screen/2 + ( pos - screen/2 ) * scale
+  high edge  (right / bottom)  device = screen - ( screen - pos ) * scale
+
+Per axis, from the drawn rectangle's own distance to each screen edge. Corner
+clustered elements - the ammo digits bottom right, the health icon bottom left
+- all resolve to the same anchor, so their relative geometry is preserved
+exactly: two digits 20 px apart at scale 2 end up 40 px apart and 2x as wide.
+====================
+*/
+static float CL_CoF_AnchorAxis( float pos, float size, float screen, float scale )
+{
+	float	low = pos;
+	float	high = screen - ( pos + size );
+	float	tolerance = Q_max( 8.0f, screen / 20.0f ); // 5 percent, as in the VGUI anchor pass
+
+	if( fabs( low - high ) <= tolerance )
+		return screen * 0.5f + ( pos - screen * 0.5f ) * scale;
+
+	if( low < high )
+		return pos * scale;
+
+	return screen - ( screen - pos ) * scale;
+}
+
+// A HUD widget is small. Anything that covers a third of the screen or more in
+// either axis is a screen-covering effect, not a widget: Cry of Fear paints its
+// darkness overlay and its fades as a handful of adjoining large sprites, and
+// anchoring each of those to its own nearest screen edge tears the effect into
+// visibly offset bands - measured, evidence/h1-spr-2560-hud.png against
+// evidence/s2-auto-2560-hud.png in stage1/ui-m4-scaling-20260922. Effects are
+// already screen-relative and need no scaling; leaving them alone is correct as
+// well as safe.
+#define COF_UI_HUD_WIDGET_FRACTION	0.33f
+
+void CL_CoF_UIScaleHudRect( float *x, float *y, float *w, float *h )
+{
+	float	scale = CL_CoF_UIScale();
+	float	rw = w ? *w : 0.0f;
+	float	rh = h ? *h : 0.0f;
+
+	if( scale == 1.0f || cof_ui_scale_sprites.value == 0.0f )
+		return;
+
+	if( rw >= refState.width * COF_UI_HUD_WIDGET_FRACTION )
+		return;
+
+	if( rh >= refState.height * COF_UI_HUD_WIDGET_FRACTION )
+		return;
+
+	if( x ) *x = CL_CoF_AnchorAxis( *x, rw, (float)refState.width, scale );
+	if( y ) *y = CL_CoF_AnchorAxis( *y, rh, (float)refState.height, scale );
+	if( w ) *w *= scale;
+	if( h ) *h *= scale;
+}
+
+/*
+====================
+CL_CoF_UIRootSize
+
+How big the VGUI root panel has to be so that nothing the anchor pass moved
+falls outside it: the client's own layout, or the part of the screen one layout
+pixel covers, whichever is larger. At the first VidInit this is exactly the
+render size, which is what the client reads when it builds its viewport.
+====================
+*/
+void CL_CoF_UIRootSize( int *width, int *height )
+{
+	float	scale = CL_CoF_UIScale();
+	int	w = refState.width, h = refState.height;
+
+	if( cof_ui.layout_pinned && scale > 0.0f )
+	{
+		int	visible_w = (int)(( refState.width / scale ) + 0.999f );
+		int	visible_h = (int)(( refState.height / scale ) + 0.999f );
+
+		w = Q_max( cof_ui.layout_width, visible_w );
+		h = Q_max( cof_ui.layout_height, visible_h );
+	}
+
+	if( width ) *width = w;
+	if( height ) *height = h;
+}
+
+/*
+====================
+Cry of Fear engine-rasterised VGUI fonts (cof_ui_inter_fonts, milestone 4)
+====================
+
+The game's VGUI text comes from bitmap strips at
+gfx/vgui/fonts/<res>_<scheme>.tga. Its resolution table caps at 1600 and the
+strips are byte-identical from the 1024 bucket upwards, so above 1024 px wide
+the text has one fixed pixel size whatever the display is - the `inventory`
+scheme never scaled at all. The engine therefore rasterises its own font from
+the Inter faces the project already ships, at a size that is a fraction of the
+render height.
+
+The fractions are the shipped point sizes at the 1024 bucket, the last one the
+artists actually changed, read as a fraction of 768:
+
+	inventory      14 px -> 1.82 %
+	credits        14 px -> 1.82 %
+	creditstitle   24 px -> 3.13 %
+	chaptertitle   30 px -> 3.91 %
+
+Two sizes come out of that, and the difference between them is the whole
+device/logical split this feature turns on:
+
+	devicePx  = fraction * render_height * cof_ui_scale_user
+	logicalPx = devicePx / cof_ui_scale
+
+`devicePx` is what the glyphs are rasterised at. `logicalPx` is what every
+metric is reported at, because the client lays out in the frozen layout space
+and cof_ui_scale multiplies every VGUI quad by its scale on the way out. Report
+the device size instead and the text would be magnified twice; rasterise at the
+logical size instead and it would be a magnified bitmap again, which is exactly
+what this replaces. Reported logical, rasterised device, the atlas lands on the
+device pixels it was drawn for, 1:1.
+
+Which role a font is cannot be read off the font: the client builds every one
+of them as Font( "Arial", <tga bytes>, tall = 20, weight = 700 ). But it loads
+the strip through COM_LoadFile immediately before constructing the font, so the
+scheme name in that path identifies the next font built. CL_CoF_FontLatch()
+records it (from the engfunc wrapper in cl_game.c) and the support library
+consumes it in the Font constructor.
+*/
+#define COF_FONT_REFERENCE_HEIGHT	768.0f	// the 1024x768 bucket the sizes come from
+// Milestone 4c: the VGUI font roles that carry the client's transient in-game
+// message text - the item pickups and the cutscene dialogue lines, which are
+// the same panel (CHUDControl's child Label at +0x3A8, disassembly in
+// docs/cof-hud-text-legibility.md section 9). MEASURED with cof_hud_text_trace,
+// not guessed: the role a client font gets is the scheme strip it loaded first,
+// and CHUDControl asks CSchemeManager for "credits" in its constructor.
+//
+// CSubtitle is NOT in this list. It builds its font from "Default Text" (or
+// from a leading "@<scheme>" token in the line), and it is unreachable with the
+// shipped data anyway: MessageAdd only routes to it on the "$effect 3" branch,
+// and the shipped titles.txt is the stock Half-Life file with no such entry.
+// The dialogue the player actually sees goes through the Label below.
+#define COF_FONT_MESSAGE_ROLES	{ "credits" }
+
+static struct
+{
+	string		latched_role;
+	byte		*ttf[3];		// 0 = Regular, 1 = SemiBold, 2 = Bold
+	int		ttf_size[3];
+	qboolean	ttf_tried[3];
+} cof_font;
+
+/*
+====================
+CL_CoF_FontLatch
+
+Remember the scheme name from a gfx/vgui/fonts/<res>_<scheme>.tga load.
+====================
+*/
+void CL_CoF_FontLatch( const char *scheme )
+{
+	if( COM_StringEmptyOrNULL( scheme ))
+		cof_font.latched_role[0] = '\0';
+	else Q_strncpy( cof_font.latched_role, scheme, sizeof( cof_font.latched_role ));
+
+	if( cof_ui_inter_fonts.value > 1.0f )
+		Con_Reportf( "[cof-font] latch \"%s\"\n", cof_font.latched_role );
+}
+
+/*
+====================
+CL_CoF_FontRoleLatch
+
+Consume it. One shot: a second font built without its own strip load gets
+nothing and falls back to the client's own bitmap.
+====================
+*/
+int CL_CoF_FontRoleLatch( char *buf, int size )
+{
+	if( !buf || size <= 0 || !cof_font.latched_role[0] )
+		return 0;
+
+	// deliberately NOT cleared: the client builds more than one font object per
+	// strip load, and the first one is not always the one it draws with. The
+	// role stays current until the next strip load replaces it, so every font
+	// built for a scheme gets that scheme's size
+	Q_strncpy( buf, cof_font.latched_role, size );
+
+	return 1;
+}
+
+/*
+====================
+CL_CoF_FontRoleFraction
+
+The share of the render height this role's glyphs should occupy. Anything the
+table does not name - the Half-Life leftovers, and the two schemes that have no
+strip at any resolution and therefore render nothing today ("Default Text" and
+"impact") - gets the body size, which is how they start working at all.
+====================
+*/
+/*
+====================
+CL_CoF_FontRoleIsMessage
+
+Cry of Fear in-game message text (milestone 4c).
+
+The one place that decides which VGUI font roles carry the transient in-game
+messages the player reads mid-action - the item pickups ("You got the Lantern",
+"Picked up a glock magazine with 15 rounds", both of which land in the client's
+CHUDControl message strip) and the cutscene subtitles. Those two get the
+vertical target, the backing strip and the heavier face; nothing else does.
+
+Kept here, next to the size table, because that is already the file that owns
+"what does this role mean"; the support library only carries out what this
+returns.
+====================
+*/
+static qboolean CL_CoF_FontRoleIsMessage( const char *role )
+{
+	static const char *const roles[] = COF_FONT_MESSAGE_ROLES;
+
+	if( COM_StringEmptyOrNULL( role ))
+		return false;
+
+	for( int i = 0; i < (int)ARRAYSIZE( roles ); i++ )
+	{
+		if( !Q_stricmp( role, roles[i] ))
+			return true;
+	}
+
+	return false;
+}
+
+static float CL_CoF_FontRoleFraction( const char *role, qboolean *semibold )
+{
+	float	points = 14.0f;
+
+	if( !Q_stricmp( role, "creditstitle" ))
+		points = 24.0f;
+	else if( !Q_stricmp( role, "chaptertitle" ))
+		points = 30.0f;
+
+	// "arial bold" in the game's own font info.txt is every *title* scheme.
+	// Milestone 4c: the in-game message roles join them, for the same reason
+	// the engine HUD text did - a Regular face over an arbitrary scene is
+	// what "too light to read" meant.
+	if( semibold )
+		*semibold = ( Q_stristr( role, "title" ) != NULL ) || CL_CoF_FontRoleIsMessage( role );
+
+	return points / COF_FONT_REFERENCE_HEIGHT;
+}
+
+/*
+====================
+CL_CoF_FontDesc
+
+Answer the size and code page for a role, or false to leave the client's own
+bitmap strip alone.
+====================
+*/
+qboolean CL_CoF_FontDesc( const char *role, cof_vgui_font_t *out )
+{
+	float		scale, fraction, device;
+	qboolean	semibold = false;
+	int		codepage;
+
+	if( !out || COM_StringEmptyOrNULL( role ))
+		return false;
+
+	if( cof_ui_inter_fonts.value == 0.0f )
+		return false;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return false;
+
+	if( !ref.initialized || refState.height <= 0 )
+		return false;
+
+	scale = CL_CoF_UIScale();
+	fraction = CL_CoF_FontRoleFraction( role, &semibold );
+
+	device = fraction * refState.height * CL_CoF_UIScaleUser();
+	device = bound( 8.0f, device, 256.0f );
+
+	codepage = (int)cof_text_codepage.value;
+
+	if( codepage != 1250 && codepage != 1251 && codepage != 1252 )
+		codepage = 1252;
+
+	if( cof_ui_inter_fonts.value > 1.0f )
+	{
+		Con_Reportf( "[cof-font] role \"%s\" -> device %.1f px, logical %.1f px, cp %i, %s\n",
+			role, device, device / ( scale > 0.0f ? scale : 1.0f ), codepage,
+			semibold ? "SemiBold" : "Regular" );
+	}
+
+	out->devicePx = Q_rint( device );
+	out->logicalPx = Q_max( 6, Q_rint( device / ( scale > 0.0f ? scale : 1.0f )));
+	out->codepage = codepage;
+	out->semibold = cof_hud_text_style.value && CL_CoF_FontRoleIsMessage( role ) ? 2 : semibold ? 1 : 0;
+
+	// milestone 4b: the same translucent strip the engine HUD text gets, for
+	// the notes and document reader, and (4c) for the in-game message text.
+	// Named here, in the engine, rather than in the support library, so there
+	// is exactly one place that decides which text gets a backing.
+	out->backing = 0;
+	out->ytarget = -1;
+	out->trace = ( cof_hud_text_trace.value != 0.0f ) ? 1 : 0;
+	out->overflow = ( cof_vgui_text_overflow.value != 0.0f ) ? 1 : 0;
+
+	if( !Q_stricmp( role, "pager" ) || CL_CoF_FontRoleIsMessage( role ))
+		out->backing = bound( 0, (int)cof_hud_text_backing.value, 255 );
+
+	// milestone 4c: where the in-game message text belongs.
+	//
+	// MEASURED, with cof_hud_text_trace: the client draws that text at layout
+	// y 776 in its own 1080-tall layout - 71.9 % of the screen, the lower
+	// third, which is where the original game had it. But the surface
+	// transform scales about the panel's anchor, so at the HUD scale the user
+	// plays with (cof_ui_scale_user 1.5) that line lands at 776 * 1.5 = 1164
+	// device pixels on a 1080 px screen: completely off the bottom. The same
+	// panel's other slot sits at layout y 224, which the transform pulls to
+	// 31 % - high over the scene and over a full-screen view like the
+	// map/timetable screen.
+	//
+	// So the fix is not an offset from where the client put it: it is an
+	// absolute place on the display, which is stable in the render height, in
+	// cof_ui_scale and in cof_ui_scale_user alike. The support library shifts
+	// a whole run so its first line lands here and keeps the rest's spacing.
+	//
+	// 0 turns the repositioning off and leaves the client's own placement.
+	if( CL_CoF_FontRoleIsMessage( role ) && cof_hud_msg_y_pct.value > 0.0f )
+	{
+		float	pct = bound( 1.0f, cof_hud_msg_y_pct.value, 100.0f );
+
+		out->ytarget = Q_rint( refState.height * pct * 0.01f );
+	}
+
+	return true;
+}
+
+/*
+====================
+CL_CoF_FontFile
+
+The shipped Inter faces, loaded once and kept for the session. gamedata puts
+them in cryoffear/gfx/fonts, which is where the menu theme already reads them
+from.
+====================
+*/
+const byte *CL_CoF_FontFile( int semibold, int *size )
+{
+	int	slot = bound( 0, semibold, 2 );
+
+	if( size )
+		*size = 0;
+
+	if( !cof_font.ttf_tried[slot] )
+	{
+		fs_offset_t	length = 0;
+		const char	*path = slot == 2 ? "gfx/fonts/Inter-Bold.ttf" : slot == 1 ? "gfx/fonts/Inter-SemiBold.ttf" : "gfx/fonts/Inter-Regular.ttf";
+
+		cof_font.ttf_tried[slot] = true;
+		cof_font.ttf[slot] = FS_LoadFile( path, &length, false );
+		cof_font.ttf_size[slot] = (int)length;
+
+		if( !cof_font.ttf[slot] )
+			Con_Printf( S_WARN "cof_ui_inter_fonts: %s not found, the client's own font strips stay in use\n", path );
+		else Con_Reportf( "[cof-font] loaded %s (%i bytes)\n", path, cof_font.ttf_size[slot] );
+	}
+
+	if( cof_ui_inter_fonts.value > 1.0f )
+		Con_Reportf( "[cof-font] file request slot %i -> %s\n", slot, cof_font.ttf[slot] ? "ok" : "MISSING" );
+
+	if( !cof_font.ttf[slot] )
+		return slot == 2 ? CL_CoF_FontFile( 1, size ) : NULL;
+
+	if( size )
+		*size = cof_font.ttf_size[slot];
+
+	return cof_font.ttf[slot];
+}
+
+/*
+====================
+CL_CoF_FontProbe
+
+cof_font_probe: the string to draw, and the role to draw it with. The value is
+"<text>" or "<role> <text>" - a leading word that names a known scheme picks
+that size, so "chaptertitle Zazolc gesla jazn" is legible at a glance.
+
+This exists because there is no other way to see a code page working: the game
+draws only English, the inventory's labels turned out to be painted into
+gfx/vgui/640_inventory.tga rather than drawn as text, and every other VGUI text
+surface needs a map event or a mouse click to reach.
+====================
+*/
+int CL_CoF_FontProbe( char *text, int size, char *role, int roleSize )
+{
+	const char	*value = cof_font_probe.string;
+	const char	*space;
+
+	if( !text || size <= 0 || !role || roleSize <= 0 || COM_StringEmptyOrNULL( value ))
+		return 0;
+
+	Q_strncpy( role, "credits", roleSize );
+
+	space = Q_strchr( value, ' ' );
+
+	if( space && space != value )
+	{
+		string	first;
+		int	length = (int)( space - value );
+
+		if( length < (int)sizeof( first ))
+		{
+			memcpy( first, value, length );
+			first[length] = 0;
+
+			if( !Q_stricmp( first, "inventory" ) || !Q_stricmp( first, "credits" ) ||
+				!Q_stricmp( first, "creditstitle" ) || !Q_stricmp( first, "chaptertitle" ) ||
+				!Q_stricmp( first, "pager" ))
+			{
+				Q_strncpy( role, first, roleSize );
+				value = space + 1;
+			}
+		}
+	}
+
+	Q_strncpy( text, value, size );
+
+	return 1;
+}
+
+/*
+====================
+CL_CoF_StopMP3
+
+Cry of Fear music bleed across transitions (cof_mp3_stop_on_map, default on).
+
+Cry of Fear does not play music through the engine at all. The client owns an
+irrKlang device and a CMP3Player of its own (measured in
+stage1/menu-music-20260921/RESULTS.md: MP3_Create at client.dll VA 1007F9E0,
+the current track at 105440B0), so S_StopBackgroundTrack in CL_Disconnect and
+the level loader's own audio teardown do not touch it, and a track started on
+one map keeps playing on the next. The only control surface the client exposes
+is one console command, "stopmp3" (registered at VA 1006D60A, handler 1006E350,
+an unconditional MP3_Stop( 0.0f )); the "mp3player" command is an empty stub and
+there is no "stop" user message.
+
+So the engine issues that command itself, directly rather than through Cbuf,
+because it has to take effect *before* the transition it precedes - a queued
+command would run after the new level had already started its own track.
+
+Deliberately NOT done for changelevel: Cry of Fear carries a track across an
+in-game level transition on purpose (the train ride, the sewer/subway chains),
+and killing it there would be a regression, not a fix. The hooks are therefore
+on the four "this is a new session" funnels only - COM_LoadLevel, COM_NewGame,
+COM_LoadGame and CL_Disconnect - and never on COM_ChangeLevel.
+
+Safe on a dedicated build (the stub in common.h), before the client DLL is
+loaded, with a client that does not register the command, and during a crash
+teardown.
+====================
+*/
+void CL_CoF_StopMP3( const char *reason )
+{
+	// COM_NewGame/COM_LoadLevel/COM_LoadGame call CL_Disconnect themselves when
+	// no server is running, so one transition can reach this twice. "once" is
+	// per frame: stopmp3 is idempotent, but the log should not double up.
+	static qboolean	stopped_once;
+	static uint	last_frame;
+
+	if( !cof_mp3_stop_on_map.value )
+		return;
+
+	if( host.status == HOST_CRASHED || host.type == HOST_DEDICATED )
+		return;
+
+	if( !clgame.hInstance )
+		return; // no client DLL, so no player and no command
+
+	if( !Cmd_Exists( "stopmp3" ))
+		return; // a client that does not have the Cry of Fear music player
+
+	if( stopped_once && last_frame == host.framecount )
+		return;
+
+	stopped_once = true;
+	last_frame = host.framecount;
+
+	Con_Reportf( "[cof-mp3] stopmp3 before %s\n", reason ? reason : "transition" );
+	Cmd_ExecuteString( "stopmp3" );
+}
+
+/*
+====================
+Cry of Fear sky reset (cof_sky_reset_per_map, default on)
+
+The bug, as reported: opening the Unlockables gallery logs
+
+    Sky error: cant load sky face gfx/env/desertlf.tga
+    Use gl_customsky 1 to reenable sky
+
+and from then on *every* map in the session has a blank sky - loading a forest
+save afterwards shows no sky at all, although a direct load of the same save is
+fine.
+
+Measured in the shipped client.dll (read-only, image base 0x10000000):
+
+  the custom sky loader          VA 10063450
+  the custom sky draw pass       VA 10063780
+  gl_customsky, registered with  pfnRegisterVariable( "gl_customsky", "1", 0 )
+                                 at VA 10063F6E, cvar_t* kept at 104CE068
+
+  10063780  draw: if( gl_customsky->value == 0 ) return;      <- the whole pass
+            else load(); if( !loaded_flag ) return; ...draw 6 faces...
+  10063450  load: name = maxclients > 1 ? "black"
+                                        : pfnGetCvarString( "sv_skyname" );
+            if( name == cached_name ) return;   // 104CE028
+            loaded_flag = 0;                    // 104CE020
+            for( 6 faces ) if( !load( "gfx/env/%s%s.tga" )) goto fail;
+            cached_name = name; loaded_flag = 1; return;
+     fail:  Con_Printf( "Sky error: cant load sky face %s" );
+            Con_Printf( "Use gl_customsky 1 to reenable sky" );
+            Cvar_SetValue( "gl_customsky", 0 );   // VA 1006375F and 100635C8,
+                                                  // engine func table index 37
+
+That last line is the whole mechanism. "gl_customsky" is registered with flags
+0, so it is not archived and not reset by anything: the client writes 0 into it
+once, and its own sky pass is then skipped for the rest of the process. Nothing
+in the engine or in ref_gl persists a failed sky load - the engine's own sky
+state is rebuilt from scratch on every level (R_SetupSky in ref_common.c, called
+from CL_ParseServerData's one-time block, which starts by unloading the old
+skybox and clearing FWORLD_CUSTOM_SKYBOX). The flag that survives the map change
+is the client's cvar, and only that.
+
+Why c_unlockables trips it: its worldspawn has no "skyname" key at all
+(measured: the entity lump has MaxRange and wad but no skyname), and
+SV_SpawnEntities does Cvar_Reset( "sv_skyname" ) per map (sv_game.c), so
+sv_skyname falls back to its default "desert" (sv_main.c, DEFAULT_SKYBOX_NAME in
+com_strings.h). Cry of Fear ships gfx/env/black*, gfx/env/blue22* and
+gfx/env/sorgard* and no desert faces anywhere - not loose, not in any of its 22
+WADs. Under real GoldSrc the engine would have found them in valve/gfx/env
+through the fallback game directory; a standalone Cry of Fear gamedir has no
+such fallback, so the load fails where it never did before.
+
+A second, nastier failure follows from the same loader, and it is the one the
+user sees as "sometimes the sky is not re-enabled when changing maps"
+(measured, same disassembly):
+
+    10063639  if( cached_name[0] && !strcmp( cached_name, name ))
+    10063677      return;                 <- WITHOUT touching loaded_flag
+    1006367D  loaded_flag = 0;
+              ...six faces...
+    100636F6  cached_name = name;         <- only on success
+    10063713  loaded_flag = 1;
+
+cached_name is written only by a SUCCESSFUL load, loaded_flag is zeroed by
+every ATTEMPT. So a failed load leaves loaded_flag 0 with cached_name still
+naming the last skybox that did load, and the next map that asks for that same
+skybox takes the early return at 10063677 and never sets loaded_flag again. The
+draw pass at 100637C7 then returns on !loaded_flag: gl_customsky reads 1, the
+console is silent, and there is no sky. Cry of Fear ships 167 of its 235 maps
+with skyname "black", so the sequence black -> a map with no skyname -> black
+is ordinary play, and it is exactly the sequence that traps the client.
+
+The fix, in three parts:
+
+  * CL_CoF_SkyClientCvarSet is called from the client's own Cvar_SetValue
+    engine callback (cl_game.c) and is the only place that can tell a *client*
+    write apart from a user's console line or config. When the client writes 0
+    into gl_customsky it remembers what the value was a moment earlier and lets
+    the write through, so the map that actually has no sky faces still behaves
+    exactly as it does today - no spam, no retry every frame;
+  * CL_CoF_SkyResetPerMap puts the remembered value back at every level start.
+    It runs from R_SetupSky (ref_common.c), which CL_ParseServerData reaches
+    unconditionally on every level load, and from CL_ClearState, which covers
+    a disconnect, a map command and a save load. The pending restore is NOT
+    tied to the map it was armed on: it survives any number of level starts
+    until it is actually carried out, so two maps in a row that both fail, or
+    a level start that somehow misses R_SetupSky, cannot lose it;
+  * and the real cure for Cry of Fear, on the server side:
+    SV_CoF_ApplyDefaultSkyName (sv_main.c) replaces the stock "desert" default
+    of sv_skyname with cof_default_skyname ("black") on the 56 maps that carry
+    no skyname key, so the client's loader SUCCEEDS on them. Nothing fails,
+    nothing is turned off, and cached_name/loaded_flag never fall out of step -
+    which is the only way to keep the trap above from arming, since its state
+    lives inside the client and the engine cannot reach it.
+
+Nothing else about gl_customsky changes. A user who types "gl_customsky 0"
+turns the pass off, so the loader never runs and never fails, so nothing is ever
+remembered; and a 0 the engine did not see the client write is never touched, so
+the user's own choice survives every level start. A user who types
+"gl_customsky 1" on a map whose faces are missing gets the same error and the
+same shutdown as before, confined to that map. cof_sky_reset_per_map 0 restores
+stock behaviour exactly.
+====================
+*/
+#define COF_SKY_CVAR	"gl_customsky"
+
+// The pending restore deliberately OUTLIVES the map it was armed on: it is
+// cleared when it is carried out, or when the cvar is seen to be on again,
+// and by nothing else.
+static qboolean	cof_sky_off_by_client;		// the 0 now in the cvar was written by the client
+static char	cof_sky_saved_value[32];	// what it held a moment before that
+
+void CL_CoF_SkyClientCvarSet( const char *name, float value )
+{
+	convar_t	*var;
+
+	if( !cof_sky_reset_per_map.value )
+		return;
+
+	if( COM_StringEmptyOrNULL( name ) || Q_stricmp( name, COF_SKY_CVAR ))
+		return;
+
+	if( value != 0.0f )
+		return; // the client only ever writes 0 here, but be explicit
+
+	if( cof_sky_off_by_client )
+		return; // already ours; keep the first saved value, never overwrite it with 0
+
+	var = Cvar_FindVar( COF_SKY_CVAR );
+
+	if( !var || var->value == 0.0f )
+		return; // it was already off - the user's choice, nothing to restore
+
+	Q_strncpy( cof_sky_saved_value, var->string, sizeof( cof_sky_saved_value ));
+	cof_sky_off_by_client = true;
+
+	Con_Printf( "[cof-sky] the client turned \"%s\" off after a failed sky load on \"%s\"; \"%s\" will be restored at the next level start\n",
+		COF_SKY_CVAR, COM_StringEmpty( clgame.mapname ) ? "?" : clgame.mapname, cof_sky_saved_value );
+}
+
+/*
+====================
+CL_CoF_SkyResetPerMap
+
+Every level start, unconditionally: from R_SetupSky (ref_common.c), which
+CL_ParseServerData reaches on every level load whether or not the skyname
+changed, and from CL_ClearState, which covers a disconnect, a map command and a
+save load. Safe to call as often as one likes - it only ever puts back a value
+the engine watched the client take away.
+====================
+*/
+void CL_CoF_SkyResetPerMap( void )
+{
+	convar_t	*var;
+
+	var = Cvar_FindVar( COF_SKY_CVAR );
+
+	if( !var )
+		return;
+
+	if( var->value != 0.0f )
+	{
+		// the client's sky pass is on, so nothing is pending; anything the
+		// client turns off from here on is a fresh failure with a fresh value
+		cof_sky_off_by_client = false;
+		return;
+	}
+
+	if( !cof_sky_off_by_client )
+		return; // this 0 is the user's own - never override it
+
+	if( !cof_sky_reset_per_map.value )
+		return; // stock behaviour; keep the flag so turning the fix back on still works
+
+	Cvar_DirectSet( var, COM_StringEmptyOrNULL( cof_sky_saved_value ) ? "1" : cof_sky_saved_value );
+	cof_sky_off_by_client = false;
+
+	Con_Printf( "[cof-sky] restored \"%s\" to \"%s\" for the new level (a failed sky load stays on the map that caused it)\n",
+		COF_SKY_CVAR, var->string );
+}
+
+/*
+====================
+CL_CoF_VidRestartForget
+
+Drop a queued background-map restart. Called from CL_ClearState so a restart
+that never reached the server (an invalid map name, a level load that was
+overtaken) cannot latch the guard on for the rest of the session.
+====================
+*/
+void CL_CoF_VidRestartForget( void )
+{
+	cof_vid_restart_pending = false;
+}
+
+/*
+====================
+CL_CoF_VidModeChanged
+
+Cry of Fear video mode change hook (cof_vid_restart_background, default on).
+
+Called once a resolution change or a windowed/fullscreen toggle has completed,
+right after the engine has re-called the client's pfnVidInit through
+SCR_VidInit(). FWGS keeps the GL context across a mode change and only re-runs
+that one callback, but Cry of Fear's HUD_VidInit is a per-level entry point: it
+rebuilds the screen-sized state and clears the one-shot state the map set up
+(custom sky, atmosphere, the snow the server enabled with a single user message
+at spawn). Nothing replays that, so the menu scene comes back stripped.
+
+While the engine menu is running over a background map there is no session to
+lose, so the cheapest correct repair is to reload that background map: the
+server respawns it, resends its messages and the client's per-level init runs
+in full. The restart goes through the command buffer, so it lands at the start
+of the next Cbuf_Execute rather than inside the video code.
+
+With a real game in progress a reload would throw the session away, so this
+only reports the situation at developer level. Rebuilding a live session's
+client state after a mode change needs the client to be told to replay its
+per-level setup and is left for later; this function is the hook for it.
+====================
+*/
+void CL_CoF_VidModeChanged( void )
+{
+	if( cls.state != ca_active )
+	{
+		// nothing is loaded (or a level change is already under way)
+		cof_vid_restart_pending = false;
+		return;
+	}
+
+	if( cls.demoplayback )
+		return; // startup demos and demo playback own their own level flow
+
+	if( !cl.background )
+	{
+		// documented hook: a live game keeps the stock behaviour for now
+		Con_Reportf( "[cof-vid] video mode changed during a live game: the client's per-level setup is not rebuilt (map \"%s\")\n",
+			clgame.mapname );
+		return;
+	}
+
+	if( !cof_vid_restart_background.value )
+		return;
+
+	if( cof_vid_restart_pending )
+		return; // one restart per mode change, even if two call sites report it
+
+	if( COM_StringEmpty( clgame.mapname ))
+		return;
+
+	cof_vid_restart_pending = true;
+	Con_Reportf( "[cof-vid] restarting background map \"%s\" after a video mode change\n", clgame.mapname );
+	Cbuf_AddTextf( "map_background %s\n", clgame.mapname );
 }
 
 qboolean CL_IsInConsole( void )
 {
 	return ( cls.key_dest == key_console );
+}
+
+/*
+====================
+CL_CoF_RememberBackgroundMap
+
+Cry of Fear unified UI (cof_ui_menu_map_redirect, default on).
+
+Record the name of every background map the engine is actually asked to start
+(engine/server/sv_cmds.c, SV_MapBackground_f). MainUI picks that name at random
+from scripts/chapterbackgrounds.txt and the engine has nowhere else to read it
+back from, so remembering it is what lets the redirect below put the very same
+scene back under the menu instead of guessing one.
+====================
+*/
+void CL_CoF_RememberBackgroundMap( const char *mapname )
+{
+	if( COM_StringEmptyOrNULL( mapname ))
+		return;
+
+	Q_strncpy( cof_menu_background_map, mapname, sizeof( cof_menu_background_map ));
+
+	// back under the engine menu: arm the panel hook again, see
+	// CL_CoF_MenuPanelSound. This is the one event that always follows a panel
+	// return and always precedes the next trip out to a Cry of Fear UI map.
+	cof_menu_panel_map[0] = '\0';
+
+	// the queued return has arrived; nothing is pending any more, so the next
+	// disconnect from anywhere is free to arm a background map of its own
+	cof_menu_return_armed = false;
+}
+
+/*
+====================
+CL_CoF_MenuBackgroundMap
+
+Which map the redirect re-arms under the engine menu, in order of preference:
+
+1. the last background map the engine really started (above);
+2. the first entry of scripts/chapterbackgrounds.txt - the same file, and the
+   same "skip the numbers of the old format list" parse, MainUI uses in
+   UI_LoadBackgroundMapList() (3rdparty/mainui/BaseMenu.cpp:971-995);
+3. the map the intercepted command asked for, so the redirect can never end up
+   with no scene at all. For Cry of Fear that is its own authored menu map.
+====================
+*/
+static const char *CL_CoF_MenuBackgroundMap( const char *requested )
+{
+	static char	name[MAX_QPATH];
+	char		token[MAX_QPATH];
+	char		*afile, *pfile;
+
+	if( cof_menu_background_map[0] != '\0' )
+		return cof_menu_background_map;
+
+	afile = (char *)FS_LoadFile( "scripts/chapterbackgrounds.txt", NULL, false );
+
+	if( afile != NULL )
+	{
+		pfile = afile;
+
+		while(( pfile = COM_ParseFile( pfile, token, sizeof( token ))) != NULL )
+		{
+			if( token[0] >= '0' && token[0] <= '9' )
+				continue; // skip the numbers of the old format list
+
+			Q_strncpy( name, token, sizeof( name ));
+			Mem_Free( afile );
+			return name;
+		}
+
+		Mem_Free( afile );
+	}
+
+	return requested;
+}
+
+/*
+====================
+CL_CoF_ParseMenuMapCommand
+
+True when one console command is a level change to Cry of Fear's 3D menu map:
+"map c_game_menu1" or "changelevel c_game_menu1", case-insensitive, with any
+whitespace and an optionally quoted map name. Anything after the map name (a
+"changelevel2 <map> <landmark>", say) makes it a real transition and is left
+alone.
+====================
+*/
+static qboolean CL_CoF_ParseMenuMapCommand( const char *segment )
+{
+	char	buffer[COF_MENU_CMD_MAX];
+	char	token[MAX_QPATH];
+	char	*pfile;
+
+	Q_strncpy( buffer, segment, sizeof( buffer ));
+	pfile = buffer;
+
+	if(( pfile = COM_ParseFile( pfile, token, sizeof( token ))) == NULL )
+		return false;
+
+	if( Q_stricmp( token, "map" ) && Q_stricmp( token, "changelevel" ))
+		return false;
+
+	if(( pfile = COM_ParseFile( pfile, token, sizeof( token ))) == NULL )
+		return false;
+
+	COM_StripExtension( token );
+
+	if( Q_stricmp( token, COF_MENU_MAP ))
+		return false;
+
+	// a landmark or any other argument means this is a real level change
+	if( COM_ParseFile( pfile, token, sizeof( token )) != NULL )
+		return false;
+
+	return true;
+}
+
+/*
+====================
+CL_CoF_MenuMapReturn
+
+Queue the return to the engine menu. This is the sequence MainUI's own
+Quit-to-menu path produces: CMenuMain::DisconnectCb issues "disconnect" and
+CMenuMain::Think then calls UI_StartBackGroundMap(), which issues
+"map_background <chapterbackground>" (3rdparty/mainui/menus/Main.cpp:180-192,
+:709-728, BaseMenu.cpp:548-583). menu_main is added in between because a
+disconnect in a developer build does not raise the menu by itself
+(CL_Disconnect's "back to menu in non-developer mode" test).
+
+"disconnect" ends a local game through Host_EndGame(), which aborts the current
+frame; the command buffer keeps everything behind the line it has already
+popped (engine/common/cmd.c, Cbuf_ExecuteCommandsFromBuffer), so menu_main and
+map_background run at the start of the next frame, after the server is really
+down. That is also why this can be queued from inside a client or server DLL
+callback: nothing is executed here.
+====================
+*/
+static qboolean CL_CoF_MenuMapReturn( const char *what, const char *source )
+{
+	char		redirect[COF_MENU_CMD_MAX];
+	const char	*background;
+
+	if( cl_background.value != 0.0f )
+	{
+		// already exactly where the redirect would take us
+		Con_Reportf( "[cof-ui] menu map redirect: dropped \"%s\" from %s (already on the background map)\n",
+			what, source );
+		return true;
+	}
+
+	background = CL_CoF_MenuBackgroundMap( COF_MENU_MAP );
+	Q_snprintf( redirect, sizeof( redirect ), "disconnect\nmenu_main\nmap_background %s\n", background );
+	Cbuf_AddText( redirect );
+
+	// the "disconnect" on the first line of that sequence goes through the
+	// console command like any other, so tell CL_CoF_Disconnect_f that this one
+	// is already accounted for
+	cof_menu_return_armed = true;
+
+	Con_Reportf( "[cof-ui] menu map redirect: \"%s\" from %s -> disconnect + menu_main + map_background %s\n",
+		what, source, background );
+
+	return true;
+}
+
+/*
+====================
+CL_CoF_MenuMapLevelChange
+
+Cry of Fear unified UI (cof_ui_menu_map_redirect, default on).
+
+The backstop, called from the "map" and "changelevel" console commands
+themselves (engine/server/sv_cmds.c). The three producer hooks below stop the
+command before it ever reaches the command buffer and can name who issued it;
+this one catches every other route to the same level change - an alias, a cfg,
+a typed console line, a stufftext that arrived in a compound string - so the
+invariant "c_game_menu1 is never a real level under the unified UI" holds
+whatever asks for it. "map_background c_game_menu1" is a different command
+(SV_MapBackground_f) and is deliberately not affected, so the redirect cannot
+recurse and the background map still works.
+====================
+*/
+qboolean CL_CoF_MenuMapLevelChange( const char *mapname, const char *source )
+{
+	char	name[MAX_QPATH];
+
+	if( !cof_ui_menu_map_redirect.value )
+		return false;
+
+	if( COM_StringEmptyOrNULL( mapname ))
+		return false;
+
+	if( cl.maxclients > 1 )
+		return false;
+
+	Q_strncpy( name, mapname, sizeof( name ));
+	COM_StripExtension( name );
+
+	if( Q_stricmp( name, COF_MENU_MAP ))
+		return false;
+
+	return CL_CoF_MenuMapReturn( mapname, source );
+}
+
+/*
+====================
+CL_CoF_MenuPanelSound
+
+Cry of Fear unified UI (cof_ui_menu_map_redirect, default on).
+
+The producer the level-change hooks cannot see, and the one the user reported:
+from the Unlockables gallery on c_unlockables, MAIN MENU brought up the old Cry
+of Fear menu. Measured in the shipped client.dll, read-only:
+
+  CUnlockables::OnCommand( 50 ) at VA 10035950, arm 10035991
+      this->setVisible( false );
+      gViewport->UpdateCursorState();
+      gViewport->m_pGameMenu->setVisible( true );   // CGameMenu, vtable 10143200
+      gViewport->UpdateCursorState();
+      pfnPlaySoundByName( "ui/3d_click.wav", 1.0f );
+
+There is no level change, no console command, no stufftext and no user message
+anywhere on that path: the client simply shows its own main-menu panel over the
+map that is already loaded. The redirect's four interception points all sit on
+the command path, so none of them was ever reached.
+
+What the engine can see is the click sound, and the discriminator is the volume.
+"ui/3d_click.wav" has nineteen call sites in client.dll; eight of them pass
+0.5f and all eight are methods of CGameMenu itself (the object is 0xC748 bytes
+and they all work on its 0xC6xx/0xC7xx members), including CGameMenu::setVisible
+at VA 1002ECF0, which is what runs first in the arm above. Every other site
+passes 1.0f. So a 0.5f "ui/3d_click.wav" means exactly one thing: the Cry of
+Fear main-menu panel is taking the screen. Under the unified UI that is a
+request to come back to our menu, the same as "map c_game_menu1", and it is
+answered with the same sequence. The 1.0f clicks are left alone, which is what
+keeps the gallery's own item buttons - and the item viewer's way back to the
+gallery, client.dll VA 1001F0ED, also on c_unlockables - working normally.
+
+The sound still plays: the user pressed a button and should hear it. Nothing is
+executed here either, the return is queued, see CL_CoF_MenuMapReturn.
+====================
+*/
+qboolean CL_CoF_MenuPanelSound( const char *sample, float volume )
+{
+	char	name[MAX_QPATH];
+	int	i;
+
+	if( !cof_ui_menu_map_redirect.value )
+		return false;
+
+	if( COM_StringEmptyOrNULL( sample ))
+		return false;
+
+	// a real single player session or the gallery map, never a background map
+	// (there the panel cannot be on screen) and never a multiplayer game (Cry
+	// of Fear's own panels disconnect instead of showing the menu there)
+	if( cls.state != ca_active || cl.maxclients > 1 )
+		return false;
+
+	if( cl_background.value != 0.0f )
+		return false;
+
+	if( fabs( volume - COF_MENU_PANEL_VOLUME ) > 0.01f )
+		return false;
+
+	Q_strncpy( name, sample, sizeof( name ));
+
+	for( i = 0; name[i] != '\0'; i++ )
+	{
+		if( name[i] == '\\' )
+			name[i] = '/';
+	}
+
+	if( Q_stricmp( name, COF_MENU_PANEL_SOUND ))
+		return false;
+
+	// one press plays two of these; queue the return only for the first
+	if( !COM_StringEmpty( clgame.mapname ) && !Q_stricmp( cof_menu_panel_map, clgame.mapname ))
+		return true;
+
+	Q_strncpy( cof_menu_panel_map, clgame.mapname, sizeof( cof_menu_panel_map ));
+
+	return CL_CoF_MenuMapReturn( "Cry of Fear main menu panel", "client menu panel" );
+}
+
+/*
+====================
+CL_CoF_MenuPanelProbe_f
+
+Cry of Fear unified UI (cof_ui_menu_map_redirect): the test hook for
+CL_CoF_MenuPanelSound above. What that hook answers to is a mouse click on a
+client VGUI panel, and this project may not inject mouse or keyboard input, so
+feeding it the same (sample, volume) pair pfnPlaySoundByName would is the only
+way to exercise it from a cfg. It plays nothing and touches nothing else.
+
+	cof_ui_menu_panel_probe [sample] [volume]
+
+with the measured pair as the default.
+====================
+*/
+static void CL_CoF_MenuPanelProbe_f( void )
+{
+	const char	*sample = COF_MENU_PANEL_SOUND;
+	float		volume = COF_MENU_PANEL_VOLUME;
+
+	if( Cmd_Argc() > 1 )
+		sample = Cmd_Argv( 1 );
+
+	if( Cmd_Argc() > 2 )
+		volume = Q_atof( Cmd_Argv( 2 ));
+
+	Con_Printf( "[cof-ui] menu panel probe: \"%s\" %.2f -> %s\n", sample, volume,
+		CL_CoF_MenuPanelSound( sample, volume ) ? "taken over" : "passed through" );
+}
+
+/*
+====================
+CL_CoF_Disconnect_f
+
+Cry of Fear unified UI (cof_ui_menu_map_redirect, default on).
+
+The user-visible symptom: typing "disconnect" in the console left the engine
+menu standing over nothing, while Quit to menu on the same menu came back to
+the live scene. Quit to menu is not the disconnect doing that - it is MainUI's
+CMenuMain::Think re-arming the background map afterwards (menus/Main.cpp), and
+that is the *menu's* code, so no other route to a disconnect has it.
+
+This wraps the "disconnect" console command itself, which is the one thing every
+route shares: a typed line, an alias, a cfg, a stufftext, the menu's own
+ClientCmd("disconnect") and the redirect's queued sequence all arrive here. When
+the redirect is on and this is a single-player session, it queues the same two
+commands the redirect's return sequence uses after its own disconnect -
+menu_main and map_background <the remembered chapter background> - so every
+disconnect lands where Quit to menu lands.
+
+Ordering is the same trick CL_CoF_MenuMapReturn relies on: the commands are only
+*queued*, and the real CL_Disconnect_f below ends a local game through
+Host_EndGame(), which aborts the current frame. Cbuf_ExecuteCommandsFromBuffer
+has already popped this line, so the two queued ones run at the start of the
+next frame, with the server really down - which SV_MapBackground_f insists on
+("can't set background map while game is active").
+
+Not armed twice:
+
+* the redirect's own sequence already contains a disconnect. It sets
+  cof_menu_return_armed when it queues, and that disconnect consumes it here;
+* MainUI's Quit to menu issues a bare "disconnect", so it is armed here - and
+  its own delayed re-arm then cannot fire, because CMenuMain::Think requires
+  cl_background == 0 for COF_BACKGROUND_RESTART_DELAY consecutive frames and
+  UI_StartBackGroundMap() refuses outright while cl_background is set. One
+  background map is started, not two.
+====================
+*/
+static void CL_CoF_Disconnect_f( void )
+{
+	char		redirect[COF_MENU_CMD_MAX];
+	const char	*background;
+
+	while( cof_ui_menu_map_redirect.value )
+	{
+		if( cof_menu_return_armed )
+		{
+			// this is the disconnect of a sequence that already carries the
+			// re-arm; one shot, so the next disconnect is free again
+			cof_menu_return_armed = false;
+			Con_Reportf( "[cof-ui] menu map redirect: \"disconnect\" - background map already armed, not arming again\n" );
+			break;
+		}
+
+		if( cls.state == ca_disconnected )
+			break; // nothing to leave
+
+		if( cl.maxclients > 1 )
+			break; // multiplayer keeps the stock behaviour, as everywhere else here
+
+		background = CL_CoF_MenuBackgroundMap( COF_MENU_MAP );
+		Q_snprintf( redirect, sizeof( redirect ), "menu_main\nmap_background %s\n", background );
+		Cbuf_AddText( redirect );
+		cof_menu_return_armed = true;
+
+		Con_Reportf( "[cof-ui] menu map redirect: \"disconnect\" -> menu_main + map_background %s\n", background );
+		break;
+	}
+
+	CL_Disconnect_f();
+}
+
+/*
+====================
+CL_CoF_MenuMapRedirect
+
+Cry of Fear unified UI (cof_ui_menu_map_redirect, default on).
+
+Cry of Fear's main menu is a client VGUI panel that lives on a real map, so
+"go back to the main menu" is spelled "map c_game_menu1" all over the game:
+the client's own to3dmenu console command and its Unlockables / difficulty /
+server-settings panels issue it through pfnClientCmd, and hl.dll issues it
+through CLIENT_COMMAND, which reaches the client as an svc_stufftext. Under
+the unified UI the main menu is the engine menu over a background map, so
+every one of those is a request to come back to *our* menu, not to load a
+level and hand focus to the client's panel.
+
+This is the single place that answers it. The command is taken over only when
+the whole string is that one level change (";"- and newline-separated empty
+commands aside), which is exactly how every producer measured in Cry of Fear
+spells it; a compound command that merely contains one is left to the stock
+path, so nothing this function does can promote a server's stufftext into the
+unfiltered command buffer. What it did not take over still reaches the backstop
+in the "map"/"changelevel" commands above.
+
+Returns true when it took the command over, in which case the caller must not
+queue the original text; false leaves the caller's stock path untouched, which
+is also what a cvar of 0 gives.
+====================
+*/
+qboolean CL_CoF_MenuMapRedirect( const char *cmd, const char *source )
+{
+	char		segment[COF_MENU_CMD_MAX];
+	char		matchedcmd[COF_MENU_CMD_MAX];
+	char		token[MAX_QPATH];
+	const char	*begin, *p;
+	qboolean	matched = false;
+	size_t		len;
+
+	if( !cof_ui_menu_map_redirect.value )
+		return false;
+
+	if( COM_StringEmptyOrNULL( cmd ))
+		return false;
+
+	// Cry of Fear's own client makes the same distinction: with more than one
+	// client its menu buttons disconnect instead of loading the menu map, and
+	// a server-driven level change there is a real one.
+	if( cl.maxclients > 1 )
+		return false;
+
+	begin = cmd;
+
+	for( p = cmd; ; p++ )
+	{
+		if( *p != ';' && *p != '\n' && *p != '\0' )
+			continue;
+
+		len = p - begin;
+		if( len >= sizeof( segment ))
+			len = sizeof( segment ) - 1;
+		memcpy( segment, begin, len );
+		segment[len] = '\0';
+
+		if( CL_CoF_ParseMenuMapCommand( segment ))
+		{
+			if( matched )
+				return false; // twice in one string: not something we wrote
+			matched = true;
+			Q_strncpy( matchedcmd, segment, sizeof( matchedcmd ));
+		}
+		else if( COM_ParseFile( segment, token, sizeof( token )) != NULL )
+		{
+			return false; // another real command shares the string, leave it alone
+		}
+
+		if( *p == '\0' )
+			break;
+
+		begin = p + 1;
+	}
+
+	if( !matched )
+		return false;
+
+	return CL_CoF_MenuMapReturn( matchedcmd, source );
+}
+
+/*
+====================
+CL_CoF_MenuReturn_f
+
+Cry of Fear unified UI: the redirect's return sequence as a console command,
+so the engine menu can ask for exactly it without spelling out a level change
+that only means "go back to the menu" because the redirect is on. The death
+page's Exit uses it when cof_ui_menu_map_redirect is off; with the redirect on
+it emits the original panel's own "map c_game_menu1" instead, so the measured
+path is the one that runs.
+====================
+*/
+/*
+====================
+CL_CoF_HudTextProbe_f
+
+cfg-only test hook (Cry of Fear, milestone 4b).
+
+The engine HUD text path - pfnDrawCharacter through cls.creditsFont - is
+reached only when the game DLL sends a "HudText" user message, which in Cry of
+Fear means an item pickup, a scripted line or a prompt. None of those can be
+made to happen from a cfg, and "impulse 101" emits no such message (measured,
+stage1/ui-m4-scaling-20260922), so the path had no repeatable test at all.
+
+This sends one, through the engine's own CL_HudMessage() - the same call the
+TE_TEXTMESSAGE temp entity uses - so the client's CHudMessage runs its real
+layout and the result on screen is the real thing, not a mock-up.
+
+    cof_hud_text_probe "You got the Lantern"
+====================
+*/
+static void CL_CoF_HudTextProbe_f( void )
+{
+	if( Cmd_Argc() < 2 )
+	{
+		Con_Printf( S_USAGE "cof_hud_text_probe <text>\n" );
+		return;
+	}
+
+	if( cls.state != ca_active )
+	{
+		Con_Printf( S_WARN "cof_hud_text_probe: not in a level\n" );
+		return;
+	}
+
+	Con_Printf( "[cof-hudtext] probe: \"%s\"\n", Cmd_Argv( 1 ));
+	CL_HudMessage( Cmd_Argv( 1 ));
+}
+
+/*
+====================
+CL_CoF_MsgProbe_f
+
+cfg-only test hook (Cry of Fear, milestone 4c).
+
+The item-pickup notification is a server-sent user message: hl.dll formats
+"Picked up a %s magazine with %i rounds" and sends it as "ProFont", and the
+client's hook copies the string into its CHUDControl message strip. Nothing a
+cfg can run produces one - "impulse 101" emits no such message (measured) and a
+real pickup means walking to an item. This synthesises one, so the panel, its
+placement and its font can be seen on demand:
+
+    cof_hud_msg_probe "You got the Lantern" [colour]
+
+The payload is the one the client reads: a colour index byte, then the string
+(hl.dll's sender is pfnWriteByte + pfnWriteString at VA 10119810, and the
+client's handler at 100712A0 is one READ_BYTE and one READ_STRING). The colour
+index picks the Label's foreground: 0/3 yellow, 1 azure, 2/6 red, 4 green,
+5 grey - 5 is the default and what the item pickups use; 7 and above leave the
+previous colour.
+
+Do not put the substring "DEADNOTIFY" in the text: the client's own handler
+replaces any message containing it with the coop respawn prompt.
+
+The payload is the one the client reads: a leading byte, then the string.
+====================
+*/
+static void CL_CoF_MsgProbe_f( void )
+{
+	byte	buf[256];
+	int	len;
+
+	if( Cmd_Argc() < 2 )
+	{
+		Con_Printf( S_USAGE "cof_hud_msg_probe <text>\n" );
+		return;
+	}
+
+	if( cls.state != ca_active )
+	{
+		Con_Printf( S_WARN "cof_hud_msg_probe: not in a level\n" );
+		return;
+	}
+
+	buf[0] = (byte)( Cmd_Argc() > 2 ? Q_atoi( Cmd_Argv( 2 )) : 5 );
+	len = Q_strncpy( (char *)buf + 1, Cmd_Argv( 1 ), sizeof( buf ) - 2 );
+	len = 1 + Q_strlen( (char *)buf + 1 ) + 1;
+
+	Con_Printf( "[cof-msg] probe: \"%s\" as ProFont, %i bytes\n", Cmd_Argv( 1 ), len );
+
+	if( !CL_DispatchUserMessage( "ProFont", len, buf ))
+		Con_Printf( S_WARN "cof_hud_msg_probe: the client has no \"ProFont\" hook\n" );
+}
+
+static void CL_CoF_MenuReturn_f( void )
+{
+	CL_CoF_MenuMapReturn( "cof_ui_menu_return", "menu return command" );
+}
+
+/*
+====================
+CL_CoF_DeathForget
+
+Called from CL_ClearState. A disconnect, a level load or a save load ends the
+session the death page belongs to, so the latch must not survive it.
+====================
+*/
+void CL_CoF_DeathForget( void )
+{
+	cof_death_menu_open = false;
+	cof_death_menu_pending = false;
+}
+
+/*
+====================
+CL_CoF_DeathMenuActive
+
+True while the death page owns the screen, i.e. between the GAME OVER user
+message and the disconnect or save load that ends that session.
+
+Con_ToggleConsole_f asks, because closing the console in a live game normally
+means "back to the game" (UI_SetActiveMenu( false ), which cleans the whole
+menu stack). Doing that here would dismiss the death page and hand the player
+the client's own GAME OVER panel instead, with the session already over. While
+this is true the console goes back to the menu it was opened from, the same way
+it does out of game and on a background map; the death page is still on the
+stack, so that is the page that comes back.
+====================
+*/
+qboolean CL_CoF_DeathMenuActive( void )
+{
+	return cof_death_menu_open && cof_ui_death_menu.value != 0.0f;
+}
+
+/*
+====================
+CL_CoF_DeathWorldLive
+
+Cry of Fear death page (cof_ui_death_keep_running, default on).
+
+The engine pauses a single player game whenever a menu owns input. There is no
+"pause" flag involved: CL_IsInGame() goes false as soon as key_dest leaves
+key_game, SV_IsSimulating() reads it and stops running the world frame, and the
+mixer reads the same key_dest and mutes every non-local channel
+(S_MixNormalChannelsToRoombuffer). The engine background track - which is where
+the client's own "playmp3" ends up, pfnMP3_InitStream -> S_StartBackgroundTrack
+- is paused by source in S_StreamBackgroundTrack for the same reason.
+
+That is right for the pause menu and wrong for GAME OVER. The original death
+screen is a client VGUI panel drawn over a still-running game: the ambience, the
+rain, a chainsaw that was already running, the death music - all of it keeps
+playing while the player reads the screen. Our page replaces that panel, so it
+has to reproduce it, and this is the single predicate the three gates ask.
+
+Input stays gated exactly as before: key_dest is still key_menu, so the client
+DLL gets no keys (cof_ui_input_gate), IN_EngineAppendMove returns early and the
+player's movement commands are zeroed in SV_ExecuteClientMessage, which asks
+this function too. The world runs, the player does not.
+
+Scoped to the death page alone; every other menu keeps the stock pause.
+====================
+*/
+qboolean CL_CoF_DeathWorldLive( void )
+{
+	return CL_CoF_DeathMenuActive() && cof_ui_death_keep_running.value != 0.0f;
+}
+
+/*
+====================
+CL_CoF_DeathPump
+
+Open the page, once, from Host_ClientFrame.
+
+Not from the parse function itself and not through Cbuf_AddText either. The
+command buffer is a queue with a single "wait" counter shared by everything in
+it (engine/common/cmd.c, Cbuf_ExecuteCommandsFromBuffer), so a cfg or an alias
+that is mid-"wait" when the player dies would hold the death page back until it
+finished - measured, with a maps/<map>_load.cfg test script. Running it here
+instead puts it on the very next frame whatever the buffer is doing, and still
+outside CL_ParseServerMessage, so the menu library is never entered from the
+middle of a packet parse.
+====================
+*/
+void CL_CoF_DeathPump( void )
+{
+	if( !cof_death_menu_pending )
+		return;
+
+	cof_death_menu_pending = false;
+
+	Con_Reportf( "[cof-ui] death screen: opening %s\n", COF_DEATH_MENU_CMD );
+	Cmd_ExecuteString( COF_DEATH_MENU_CMD );
+}
+
+/*
+====================
+CL_CoF_DeathUserMessage
+
+Cry of Fear unified UI (cof_ui_death_menu, default on).
+
+Dying in Cry of Fear does not run a console command and does not change the
+level: hl.dll's death path sends the "VGUIMenu" user message with a first byte
+of 35, and client.dll's CClientViewport::ShowVGUIMenu turns that index into its
+CGameOver VGUI panel - "GAME OVER" over the still-running scene with a LOAD
+GAME and an EXIT link. Measured, stage1/ui-m1-engine-fixture-20260921:
+"USERMSG VGUIMenu SIZE 2 SVC_NUM 121" is the only thing that arrives, no
+stufftext follows, and the game never returns to the menu map by itself.
+
+So the one reliable signal is that message, and this is where the engine sees
+it: CL_ParseUserMessage has already read the payload and has not yet handed it
+to the client DLL. The message is still delivered afterwards - the client's own
+state (it also remembers whether the death music may play) stays consistent -
+and the panel it opens simply never reaches the screen, because opening our own
+page puts key_dest on the menu and cof_ui_input_gate suppresses the client's
+VGUI paint for as long as it stays there.
+
+Returns true when the death page was asked for; the caller delivers the message
+either way.
+====================
+*/
+qboolean CL_CoF_DeathUserMessage( const char *name, int size, const byte *buf )
+{
+	if( !cof_ui_death_menu.value )
+		return false;
+
+	if( COM_StringEmptyOrNULL( name ) || buf == NULL || size < 1 )
+		return false;
+
+	if( Q_stricmp( name, COF_DEATH_USERMSG ))
+		return false;
+
+	if( buf[0] != COF_DEATH_MENU_INDEX )
+		return false;
+
+	// the same distinction the client's own panels make: with more than one
+	// client the death screen is a respawn prompt, not an end of the session
+	if( cl.maxclients > 1 )
+		return false;
+
+	if( cof_death_menu_open )
+	{
+		Con_Reportf( "[cof-ui] death screen: repeated \"%s\" index %d ignored (page already open)\n",
+			name, COF_DEATH_MENU_INDEX );
+		return true;
+	}
+
+	cof_death_menu_open = true;
+	cof_death_menu_pending = true;
+
+	Con_Reportf( "[cof-ui] death screen: user message \"%s\" index %d (%d bytes) -> %s\n",
+		name, COF_DEATH_MENU_INDEX, size, COF_DEATH_MENU_CMD );
+
+	return true;
+}
+
+/*
+==============================================================================
+
+	CRY OF FEAR: "AIM DOWN SIGHTS: HOLD / TOGGLE"  (cof_ads_toggle)
+
+The game's own ironsights are a TOGGLE: hl.dll registers a server cvar
+"ironsights_toggle" (default "1", FCVAR_SERVER, not archived; the name string
+is at hl.dll 101AEC8C) and a press of +attack3 flips the weapon's
+m_bIronSights. The game also has a half-finished "hold" mode behind
+ironsights_toggle 0, and it is NOT usable (read from the retail hl.dll and
+MEASURED, stage1/fix-ads-tape-20260922/RESULTS.md):
+
+  * CBasePlayerWeapon::ItemPostFrame (1011DA9C) tests the +attack3 button bit
+    (0x40) FIRST and reaches PrimaryAttack only in its else branch, so while
+    the aim key is held the weapon never fires;
+  * only ten weapons read the cvar (glock, vp70, p345, revolver, tmp, g43, mp5,
+    m16, famas, shotgun: vtable slot 107, seven of them also the release check
+    in slot 86). The hunting rifle's +attack3 handler (100682A0) ignores it,
+    toggles its scope (m_bRaised, +0x106) without a press-edge check and has no
+    release path, so in "hold" the rifle does not come out of the scope.
+
+So "Hold" is built here, on top of the game's working toggle. The game is kept
+at ironsights_toggle 1 in both modes, and with cof_ads_toggle 0 the engine turns
+the aim key's press and its release each into one toggle PULSE: "+attack3 K"
+and "-attack3 K" in the same command-buffer pass, which the client's kbutton
+turns into exactly one usercmd carrying the 0x40 bit (a press edge) and nothing
+held afterwards. The +attack3 button is never held, so firing while aimed works,
+and every weapon, the rifle included, aims in on the press and out on the
+release.
+
+A pulse can be dropped by the game: a weapon refuses the toggle while it is
+busy (next-attack times, a reload, the rifle's 0.25 s scope delay). So the
+engine watches the result - the zoom target the server keeps in the player's
+vuser2[0] and sends in the client data (90 at the hip; about 50 for the glock's
+ironsights, 85 then 30 for the rifle's scope; hl.dll writes it on every enter
+and leave) - and repeats the pulse every COF_ADS_RETRY seconds until the weapon
+is where the key says, for at most COF_ADS_WINDOW seconds after the key edge. A
+release retries only while the weapon still reports aimed, and a press only
+with a weapon (its view model) that has been seen aimed before, so a weapon
+whose +attack3 does something else gets exactly one pulse per key edge.
+
+cof_ads_toggle is archived (the Game options page writes it); the engine pushes
+"1" into ironsights_toggle whenever the server DLL has (re)registered it.
+
+==============================================================================
+*/
+#define COF_ADS_RETRY		0.35	// seconds between pulses while reconciling
+#define COF_ADS_WINDOW		5.0	// seconds after a key edge the engine keeps trying
+#define COF_ADS_MAX_LEARNED	32
+
+static CVAR_DEFINE_AUTO( cof_ads_hold_pulse, "0.2", 0, "Cry of Fear aim down sights, Hold: the longest time, in seconds, the engine holds the game's +attack3 for one toggle; the press ends as soon as the weapon has switched (0 = press and release in the same frame)" );
+
+static const convar_t	*cof_ads_pushed_var;	// the ironsights_toggle registration last written
+
+static struct
+{
+	qboolean	down;		// the aim key is held, as far as the emulation saw it
+	int		key;		// its key number, the kbutton parameter
+	qboolean	pending;	// the weapon has not settled in the wanted state yet
+	qboolean	want;		// aimed (true) or at the hip (false)
+	double		deadline;	// give up reconciling after this
+	double		next;		// earliest time for the next pulse
+	int		pulses;		// pulses sent for the current key edge
+	int		servercount;	// the learned list below belongs to this server
+	qboolean	pulsing;	// +attack3 is held by the emulation right now
+	qboolean	tracked;	// the fields below describe the current server
+	float		last_zoom;	// the zoom target seen on the previous frame
+	int		aim_vm;		// the view model the current zoom began with (0 = none)
+	int		pulse_from;	// the aim state when that press began
+	double		pulse_end;	// release it at the latest then
+	int		learned[COF_ADS_MAX_LEARNED];	// view models seen aimed
+	int		numlearned;
+} cof_ads_hold;
+
+void CL_CoF_ADSSync( void )
+{
+	convar_t	*var;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return;
+
+	var = Cvar_FindVar( "ironsights_toggle" );
+
+	if( !var )
+	{
+		cof_ads_pushed_var = NULL;	// the server DLL is not loaded
+		return;
+	}
+
+	// both modes run on the game's toggle, see above
+	if( var == cof_ads_pushed_var )
+		return;
+
+	cof_ads_pushed_var = var;
+
+	if( var->value == 1.0f )
+		return;
+
+	Cvar_DirectSet( var, "1" );
+	Con_Reportf( "[cof-ads] ironsights_toggle set to 1 (%s runs on the game's toggle)\n",
+		cof_ads_toggle.value != 0.0f ? "Toggle" : "Hold, emulated by the engine," );
+}
+
+static int CL_CoF_ADSViewModel( void )
+{
+	return cl.frames[cl.parsecountmod].clientdata.viewmodel;
+}
+
+// hl.dll writes 90 when a zoom ends; 0 means nothing has zoomed yet
+static qboolean CL_CoF_ADSZoomed( float zoom )
+{
+	return zoom > 1.0f && zoom < 89.5f;
+}
+
+/*
+====================
+CL_CoF_ADSTrackZoom
+
+The zoom target alone is not the weapon's state: nothing in hl.dll resets it
+when a weapon is put away, so after a weapon change it can still say "aimed"
+for a weapon that is at the hip (MEASURED, stage1/fix-ads-tape-20260922,
+ads2.log: the glock left at 50, the rifle drawn, the target stayed 50). So the
+engine remembers which view model a zoom began with, and a zoom counts only
+while that weapon is in the hands. On a new server, or the first frame of one,
+the target is taken at its word.
+====================
+*/
+static void CL_CoF_ADSTrackZoom( void )
+{
+	float	zoom = cl.frames[cl.parsecountmod].clientdata.vuser2[0];
+	int	viewmodel = CL_CoF_ADSViewModel();
+
+	if( !cof_ads_hold.tracked )
+	{
+		cof_ads_hold.tracked = true;
+		cof_ads_hold.aim_vm = CL_CoF_ADSZoomed( zoom ) ? viewmodel : 0;
+	}
+	else if( !CL_CoF_ADSZoomed( zoom ))
+	{
+		cof_ads_hold.aim_vm = 0;
+	}
+	else if( !CL_CoF_ADSZoomed( cof_ads_hold.last_zoom ) || zoom != cof_ads_hold.last_zoom )
+	{
+		cof_ads_hold.aim_vm = viewmodel; // a zoom began (or moved on) with this weapon
+	}
+
+	cof_ads_hold.last_zoom = zoom;
+}
+
+// 1 aimed, 0 at the hip, -1 unknown (no game running)
+static int CL_CoF_ADSAimState( void )
+{
+	if( cls.state != ca_active || !cl.validsequence || !cof_ads_hold.tracked )
+		return -1;
+
+	if( !CL_CoF_ADSZoomed( cl.frames[cl.parsecountmod].clientdata.vuser2[0] ))
+		return 0;
+
+	return cof_ads_hold.aim_vm == CL_CoF_ADSViewModel() ? 1 : 0;
+}
+
+static qboolean CL_CoF_ADSLearned( int viewmodel )
+{
+	int	i;
+
+	for( i = 0; i < cof_ads_hold.numlearned; i++ )
+	{
+		if( cof_ads_hold.learned[i] == viewmodel )
+			return true;
+	}
+
+	return false;
+}
+
+static void CL_CoF_ADSSend( const char *cmd, qboolean immediate )
+{
+	// a key edge goes where the key's own bind text would have gone; anything
+	// from the frame loop happens "now", ahead of whatever waits in the buffer
+	if( immediate )
+		Cbuf_InsertText( cmd );
+	else Key_QueueBindText( cmd );
+}
+
+static void CL_CoF_ADSPulseEnd( const char *why )
+{
+	char	cmd[32];
+
+	if( !cof_ads_hold.pulsing )
+		return;
+
+	Q_snprintf( cmd, sizeof( cmd ), "-attack3 %i\n", cof_ads_hold.key );
+	CL_CoF_ADSSend( cmd, true );
+	cof_ads_hold.pulsing = false;
+	cof_ads_hold.next = host.realtime + COF_ADS_RETRY;
+
+	Con_Reportf( "[cof-ads] hold: toggle press released (%s)\n", why );
+}
+
+static void CL_CoF_ADSPulse( const char *why, qboolean immediate )
+{
+	char	cmd[64];
+	float	hold = bound( 0.0f, cof_ads_hold_pulse.value, 0.24f ); // held 0.25 s the rifle would toggle twice
+
+	if( hold <= 0.0f )
+	{
+		Q_snprintf( cmd, sizeof( cmd ), "+attack3 %i\n-attack3 %i\n", cof_ads_hold.key, cof_ads_hold.key );
+		CL_CoF_ADSSend( cmd, immediate );
+		cof_ads_hold.next = host.realtime + COF_ADS_RETRY;
+	}
+	else
+	{
+		Q_snprintf( cmd, sizeof( cmd ), "+attack3 %i\n", cof_ads_hold.key );
+		CL_CoF_ADSSend( cmd, immediate );
+		cof_ads_hold.pulsing = true;
+		cof_ads_hold.pulse_from = CL_CoF_ADSAimState();
+		cof_ads_hold.pulse_end = host.realtime + hold;
+		cof_ads_hold.next = cof_ads_hold.pulse_end + COF_ADS_RETRY;
+	}
+
+	cof_ads_hold.pulses++;
+
+	Con_Reportf( "[cof-ads] hold: %s -> toggle pulse %d (want %s, zoom target %g)\n", why,
+		cof_ads_hold.pulses, cof_ads_hold.want ? "aimed" : "hip",
+		cls.state == ca_active ? cl.frames[cl.parsecountmod].clientdata.vuser2[0] : -1.0f );
+}
+
+/*
+====================
+CL_CoF_ADSHoldActive
+
+True when the aim key has to go through the hold emulation: Cry of Fear, the
+option at Hold, a game running.
+====================
+*/
+qboolean CL_CoF_ADSHoldActive( void )
+{
+	if( cof_ads_toggle.value != 0.0f )
+		return false;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return false;
+
+	return cls.state == ca_active;
+}
+
+/*
+====================
+CL_CoF_ADSHoldKey
+
+A key bound to "+attack3" went down or up while CL_CoF_ADSHoldActive(). The
+bind's own "+attack3 K" / "-attack3 K" is replaced by one toggle pulse per edge
+(a second press while the aim is already held is ignored, like the kbutton
+ignores a repeat).
+====================
+*/
+void CL_CoF_ADSHoldKey( int key, qboolean down )
+{
+	if( down && cof_ads_hold.down )
+		return;	// auto-repeat, or a second key bound to the aim
+
+	if( !down && ( !cof_ads_hold.down || key != cof_ads_hold.key ))
+		return;	// a release without a press the emulation saw
+
+	CL_CoF_ADSPulseEnd( "new key edge" );
+
+	cof_ads_hold.down = down;
+	cof_ads_hold.key = key;
+	cof_ads_hold.want = down;
+	cof_ads_hold.pulses = 0;
+	cof_ads_hold.pending = true;
+	cof_ads_hold.deadline = host.realtime + COF_ADS_WINDOW;
+
+	// already where the key wants it (a pulse would undo that): only watch
+	if( CL_CoF_ADSAimState() == ( down ? 1 : 0 ))
+	{
+		cof_ads_hold.next = host.realtime + COF_ADS_RETRY;
+		Con_Reportf( "[cof-ads] hold: key %s, already %s\n", down ? "down" : "up", down ? "aimed" : "at the hip" );
+		return;
+	}
+
+	CL_CoF_ADSPulse( down ? "key down" : "key up", false );
+}
+
+/*
+====================
+CL_CoF_ADSHoldFrame
+
+Every client frame: reconcile the weapon with the key (see the block comment).
+====================
+*/
+static void CL_CoF_ADSHoldFrame( void )
+{
+	int	state, viewmodel, wanted;
+
+	if( cls.state != ca_active )
+	{
+		cof_ads_hold.pending = false;
+		cof_ads_hold.down = false;
+		cof_ads_hold.pulsing = false;
+		cof_ads_hold.tracked = false;
+		return;
+	}
+
+	// a release the engine never passed on (key up while a menu had focus, see
+	// Key_Event): the key is up, so the hold is over
+	if( cof_ads_hold.down && !Key_IsDown( cof_ads_hold.key ) && cls.key_dest == key_game )
+		CL_CoF_ADSHoldKey( cof_ads_hold.key, false );
+
+	if( cof_ads_hold.servercount != cl.servercount )
+	{
+		cof_ads_hold.servercount = cl.servercount;
+		cof_ads_hold.numlearned = 0;	// model indices are per map
+		cof_ads_hold.tracked = false;
+	}
+
+	if( cl.validsequence )
+		CL_CoF_ADSTrackZoom();
+
+	state = CL_CoF_ADSAimState();
+	viewmodel = CL_CoF_ADSViewModel();
+
+	// the emulation's own press of +attack3: let go as soon as the weapon has
+	// switched, or when the press has lasted cof_ads_hold_pulse
+	if( cof_ads_hold.pulsing )
+	{
+		if( state != cof_ads_hold.pulse_from )
+			CL_CoF_ADSPulseEnd( "the weapon switched" );
+		else if( host.realtime >= cof_ads_hold.pulse_end )
+			CL_CoF_ADSPulseEnd( "time" );
+	}
+
+	// learn which weapons aim, in either mode, so a hold press may retry
+	if( state == 1 && viewmodel > 0 && !CL_CoF_ADSLearned( viewmodel ) && cof_ads_hold.numlearned < COF_ADS_MAX_LEARNED )
+		cof_ads_hold.learned[cof_ads_hold.numlearned++] = viewmodel;
+
+	if( !cof_ads_hold.pending )
+		return;
+
+	if( cof_ads_toggle.value != 0.0f )
+	{
+		cof_ads_hold.pending = false;	// switched to Toggle meanwhile
+		cof_ads_hold.down = false;
+		return;
+	}
+
+	wanted = cof_ads_hold.want ? 1 : 0;
+
+	if( host.realtime < cof_ads_hold.next )
+		return;	// the last pulse may still be on its way (the rifle zooms 0.1 s later)
+
+	if( state == wanted )
+	{
+		cof_ads_hold.pending = false;	// settled for a whole retry period
+		return;
+	}
+
+	if( host.realtime > cof_ads_hold.deadline )
+	{
+		Con_Reportf( "[cof-ads] hold: gave up after %d pulses, the weapon stays %s\n",
+			cof_ads_hold.pulses, state == 1 ? "aimed" : "at the hip" );
+		cof_ads_hold.pending = false;
+		return;
+	}
+
+	// never pulse into a menu, a pause or an intermission; the window keeps running
+	if( cls.key_dest != key_game || cl.paused || cl.intermission )
+		return;
+
+	// a release retries only while the weapon still reports aimed (it does,
+	// state != wanted here); a press only with a weapon that has aimed before
+	if( cof_ads_hold.want && !CL_CoF_ADSLearned( viewmodel ))
+	{
+		cof_ads_hold.pending = false;
+		return;
+	}
+
+	CL_CoF_ADSPulse( "retry", true );
+}
+
+/*
+====================
+CL_CoF_ADSStatus_f
+
+cof_ads_status - one line a cfg-driven test can read: the option, the game's
+cvar, the zoom target the server set (vuser2[0]; 90, or 0 before any zoom, at
+the hip), the FOV the client is drawing with, and the hold emulation's state.
+====================
+*/
+static void CL_CoF_ADSStatus_f( void )
+{
+	convar_t	*var = Cvar_FindVar( "ironsights_toggle" );
+	float		target = cls.state == ca_active ? cl.frames[cl.parsecountmod].clientdata.vuser2[0] : -1.0f;
+
+	Con_Printf( "[cof-ads] cof_ads_toggle %g, ironsights_toggle %s, zoom target %g (%s, view model %d, zoom began with %d), fov now %.2f, hold key %s, pending %d, pulses %d, pressing %d\n",
+		cof_ads_toggle.value, var ? var->string : "(not registered)", target,
+		CL_CoF_ADSAimState() == 1 ? "aimed" : "hip", cls.state == ca_active ? CL_CoF_ADSViewModel() : -1, cof_ads_hold.aim_vm, cl.local.scr_fov,
+		cof_ads_hold.down ? "down" : "up", cof_ads_hold.pending, cof_ads_hold.pulses, cof_ads_hold.pulsing );
 }
 
 qboolean CL_IsIntermission( void )
@@ -626,7 +2937,6 @@ static void CL_ApplyAddAngle( void )
 	cl.prevaddangletotal = addangletotal;
 }
 
-
 /*
 =======================================================================
 
@@ -725,6 +3035,12 @@ tell the client.dll about player origin, angles, fov, etc
 */
 static void CL_UpdateClientData( void )
 {
+	// Cry of Fear "Aim down sights": keep the game's ironsights_toggle at its
+	// working toggle (it is re-registered whenever hl.dll loads) and run the
+	// engine's hold emulation on top of it
+	CL_CoF_ADSSync();
+	CL_CoF_ADSHoldFrame();
+
 	if( cls.state != ca_active )
 		return;
 
@@ -1306,6 +3622,11 @@ static void CL_SendConnectPacket( connprotocol_t proto, int challenge )
 		// reset nickname from cvar value
 		Info_SetValueForKey( cls.userinfo, "name", name.string, sizeof( cls.userinfo ));
 
+		// Re-apply the server password: an earlier set of the same cvar value
+		// is a no-op in Cvar_SanitizeAndSet, so a key once dropped for lack of
+		// room would otherwise never reach the server.
+		Info_SetValueForKey( cls.userinfo, "password", Cvar_VariableString( "password" ), sizeof( cls.userinfo ));
+
 		if( cl_dlmax.value > FRAGMENT_MAX_SIZE || cl_dlmax.value < FRAGMENT_MIN_SIZE )
 			Cvar_DirectSetValue( &cl_dlmax, FRAGMENT_DEFAULT_SIZE );
 
@@ -1603,7 +3924,6 @@ static void CL_Rcon_f( void )
 	NET_SendPacket( NS_CLIENT, MSG_GetNumBytesWritten( &msg ), MSG_GetData( &msg ), to );
 }
 
-
 /*
 =====================
 CL_ClearState
@@ -1612,6 +3932,7 @@ CL_ClearState
 */
 void CL_ClearState( void )
 {
+	CL_CoF_HudRemakeReset();
 	CL_ClearResourceLists();
 
 	for( int i = 0; i < MAX_CLIENTS; i++ )
@@ -1630,6 +3951,9 @@ void CL_ClearState( void )
 	memset( &clgame.fade, 0, sizeof( clgame.fade ));
 	memset( &clgame.shake, 0, sizeof( clgame.shake ));
 	clgame.mapname[0] = '\0';
+	CL_CoF_VidRestartForget();
+	CL_CoF_DeathForget();
+	CL_CoF_SkyResetPerMap();	// cof_sky_reset_per_map: a level start the R_SetupSky hook could miss
 	Cvar_DirectFullSet( &cl_background, "0", FCVAR_READ_ONLY );
 	cl.maxclients = 1; // allow to drawing player in menu
 	cl.mtime[0] = cl.mtime[1] = 1.0f; // because level starts from 1.0f second
@@ -1765,6 +4089,82 @@ static void CL_Reconnect( qboolean setup_netchan )
 }
 
 /*
+====================
+CL_CoF_NoteSessionEnd
+
+Cry of Fear co-op bridge (cof_ui_remote_end_menu, default on; only while
+cof_ui_menu_map_redirect is on too).
+
+A co-op joiner's session ends in many places, none of which is the
+"disconnect" command CL_CoF_Disconnect_f wraps: the host quits or its server
+shuts down (svc_disconnect -> CL_Drop), a kick, a timeout (CL_CheckTimeout),
+a refused connection (CL_Reject), five unanswered connect packets
+(CL_CheckForResend's "couldn't connect"). Every one of them runs through
+CL_Disconnect, and every one of them used to leave the joiner in the console
+over black, with no menu scene - the background map was shut down by the
+"connect" itself (CL_Connect_f kills the local server first) and nothing
+brought it back (stage1/coop-investigation-20260922, runs 4 and 8).
+
+Called first thing in CL_Disconnect, while the address of the session that is
+ending is still known (CL_Disconnect clears it). A local game - single
+player, the background map, or a listen server this client hosts itself -
+talks over NA_LOOPBACK from its first packet on (CL_CheckForResend), and its
+ends are already owned by CL_CoF_Disconnect_f and MainUI's Quit to menu, so
+only a remote session (NA_IP, or an address that never resolved) is noted.
+
+Nothing is decided here: CL_Disconnect has callers that start a new session
+straight after it - connect, retry, reconnect - so only the check is queued,
+and cof_ui_session_end runs after the command that caused this has finished.
+====================
+*/
+static void CL_CoF_NoteSessionEnd( void )
+{
+	if( !cof_ui_menu_map_redirect.value || !cof_ui_remote_end_menu.value )
+		return;
+
+	if( host.type != HOST_NORMAL || cls.demoplayback )
+		return;
+
+	if( NET_IsLocalAddress( cls.serveradr ))
+		return; // our own server: not this hook's business
+
+	Cbuf_AddText( "cof_ui_session_end\n" );
+	Con_Reportf( "[cof-ui] remote session with \"%s\" ended; menu return check queued\n", cls.servername );
+}
+
+/*
+====================
+CL_CoF_SessionEnd_f
+
+The queued half of CL_CoF_NoteSessionEnd. If by now nothing has started a new
+session, put the engine menu back over the background map with the same two
+commands CL_CoF_Disconnect_f queues after a single-player disconnect.
+====================
+*/
+static void CL_CoF_SessionEnd_f( void )
+{
+	char		cmd[COF_MENU_CMD_MAX];
+	const char	*background;
+
+	if( !cof_ui_menu_map_redirect.value || !cof_ui_remote_end_menu.value )
+		return;
+
+	// connect to another server, retry, reconnect, a map or a demo got there
+	// first; the menu scene is not wanted
+	if( cls.state != ca_disconnected || SV_Active( ) || cls.demoplayback || cl_background.value != 0.0f )
+	{
+		Con_Reportf( "[cof-ui] remote session end: a new session is already starting, no menu return\n" );
+		return;
+	}
+
+	background = CL_CoF_MenuBackgroundMap( COF_MENU_MAP );
+	Q_snprintf( cmd, sizeof( cmd ), "menu_main\nmap_background %s\n", background );
+	Cbuf_AddText( cmd );
+
+	Con_Reportf( "[cof-ui] remote session end -> menu_main + map_background %s\n", background );
+}
+
+/*
 =====================
 CL_Disconnect
 
@@ -1777,6 +4177,14 @@ void CL_Disconnect( void )
 {
 	if( cls.state == ca_disconnected )
 		return;
+
+	// Cry of Fear co-op bridge: must look at cls.serveradr before it is cleared
+	CL_CoF_NoteSessionEnd();
+
+	// Cry of Fear (cof_mp3_stop_on_map): the client's own irrKlang player is not
+	// part of the session the lines below tear down, so it has to be told. Done
+	// first, while the client DLL is still fully live.
+	CL_CoF_StopMP3( "disconnect" );
 
 	cls.connect_time = 0;
 	cls.changedemo = false;
@@ -1950,6 +4358,23 @@ static void CL_Reconnect_f( void )
 
 		Con_Printf( "reconnecting...\n" );
 	}
+}
+
+// Story transitions reuse the established connection. A generic reconnect
+// disconnects active clients and replaces the server's per-session userid.
+static void CL_CoF_StoryChangeLevel_f( void )
+{
+	int maxclients;
+	if( cls.state != ca_active || cls.demoplayback ) return;
+	maxclients = cl.maxclients;
+	SCR_BeginLoadingPlaque( false );
+	CL_ClearState();
+	// The changelevel serverdata path deliberately skips edict allocation.
+	// Match svc_changing: even the first movevars message needs world edict 0.
+	CL_InitEdicts( maxclients );
+	cls.changelevel = true;
+	Con_Reportf( "[cof-story-transition] client continuing on existing connection\n" );
+	CL_Reconnect( false );
 }
 
 /*
@@ -2992,7 +5417,6 @@ static void CL_ParseNetMessage( sizebuf_t *msg, void (*parsefn)( sizebuf_t * ))
 	}
 }
 
-
 /*
 =================
 CL_ReadNetMessage
@@ -3163,7 +5587,6 @@ static const char *CL_CleanFileName( const char *filename )
 
 	return filename;
 }
-
 
 /*
 ====================
@@ -3749,12 +6172,47 @@ static void CL_InitLocal( void )
 	Cvar_RegisterVariable( &hud_fontscale );
 	Cvar_RegisterVariable( &hud_fontrender );
 	Cvar_RegisterVariable( &hud_scale );
+	Cvar_RegisterVariable( &cof_skip_client_hud_redraw );
+	Cvar_RegisterVariable( &cof_skip_vgui_paint );
+	Cvar_RegisterVariable( &cof_ui_input_gate );
+	Cvar_RegisterVariable( &cof_ui_deferred_cmd_guard );
+	Cvar_RegisterVariable( &cof_vid_restart_background );
+	Cvar_RegisterVariable( &cof_vid_skip_redundant_vidinit );
 	Cvar_RegisterVariable( &hud_scale_minimal_width );
 	Cvar_RegisterVariable( &cl_showevents );
 	Cvar_Get( "lastdemo", "", FCVAR_ARCHIVE, "last played demo" );
 	Cvar_RegisterVariable( &ui_renderworld );
+	Cvar_RegisterVariable( &cof_ui_menu_map_redirect );
+	Cvar_RegisterVariable( &cof_ui_remote_end_menu );
+	Cvar_RegisterVariable( &cof_ui_death_menu );
+	Cvar_RegisterVariable( &cof_ui_death_keep_running );
+	CL_CoF_HudRemakeInit();
+	{ void CL_CoF_PanelPauseInit( void ); CL_CoF_PanelPauseInit(); } // cof_panel_pause, cof_panel_trace, cof_panel_status; engine\client\cof_panel_pause.c
+	{ void CL_CoF_PanelTransparencyInit( void ); CL_CoF_PanelTransparencyInit(); } // cof_panel_transparent, cof_panel_plate_alpha, cof_panel_hide_hud; engine\client\cof_panel_transparency.c
+	Cvar_RegisterVariable( &cof_mp3_stop_on_map );
+	Cvar_RegisterVariable( &cof_hud_chapter_rule_hide );
+	Cvar_RegisterVariable( &cof_sky_reset_per_map );
+	Cvar_RegisterVariable( &cof_ads_toggle );
+	Cvar_RegisterVariable( &cof_ads_hold_pulse );
+	Cvar_RegisterVariable( &cof_ui_scale );
+	Cvar_RegisterVariable( &cof_ui_scale_user );
+	Cvar_RegisterVariable( &cof_ui_inter_fonts );
+	Cvar_RegisterVariable( &cof_text_codepage );
+	Cvar_RegisterVariable( &cof_font_probe );
+	Cvar_RegisterVariable( &cof_ui_scale_sprites );
+	Cvar_RegisterVariable( &cof_hud_text_height_pct );
+	Cvar_RegisterVariable( &cof_hud_text_font );
+	Cvar_RegisterVariable( &cof_hud_text_style );
+	Cvar_RegisterVariable( &cof_hud_text_backing );
+	Cvar_RegisterVariable( &cof_hud_text_y );
+	Cvar_RegisterVariable( &cof_hud_text_y_shift );
+	Cvar_RegisterVariable( &cof_hud_msg_y_pct );
+	Cvar_RegisterVariable( &cof_hud_text_trace );
+	Cvar_RegisterVariable( &cof_vgui_text_overflow );
 	Cvar_RegisterVariable( &cl_maxframetime );
 	Cvar_RegisterVariable( &cl_fixmodelinterpolationartifacts );
+	{ void V_CoF_RegisterFovCvars( void ); V_CoF_RegisterFovCvars(); } // cof_fov, cof_fov_zoom_knee; both live in engine\client\cl_view.c
+	{ void CL_CoF_QuickSaveInit( void ); CL_CoF_QuickSaveInit(); } // cof_quick_saves, cof_quicksave, cof_quickload; engine\client\cof_quicksave.c
 
 	// server commands
 	Cmd_AddCommand ("noclip", NULL, "enable or disable no clipping mode" );
@@ -3772,6 +6230,7 @@ static void CL_InitLocal( void )
 	Cmd_AddRestrictedCommand ("ent_info", NULL, "dump entity information" );
 	Cmd_AddRestrictedCommand ("ent_create", NULL, "create entity with specified values (be careful)" );
 	Cmd_AddRestrictedCommand ("ent_getvars", NULL, "put parameters of specified entities to client's' ent_last_* cvars" );
+	Cmd_AddCommand ("cof_ads_status", CL_CoF_ADSStatus_f, "developer: report the aim-down-sights option, the game's ironsights_toggle and the client's current field of view" );
 
 	// register our commands
 	Cmd_AddCommand ("pause", NULL, "pause the game (if the server allows pausing)" );
@@ -3785,7 +6244,12 @@ static void CL_InitLocal( void )
 	Cmd_AddRestrictedCommand ("setinfo", CL_SetInfo_f, "examine or change the userinfo string (alias of userinfo)" );
 	Cmd_AddRestrictedCommand ("userinfo", CL_SetInfo_f, "examine or change the userinfo string (alias of setinfo)" );
 	Cmd_AddCommand ("physinfo", CL_Physinfo_f, "print current client physinfo" );
-	Cmd_AddCommand ("disconnect", CL_Disconnect_f, "disconnect from server" );
+	// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on): the console
+	// command goes through CL_CoF_Disconnect_f, which re-arms the engine menu's
+	// background map exactly the way Quit to menu does. The engine's own
+	// internal callers still use CL_Disconnect_f directly, so a connection
+	// failure or a host error is unaffected.
+	Cmd_AddCommand ("disconnect", CL_CoF_Disconnect_f, "disconnect from server" );
 	Cmd_AddRestrictedCommand( "record", CL_Record_f, "record a demo" );
 	Cmd_AddCommand ("playdemo", CL_PlayDemo_f, "play a demo" );
 	Cmd_AddCommand ("timedemo", CL_TimeDemo_f, "demo benchmark" );
@@ -3797,11 +6261,16 @@ static void CL_InitLocal( void )
 	Cmd_AddCommand( "listdemo", CL_ListDemo_f, "list demo entries" );
 	Cmd_AddCommand ("info", NULL, "collect info about local servers with specified protocol" );
 	Cmd_AddCommand ("escape", CL_Escape_f, "escape from game to menu" );
+	Cmd_AddCommand ("cof_ui_menu_return", CL_CoF_MenuReturn_f, "Cry of Fear unified UI: disconnect and re-arm the engine menu over its background map" );
+	Cmd_AddCommand ("cof_ui_session_end", CL_CoF_SessionEnd_f, "Cry of Fear co-op: queued by the engine when a remote session ends; brings the menu back over the background map unless a new session has started" );
+	Cmd_AddCommand ("cof_hud_msg_probe", CL_CoF_MsgProbe_f, "developer: send the client one \"ProFont\" message, so the in-game message strip can be seen from a cfg" );
+	Cmd_AddCommand ("cof_hud_text_probe", CL_CoF_HudTextProbe_f, "developer: send the client one \"HudText\" message, so the engine HUD text path can be seen from a cfg" );
 	Cmd_AddCommand ("togglemenu", CL_Escape_f, "toggle between game and menu" );
 	Cmd_AddCommand ("pointfile", CL_ReadPointFile_f, "show leaks on a map (if present of course)" );
 	Cmd_AddCommand ("linefile", CL_ReadLineFile_f, "show leaks on a map (if present of course)" );
 	Cmd_AddCommand ("fullserverinfo", CL_FullServerinfo_f, "sent by server when serverinfo changes" );
 	Cmd_AddCommand ("upload", CL_BeginUpload_f, "uploading file to the server" );
+	Cmd_AddCommand ("cof_ui_menu_panel_probe", CL_CoF_MenuPanelProbe_f, "Cry of Fear unified UI: feed a UI sound through the menu-panel hook, the cfg-driven stand-in for the click" );
 
 	Cmd_AddRestrictedCommand( "replaybufferdat", CL_ReplayBufferDat_f, "development and debugging tool" );
 
@@ -3817,6 +6286,7 @@ static void CL_InitLocal( void )
 
 	Cmd_AddRestrictedCommand ("connect", CL_Connect_f, "connect to a server by hostname" );
 	Cmd_AddCommand ("reconnect", CL_Reconnect_f, "reconnect to current level" );
+	Cmd_AddCommand( "cof_story_changelevel", CL_CoF_StoryChangeLevel_f, "continue a story map transition on the current connection" );
 	Cmd_AddCommand ("retry", CL_Retry_f, "retry connection to last server" );
 
 	Cmd_AddRestrictedCommand ("rcon", CL_Rcon_f, "sends a command to the server console (rcon_password and rcon_address required)" );
@@ -3918,6 +6388,15 @@ void Host_ClientFrame( void )
 
 	// read updates from server
 	CL_ReadPackets ();
+
+	// Cry of Fear unified UI (cof_ui_death_menu): the GAME OVER user message
+	// may have arrived in there; open our death page now, outside the parse
+	// and independent of whatever the command buffer is waiting on
+	CL_CoF_DeathPump ();
+
+	// Cry of Fear quick load (cof_quick_saves): "Quick loaded" on the
+	// message strip once the loaded level is up; engine\client\cof_quicksave.c
+	{ void CL_CoF_QuickSaveFrame( void ); CL_CoF_QuickSaveFrame(); }
 
 	// do prediction again in case we got
 	// a new portion updates from server

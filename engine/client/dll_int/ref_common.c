@@ -108,6 +108,14 @@ void R_SetupSky( const char *name )
 	int skyboxTextures[SKYBOX_MAX_SIDES] = { 0 };
 	int i, len;
 
+	// Cry of Fear sky reset (cof_sky_reset_per_map, default on). This function
+	// is the engine's own per-map sky setup - it runs from CL_ParseServerData's
+	// one-time block on every level start, from CL_ParseMovevars when the
+	// skyname changes, and from the "skybox" command - so it is also the point
+	// where the client's "gl_customsky 0", written after a failed sky load on
+	// some earlier map, has to be undone. See cl_main.c for the mechanism.
+	CL_CoF_SkyResetPerMap();
+
 	if( COM_StringEmptyOrNULL( name ))
 	{
 		ref.dllFuncs.R_SetupSky( NULL ); // unload skybox

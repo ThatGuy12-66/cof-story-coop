@@ -1169,7 +1169,11 @@ qboolean Netchan_CopyNormalFragments( netchan_t *chan, sizebuf_t *msg, size_t *l
 		Host_Error( "%s: BZ2 compression is not supported for server\n", __func__ );
 #endif
 	}
-	else if( chan->use_lzss && LZSS_IsCompressed( MSG_GetData( msg ), size ))
+	// Cry of Fear co-op: a listen server sets up remote clients without LZSS
+	// (Host_IsLocalClient is true for the whole process) while the remote
+	// client compresses its split packets, so honour the LZSS header on
+	// receive regardless. No valid message starts with it: "L" is clc_bad.
+	else if(( chan->use_lzss || !chan->use_bz2 ) && LZSS_IsCompressed( MSG_GetData( msg ), size ))
 	{
 		byte buf[NET_MAX_MESSAGE];
 		uint uDecompressedLen = LZSS_GetActualSize( MSG_GetData( msg ), size );
@@ -1328,7 +1332,7 @@ qboolean Netchan_CopyFileFragments( netchan_t *chan, sizebuf_t *msg )
 		Host_Error( "%s: BZ2 compression is not supported for server", __func__ );
 #endif
 	}
-	else if( chan->use_lzss && LZSS_IsCompressed( buffer, nsize ))
+	else if(( chan->use_lzss || !chan->use_bz2 ) && LZSS_IsCompressed( buffer, nsize )) // see the note in Netchan_CopyNormalFragments
 	{
 		uncompressedSize = LZSS_GetActualSize( buffer, nsize );
 

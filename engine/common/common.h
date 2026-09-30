@@ -384,6 +384,7 @@ void _Mem_FreePool( poolhandle_t *poolptr, const char *filename, int fileline );
 void _Mem_EmptyPool( poolhandle_t poolptr, const char *filename, int fileline );
 void _Mem_Check( const char *filename, int fileline );
 qboolean Mem_IsAllocatedExt( poolhandle_t poolptr, void *data );
+size_t Mem_AllocatedSize( poolhandle_t poolptr, void *data );
 void Mem_PrintStats( void );
 void Mem_Stats_f( void );
 
@@ -753,9 +754,34 @@ qboolean CL_IsPlaybackDemo( void );
 qboolean UI_CreditsActive( void );
 void *UI_GetMenuFactory( void );
 int CL_GetMaxClients( void );
+// Cry of Fear unified UI (cof_ui_menu_map_redirect): defined in cl_main.c,
+// called from the client and from the server's pfnServerCommand
+qboolean CL_CoF_MenuMapRedirect( const char *cmd, const char *source );
+qboolean CL_CoF_MenuMapLevelChange( const char *mapname, const char *source );
+qboolean CL_CoF_MenuPanelSound( const char *sample, float volume );
+void CL_CoF_RememberBackgroundMap( const char *mapname );
+// Cry of Fear music bleed (cof_mp3_stop_on_map): defined in cl_main.c, called
+// from the host state transitions in host_state.c
+void CL_CoF_StopMP3( const char *reason );
+// Cry of Fear death page (cof_ui_death_keep_running): true while the GAME OVER
+// page is up and the world is meant to keep running and sounding behind it.
+// Defined in cl_main.c; read by SV_IsSimulating and SV_ExecuteClientMessage.
+qboolean CL_CoF_DeathWorldLive( void );
+// Cry of Fear panel pause (cof_panel_pause): true while a safe in-play panel
+// keeps the single-player world stopped. Defined in cof_panel_pause.c; read by
+// SV_IsSimulating and SV_ExecuteClientMessage.
+qboolean CL_CoF_PanelPaused( void );
+// Cry of Fear panel identity: the modal client panels on screen by class
+// (COF_PANEL_* bits of vgui_api.h, the HUD container left out); *reporting is
+// false when no fresh report exists (older vgui.dll, no VGUI frame painted).
+// Defined in cof_panel_pause.c; the one "panel open" source for the gamepad
+// code (cof_gamepad.c).
+unsigned int CL_CoF_PanelsOnScreen( qboolean *reporting );
 #else
 static inline qboolean CL_Initialized( void ) { return false; }
 static inline qboolean CL_IsInGame( void ) { return true; } // always true for dedicated
+static inline qboolean CL_CoF_DeathWorldLive( void ) { return false; } // no client, no death page
+static inline qboolean CL_CoF_PanelPaused( void ) { return false; } // no client, no panels
 static inline qboolean CL_IsInConsole( void ) { return false; }
 static inline qboolean CL_IsIntermission( void ) { return false; }
 static inline qboolean CL_DisableVisibility( void ) { return false; }
@@ -764,6 +790,11 @@ static inline qboolean CL_IsPlaybackDemo( void ) { return false; }
 static inline qboolean UI_CreditsActive( void ) { return false; }
 static inline void *UI_GetMenuFactory( void ) { return NULL; }
 static inline int CL_GetMaxClients( void ) { return SV_GetMaxClients(); }
+static inline qboolean CL_CoF_MenuMapRedirect( const char *cmd, const char *source ) { return false; }
+static inline qboolean CL_CoF_MenuMapLevelChange( const char *mapname, const char *source ) { return false; }
+static inline qboolean CL_CoF_MenuPanelSound( const char *sample, float volume ) { return false; }
+static inline void CL_CoF_RememberBackgroundMap( const char *mapname ) { }
+static inline void CL_CoF_StopMP3( const char *reason ) { }
 #endif
 
 char *CL_Userinfo( void );

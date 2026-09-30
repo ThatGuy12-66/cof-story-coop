@@ -82,6 +82,10 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 	refState.wideScreen = render_w * 3 != render_h * 4 && render_w * 4 != render_h * 5;
 
 	SCR_VidInit(); // tell client.dll that vid_mode has changed
+
+	// Cry of Fear video mode change hook: the client's per-level setup has just
+	// been thrown away by its own pfnVidInit, rebuild it if we can
+	CL_CoF_VidModeChanged();
 }
 
 /*
@@ -119,9 +123,31 @@ void VID_CheckChanges( void )
 
 	if( host.renderinfo_changed )
 	{
+		// Cry of Fear (cof_vid_skip_redundant_vidinit, default off): remember the
+		// render size so a mode change that does not resize anything - a pure
+		// windowed/fullscreen toggle at the same resolution - can be told apart.
+		// In that case R_SaveVideoMode() returns before its own SCR_VidInit() and
+		// the call below is the only one, even though nothing screen-sized moved:
+		// the GL context survives R_ChangeDisplaySettings(), so every texture,
+		// sprite and font is still valid and the client's pfnVidInit has nothing
+		// to rebuild. It only destroys the client's per-level state.
+		const int cof_prev_width = refState.width;
+		const int cof_prev_height = refState.height;
+
 		if( VID_SetMode( ))
 		{
-			SCR_VidInit(); // tell the client.dll what vid_mode has changed
+			const qboolean cof_resized = ( refState.width != cof_prev_width || refState.height != cof_prev_height );
+
+			if( !cof_resized && cof_vid_skip_redundant_vidinit.value )
+			{
+				Con_Reportf( "[cof-vid] skipped the redundant client VidInit: render size unchanged (%dx%d)\n",
+					refState.width, refState.height );
+			}
+			else
+			{
+				SCR_VidInit(); // tell the client.dll what vid_mode has changed
+				CL_CoF_VidModeChanged();
+			}
 		}
 		else
 		{

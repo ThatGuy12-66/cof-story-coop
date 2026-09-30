@@ -655,6 +655,47 @@ void VID_RestoreScreenResolution( window_mode_t window_mode )
 
 /*
 =================
+VID_CoF_WindowTitle
+
+Cry of Fear: Enhanced (cof-window-name.patch): the game window is called
+"Cry of Fear Enhanced" whatever the gameinfo.txt title says - the installer
+writes that file from the player's own liblist.gam ("Cry of Fear"), and
+recording and overlay tools (ShadowPlay and the like) name their captures
+after the window. Any other game keeps its gameinfo.txt title.
+=================
+*/
+#define COF_WINDOW_TITLE "Cry of Fear Enhanced"
+
+static const char *VID_CoF_WindowTitle( void )
+{
+	if( !Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return COF_WINDOW_TITLE;
+	return GI->title;
+}
+
+static void VID_CoF_ReportWindow( SDL_Window *hWnd )
+{
+#if XASH_WIN32
+	SDL_SysWMinfo info;
+	char title[128], wndclass[128];
+
+	SDL_VERSION( &info.version );
+	if( !SDL_GetWindowWMInfo( hWnd, &info ) || info.subsystem != SDL_SYSWM_WINDOWS )
+	{
+		Con_Printf( "[cof-window] title \"%s\" (no window handle to read back: %s)\n", SDL_GetWindowTitle( hWnd ), SDL_GetError( ));
+		return;
+	}
+
+	// read back from the window itself, as a recorder sees it
+	title[0] = wndclass[0] = 0;
+	GetWindowTextA( info.info.win.window, title, sizeof( title ));
+	GetClassNameA( info.info.win.window, wndclass, sizeof( wndclass ));
+	Con_Printf( "[cof-window] title \"%s\", class \"%s\"\n", title, wndclass );
+#endif
+}
+
+/*
+=================
 VID_CreateWindow
 =================
 */
@@ -677,7 +718,7 @@ static rserr_t VID_CreateWindow( const int input_width, const int input_height, 
 
 	// by default we create window in windowed mode because we don't know
 	// if window creation failed because of invalid video mode or any other reason
-	host.hWnd = SDL_CreateWindow( GI->title, rect.x, rect.y, rect.w, rect.h, flags );
+	host.hWnd = SDL_CreateWindow( VID_CoF_WindowTitle( ), rect.x, rect.y, rect.w, rect.h, flags );
 
 	if( !host.hWnd )
 	{
@@ -697,6 +738,7 @@ static rserr_t VID_CreateWindow( const int input_width, const int input_height, 
 	VID_SetWindowIcon( host.hWnd );
 	SDL_ShowWindow( host.hWnd );
 	SDL_RaiseWindow( host.hWnd );
+	VID_CoF_ReportWindow( host.hWnd );
 
 	if( glw_state.software )
 	{

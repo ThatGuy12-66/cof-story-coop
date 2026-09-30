@@ -208,6 +208,11 @@ static void SV_Map_f( void )
 	Q_strncpy( mapname, Cmd_Argv( 1 ), sizeof( mapname ));
 	COM_StripExtension( mapname );
 
+	// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on): the 3D
+	// menu map is never a real level here, whatever route asked for it
+	if( CL_CoF_MenuMapLevelChange( mapname, "map command" ))
+		return;
+
 	if( !SV_ValidateMap( mapname ))
 		return;
 
@@ -286,6 +291,10 @@ static void SV_MapBackground_f( void )
 
 	if( !SV_ValidateMap( mapname ))
 		return;
+
+	// Cry of Fear unified UI (cof_ui_menu_map_redirect): remember the scene the
+	// engine menu is running over, so the redirect can put this exact map back
+	CL_CoF_RememberBackgroundMap( mapname );
 
 	// background map is always run as singleplayer
 	Cvar_FullSet( "maxplayers", "1", FCVAR_LATCH );
@@ -422,6 +431,18 @@ SV_Save_f
 
 ==============
 */
+static void SV_CoFMenuSave_f( void )
+{
+	const char *slot = Cmd_Argv( 1 );
+	if( Cmd_Argc() != 2 || slot[0] < '1' || slot[0] > '5' || slot[1] )
+	{
+		Con_Printf( S_USAGE "cof_menu_save <1..5>\n" );
+		return;
+	}
+	if( SV_CoFMenuSave( slot[0] - '0' ) && CL_Active() )
+		CL_HudMessage( "GAMESAVED" );
+}
+
 static void SV_Save_f( void )
 {
 	qboolean ret = false;
@@ -469,8 +490,8 @@ static void SV_DeleteSave_f( void )
 	}
 
 	// delete save and saveshot
-	FS_Delete( va( DEFAULT_SAVE_DIRECTORY "%s.sav", Cmd_Argv( 1 )));
-	FS_Delete( va( DEFAULT_SAVE_DIRECTORY "%s.bmp", Cmd_Argv( 1 )));
+	SV_CoFSaveDelete( va( DEFAULT_SAVE_DIRECTORY "%s.sav", Cmd_Argv( 1 )));
+	SV_CoFSaveDelete( va( DEFAULT_SAVE_DIRECTORY "%s.bmp", Cmd_Argv( 1 )));
 }
 
 /*
@@ -537,6 +558,10 @@ static void SV_ChangeLevel_f( void )
 		Con_Printf( S_USAGE "changelevel <mapname>\n" );
 		return;
 	}
+
+	// Cry of Fear unified UI (cof_ui_menu_map_redirect, default on)
+	if( CL_CoF_MenuMapLevelChange( Cmd_Argv( 1 ), "changelevel command" ))
+		return;
 
 	SV_QueueChangeLevel( Cmd_Argv( 1 ), NULL );
 }
@@ -1002,6 +1027,29 @@ static void SV_ListMessages_f( void )
 
 /*
 ==================
+SV_CoFWorldProbe_f
+
+cfg-only test hook (Cry of Fear, milestone 4b). One line naming everything the
+"does the world keep running behind the GAME OVER page" question depends on:
+the server clock, which only advances while SV_IsSimulating() is true, the
+number of world frames run since the map started, and the flags that gate
+them. Two of these, some hundreds of frames apart, are
+the whole proof - no screenshot can show a clock.
+
+sv.framecount is the physics frame counter, which SV_RunGameFrame only ever
+increments while sv.simulating is true.
+==================
+*/
+static void SV_CoFWorldProbe_f( void )
+{
+	Con_Printf( "[cof-world] %s sv.time %.3f worldframes %i simulating %i ingame %i paused %i deathpage %i\n",
+		Cmd_Argc() > 1 ? Cmd_Argv( 1 ) : "probe",
+		sv.time, sv.framecount, sv.simulating ? 1 : 0, CL_IsInGame() ? 1 : 0,
+		sv.paused ? 1 : 0, CL_CoF_DeathWorldLive() ? 1 : 0 );
+}
+
+/*
+==================
 SV_InitHostCommands
 
 commands that create server
@@ -1011,6 +1059,7 @@ is available always
 void SV_InitHostCommands( void )
 {
 	Cmd_AddRestrictedCommand( "map", SV_Map_f, "start new level" );
+	Cmd_AddCommand( "cof_world_probe", SV_CoFWorldProbe_f, "developer: print the server clock, the world frame counter and the pause gates" );
 	Cmd_AddCommand( "maps", SV_Maps_f, "list maps" );
 
 	if( host.type == HOST_NORMAL )
@@ -1057,6 +1106,8 @@ void SV_InitOperatorCommands( void )
 	if( host.type == HOST_NORMAL )
 	{
 		Cmd_AddCommand( "save", SV_Save_f, "save the game to a file" );
+		Cvar_Get( "cof_pause_menu_saves", "0", FCVAR_ARCHIVE, "allow optional Cry of Fear pause-menu saves" );
+		Cmd_AddCommand( "cof_menu_save", SV_CoFMenuSave_f, "save to one of the five Cry of Fear slots when enabled" );
 		Cmd_AddCommand( "savequick", SV_QuickSave_f, "save the game to the quicksave" );
 		Cmd_AddCommand( "autosave", SV_AutoSave_f, "save the game to 'autosave' file" );
 	}
@@ -1096,6 +1147,7 @@ void SV_KillOperatorCommands( void )
 	if( host.type == HOST_NORMAL )
 	{
 		Cmd_RemoveCommand( "save" );
+		Cmd_RemoveCommand( "cof_menu_save" );
 		Cmd_RemoveCommand( "savequick" );
 		Cmd_RemoveCommand( "autosave" );
 	}

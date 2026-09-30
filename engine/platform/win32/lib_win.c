@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #if XASH_LIB == LIB_WIN32
 #include "lib_win.h"
 #include "utflib.h"
+#include "cof_language.h"
 
 static const wchar_t *FS_PathToWideChar( const char *path )
 {
@@ -507,6 +508,9 @@ void COM_FreeLibrary( void *hInstance )
 	else
 #endif
 	{
+		// Cry of Fear language packs: a game DLL whose CreateFileW import was
+		// patched at load gets its original import back before it goes
+		CoF_Lang_UnhookModule( hInst->hInstance );
 		FreeLibrary( hInst->hInstance );
 	}
 

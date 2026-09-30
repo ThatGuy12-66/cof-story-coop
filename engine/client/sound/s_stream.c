@@ -236,7 +236,10 @@ void S_StreamBackgroundTrack( void )
 	if( !cl.background )
 	{
 		// pause music by source type
-		if( s_bgTrack.source == key_game && cls.key_dest == key_menu ) return;
+		// Cry of Fear death page (cof_ui_death_keep_running): the client's own
+		// MP3 player runs through this stream (pfnMP3_InitStream), and the
+		// original GAME OVER screen kept it playing over the live scene.
+		if( s_bgTrack.source == key_game && cls.key_dest == key_menu && !CL_CoF_DeathWorldLive( )) return;
 		if( s_bgTrack.source == key_menu && cls.key_dest != key_menu ) return;
 	}
 	else if( cls.key_dest == key_console )

@@ -189,6 +189,9 @@ def options(opt):
 	grp.add_option('--enable-hl25-extended-structs', action = 'store_true', dest = 'SUPPORT_HL25_EXTENDED_STRUCTS', default = False,
 		help = 'build engine and renderers with HL25 extended structs compatibility (might be required for some mods) [default: %(default)s]')
 
+	grp.add_option('--enable-cof-entvars-legacy', action = 'store_true', dest = 'COF_ENTVARS_LEGACY', default = False,
+		help = 'build the experimental Cry of Fear entvars layout with a reserved field after light_level [default: %(default)s]')
+
 	grp.add_option('--low-memory-mode', action = 'store', dest = 'LOW_MEMORY', default = 0, type = int,
 		help = 'enable low memory mode (only for devices have <128 ram)')
 
@@ -452,6 +455,7 @@ def configure(conf):
 	conf.env.TUI = conf.options.ENABLE_TUI
 
 	conf.define_cond('SUPPORT_HL25_EXTENDED_STRUCTS', conf.options.SUPPORT_HL25_EXTENDED_STRUCTS)
+	conf.define_cond('XASH_COF_ENTVARS_LEGACY', conf.options.COF_ENTVARS_LEGACY)
 
 	if conf.options.ENABLE_RPATH and conf.env.DEST_OS not in ['nswitch', 'psvita']:
 		if conf.env.DEST_OS == 'openbsd':

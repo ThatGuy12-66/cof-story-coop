@@ -624,7 +624,7 @@ void SV_ActivateServer( int runPhysics )
 
 	// run some frames to allow everything to settle
 	for( i = 0; i < numFrames; i++ )
-		SV_Physics();
+		if( !SV_CoF_TransitionActive() ) SV_Physics();
 
 	// create a baseline for more efficient communications
 	SV_CreateBaseline();
@@ -1105,6 +1105,7 @@ State machine exec new map
 */
 void SV_ExecLoadLevel( void )
 {
+	SV_CoF_TransitionReset( true );
 	SV_SetStringArrayMode( false );
 	if( SV_SpawnServer( GameState->levelName, NULL, GameState->backgroundMap ))
 	{

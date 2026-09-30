@@ -365,8 +365,10 @@ Prints or complete savegame filename
 static qboolean Cmd_GetSavesList( const char *s, char *completedname, int length, qboolean print_suggestions )
 {
 	string matchbuf;
+	const qboolean cof_root_save = Cvar_VariableInteger( "cof_save_root_compat" ) && GI &&
+		!Q_stricmp( GI->gamefolder, "cryoffear" );
 
-	search_t *t = FS_Search( va( DEFAULT_SAVE_DIRECTORY "%s*.sav", s ), true, true );	// lookup only in gamedir
+	search_t *t = FS_Search( va( cof_root_save ? "SAVE/%s*.sav" : DEFAULT_SAVE_DIRECTORY "%s*.sav", s ), true, !cof_root_save );	// lookup only in save location
 	if( !t ) return false;
 
 	COM_FileBase( t->filenames[0], matchbuf, sizeof( matchbuf ));

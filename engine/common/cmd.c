@@ -980,6 +980,11 @@ so when they are typed in at the console, they will need to be forwarded.
 void Cmd_ForwardToServer( void )
 {
 	char str[MAX_CMD_BUFFER];
+	qboolean cofload = ( Cmd_Argc() == 2 && !Q_stricmp( Cmd_Argv( 0 ), "cofload" ) &&
+		Cmd_Argv( 1 )[0] >= '1' && Cmd_Argv( 1 )[0] <= '5' && Cmd_Argv( 1 )[1] == '\0' );
+
+	if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
+		Con_Reportf( "[cof-trace] forward cofload %s state=%d\n", Cmd_Argv( 1 ), cls.state );
 
 	if( cls.demoplayback )
 	{
@@ -990,6 +995,8 @@ void Cmd_ForwardToServer( void )
 
 	if( cls.state < ca_connected || cls.state > ca_active )
 	{
+		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
+			Con_Reportf( "[cof-trace] forward cofload rejected: client not connected\n" );
 		if( Q_stricmp( Cmd_Argv( 0 ), "setinfo" ))
 			Con_Printf( "Can't \"%s\", not connected\n", Cmd_Argv( 0 ));
 		return; // not connected
@@ -1240,8 +1247,12 @@ static void Cmd_ExecScript( const char *filename )
 
 	if( f[len - 1] != '\n' )
 	{
-		Cbuf_InsertTextLen( f, len, len + 1 );
-		Cbuf_InsertTextLen( "\n", 1, 1 );
+		// both inserts go to the FRONT of the buffer, so the missing newline
+		// has to go in first to end up after the file; the other way round it
+		// landed in front of the file and the file's last line was glued onto
+		// whatever command followed the exec (upstreamable, cof-coop-bridge)
+		Cbuf_InsertTextLen( "\n", 1, len + 1 );
+		Cbuf_InsertTextLen( f, len, len );
 	}
 	else Cbuf_InsertTextLen( f, len, len );
 

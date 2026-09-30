@@ -64,6 +64,15 @@ qboolean R_OpaqueEntity( cl_entity_t *ent )
 {
 	if( R_GetEntityRenderMode( ent ) == kRenderNormal )
 	{
+		// GoldSrc classifies an entity as opaque from its rendermode alone, so a
+		// mod that stores its own meaning in renderfx (Cry of Fear uses 92/137/184
+		// for draw-distance and sky markers) still gets a solid-pass draw there.
+		// Values above the last standard enum entry are outside this switch, so
+		// without this they would be sorted into the translucent list and drawn
+		// after translucent brush geometry.
+		if( cof_custom_renderfx_opaque.value && ent->curstate.renderfx > kRenderFxLightMultiplier )
+			return true;
+
 		switch( ent->curstate.renderfx )
 		{
 		case kRenderFxNone:
@@ -796,8 +805,12 @@ R_DrawEntitiesOnList
 */
 static void R_DrawEntitiesOnList( void )
 {
+	static int cof_solid_entity_trace_count;
 	tr.blend = 1.0f;
-	GL_CheckForErrors();
+	#define COF_GL_STAGE_CHECK( name ) \
+		do { if( cof_gl_trace.value ) GL_CheckForErrorsNamed_( name, __FILE__, __LINE__ ); else GL_CheckForErrors(); } while( 0 )
+
+	COF_GL_STAGE_CHECK( "before_solid_entities" );
 
 	// first draw solid entities
 	for( int i = 0; i < tr.draw_list->num_solid_entities && !FBitSet( RI.rvp.flags, RF_ONLY_CLIENTDRAW ); i++ )
@@ -810,7 +823,13 @@ static void R_DrawEntitiesOnList( void )
 
 		Assert( RI.currententity != NULL );
 		Assert( RI.currentmodel != NULL );
-
+		if( cof_solid_entity_trace.value )
+		{
+			int error = pglGetError();
+			if( error != GL_NO_ERROR && cof_solid_entity_trace_count++ < 32 )
+				gEngfuncs.Con_Reportf( "[cof-solid-gl] before ent=%d model=%s type=%d studio=%s error=%s\n", RI.currententity->index,
+					RI.currentmodel->name, RI.currentmodel->type, RI.currentmodel->type == mod_studio ? ( r_studio_builtin_renderer.value ? "builtin" : "client" ) : "n/a", GL_ErrorString( error ));
+		}
 		switch( RI.currentmodel->type )
 		{
 		case mod_brush:
@@ -825,14 +844,21 @@ static void R_DrawEntitiesOnList( void )
 		default:
 			break;
 		}
+		if( cof_solid_entity_trace.value )
+		{
+			int error = pglGetError();
+			if( error != GL_NO_ERROR && cof_solid_entity_trace_count++ < 32 )
+				gEngfuncs.Con_Reportf( "[cof-solid-gl] after ent=%d model=%s type=%d studio=%s error=%s\n", RI.currententity->index,
+					RI.currentmodel->name, RI.currentmodel->type, RI.currentmodel->type == mod_studio ? ( r_studio_builtin_renderer.value ? "builtin" : "client" ) : "n/a", GL_ErrorString( error ));
+		}
 	}
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_solid_entities" );
 
 	// quake-specific feature
 	R_DrawAlphaTextureChains();
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_alpha_texture_chains" );
 
 	// draw sprites seperately, because of alpha blending
 	for( int i = 0; i < tr.draw_list->num_solid_entities && !FBitSet( RI.rvp.flags, RF_ONLY_CLIENTDRAW ); i++ )
@@ -854,19 +880,19 @@ static void R_DrawEntitiesOnList( void )
 		}
 	}
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_solid_sprites" );
 
 	if( !FBitSet( RI.rvp.flags, RF_ONLY_CLIENTDRAW ))
 	{
 		gEngfuncs.CL_DrawEFX( tr.frametime, false );
 	}
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_solid_efx" );
 
-	if( FBitSet( RI.rvp.flags, RF_DRAW_WORLD ))
+	if( FBitSet( RI.rvp.flags, RF_DRAW_WORLD ) && !cof_skip_client_normal_triangles.value )
 		gEngfuncs.pfnDrawNormalTriangles();
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_client_normal_triangles" );
 
 #ifdef HACKS_RELATED_HLMODS
 	// Vampire Slayer leave GL_LINEAR fog with their own start/end after
@@ -913,15 +939,16 @@ static void R_DrawEntitiesOnList( void )
 		}
 	}
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_trans_entities" );
 
 	if( FBitSet( RI.rvp.flags, RF_DRAW_WORLD ))
 	{
 		pglTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
-		gEngfuncs.pfnDrawTransparentTriangles ();
+		if( !cof_skip_client_transparent_triangles.value )
+	gEngfuncs.pfnDrawTransparentTriangles ();
 	}
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_client_transparent_triangles" );
 
 	if( !FBitSet( RI.rvp.flags, RF_ONLY_CLIENTDRAW ))
 	{
@@ -930,7 +957,7 @@ static void R_DrawEntitiesOnList( void )
 		R_AllowFog( true );
 	}
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_transparent_efx" );
 
 	pglDisable( GL_BLEND );	// Trinity Render issues
 
@@ -938,7 +965,8 @@ static void R_DrawEntitiesOnList( void )
 		R_DrawViewModel();
 	gEngfuncs.CL_ExtraUpdate();
 
-	GL_CheckForErrors();
+	COF_GL_STAGE_CHECK( "after_viewmodel" );
+	#undef COF_GL_STAGE_CHECK
 }
 
 /*

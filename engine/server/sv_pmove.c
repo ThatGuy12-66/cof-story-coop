@@ -16,12 +16,102 @@ GNU General Public License for more details.
 #include "common.h"
 #include "server.h"
 #include "const.h"
+#include "sv_cof_cheats.h"
+#include "sv_cof_story.h"
 #include "pm_local.h"
 #include "event_flags.h"
 #include "studio.h"
+#include <stddef.h>
 
 static qboolean has_update = false;
 static void SV_GetTrueOrigin( sv_client_t *cl, int edictnum, vec3_t origin );
+
+/*
+ * Experimental compatibility path for the Steam Cry of Fear server DLL.
+ *
+ * The shipped DLL's PM_Init accesses physinfo and the common callback table
+ * four bytes later than the current playermove_t layout.  Keep this opt-in and
+ * translate only at the DLL boundary; the engine continues using its native
+ * playermove_t.  The missing historical field is not identified, so this is a
+ * diagnostic adapter and is not a general ABI guarantee.
+ */
+#define COF_PMOVE_LEGACY_SHIFT 4
+typedef union cof_pmove_legacy_storage_s
+{
+	playermove_t align;
+	byte bytes[sizeof( playermove_t ) + COF_PMOVE_LEGACY_SHIFT];
+} cof_pmove_legacy_storage_t;
+
+static qboolean cof_pmove_legacy_enabled;
+static cof_pmove_legacy_storage_t cof_pmove_legacy_storage;
+
+/*
+ * Where the four-byte gap goes.  Measured from the shipped cl_dlls/hl.dll:
+ * it keeps numtouch at pmove+0x45490 and touchindex at pmove+0x45494, while
+ * the current layout has them at 0x4548C and 0x45490 - so the gap belongs
+ * before numtouch, not before physinfo.  Inserting it at numtouch leaves
+ * physinfo and everything after it exactly where they were (+4) and restores
+ * the two fields the engine reads back after PM_Move.  Latched in
+ * SV_InitClientMove: the game DLL keeps the pointer PM_Init was handed.
+ */
+static int cof_pmove_legacy_touchfix_latched;
+/* Non-NULL only while the game DLL is inside PM_Init / PM_Move. */
+static playermove_t *cof_pmove_legacy_active;
+static CVAR_DEFINE_AUTO( cof_pmove_legacy_hullsync, "1", 0, "CoF playermove adapter: mirror usehull/origin/velocity into the engine pmove object while the game DLL runs" );
+static CVAR_DEFINE_AUTO( cof_pmove_legacy_touchfix, "1", 0, "CoF playermove adapter: insert the legacy four-byte gap before numtouch instead of physinfo" );
+
+static size_t SV_CoF_LegacyTail( void )
+{
+	return cof_pmove_legacy_touchfix_latched ? offsetof( playermove_t, numtouch ) : offsetof( playermove_t, physinfo );
+}
+
+static playermove_t *SV_CoF_LegacyPMove( void )
+{
+	return (playermove_t *)cof_pmove_legacy_storage.bytes;
+}
+
+/*
+ * Every engine playermove callback below reads svgame.pmove, but while the
+ * game DLL runs it is mutating the shifted view instead, so the callbacks see
+ * a snapshot taken before the call.  usehull is the field that matters:
+ * PM_Duck and PM_UnDuck change it and then immediately ask the engine to
+ * trace with it, so PM_FixPlayerCrouchStuck undoes the duck's origin drop and
+ * PM_UnDuck's "would I fit standing?" test is answered with the duck hull.
+ * Mirror the few fields the callbacks read; they all live in the unshifted
+ * prefix, so the legacy view can be read through the normal struct type.
+ */
+static void SV_CoF_SyncLegacyToNative( void )
+{
+	playermove_t *legacy = cof_pmove_legacy_active;
+
+	if( legacy == NULL || cof_pmove_legacy_hullsync.value == 0.0f )
+		return;
+
+	svgame.pmove->usehull = legacy->usehull;
+	VectorCopy( legacy->origin, svgame.pmove->origin );
+	VectorCopy( legacy->velocity, svgame.pmove->velocity );
+}
+
+static void SV_CoF_CopyToLegacyPMove( void )
+{
+	const size_t tail = SV_CoF_LegacyTail();
+	playermove_t *legacy = SV_CoF_LegacyPMove();
+
+	memcpy( legacy, svgame.pmove, tail );
+	memset( (byte *)legacy + tail, 0, COF_PMOVE_LEGACY_SHIFT );
+	memcpy( (byte *)legacy + tail + COF_PMOVE_LEGACY_SHIFT,
+		(byte *)svgame.pmove + tail, sizeof( playermove_t ) - tail );
+}
+
+static void SV_CoF_CopyFromLegacyPMove( void )
+{
+	const size_t tail = SV_CoF_LegacyTail();
+	playermove_t *legacy = SV_CoF_LegacyPMove();
+
+	memcpy( svgame.pmove, legacy, tail );
+	memcpy( (byte *)svgame.pmove + tail,
+		(byte *)legacy + tail + COF_PMOVE_LEGACY_SHIFT, sizeof( playermove_t ) - tail );
+}
 
 void SV_ClipPMoveToEntity( physent_t *pe, const vec3_t start, vec3_t mins, vec3_t maxs, const vec3_t end, pmtrace_t *tr )
 {
@@ -340,46 +430,55 @@ static void GAME_EXPORT pfnParticle( const float *origin, int color, float life,
 
 static int GAME_EXPORT pfnTestPlayerPosition( float *pos, pmtrace_t *ptrace )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TestPlayerPosition( svgame.pmove, pos, ptrace, NULL );
 }
 
 static void GAME_EXPORT pfnStuckTouch( int hitent, pmtrace_t *tr )
 {
+	SV_CoF_SyncLegacyToNative();
 	PM_StuckTouch( svgame.pmove, hitent, tr );
 }
 
 static int GAME_EXPORT pfnPointContents( float *p, int *truecontents )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_PointContentsPmove( svgame.pmove, p, truecontents );
 }
 
 static int GAME_EXPORT pfnTruePointContents( float *p )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TruePointContents( svgame.pmove, p );
 }
 
 static pmtrace_t GAME_EXPORT pfnPlayerTrace( float *start, float *end, int traceFlags, int ignore_pe )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_PlayerTraceExt( svgame.pmove, start, end, traceFlags, svgame.pmove->numphysent, svgame.pmove->physents, ignore_pe, NULL );
 }
 
 static pmtrace_t *GAME_EXPORT pfnTraceLine( float *start, float *end, int flags, int usehull, int ignore_pe )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TraceLine( svgame.pmove, start, end, flags, usehull, ignore_pe );
 }
 
 static hull_t *GAME_EXPORT pfnHullForBsp( physent_t *pe, float *offset )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_HullForBsp( pe, svgame.pmove, offset );
 }
 
 static float GAME_EXPORT pfnTraceModel( physent_t *pe, float *start, float *end, trace_t *trace )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TraceModel( svgame.pmove, pe, start, end, trace );
 }
 
 static const char *GAME_EXPORT pfnTraceTexture( int ground, float *vstart, float *vend )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TraceTexture( svgame.pmove, ground, vstart, vend );
 }
 
@@ -411,21 +510,25 @@ static void GAME_EXPORT pfnPlaybackEventFull( int flags, int clientindex, word e
 
 static pmtrace_t GAME_EXPORT pfnPlayerTraceEx( float *start, float *end, int traceFlags, pfnIgnore pmFilter )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_PlayerTraceExt( svgame.pmove, start, end, traceFlags, svgame.pmove->numphysent, svgame.pmove->physents, -1, pmFilter );
 }
 
 static int GAME_EXPORT pfnTestPlayerPositionEx( float *pos, pmtrace_t *ptrace, pfnIgnore pmFilter )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TestPlayerPosition( svgame.pmove, pos, ptrace, pmFilter );
 }
 
 static pmtrace_t *GAME_EXPORT pfnTraceLineEx( float *start, float *end, int flags, int usehull, pfnIgnore pmFilter )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TraceLineEx( svgame.pmove, start, end, flags, usehull, pmFilter );
 }
 
 static struct msurface_s *GAME_EXPORT pfnTraceSurface( int ground, float *vstart, float *vend )
 {
+	SV_CoF_SyncLegacyToNative();
 	return PM_TraceSurfacePmove( svgame.pmove, ground, vstart, vend );
 }
 
@@ -438,6 +541,21 @@ SV_InitClientMove
 void SV_InitClientMove( void )
 {
 	Pmove_Init ();
+	cof_pmove_legacy_enabled = (Sys_CheckParm( "-cof-pmove-legacy" ) != 0);
+	if( cof_pmove_legacy_enabled )
+	{
+		static qboolean cof_pmove_cvars_registered;
+
+		if( !cof_pmove_cvars_registered )
+		{
+			Cvar_RegisterVariable( &cof_pmove_legacy_hullsync );
+			Cvar_RegisterVariable( &cof_pmove_legacy_touchfix );
+			cof_pmove_cvars_registered = true;
+		}
+		cof_pmove_legacy_touchfix_latched = cof_pmove_legacy_touchfix.value != 0.0f ? 1 : 0;
+		Con_Reportf( S_WARN "experimental CoF legacy playermove adapter enabled (hullsync %d, touchfix %d)\n",
+			cof_pmove_legacy_hullsync.value != 0.0f ? 1 : 0, cof_pmove_legacy_touchfix_latched );
+	}
 
 	svgame.pmove->server = true;
 	svgame.pmove->movevars = &svgame.movevars;
@@ -488,7 +606,17 @@ void SV_InitClientMove( void )
 	svgame.pmove->PM_TraceSurface = pfnTraceSurface;
 
 	// initalize pmove
-	svgame.dllFuncs.pfnPM_Init( svgame.pmove );
+	if( cof_pmove_legacy_enabled )
+	{
+		SV_CoF_CopyToLegacyPMove();
+		cof_pmove_legacy_active = SV_CoF_LegacyPMove();
+		svgame.dllFuncs.pfnPM_Init( SV_CoF_LegacyPMove() );
+		cof_pmove_legacy_active = NULL;
+	}
+	else
+	{
+		svgame.dllFuncs.pfnPM_Init( svgame.pmove );
+	}
 }
 
 static void PM_CheckMovingGround( edict_t *ent, float frametime )
@@ -953,7 +1081,18 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	SV_SetupPMove( svgame.pmove, cl, ucmd, cl->physinfo );
 
 	// motor!
-	svgame.dllFuncs.pfnPM_Move( svgame.pmove, true );
+	if( cof_pmove_legacy_enabled )
+	{
+		SV_CoF_CopyToLegacyPMove();
+		cof_pmove_legacy_active = SV_CoF_LegacyPMove();
+		svgame.dllFuncs.pfnPM_Move( SV_CoF_LegacyPMove(), true );
+		cof_pmove_legacy_active = NULL;
+		SV_CoF_CopyFromLegacyPMove();
+	}
+	else
+	{
+		svgame.dllFuncs.pfnPM_Move( svgame.pmove, true );
+	}
 
 	// copy results back to client
 	SV_FinishPMove( svgame.pmove, cl );
@@ -987,6 +1126,14 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 			VectorCopy( oldvel, clent->v.velocity );
 		}
 	}
+	else if( clent->v.solid == SOLID_NOT && SV_CoF_StoryCoopEnabled( ))
+	{
+		// Cry of Fear: retail PreThink keeps a player SOLID_NOT while its absbox
+		// touches another player's. Without a relink the box never follows the
+		// player, so both stay non-solid forever and stop touching triggers.
+		// A SOLID_NOT link only refreshes the box and PVS leafs; no touches.
+		SV_LinkEdict( clent, false );
+	}
 
 	svgame.pmove->numtouch = 0;
 	svgame.globals->time = cl->timebase;
@@ -994,6 +1141,7 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 
 	// run post-think
 	svgame.dllFuncs.pfnPlayerPostThink( clent );
+	SV_CoF_CheatsPostThink( cl ); // Cry of Fear: re-assert what PostThink reset
 	svgame.dllFuncs.pfnCmdEnd( clent );
 
 	if( !FBitSet( cl->flags, FCL_FAKECLIENT ))

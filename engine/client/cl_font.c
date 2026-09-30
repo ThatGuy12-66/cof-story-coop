@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #include "client.h"
 #include "qfont.h"
 #include "swaplib.h"
+#include "cof_language.h"
 
 le_struct_begin( charinfo_swap )
 	le_struct_field( charinfo, startoffset )
@@ -250,6 +251,17 @@ int CL_DrawString( float x, float y, const char *s, const rgba_t color, cl_font_
 	if( !font || !font->valid )
 		return 0;
 
+	// Cry of Fear language packs: the captions compiled into client.dll and
+	// hl.dll have no file slot of any kind, so they are substituted here,
+	// at the last point before they become glyphs - but only for text the
+	// client DLL hands in (FONT_DRAW_COF_LANG, set by the engfuncs), never
+	// for the engine's own console and overlays. Returns s unchanged when
+	// no pack is active or nothing in its table matches. The width query
+	// below does the same, or the measured width would no longer match the
+	// drawn text.
+	if( FBitSet( flags, FONT_DRAW_COF_LANG ))
+		s = CoF_Lang_StringEngineFont( s, FBitSet( flags, FONT_DRAW_UTF8 ));
+
 	if( FBitSet( flags, FONT_DRAW_UTF8 ))
 		Con_UtfProcessChar( 0 ); // clear utf state
 
@@ -339,6 +351,10 @@ void CL_DrawStringLen( cl_font_t *font, const char *s, int *width, int *height, 
 
 	if( COM_StringEmptyOrNULL( s ))
 		return;
+
+	// see CL_DrawString
+	if( FBitSet( flags, FONT_DRAW_COF_LANG ))
+		s = CoF_Lang_StringEngineFont( s, FBitSet( flags, FONT_DRAW_UTF8 ));
 
 	if( FBitSet( flags, FONT_DRAW_UTF8 ))
 		Con_UtfProcessChar( 0 ); // reset utf state

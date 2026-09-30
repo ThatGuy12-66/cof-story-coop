@@ -18,6 +18,9 @@ GNU General Public License for more details.
 #include "const.h"
 #include "server.h"
 #include "net_encode.h"
+#include "sv_cof_cheats.h"
+#include "sv_cof_story.h"
+#include "sv_cof_party.h"
 
 // challenges are valid for two consecutive windows of this size (max lifetime ~10s).
 #define CHALLENGE_WINDOW_SECONDS 5
@@ -436,6 +439,9 @@ static void SV_ConnectClient( netadr_t from )
 
 	// build a new connection
 	// accept the new client
+	// A deliberate reconnect is a new identity. Never leave the displaced
+	// restore ticket pending, nor let the replacement inherit its inventory.
+	SV_CoF_TransitionClientDrop( newcl );
 	sv.current_client = newcl;
 	frames = Mem_Realloc( host.mempool, newcl->frames, sizeof( client_frame_t ) * SV_UPDATE_BACKUP );
 	memset( frames, 0, sizeof( client_frame_t ) * SV_UPDATE_BACKUP );
@@ -623,6 +629,8 @@ void SV_DropClient( sv_client_t *cl, qboolean crash )
 
 	if( cl->state == cs_zombie )
 		return;	// already dropped
+
+	SV_CoF_TransitionClientDrop( cl );
 
 	if( !crash )
 	{
@@ -1240,6 +1248,8 @@ void SV_FullClientUpdate( sv_client_t *cl, sizebuf_t *msg )
 
 		// remove server passwords, etc.
 		Info_RemovePrefixedKeys( info, '_' );
+		Info_RemoveKey( info, "password" );
+		SV_CoF_StoryUserinfo( cl, info, sizeof( info ));
 		MSG_WriteString( msg, info );
 
 		MD5Init( &ctx );
@@ -1330,10 +1340,11 @@ static void SV_PutClientInServer( sv_client_t *cl )
 	static byte    	msg_buf[MAX_INIT_MSG + 0x200];	// MAX_INIT_MSG + some space
 	edict_t		*ent = cl->edict;
 	sizebuf_t		msg;
+	qboolean		fresh = false;
 
 	MSG_Init( &msg, "Spawn", msg_buf, sizeof( msg_buf ));
 
-	if( sv.loadgame )
+	if( SV_CoF_TransitionRestoredClient( cl ) || (sv.loadgame && !SV_CoF_TransitionActive()) )
 	{
 		// NOTE: we needs to setup angles on restore here
 		if( ent->v.fixangle == 1 )
@@ -1343,7 +1354,7 @@ static void SV_PutClientInServer( sv_client_t *cl )
 			ent->v.fixangle = 0;
 		}
 
-		if( svgame.dllFuncs.pfnParmsChangeLevel )
+		if( !SV_CoF_TransitionActive() && svgame.dllFuncs.pfnParmsChangeLevel )
 		{
 			SAVERESTOREDATA	levelData;
 			string		name;
@@ -1369,8 +1380,11 @@ static void SV_PutClientInServer( sv_client_t *cl )
 		MSG_WriteByte( &msg, 0 );
 		MSG_WriteByte( &msg, 0 );
 
-		sv.loadgame = false;
-		sv.paused = false;
+		if( !SV_CoF_TransitionActive() )
+		{
+			sv.loadgame = false;
+			sv.paused = false;
+		}
 	}
 	else
 	{
@@ -1390,12 +1404,15 @@ static void SV_PutClientInServer( sv_client_t *cl )
 		// fisrt entering
 		svgame.globals->time = sv.time;
 		svgame.dllFuncs.pfnClientPutInServer( ent );
+		fresh = true;
 
 		if( sv.background )	// don't attack player in background mode
 			SetBits( ent->v.flags, FL_GODMODE|FL_NOTARGET );
 
 		cl->pViewEntity = NULL; // reset pViewEntity
 	}
+
+	SV_CoF_PartyPlayerReady( cl, fresh );
 
 	if( svgame.globals->cdAudioTrack )
 	{
@@ -1607,7 +1624,7 @@ static qboolean SV_New_f( sv_client_t *cl )
 	Q_strncpy( szRejectReason, "Connection rejected by game\n", sizeof( szRejectReason ) );
 
 	// Allow the game dll to reject this client.
-	if( !svgame.dllFuncs.pfnClientConnect( cl->edict, szName, szAddress, szRejectReason ))
+	if( !SV_CoF_TransitionRestoredClient( cl ) && !svgame.dllFuncs.pfnClientConnect( cl->edict, szName, szAddress, szRejectReason ))
 	{
 		// reject the connection and drop the client.
 		SV_RejectConnection( cl->netchan.remote_address, "%s\n", szRejectReason );
@@ -2170,6 +2187,7 @@ static qboolean SV_Begin_f( sv_client_t *cl )
 	cl->state = cs_spawned;
 	cl->connecttime = host.realtime;
 	SetBits( cl->flags, FCL_HOLD_FIRST_DATAGRAM );
+	SV_CoF_TransitionClientReady( cl );
 
 	return true;
 }
@@ -3086,8 +3104,21 @@ SV_ExecuteUserCommand
 static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 {
 	int i;
+	qboolean cofload = false;
+	char cofload_slot[2] = { '\0', '\0' };
 
 	Cmd_TokenizeString( s );
+	cofload = ( Cmd_Argc() == 2 && !Q_stricmp( Cmd_Argv( 0 ), "cofload" ) &&
+		Cmd_Argv( 1 )[0] >= '1' && Cmd_Argv( 1 )[0] <= '5' && Cmd_Argv( 1 )[1] == '\0' );
+	if( cofload )
+		cofload_slot[0] = Cmd_Argv( 1 )[0];
+	if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
+		Con_Reportf( "[cof-trace] server received cofload %s client_state=%d server_state=%d\n",
+			Cmd_Argv( 1 ), cl->state, sv.state );
+
+	// Cry of Fear: latched noclip/notarget, fly, give and the cof_* cheats
+	if( SV_CoF_CheatsClientCommand( cl ))
+		return;
 
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )
 	{
@@ -3131,6 +3162,8 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 
 		// custom client commands
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
+		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
+			Con_Reportf( "[cof-trace] hl ClientCommand returned for cofload %s\n", cofload_slot );
 
 		if( fullupdate )
 		{
@@ -3336,7 +3369,12 @@ static void SV_ParseClientMove( sv_client_t *cl, sizebuf_t *msg )
 		return;
 
 	// check for pause or frozen
-	if( sv.paused || !CL_IsInGame() || SV_PlayerIsFrozen( player ))
+	// Cry of Fear death page (cof_ui_death_keep_running): the world keeps
+	// running behind GAME OVER but the player does not - CL_IsInGame() is
+	// deliberately true there, so the input gate has to be named explicitly.
+	// Cry of Fear panel pause (cof_panel_pause): the player stands still with
+	// the world while a safe panel is open.
+	if( sv.paused || !CL_IsInGame() || CL_CoF_DeathWorldLive() || CL_CoF_PanelPaused() || SV_PlayerIsFrozen( player ))
 	{
 		for( i = 0; i < numcmds; i++ )
 		{
@@ -3667,7 +3705,12 @@ void SV_ExecuteClientMessage( sv_client_t *cl, sizebuf_t *msg )
 			SV_ParseClientMove( cl, msg );
 			break;
 		case clc_stringcmd:
-			SV_ExecuteClientCommand( cl, MSG_ReadString( msg ));
+		{
+			const char *stringcmd = MSG_ReadString( msg );
+			if( Cvar_VariableInteger( "cof_trace_menu_load" ) && !Q_strnicmp( stringcmd, "cofload ", 8 ))
+				Con_Reportf( "[cof-trace] clc_stringcmd cofload packet: %s\n", stringcmd );
+			SV_ExecuteClientCommand( cl, stringcmd );
+		}
 			if( cl->state == cs_zombie )
 				return; // disconnect command
 			break;

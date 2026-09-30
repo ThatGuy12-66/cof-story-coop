@@ -22,6 +22,12 @@ CVAR_DEFINE_AUTO( gl_msaa, "1", FCVAR_GLCONFIG, "enable or disable multisample a
 CVAR_DEFINE_AUTO( gl_stencilbits, "8", FCVAR_GLCONFIG|FCVAR_READ_ONLY, "pixelformat stencil bits (0 - auto)" );
 CVAR_DEFINE_AUTO( gl_overbright, "1", FCVAR_GLCONFIG, "overbrights" );
 CVAR_DEFINE_AUTO( gl_fog, "1", FCVAR_GLCONFIG, "allow for rendering fog using built-in OpenGL fog implementation" );
+CVAR_DEFINE_AUTO( cof_gl_trace, "0", FCVAR_GLCONFIG, "label GL errors at Cry of Fear draw-stage boundaries (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_solid_entity_trace, "0", FCVAR_GLCONFIG, "trace GL errors around individual solid entities (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_skyline_trace, "0", FCVAR_GLCONFIG, "trace Cry of Fear menu skyline studio culling (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_skip_client_transparent_triangles, "0", FCVAR_GLCONFIG, "skip client transparent-triangle callback (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_skip_client_normal_triangles, "0", FCVAR_GLCONFIG, "skip client normal-triangle callback (diagnostic)" );
+CVAR_DEFINE_AUTO( cof_custom_renderfx_opaque, "1", FCVAR_GLCONFIG, "treat rendermode-normal entities with non-standard renderfx values as opaque, matching GoldSrc" );
 CVAR_DEFINE_AUTO( gl_litwater_force, "0", FCVAR_GLCONFIG, "force enable lightmapped water, even if support not declared in the map" );
 CVAR_DEFINE_AUTO( r_lighting_ambient, "0.3", FCVAR_GLCONFIG, "map ambient lighting scale" );
 CVAR_DEFINE_AUTO( r_detailtextures, "1", FCVAR_GLCONFIG, "enable detail textures support" );
@@ -430,12 +436,60 @@ For ARB_debug_output
 ========================
 */
 #if !XASH_GL4ES // GL4ES doesn't provide glDebug functions, even as stubs
+#if XASH_WIN32
+#define COF_GL_TRACE_STACK_FRAMES 12
+#define COF_GL_TRACE_STACK_SAMPLES 2
+
+static void GL_CoFTraceDebugStack( const char *kind, unsigned int *samples )
+{
+	void *frames[COF_GL_TRACE_STACK_FRAMES];
+	USHORT count;
+	unsigned int i;
+
+	if( !cof_gl_trace.value || *samples >= COF_GL_TRACE_STACK_SAMPLES )
+		return;
+
+	(*samples)++;
+	count = CaptureStackBackTrace( 1, ARRAYSIZE( frames ), frames, NULL );
+	gEngfuncs.Con_Printf( "[cof-gl-trace] %s stack sample %u\n", kind, *samples );
+
+	for( i = 0; i < count; i++ )
+	{
+		HMODULE module = NULL;
+		char path[MAX_PATH];
+		const char *name = "unknown";
+
+		if( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)frames[i], &module ))
+		{
+			const char *slash;
+			path[0] = '\0';
+			GetModuleFileNameA( module, path, ARRAYSIZE( path ));
+			path[ARRAYSIZE( path ) - 1] = '\0';
+			slash = Q_strrchr( path, '\\' );
+			name = slash ? slash + 1 : path;
+		}
+
+		gEngfuncs.Con_Printf( "[cof-gl-trace]   #%u %s+0x%zx\n", i, name, (size_t)frames[i] - (size_t)module );
+	}
+}
+#endif // XASH_WIN32
 static void APIENTRY GL_DebugOutput( GLuint source, GLuint type, GLuint id, GLuint severity, GLint length, const GLcharARB *message, GLvoid *userParam )
 {
 	switch( type )
 	{
 	case GL_DEBUG_TYPE_ERROR_ARB:
 		gEngfuncs.Con_Printf( S_OPENGL_ERROR "%s\n", message );
+#if XASH_WIN32
+	{
+		static unsigned int negative_count_samples;
+		static unsigned int invalid_cull_mode_samples;
+
+		if( Q_stristr( message, "must not be negative" ))
+			GL_CoFTraceDebugStack( "negative-count", &negative_count_samples );
+		else if( Q_stristr( message, "valid face culling mode" ))
+			GL_CoFTraceDebugStack( "invalid-cull-mode", &invalid_cull_mode_samples );
+	}
+#endif // XASH_WIN32
 		break;
 	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR_ARB:
 	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR_ARB:
@@ -1176,6 +1230,15 @@ static void GL_InitCommands( void )
 	gEngfuncs.Cvar_RegisterVariable( &gl_round_down );
 	gEngfuncs.Cvar_RegisterVariable( &gl_overbright );
 	gEngfuncs.Cvar_RegisterVariable( &gl_fog );
+	gEngfuncs.Cvar_RegisterVariable( &cof_gl_trace );
+	gEngfuncs.Cvar_RegisterVariable( &cof_solid_entity_trace );
+	gEngfuncs.Cvar_RegisterVariable( &cof_skyline_trace );
+	gEngfuncs.Cvar_RegisterVariable( &cof_skip_client_transparent_triangles );
+	gEngfuncs.Cvar_RegisterVariable( &cof_skip_client_normal_triangles );
+	gEngfuncs.Cvar_RegisterVariable( &cof_custom_renderfx_opaque );
+	gEngfuncs.Cvar_RegisterVariable( &cof_viewmodel_fov );
+	gEngfuncs.Cvar_RegisterVariable( &cof_sprite_quiet_frames );
+	gEngfuncs.Cvar_RegisterVariable( &cof_sprite_trace );
 	gEngfuncs.Cvar_RegisterVariable( &gl_litwater_force );
 
 	gEngfuncs.Cvar_RegisterVariable( &gl_polyoffset );
@@ -1355,6 +1418,19 @@ void GL_CheckForErrors_( const char *filename, const int fileline )
 		return;
 
 	gEngfuncs.Con_Printf( S_OPENGL_ERROR "%s (at %s:%i)\n", GL_ErrorString( err ), filename, fileline );
+}
+
+void GL_CheckForErrorsNamed_( const char *stage, const char *filename, const int fileline )
+{
+	if( !gl_check_errors.value || !gpGlobals->developer )
+		return;
+
+	int err = pglGetError();
+	if( err == GL_NO_ERROR )
+		return;
+
+	gEngfuncs.Con_Printf( S_OPENGL_ERROR "%s [cof-stage=%s] (at %s:%i)\n",
+		GL_ErrorString( err ), stage, filename, fileline );
 }
 
 void GL_SetupAttributes( int safegl )

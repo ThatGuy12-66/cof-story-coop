@@ -162,5 +162,37 @@ void Joy_FinalizeMove( float *fw, float *side, float *dpitch, float *dyaw );
 void Joy_DrawDebug( void );
 void Joy_Init( void );
 void Joy_Shutdown( void );
+short Joy_CoF_AxisValue( engineAxis_t axis );
+short Joy_CoF_AxisRaw( engineAxis_t axis );
+
+//
+// cof_gamepad.c (Cry of Fear: Enhanced gamepad support)
+//
+extern convar_t cof_joy_pulse_hysteresis;
+void CL_CoF_PadInit( void );
+void CL_CoF_PadMoveCommand( const char *command ); // scoped stick dodge guard
+qboolean CL_CoF_ClickablePanelOpen( void );
+qboolean CL_CoF_PadSuppressMove( void );
+void CL_CoF_PadTraceMove( float forwardmove, float sidemove, qboolean suppressed );
+void CL_CoF_PadTracePulses( uint oldflags, uint newflags, float forwardmove, float sidemove );
+float CL_CoF_JoyPulseHysteresis( void );
+qboolean CL_CoF_PadStartAsEscape( int key, const char *binding );
+qboolean CL_CoF_PadKeyEvent( int key, int down );
+qboolean CL_CoF_PadFrame( void );
+qboolean CL_CoF_VCursorPos( int *x, int *y );
+void CL_CoF_VCursorDraw( void );
+void CL_CoF_InputEvent( const void *sdlEvent );	// host_sdl2.c: the last input device
+void CL_CoF_NotePadAxis( int axis, short value );	// in_joy.c
+void CL_CoF_NoteMouseWarp( int x, int y );		// in_sdl2.c Platform_SetMousePos
+qboolean CL_CoF_PadHidesOSCursor( void );
+qboolean CL_CoF_OSCursorRequest( int type );		// in_sdl2.c Platform_SetCursorType
+float CL_CoF_QuickTurnYaw( void );			// input.c IN_EngineAppendMove: cof_quickturn
+float CL_CoF_TriggerHysteresis( void );			// in_joy.c Joy_ProcessTrigger
+void CL_CoF_NoteTriggerEdge( int axis, qboolean down, short value, int threshold );
+void CL_CoF_PadMoveCorrectCommand( usercmd_t *cmd, float forward, float side );
+qboolean CL_CoF_PadMoveShape( float *fw, float *side, float fwscale, float sidescale ); // in_joy.c Joy_FinalizeMove
+void CL_CoF_PadMoveKeyThresholds( float *forward, float *side );	// input.c IN_JoyAppendMove
+void CL_CoF_PadActivated( void *gamecontroller );	// joy_sdl2.c: the pad in use changed
+void CL_CoF_NoteEventLoop( double seconds, int events );	// host_sdl2.c Platform_RunEvents
 
 #endif//INPUT_H

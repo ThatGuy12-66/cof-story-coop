@@ -33,6 +33,24 @@ static CVAR_DEFINE_AUTO( net_speeds, "0", FCVAR_ARCHIVE, "show network packets" 
 static CVAR_DEFINE_AUTO( cl_showfps, "0", FCVAR_ARCHIVE, "show client fps" );
 static CVAR_DEFINE_AUTO( cl_showpos, "0", FCVAR_ARCHIVE, "show local player position and velocity" );
 static CVAR_DEFINE_AUTO( cl_showents, "0", FCVAR_ARCHIVE | FCVAR_CHEAT, "show entities information (largely undone)" );
+
+static qboolean SCR_IsSafeCoFRootSaveShotPath( const char *path )
+{
+	const char *const prefix = "../SAVE/";
+	const size_t prefixLength = Q_strlen( prefix );
+	const size_t pathLength = Q_strlen( path );
+
+	if( Q_strncmp( path, prefix, prefixLength ) || pathLength <= prefixLength + 4 || Q_stricmp( path + pathLength - 4, ".bmp" ))
+		return false;
+
+	for( const char *c = path + prefixLength; c < path + pathLength - 4; c++ )
+	{
+		if( *c == '/' || *c == '\\' || *c == ':' )
+			return false;
+	}
+
+	return true;
+}
 static CVAR_DEFINE_AUTO( cl_showcmd, "0", 0, "visualize usercmd button presses" );
 
 typedef struct
@@ -320,8 +338,17 @@ void SCR_NetSpeeds( void )
 		Q_memprint( cls.netchan.total_sended )
 	);
 
-	int x = refState.width - 320 * font->scale;
-	int y = 384;
+	// milestone 4 (cof_text_autoscale): 320 is where this block starts with the
+	// stock 8 px glyphs. Once the console font is sized from the display, the
+	// widest line no longer fits in 320 scaled pixels and the text ran off the
+	// right edge, so place it from its own measured width instead.
+	int width = 0, x, y = 384;
+
+	CL_DrawStringLen( font, msg, &width, NULL, FONT_DRAW_RESETCOLORONLF );
+	if( width <= 0 )
+		width = 320 * font->scale;
+
+	x = Q_max( 0, refState.width - width - Q_max( 4, font->charWidths[' ' ] ));
 
 	MakeRGBA( color, 255, 255, 255, 255 );
 	CL_DrawString( x, y, msg, color, font, FONT_DRAW_RESETCOLORONLF );
@@ -344,8 +371,15 @@ void SCR_RSpeeds( void )
 		rgba_t	color;
 		cl_font_t *font = Con_GetCurFont();
 
-		int x = refState.width - 340 * font->scale;
-		int y = 64;
+		// milestone 4 (cof_text_autoscale): same as SCR_NetSpeeds above, 340 is
+		// a stock-glyph constant; measure the block and right-align it
+		int width = 0, x, y = 64;
+
+		CL_DrawStringLen( font, msg, &width, NULL, FONT_DRAW_RESETCOLORONLF );
+		if( width <= 0 )
+			width = 340 * font->scale;
+
+		x = Q_max( 0, refState.width - width - Q_max( 4, font->charWidths[' ' ] ));
 
 		MakeRGBA( color, 255, 255, 255, 255 );
 		CL_DrawString( x, y, msg, color, font, FONT_DRAW_RESETCOLORONLF );
@@ -435,7 +469,18 @@ void SCR_MakeScreenShot( void )
 		iRet = ref.dllFuncs.VID_ScreenShot( cls.shotname, VID_LEVELSHOT );
 		break;
 	case scrshot_savegame:
+		if( Cvar_VariableInteger( "cof_save_root_compat" ) && GI && !Q_stricmp( GI->gamefolder, "cryoffear" ))
+		{
+			if( !SCR_IsSafeCoFRootSaveShotPath( cls.shotname ))
+			{
+				Con_Printf( S_ERROR "Refusing unsafe Cry of Fear saveshot path: %s\n", cls.shotname );
+				break;
+			}
+
+			FS_AllowDirectPaths( true );
+		}
 		iRet = ref.dllFuncs.VID_ScreenShot( cls.shotname, VID_MINISHOT );
+		FS_AllowDirectPaths( false );
 		break;
 	case scrshot_envshot:
 		iRet = ref.dllFuncs.VID_CubemapShot( cls.shotname, viewsize, cls.envshot_vieworg, false );
@@ -711,12 +756,176 @@ SCR_LoadCreditsFont
 INTERNAL RESOURCE
 ================
 */
+// Cry of Fear engine HUD text sizing: the target height cls.creditsFont was
+// last loaded for, so SCR_VidInit() can tell when the screen has moved away
+// from it. A negative sentinel compares unequal to every live target, so the
+// first VidInit always loads.
+static float scr_hud_text_target = -1.0f;
+
+// Cry of Fear engine HUD text legibility (cof_hud_text_font, milestone 4b).
+// The game's own gfx/creditsfont.fnt is a thin, aliased, one-size bitmap: at
+// 1440p and 2160p it is magnified 1.3x and 2x and the stems fall apart, which
+// is half of "the subtitles are too light" in the user's feedback. These are
+// the base heights of the generated Inter SemiBold atlases shipped as
+// gamedata/cryoffear/fonts/cof_hudtext<N>.fnt, produced by
+// scripts/make-cof-console-font.py. Two sizes, not more: the .fnt container
+// addresses glyphs with a 16-bit linear pixel offset, so the whole atlas has
+// to fit in 65536 pixels and a base above ~20 px starts dropping glyphs out of
+// the 216-character cp1252 set - which the language packs need.
+static const int scr_hud_text_atlas_base[] = { 14, 19 };
+static qboolean scr_hud_text_atlas_warned;
+
+// the height the game's own HUD font has on this display, before any resizing.
+// The vertical correction in cl_game.c needs it to know how far the client's
+// own centring has drifted; 0 means "not known yet".
+float cls_cof_hud_text_shipped;
+
+/*
+================
+SCR_HudTextUseAtlas
+
+Gated on the Cry of Fear client like the rest of the cof_* stack, so no other
+game's HUD font is touched, and on cof_hud_text_font so the game's own font is
+always one cvar away.
+================
+*/
+static qboolean SCR_HudTextUseAtlas( void )
+{
+	if( cof_hud_text_font.value == 0.0f )
+		return false;
+
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ))
+		return false;
+
+	return true;
+}
+
+/*
+================
+SCR_HudTextTargetHeight
+
+Cry of Fear engine HUD text sizing (cof_hud_text_height_pct, milestone 4).
+
+cls.creditsFont is the font behind pfnDrawCharacter, which is how the Cry of
+Fear client draws its hints, its "Using Gas Mask" style prompts and its
+subtitles: the client measures the text itself with gHUD.m_scrinfo.charWidths[]
+and iCharHeight and emits one pfnDrawCharacter per glyph. Those two fields are
+copied out of this very font at the bottom of SCR_LoadCreditsFont(), so making
+the font bigger makes the client's own centring, line pitch and wrap points
+follow it for free - no client-side layout has to be understood or touched.
+
+Same model as the console's cof_text_autoscale: a plain fraction of the render
+height, continuous, with no per-resolution cases. The default 1.85 percent
+reproduces the stock 20 px glyph at 1920x1080 and scales it from there, so a
+1080p player sees exactly what they saw before and a 4K player finally gets
+readable subtitles. hud_fontscale multiplies it, so a user who already set that
+keeps their preference on top. Returns 0 for "size it exactly as stock".
+================
+*/
+static float SCR_HudTextTargetHeight( void )
+{
+	float	px;
+
+	if( cof_hud_text_height_pct.value <= 0.0f )
+		return 0.0f;
+
+	if( !ref.initialized || refState.height <= 0 )
+		return 0.0f;
+
+	px = refState.height * bound( 0.4f, cof_hud_text_height_pct.value, 12.0f ) * 0.01f;
+
+	if( hud_fontscale.value > 0.0f )
+		px *= hud_fontscale.value;
+
+	// the menu's HUD scale control, the same multiplier the surface transform
+	// uses, so text and panels grow together
+	px *= CL_CoF_UIScaleUser();
+
+	return bound( 6.0f, px, 192.0f );
+}
+
+/*
+================
+SCR_ScaleCreditsFont
+
+Resize the loaded HUD font to the target height. The atlas was loaded at
+base_scale, so dividing it back out recovers the raw metrics and setting
+font->scale is exactly what loading at that scale would have produced -
+CL_DrawCharacter() multiplies both the glyph rectangle and the advance by it.
+================
+*/
+static void SCR_ScaleCreditsFont( cl_font_t *font, float base_scale, float shipped )
+{
+	float	target = SCR_HudTextTargetHeight();
+	float	base, scale;
+
+	if( !font->valid )
+		return;
+
+	if( target <= 0.0f )
+	{
+		// stock sizing asked for. With the game's own font that means "leave it
+		// exactly as loaded", which is what the early return does. With the
+		// generated atlas there is nothing to leave alone - its base height is
+		// an arbitrary 14 or 19 px - so bring it to the height the game's own
+		// font would have had.
+		if( !SCR_HudTextUseAtlas( ))
+			return;
+
+		target = shipped;
+	}
+
+	// never smaller than the font the game shipped, for the same reason
+	// cof_ui_scale never goes below 1: the shipped font is already small at
+	// 1080p and shrinking it at 720p would be a regression, not a feature. The
+	// floor used to be expressed as "glyph scale never below 1", which is the
+	// same thing only while the atlas IS the shipped font; with a generated
+	// atlas of its own base height it has to be said in pixels.
+	if( shipped > 0.0f && target < shipped )
+		target = shipped;
+
+	if( base_scale <= 0.0f )
+		base_scale = 1.0f;
+
+	base = font->charHeight / base_scale;
+
+	if( base <= 0.0f )
+		return;
+
+	scale = target / base;
+
+	if( scale <= 0.0f )
+		return;
+
+	font->scale = scale;
+	font->charHeight = Q_max( 1, Q_rint( base * scale ));
+
+	for( int i = 0; i < ARRAYSIZE( font->charWidths ); i++ )
+	{
+		if( font->charWidths[i] > 0 )
+			font->charWidths[i] = Q_max( 1, Q_rint(( font->charWidths[i] / base_scale ) * scale ));
+	}
+
+	scr_hud_text_target = SCR_HudTextTargetHeight();
+
+	Con_Reportf( "[cof-hudtext] %ix%i: target %.1f px (cof_hud_text_height_pct %.2f, hud_fontscale %.2f, shipped %.0f px) -> base %.0f px, glyph scale %.3f, charH %i px\n",
+		refState.width, refState.height, target, cof_hud_text_height_pct.value,
+		hud_fontscale.value, shipped, base, scale, font->charHeight );
+}
+
 void SCR_LoadCreditsFont( void )
 {
 	cl_font_t *const font = &cls.creditsFont;
 	qboolean success = false;
 	float scale = hud_fontscale.value;
+	float shipped = 0.0f;
 	dword crc = 0;
+
+	// Cry of Fear engine HUD text sizing: SCR_ScaleCreditsFont() below rewrites
+	// charHeight and charWidths[] in place, so the loader has to start from a
+	// clean font or a second call would scale the already scaled metrics. This
+	// is a no-op for a font that is not loaded.
+	CL_FreeFont( font );
 
 	// replace default gfx.wad textures by current charset's font
 	if( !CRC32_File( &crc, "gfx.wad" ) || crc == 0x49eb9f16 )
@@ -737,6 +946,65 @@ void SCR_LoadCreditsFont( void )
 	// it's a Quake font, we need to keep source texture for it
 	if( !success )
 		success = Con_LoadFixedWidthFont( "gfx/conchars", font, scale, &hud_fontrender, TF_FONT|TF_NEAREST|TF_KEEP_SOURCE );
+
+	// the height the game's own font has on this display, before any resizing.
+	// It is the floor the target is never allowed below, and with the generated
+	// atlas in play it is the only way left to know what "the shipped size" was.
+	shipped = success ? ( font->charHeight / ( scale > 0.0f ? scale : 1.0f )) : 0.0f;
+	cls_cof_hud_text_shipped = shipped;
+
+	// Cry of Fear engine HUD text legibility (cof_hud_text_font): swap the
+	// game's thin one-size bitmap for the generated Inter SemiBold atlas whose
+	// base height is nearest below what this display wants, so the glyphs are
+	// magnified as little as possible instead of 2x at 2160p. Loaded into a
+	// scratch font first: a missing or corrupt atlas then leaves the font the
+	// stock chain already produced completely untouched.
+	if( SCR_HudTextUseAtlas( ))
+	{
+		float want = SCR_HudTextTargetHeight();
+		cl_font_t atlas;
+		string path;
+		int page;
+
+		if( want < shipped ) want = shipped;
+		if( want <= 0.0f ) want = (float)scr_hud_text_atlas_base[0];
+
+		for( page = (int)ARRAYSIZE( scr_hud_text_atlas_base ) - 1; page > 0; page-- )
+		{
+			if( want >= (float)scr_hud_text_atlas_base[page] )
+				break;
+		}
+
+		memset( &atlas, 0, sizeof( atlas ));
+		Q_snprintf( path, sizeof( path ), cof_hud_text_style.value ? "fonts/cof_hudtext_bold%i.fnt" : "fonts/cof_hudtext%i.fnt", page );
+		// A partial installation keeps the earlier atlas rather than losing text.
+		if( cof_hud_text_style.value && !FS_FileExists( path, false ))
+			Q_snprintf( path, sizeof( path ), "fonts/cof_hudtext%i.fnt", page );
+
+		if( Con_LoadVariableWidthFont( path, &atlas, scale, &hud_fontrender, TF_FONT ))
+		{
+			CL_FreeFont( font );
+			*font = atlas;
+			success = true;
+
+			Con_Reportf( "[cof-hudtext] %s (base %i px) replaces the game font (%.0f px) for a %.1f px target\n",
+				path, scr_hud_text_atlas_base[page], shipped, want );
+		}
+		else
+		{
+			CL_FreeFont( &atlas );
+
+			if( !scr_hud_text_atlas_warned )
+			{
+				scr_hud_text_atlas_warned = true;
+				Con_Printf( S_WARN "cof_hud_text_font: %s is missing, keeping the game's own HUD font\n", path );
+			}
+		}
+	}
+
+	// Cry of Fear engine HUD text sizing: resize BEFORE the metrics are copied
+	// out, so the client lays its hints and subtitles out at the new size
+	SCR_ScaleCreditsFont( font, scale, shipped );
 
 	// copy font size for client.dll
 	if( success )
@@ -884,6 +1152,24 @@ void SCR_VidInit( void )
 	{
 		gameui.globals->scrWidth = refState.width;
 		gameui.globals->scrHeight = refState.height;
+	}
+
+	// Cry of Fear in-game UI scaling: pin the size the client's one and only
+	// layout pass is about to be made at, before anything can read it
+	CL_CoF_UIPinLayout();
+
+	// Cry of Fear engine HUD text sizing: the target is a fraction of the render
+	// height, so a mode change has to reload the font at the new size. The
+	// client re-reads charWidths[]/iCharHeight from pfnGetScreenInfo in its own
+	// VidInit, which runs below, so the new metrics are in place in time
+	// which atlas is loaded is not a function of the target height, so
+	// cof_hud_text_font has to force the reload on its own
+	if( scr_hud_text_target != SCR_HudTextTargetHeight( ) || FBitSet( cof_hud_text_font.flags, FCVAR_CHANGED ) || FBitSet( cof_hud_text_style.flags, FCVAR_CHANGED ))
+	{
+		ClearBits( cof_hud_text_font.flags, FCVAR_CHANGED );
+		ClearBits( cof_hud_text_style.flags, FCVAR_CHANGED );
+		CL_FreeFont( &cls.creditsFont );
+		SCR_LoadCreditsFont();
 	}
 
 	// notify vgui about screen size change

@@ -33,6 +33,14 @@ typedef struct
 
 // never gonna change, just shut up const warning
 CVAR_DEFINE_AUTO( r_shadows, "0", 0, "draw ugly shadows" );
+static int cof_skyline_trace_count;
+/* Desktop compatibility-GL queries used only by the optional diagnostic. */
+#ifndef GL_CURRENT_COLOR
+#define GL_CURRENT_COLOR 0x0B00
+#endif
+#ifndef GL_COLOR_WRITEMASK
+#define GL_COLOR_WRITEMASK 0x0C23
+#endif
 
 static const vec3_t hullcolor[8] =
 {
@@ -252,8 +260,26 @@ static qboolean R_StudioComputeBBox( vec3_t bbox[8] )
 		if( bbox ) VectorCopy( p2, bbox[i] );
 	}
 
-	if( !bbox && R_CullModel( e, studio_mins, studio_maxs ))
-		return false; // model culled
+	if( !bbox )
+	{
+		const qboolean skyline = cof_skyline_trace.value && cof_skyline_trace_count < 48 && RI.currentmodel &&
+			!Q_stricmp( RI.currentmodel->name, "models/Props/Blandat/byggnader.mdl" );
+		const qboolean culled = R_CullModel( e, studio_mins, studio_maxs );
+		if( skyline )
+		{
+			cof_skyline_trace_count++;
+			gEngfuncs.Con_Reportf( "[cof-skyline] bboxmatrix ent=%d seq=%d effects=%d eang=(%.1f %.1f %.1f) cang=(%.1f %.1f %.1f) scale=%.3f model=(%.1f %.1f %.1f)-(%.1f %.1f %.1f) seq=(%.1f %.1f %.1f)-(%.1f %.1f %.1f) matrix=((%.3f %.3f %.3f %.1f)(%.3f %.3f %.3f %.1f)(%.3f %.3f %.3f %.1f)) bounds=(%.1f %.1f %.1f)-(%.1f %.1f %.1f) cull=%d\n",
+				e->index, e->curstate.sequence, e->curstate.effects, e->angles[0], e->angles[1], e->angles[2],
+				e->curstate.angles[0], e->curstate.angles[1], e->curstate.angles[2], e->curstate.scale,
+				RI.currentmodel->mins[0], RI.currentmodel->mins[1], RI.currentmodel->mins[2], RI.currentmodel->maxs[0], RI.currentmodel->maxs[1], RI.currentmodel->maxs[2],
+				pseqdesc->bbmin[0], pseqdesc->bbmin[1], pseqdesc->bbmin[2], pseqdesc->bbmax[0], pseqdesc->bbmax[1], pseqdesc->bbmax[2],
+				g_studio.rotationmatrix[0][0], g_studio.rotationmatrix[0][1], g_studio.rotationmatrix[0][2], g_studio.rotationmatrix[0][3],
+				g_studio.rotationmatrix[1][0], g_studio.rotationmatrix[1][1], g_studio.rotationmatrix[1][2], g_studio.rotationmatrix[1][3],
+				g_studio.rotationmatrix[2][0], g_studio.rotationmatrix[2][1], g_studio.rotationmatrix[2][2], g_studio.rotationmatrix[2][3],
+				studio_mins[0], studio_mins[1], studio_mins[2], studio_maxs[0], studio_maxs[1], studio_maxs[2], culled );
+		}
+		if( culled ) return false; // model culled
+	}
 	return true; // visible
 }
 
@@ -3143,6 +3169,22 @@ static int R_StudioDrawModel( int flags )
 	R_StudioSetHeader((studiohdr_t *)gEngfuncs.Mod_Extradata( mod_studio, RI.currentmodel ));
 
 	R_StudioSetUpTransform( RI.currententity );
+	if( cof_skyline_trace.value && cof_skyline_trace_count < 48 && RI.currentmodel && m_pStudioHeader && m_pStudioHeader->numseq > 0 &&
+		!Q_stricmp( RI.currentmodel->name, "models/Props/Blandat/byggnader.mdl" ))
+	{
+		int sequence = RI.currententity->curstate.sequence;
+		if( sequence < 0 || sequence >= m_pStudioHeader->numseq ) sequence = 0;
+		mstudioseqdesc_t *seqdesc = (mstudioseqdesc_t *)((byte *)m_pStudioHeader + m_pStudioHeader->seqindex) + sequence;
+		cof_skyline_trace_count++;
+		gEngfuncs.Con_Reportf( "[cof-skyline] transform ent=%d eang=(%.1f %.1f %.1f) cang=(%.1f %.1f %.1f) scale=%.3f model=(%.1f %.1f %.1f)-(%.1f %.1f %.1f) seq=(%.1f %.1f %.1f)-(%.1f %.1f %.1f) matrix=((%.3f %.3f %.3f %.1f)(%.3f %.3f %.3f %.1f)(%.3f %.3f %.3f %.1f))\n",
+			RI.currententity->index, RI.currententity->angles[0], RI.currententity->angles[1], RI.currententity->angles[2],
+			RI.currententity->curstate.angles[0], RI.currententity->curstate.angles[1], RI.currententity->curstate.angles[2], RI.currententity->curstate.scale,
+			RI.currentmodel->mins[0], RI.currentmodel->mins[1], RI.currentmodel->mins[2], RI.currentmodel->maxs[0], RI.currentmodel->maxs[1], RI.currentmodel->maxs[2],
+			seqdesc->bbmin[0], seqdesc->bbmin[1], seqdesc->bbmin[2], seqdesc->bbmax[0], seqdesc->bbmax[1], seqdesc->bbmax[2],
+			g_studio.rotationmatrix[0][0], g_studio.rotationmatrix[0][1], g_studio.rotationmatrix[0][2], g_studio.rotationmatrix[0][3],
+			g_studio.rotationmatrix[1][0], g_studio.rotationmatrix[1][1], g_studio.rotationmatrix[1][2], g_studio.rotationmatrix[1][3],
+			g_studio.rotationmatrix[2][0], g_studio.rotationmatrix[2][1], g_studio.rotationmatrix[2][2], g_studio.rotationmatrix[2][3] );
+	}
 
 	if( flags & STUDIO_RENDER )
 	{
@@ -3205,6 +3247,13 @@ R_StudioDrawModelInternal
 */
 static void R_StudioDrawModelInternal( cl_entity_t *e, int flags )
 {
+	if( cof_skyline_trace.value && cof_skyline_trace_count < 48 && e && e->model &&
+		!Q_stricmp( e->model->name, "models/Props/Blandat/byggnader.mdl" ))
+	{
+		cof_skyline_trace_count++;
+		gEngfuncs.Con_Reportf( "[cof-skyline] entry ent=%d seq=%d effects=%d org=(%.1f %.1f %.1f)\n",
+			e->index, e->curstate.sequence, e->curstate.effects, e->origin[0], e->origin[1], e->origin[2] );
+	}
 	if( !FBitSet( RI.rvp.flags, RF_DRAW_WORLD ))
 	{
 		if( e->player )
@@ -3222,7 +3271,37 @@ static void R_StudioDrawModelInternal( cl_entity_t *e, int flags )
 		// select the properly method
 		if( e->player )
 			pStudioDraw->StudioDrawPlayer( flags, R_StudioGetPlayerState( e->index - 1 ));
-		else pStudioDraw->StudioDrawModel( flags );
+		else
+		{
+			const qboolean trace = cof_skyline_trace.value && cof_skyline_trace_count < 48 && e->model &&
+				!Q_stricmp( e->model->name, "models/Props/Blandat/byggnader.mdl" );
+			if( trace )
+			{
+				GLfloat color[4];
+				GLboolean depthwrite, colorwrite[4];
+				pglGetFloatv( GL_CURRENT_COLOR, color );
+				pglGetBooleanv( GL_DEPTH_WRITEMASK, &depthwrite );
+				pglGetBooleanv( GL_COLOR_WRITEMASK, colorwrite );
+				cof_skyline_trace_count++;
+				gEngfuncs.Con_Reportf( "[cof-skyline] callback-before ent=%d flags=%d mode=%d amount=%d fx=%d body=%d skin=%d blend=%.3f color=(%.3f %.3f %.3f %.3f) depthwrite=%d colorwrite=%d%d%d%d\n",
+					e->index, flags, e->curstate.rendermode, e->curstate.renderamt, e->curstate.renderfx,
+					e->curstate.body, e->curstate.skin, tr.blend, color[0], color[1], color[2], color[3],
+					depthwrite, colorwrite[0], colorwrite[1], colorwrite[2], colorwrite[3] );
+			}
+			const int result = pStudioDraw->StudioDrawModel( flags );
+			if( trace && cof_skyline_trace_count < 48 )
+			{
+				GLfloat color[4];
+				GLboolean depthwrite, colorwrite[4];
+				pglGetFloatv( GL_CURRENT_COLOR, color );
+				pglGetBooleanv( GL_DEPTH_WRITEMASK, &depthwrite );
+				pglGetBooleanv( GL_COLOR_WRITEMASK, colorwrite );
+				cof_skyline_trace_count++;
+				gEngfuncs.Con_Reportf( "[cof-skyline] callback-after ent=%d result=%d color=(%.3f %.3f %.3f %.3f) depthwrite=%d colorwrite=%d%d%d%d\n",
+					e->index, result, color[0], color[1], color[2], color[3], depthwrite,
+					colorwrite[0], colorwrite[1], colorwrite[2], colorwrite[3] );
+			}
+		}
 	}
 }
 
@@ -3315,6 +3394,117 @@ void R_RunViewmodelEvents( void )
 }
 
 /*
+====================
+Cry of Fear viewmodel field of view (cof_viewmodel_fov)
+
+There is exactly one projection matrix in this renderer, built once per frame
+in R_SetupProjectionMatrix from RI.rvp.fov_x/fov_y, so the viewmodel has always
+scaled with the world FOV: raising the world FOV pushes the weapon away from
+the camera and shrinks it.
+
+R_DrawViewModel is the last thing in the scene and already brackets its draw
+with its own glDepthRange, so a second projection can be pushed for that one
+pass and popped again. The Cry of Fear client cannot notice: measured on
+client.dll D2A04641, it never calls glViewport, its only glFrustum call is
+issued under GL_TEXTURE for projected lights, its only GL_PROJECTION work is a
+balanced push / 0..1 glOrtho / pop inside one full-screen post-process, and it
+never reads a matrix back (no glGetDoublev, no GL_PROJECTION_MATRIX query).
+RI.projectionMatrix and RI.worldviewProjectionMatrix are swapped along with the
+GL state so that pfnWorldToScreen would agree with what is on screen.
+
+The cvar is the 4:3-equivalent base value, exactly like cof_fov and like the
+game's own 90, and it goes through the same V_CalcFov / V_AdjustFov chain the
+engine uses for the world, so Hor+ behaves the same way on a widescreen.
+0 means "follow the world FOV" and leaves the pass byte-identical to stock.
+====================
+*/
+CVAR_DEFINE_AUTO( cof_viewmodel_fov, "0", FCVAR_GLCONFIG, "field of view the viewmodel alone is drawn with, as the 4:3-equivalent base value (0 = follow the world field of view, 55-90 otherwise). Only the viewmodel pass is affected; the world keeps cof_fov" );
+
+// mirrors V_CalcFov, engine\client\cl_view.c
+static float R_CoFCalcFov( float *fov_x, float width, float height )
+{
+	float	x, half_fov_y;
+
+	if( *fov_x < 1.0f || *fov_x > 179.0f )
+		*fov_x = 90.0f; // default value
+
+	x = width / tan( DEG2RAD( *fov_x ) * 0.5f );
+	half_fov_y = atan( height / x );
+
+	return RAD2DEG( half_fov_y ) * 2;
+}
+
+// mirrors V_AdjustFov with lock_x false, engine\client\cl_view.c. It returns on
+// its own for 4:3 and 5:4, so the engine's wideScreen test is not needed here
+static void R_CoFAdjustFov( float *fov_x, float *fov_y, float width, float height )
+{
+	float	x, y;
+
+	if( width * 3 == 4 * height || width * 4 == height * 5 )
+		return;
+
+	y = R_CoFCalcFov( fov_x, 640, 480 );
+	x = *fov_x;
+
+	*fov_x = R_CoFCalcFov( &y, height, width );
+	if( *fov_x < x ) *fov_x = x;
+	else *fov_y = y;
+}
+
+static float cof_viewmodel_reported;
+
+static qboolean R_CoFViewModelProjection( matrix4x4 m )
+{
+	float	fov_x, fov_y, width, height;
+	GLfloat	zNear, zFar, xMax, xMin, yMax, yMin;
+
+	if( cof_viewmodel_fov.value <= 0.0f )
+	{
+		cof_viewmodel_reported = 0.0f;
+		return false;
+	}
+
+	// the overview pass is orthographic and never draws a viewmodel anyway
+	if( FBitSet( RI.rvp.flags, RF_DRAW_OVERVIEW ))
+		return false;
+
+	width = RI.rvp.viewport[2];
+	height = RI.rvp.viewport[3];
+	if( width <= 0.0f || height <= 0.0f )
+		return false;
+
+	fov_x = bound( 55.0f, cof_viewmodel_fov.value, 90.0f );
+	fov_y = R_CoFCalcFov( &fov_x, width, height );
+
+	if( gpGlobals->wideScreen && gEngfuncs.pfnGetCvarFloat( "r_adjust_fov" ) != 0.0f )
+		R_CoFAdjustFov( &fov_x, &fov_y, width, height );
+
+	// same near/far plane as the world pass, so the depth-range hack that
+	// keeps the viewmodel out of walls still lands where it used to
+	zNear = 4.0f;
+	zFar = Q_max( 256.0f, RI.farClip );
+
+	yMax = zNear * tan( fov_y * M_PI_F / 360.0f );
+	yMin = -yMax;
+	xMax = zNear * tan( fov_x * M_PI_F / 360.0f );
+	xMin = -xMax;
+
+	if( tr.rotation & 1 )
+		Matrix4x4_CreateProjection( m, yMax, yMin, xMax, xMin, zNear, zFar );
+	else Matrix4x4_CreateProjection( m, xMax, xMin, yMax, yMin, zNear, zFar );
+
+	// developer: say what this pass is actually rendering with, once per change
+	if( fabs( fov_x - cof_viewmodel_reported ) > 0.005f )
+	{
+		cof_viewmodel_reported = fov_x;
+		gEngfuncs.Con_Reportf( "[cof-fov] viewmodel pass fov_x %.2f fov_y %.2f (cof_viewmodel_fov %g, world fov_x %.2f, viewport %.0fx%.0f)\n",
+			fov_x, fov_y, cof_viewmodel_fov.value, RI.rvp.fov_x, width, height );
+	}
+
+	return true;
+}
+
+/*
 =================
 R_DrawViewModel
 =================
@@ -3322,6 +3512,8 @@ R_DrawViewModel
 void R_DrawViewModel( void )
 {
 	cl_entity_t	*view = tr.viewent;
+	matrix4x4	vm_projection, saved_projection, saved_worldviewprojection;
+	qboolean	vm_fov;
 
 	R_GatherPlayerLight( view );
 
@@ -3348,6 +3540,21 @@ void R_DrawViewModel( void )
 	pglDepthRange( gldepthmin, gldepthmin + 0.3f * ( gldepthmax - gldepthmin ));
 	RI.currentmodel = RI.currententity->model;
 
+	// give this one pass its own projection, see R_CoFViewModelProjection
+	vm_fov = R_CoFViewModelProjection( vm_projection );
+	if( vm_fov )
+	{
+		Matrix4x4_Copy( saved_projection, RI.projectionMatrix );
+		Matrix4x4_Copy( saved_worldviewprojection, RI.worldviewProjectionMatrix );
+		Matrix4x4_Copy( RI.projectionMatrix, vm_projection );
+		Matrix4x4_Concat( RI.worldviewProjectionMatrix, RI.projectionMatrix, RI.worldviewMatrix );
+
+		pglMatrixMode( GL_PROJECTION );
+		pglPushMatrix();
+		GL_LoadMatrix( vm_projection );
+		pglMatrixMode( GL_MODELVIEW );
+	}
+
 	switch( RI.currententity->model->type )
 	{
 	case mod_alias:
@@ -3357,6 +3564,16 @@ void R_DrawViewModel( void )
 		R_StudioSetupTimings();
 		R_StudioDrawModelInternal( RI.currententity, STUDIO_RENDER );
 		break;
+	}
+
+	if( vm_fov )
+	{
+		pglMatrixMode( GL_PROJECTION );
+		pglPopMatrix();
+		pglMatrixMode( GL_MODELVIEW );
+
+		Matrix4x4_Copy( RI.projectionMatrix, saved_projection );
+		Matrix4x4_Copy( RI.worldviewProjectionMatrix, saved_worldviewprojection );
 	}
 
 	// restore depth range

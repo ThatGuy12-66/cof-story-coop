@@ -60,6 +60,8 @@ Platform_SetMousePos
 */
 void GAME_EXPORT Platform_SetMousePos( int x, int y )
 {
+	// Cry of Fear: the motion event SDL makes of this warp is not the mouse
+	CL_CoF_NoteMouseWarp( x, y );
 	SDL_WarpMouseInWindow( host.hWnd, x, y );
 }
 
@@ -286,7 +288,10 @@ void Platform_SetCursorType( VGUI_DefaultCursor type )
 		if( cursors.initialized )
 			SDL_SetCursor( cursors.cursors[type] );
 
-		SDL_ShowCursor( true );
+		// Cry of Fear: while the gamepad is the last input device the arrow
+		// the client or the menu asks for stays hidden, from this very call
+		// (cof_gamepad.c); host.mouse_visible is set as asked all the same
+		SDL_ShowCursor( CL_CoF_OSCursorRequest( type ));
 
 		// restore the last mouse position
 		if( in_visible_cursor_pos.pushed )

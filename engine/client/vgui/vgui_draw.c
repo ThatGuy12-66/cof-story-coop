@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "ref_common.h"
 #include "input.h"
 #include "platform/platform.h"
+#include "cof_language.h"
 
 #define VGUI_MAX_TEXTURES 1024
 
@@ -29,6 +30,7 @@ typedef struct vgui_reusable_texture_s
 {
 	int gl_texturenum;
 	byte hash[16];
+	int cof_hud_kind; // exact decoded Classic health/stamina image
 } vgui_reusable_texture_t;
 
 typedef struct vgui_static_s
@@ -58,6 +60,58 @@ static vgui_static_t vgui = {
 };
 static CVAR_DEFINE_AUTO( vgui_utf8, "0", FCVAR_ARCHIVE, "enable utf-8 support for vgui text" );
 static CVAR_DEFINE_AUTO( vgui_key_layout, "1", FCVAR_ARCHIVE, "translate keys sent to vgui through the keyboard layout, like GoldSrc does, so text entries type what's on the keycap" );
+
+// Cry of Fear unified UI: remembers which keys and mouse buttons the support
+// library was actually told about, so a release is only ever delivered for a
+// press it received. Gating presses alone would leak the matching release into
+// a CoF panel (measured: the 3D menu reacted to the escape release and
+// re-issued "map c_game_menu1"), and gating releases alone would leave a key
+// pressed in game stuck down inside VGUI after focus moved to the menu.
+static byte vgui_key_delivered[256];
+
+static qboolean VGui_CoF_DeliverKey( int key, int down )
+{
+	if( key < 0 || key >= (int)ARRAYSIZE( vgui_key_delivered ))
+		return !CL_CoF_UIGateActive();
+
+	if( down )
+	{
+		if( CL_CoF_UIGateActive( ))
+			return false;
+
+		vgui_key_delivered[key] = 1;
+		return true;
+	}
+
+	if( !vgui_key_delivered[key] )
+		return false;
+
+	vgui_key_delivered[key] = 0;
+	return true;
+}
+
+void VGui_CoF_ForgetKey( int key )
+{
+	if( key >= 0 && key < (int)ARRAYSIZE( vgui_key_delivered ))
+		vgui_key_delivered[key] = 0;
+}
+
+/*
+====================
+VGui_CoF_OskCall
+
+Cry of Fear on-screen keyboard (cof_osk.c): the support library's text entry
+operations, vguiapi_t::CofOskCall. 0 when it has none (an older vgui.dll, no
+text entry).
+====================
+*/
+int VGui_CoF_OskCall( int op, char *buf, int size )
+{
+	if( !vgui.initialized || !vgui.dllFuncs.CofOskCall )
+		return 0;
+
+	return vgui.dllFuncs.CofOskCall( op, buf, size );
+}
 
 static void GAME_EXPORT VGUI_DrawInit( void )
 {
@@ -131,6 +185,7 @@ static void GAME_EXPORT VGUI_UploadTexture( int id, const char *buffer, int widt
 	MD5Init( &ctx );
 	MD5Update( &ctx, buffer, width * height * 4 );
 	MD5Final( hash, &ctx );
+	vgui.textures[id].cof_hud_kind = CL_CoF_HudRemakeTexture( hash );
 
 	// it's a new texture, try to find a copy
 	if( vgui.textures[id].gl_texturenum == 0 )
@@ -218,8 +273,15 @@ static void GAME_EXPORT VGUI_DrawQuad( const vpoint_t *ul, const vpoint_t *lr )
 	float w = lr->point[0] - ul->point[0];
 	float h = lr->point[1] - ul->point[1];
 
+	// Cry of Fear in-game UI scaling: the support library hands us the client's
+	// own layout pixels, this is where they become device pixels. It is applied
+	// before SPR_AdjustSize so a hand-set hud_scale still composes with it
+	CL_CoF_UIScaleRect( &x, &y, &w, &h );
+
 	SPR_AdjustSize( &x, &y, &w, &h );
 
+	if( CL_CoF_HudRemakeVguiQuad( vgui.enable_texture ? vgui.textures[vgui.bound_texture].cof_hud_kind : 0,
+		vgui.enable_texture, x, y, w, h, vgui.color )) return;
 	if( vgui.enable_texture )
 	{
 		float s1 = ul->coord[0];
@@ -241,11 +303,67 @@ static void GAME_EXPORT VGUI_EnableTexture( qboolean enable )
 	vgui.enable_texture = enable;
 }
 
+static int GAME_EXPORT VGUI_CofUITransform( float *scale, int *layoutWide, int *layoutTall, int *screenWide, int *screenTall )
+{
+	return CL_CoF_UITransform( scale, layoutWide, layoutTall, screenWide, screenTall ) ? 1 : 0;
+}
+
+static int GAME_EXPORT VGUI_CofFontRoleLatch( char *buf, int size )
+{
+	return CL_CoF_FontRoleLatch( buf, size );
+}
+
+static int GAME_EXPORT VGUI_CofFontDesc( const char *role, cof_vgui_font_t *out )
+{
+	return CL_CoF_FontDesc( role, out ) ? 1 : 0;
+}
+
+static const unsigned char *GAME_EXPORT VGUI_CofFontFile( int semibold, int *size )
+{
+	return CL_CoF_FontFile( semibold, size );
+}
+
+/*
+================
+VGUI_CofPrint
+
+milestone 4c: the support library's developer trace, into the engine console.
+================
+*/
+static void GAME_EXPORT VGUI_CofPrint( const char *text )
+{
+	if( COM_StringEmptyOrNULL( text ))
+		return;
+
+	// Con_Printf is gated on host.allow_console, and an unlocked console is
+	// also the configuration in which the client's own VGUI layer does NOT
+	// paint (it owns key_dest, and XashPaint returns early) - so the one
+	// configuration this trace exists for is the one Con_Printf drops. Write
+	// straight to the log file when the console is locked.
+	if( host.allow_console )
+		Con_Printf( "%s", text );
+	else Sys_PrintLog( text );
+}
+
+static const char *GAME_EXPORT VGUI_CofLangString( const char *str )
+{
+	return CoF_Lang_String( str );
+}
+
+static int GAME_EXPORT VGUI_CofFontProbe( char *text, int size, char *role, int roleSize )
+{
+	return CL_CoF_FontProbe( text, size, role, roleSize );
+}
+
 static void GAME_EXPORT VGUI_SetPaintOffset( int x, int y )
 {
 	float fx = x, fy = y, fw = 0.0f, fh = 0.0f;
 
 	Vector2Set( vgui.paint_offset, x, y );
+
+	// the offset is in the same layout pixels VGUI_DrawQuad() subtracts it from,
+	// so it goes through exactly the same scale
+	CL_CoF_UIScaleRect( &fx, &fy, &fw, &fh );
 
 	SPR_AdjustSize( &fx, &fy, &fw, &fh );
 	ref.dllFuncs.R_Set2DOffset( fx, fy );
@@ -258,16 +376,27 @@ static void GAME_EXPORT *VGUI_EngineMalloc( size_t size )
 
 static qboolean GAME_EXPORT VGUI_IsInGame( void )
 {
-	return cls.state == ca_active && cls.key_dest == key_game;
+	// Cry of Fear on-screen keyboard: the support library paints nothing
+	// unless the game is "in game"; while the menu's keyboard types into a
+	// game panel, that panel must keep painting (cof_osk.c)
+	return cls.state == ca_active && ( cls.key_dest == key_game || CL_CoF_OskOverGame( ));
 }
 
 static void GAME_EXPORT VGUI_GetMousePos( int *_x, int *_y )
 {
-	float xscale = (float)refState.width / (float)clgame.scrInfo.iWidth;
-	float yscale = (float)refState.height / (float)clgame.scrInfo.iHeight;
+	// Cry of Fear in-game UI scaling: the exact inverse of the scale
+	// VGUI_DrawQuad() applies, so the cursor lands on the same layout pixel the
+	// panel under it was drawn from. The anchor half of the transform moved the
+	// panels themselves (CofUI_SolvePanel), so it needs no inverse here
+	float cof_scale = CL_CoF_UIScale();
+	float xscale = (float)refState.width / (float)clgame.scrInfo.iWidth * cof_scale;
+	float yscale = (float)refState.height / (float)clgame.scrInfo.iHeight * cof_scale;
 	int x, y;
 
-	Platform_GetMousePos( &x, &y );
+	// Cry of Fear gamepad: while the stick drives the panel cursor, FreeVGUI's
+	// per-frame poll reads that position (cof_gamepad.c)
+	if( !CL_CoF_VCursorPos( &x, &y ))
+		Platform_GetMousePos( &x, &y );
 	*_x = x / xscale;
 	*_y = y / yscale;
 }
@@ -306,6 +435,10 @@ void VGui_RegisterCvars( void )
 	Cvar_RegisterVariable( &vgui_key_layout );
 }
 
+int CL_CoF_PanelReport( unsigned int visible ); // cof_panel_pause.c
+int CL_CoF_PanelConfig( cof_vgui_panel_cfg_t *out ); // cof_panel_transparency.c
+int CL_CoF_PanelImageLatch( char *buf, int size ); // cof_panel_transparency.c
+
 static const vguiapi_t gEngfuncs =
 {
 	false, // Not initialized yet
@@ -341,6 +474,18 @@ static const vguiapi_t gEngfuncs =
 	NULL, // MouseMove
 	NULL, // TextInput
 	VGUI_SetPaintOffset,
+	CL_CoF_OskEntry, // CofOskEntry (cof_osk.c)
+	NULL, // CofOskCall, filled in by the support library
+	VGUI_CofUITransform,
+	VGUI_CofFontRoleLatch,
+	VGUI_CofFontDesc,
+	VGUI_CofFontFile,
+	VGUI_CofFontProbe,
+	VGUI_CofPrint,
+	VGUI_CofLangString,
+	CL_CoF_PanelReport,
+	CL_CoF_PanelConfig,
+	CL_CoF_PanelImageLatch,
 };
 
 qboolean VGui_LoadProgs( HINSTANCE hInstance )
@@ -404,6 +549,11 @@ void VGui_Startup( int width, int height )
 	// vgui not initialized from both support and client modules, skip
 	if( !vgui.initialized )
 		return;
+
+	// Cry of Fear in-game UI scaling: the root panel has to cover everything the
+	// anchor pass may move, which at the client's first VidInit is exactly the
+	// render size it is called with here
+	CL_CoF_UIRootSize( &width, &height );
 
 	height = Q_max( 480, height );
 
@@ -573,6 +723,10 @@ void VGui_MouseEvent( int key, int clicks )
 	if( !vgui.dllFuncs.Mouse )
 		return;
 
+	// see VGui_KeyEvent: a release is only delivered for a press VGUI received
+	if( !VGui_CoF_DeliverKey( key, clicks >= 1 ))
+		return;
+
 	switch( key )
 	{
 	case K_MOUSE1: code = MOUSE_LEFT; break;
@@ -596,6 +750,9 @@ void VGui_MWheelEvent( int y )
 	if( !vgui.dllFuncs.Mouse )
 		return;
 
+	if( CL_CoF_UIGateActive( ))
+		return;
+
 	vgui.dllFuncs.Mouse( MA_WHEEL, y );
 }
 
@@ -604,6 +761,9 @@ void VGui_KeyEvent( int key, int down )
 	enum VGUI_KeyCode code;
 
 	if( !vgui.dllFuncs.Key )
+		return;
+
+	if( !VGui_CoF_DeliverKey( key, down ))
 		return;
 
 	// VGUI wants the character printed on the keycap, not the physical key position, so text entries work on non-QWERTY layouts
@@ -625,21 +785,66 @@ void VGui_KeyEvent( int key, int down )
 
 void VGui_MouseMove( int x, int y )
 {
+	// Cry of Fear unified UI: only one cursor may be live at a time. While the
+	// engine menu or the console owns input, UI_MouseMove drives the menu cursor
+	// and the client's VGUI cursor is frozen where it was.
+	if( CL_CoF_UIGateActive( ))
+		return;
+
 	if( vgui.dllFuncs.MouseMove )
 	{
-		float xscale = (float)refState.width / (float)clgame.scrInfo.iWidth;
-		float yscale = (float)refState.height / (float)clgame.scrInfo.iHeight;
+		// same inverse as VGUI_GetMousePos() above
+		float cof_scale = CL_CoF_UIScale();
+		float xscale = (float)refState.width / (float)clgame.scrInfo.iWidth * cof_scale;
+		float yscale = (float)refState.height / (float)clgame.scrInfo.iHeight * cof_scale;
 		vgui.dllFuncs.MouseMove( x / xscale, y / yscale );
 	}
 }
 
 void VGui_Paint( void )
 {
+	// Cry of Fear unified UI: nothing from the client's VGUI1 layer may be drawn
+	// underneath the engine menu or the console. This is what keeps the CoF 3D
+	// menu overlay off the screen while mainui owns it, and what will keep the
+	// CoF HUD from bleeding through a translucent pause scrim later.
+	// The one exception is the menu's on-screen keyboard typing into one of
+	// these panels (the computer): that panel must stay visible. The same
+	// call runs the keyboard's once-a-frame work (cof_osk.c).
+	const qboolean osk_over_game = CL_CoF_OskFrame( );
+
+	if( CL_CoF_UIGateActive( ) && !osk_over_game )
+		return;
+
+	CL_CoF_HudRemakeVguiBegin();
 	if( vgui.dllFuncs.Paint )
 		vgui.dllFuncs.Paint();
 
 	// don't trust the support library to leave it clean, everything drawn afterwards is in screen space
 	VGUI_SetPaintOffset( 0, 0 );
+
+	// Cry of Fear gamepad: the ring cursor over the panels (cof_gamepad.c)
+	CL_CoF_HudRemakeBars();
+	CL_CoF_VCursorDraw( );
+}
+
+/*
+================
+VGui_CoF_PanelAction
+
+Cry of Fear gamepad (cof_gamepad.c): an action on the client's open panel
+through its own buttons (vguiapi_t::CofPanelAction, COF_VGUI_PANEL_*). 0 when
+the support library does not offer it.
+================
+*/
+int VGui_CoF_PanelAction( int action, char *info, int infoSize )
+{
+	if( info && infoSize > 0 && action != COF_VGUI_PANEL_LOCATE )
+		info[0] = 0;
+
+	if( !vgui.initialized || !vgui.dllFuncs.CofPanelAction )
+		return 0;
+
+	return vgui.dllFuncs.CofPanelAction( action, info, infoSize );
 }
 
 void VGui_UpdateInternalCursorState( VGUI_DefaultCursor cursorType )
@@ -656,6 +861,11 @@ void *GAME_EXPORT VGui_GetPanel( void )
 
 void VGui_ReportTextInput( const char *text )
 {
+	// Cry of Fear unified UI: characters typed into the console or a menu field
+	// must not also land in a CoF text entry (the computer, the phone keypad).
+	if( CL_CoF_UIGateActive( ))
+		return;
+
 	if( vgui.dllFuncs.TextInput )
 		vgui.dllFuncs.TextInput( text );
 }

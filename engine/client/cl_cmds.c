@@ -16,6 +16,20 @@ GNU General Public License for more details.
 #include "common.h"
 #include "client.h"
 
+static qboolean CL_IsSafeCoFSaveShotName( const char *name )
+{
+	if( COM_StringEmptyOrNULL( name ) || !Q_stricmp( name, "." ) || !Q_stricmp( name, ".." ))
+		return false;
+
+	for( const char *c = name; *c; c++ )
+	{
+		if( *c == '/' || *c == '\\' || *c == ':' )
+			return false;
+	}
+
+	return true;
+}
+
 /*
 ====================
 CL_PlayVideo_f
@@ -290,6 +304,13 @@ void CL_LevelShot_f( void )
 	// check for exist
 	if( cls.demoplayback && ( cls.demonum != -1 ))
 	{
+		if( COM_StringEmpty( cls.demoname ))
+		{
+			// nothing to name the levelshot after
+			cls.scrshot_action = scrshot_inactive;
+			return;
+		}
+
 		Q_snprintf( cls.shotname, sizeof( cls.shotname ),
 			"levelshots/%s_%s.bmp", cls.demoname, refState.wideScreen ? "16x9" : "4x3" );
 		Q_snprintf( filename, sizeof( filename ), "%s.dem", cls.demoname );
@@ -300,6 +321,19 @@ void CL_LevelShot_f( void )
 	}
 	else
 	{
+		// a queued levelshot can outlive the world it was queued for: a command
+		// that shuts the server down (e.g. "newgame" typed at the console while a
+		// background map is running) runs from the same command buffer, so by the
+		// time this is executed cl.worldmodel is NULL. cl.worldmodel->name is then
+		// a NULL path and FS_FileTime -> FS_FindFile -> FS_FixFileCase (dir.c:294)
+		// dereferences it. Drop the levelshot instead.
+		if( !cl.worldmodel || COM_StringEmpty( cl.worldmodel->name ) || COM_StringEmpty( clgame.mapname ))
+		{
+			Con_Reportf( "%s: no world loaded, skipping the levelshot\n", __func__ );
+			cls.scrshot_action = scrshot_inactive;
+			return;
+		}
+
 		Q_snprintf( cls.shotname, sizeof( cls.shotname ),
 			"levelshots/%s_%s.bmp", clgame.mapname, refState.wideScreen ? "16x9" : "4x3" );
 
@@ -360,7 +394,17 @@ void CL_GenericShot_f( void )
 		Q_snprintf( cls.shotname, sizeof( cls.shotname ), "gfx/env/%s", Cmd_Argv( 1 ));
 		break;
 	case scrshot_savegame:
-		Q_snprintf( cls.shotname, sizeof( cls.shotname ), DEFAULT_SAVE_DIRECTORY "%s.bmp", Cmd_Argv( 1 ));
+		if( Cvar_VariableInteger( "cof_save_root_compat" ) && GI && !Q_stricmp( GI->gamefolder, "cryoffear" ))
+		{
+			if( !CL_IsSafeCoFSaveShotName( Cmd_Argv( 1 )))
+			{
+				Con_Printf( S_ERROR "Invalid Cry of Fear saveshot name: %s\n", Cmd_Argv( 1 ));
+				return;
+			}
+
+			Q_snprintf( cls.shotname, sizeof( cls.shotname ), "../SAVE/%s.bmp", Cmd_Argv( 1 ));
+		}
+		else Q_snprintf( cls.shotname, sizeof( cls.shotname ), DEFAULT_SAVE_DIRECTORY "%s.bmp", Cmd_Argv( 1 ));
 		break;
 	case scrshot_mapshot:
 		Q_snprintf( cls.shotname, sizeof( cls.shotname ), "overviews/%s.bmp", clgame.mapname );

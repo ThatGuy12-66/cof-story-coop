@@ -17,6 +17,9 @@ GNU General Public License for more details.
 #include "gl_local.h"
 #include "const.h"
 
+#define COF_TRIAPI_STAGE_CHECK( name ) \
+	do { if( cof_gl_trace.value ) GL_CheckForErrorsNamed_( name, __FILE__, __LINE__ ); } while( 0 )
+
 static struct
 {
 	int		renderMode;		// override kRenderMode from TriAPI
@@ -69,6 +72,8 @@ void TriRenderMode( int mode )
 		pglDepthMask( GL_FALSE );
 		break;
 	}
+
+	COF_TRIAPI_STAGE_CHECK( "triapi_render_mode" );
 }
 
 /*
@@ -122,6 +127,7 @@ draw triangle sequence
 void TriEnd( void )
 {
 	pglEnd( );
+	COF_TRIAPI_STAGE_CHECK( "triapi_end" );
 }
 
 /*
@@ -252,6 +258,7 @@ int TriSpriteTexture( model_t *pSpriteModel, int frame )
 		gl_texturenum = tr.defaultTexture;
 
 	GL_Bind( XASH_TEXTURE0, gl_texturenum );
+	COF_TRIAPI_STAGE_CHECK( "triapi_sprite_texture" );
 
 	return 1;
 }
@@ -305,6 +312,7 @@ void TriFog( float flFogColor[3], float flStart, float flEnd, int bOn )
 	pglFogf( GL_FOG_START, RI.fogStart );
 	pglFogf( GL_FOG_END, RI.fogEnd );
 	pglHint( GL_FOG_HINT, GL_NICEST );
+	COF_TRIAPI_STAGE_CHECK( "triapi_fog" );
 }
 
 /*
@@ -317,6 +325,7 @@ very strange export
 void TriGetMatrix( const int pname, float *matrix )
 {
 	pglGetFloatv( pname, matrix );
+	COF_TRIAPI_STAGE_CHECK( "triapi_get_matrix" );
 }
 
 /*
@@ -352,6 +361,7 @@ void TriCullFace( TRICULLSTYLE mode )
 	}
 
 	GL_Cull( glMode );
+	COF_TRIAPI_STAGE_CHECK( "triapi_cull_face" );
 }
 
 /*
@@ -366,5 +376,7 @@ void TriBrightness( float brightness )
 	float b = ds.triRGBA[2] * ds.triRGBA[3] * brightness;
 
 	_TriColor4f( r, g, b, 1.0f );
+	COF_TRIAPI_STAGE_CHECK( "triapi_brightness" );
 }
 
+#undef COF_TRIAPI_STAGE_CHECK

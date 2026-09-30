@@ -20,6 +20,158 @@ GNU General Public License for more details.
 #include "render_api.h"	// decallist_t
 #include "sound.h"		// S_GetDynamicSounds
 #include "ref_common.h" // decals
+#include "sv_cof_story.h"
+#include "sv_cof_party.h"
+#include "sv_story_transition_state.h"
+
+// Reserved outside the SDK's low 16 landmark bits and high four entity bits.
+// Only our session snapshots use it; destination world loads skip old inventory.
+#define FENTTABLE_COF_INVENTORY 0x08000000
+#define COF_STORY_MAP_HISTORY 256
+static struct
+{
+	cof_transition_state_t tickets;
+	char source[MAX_QPATH], destination[MAX_QPATH], landmark[MAX_QPATH];
+	vec3_t source_origin, destination_origin;
+	int *inventory_owner; // source entity id -> captured player's one-based slot
+	int entity_count, connection;
+	qboolean incoming;
+} cof_transition;
+static char cof_story_maps[COF_STORY_MAP_HISTORY][MAX_QPATH];
+static int cof_story_map_count;
+
+static qboolean CoF_StoryMapSaved( const char *map )
+{
+	for( int i = 0; i < cof_story_map_count; i++ )
+		if( !Q_stricmp( map, cof_story_maps[i] )) return true;
+	return false;
+}
+
+qboolean SV_CoF_TransitionActive( void )
+{
+	return cof_transition.tickets.active;
+}
+
+void SV_CoF_TransitionReset( qboolean clear_history )
+{
+	if( cof_transition.inventory_owner ) Mem_Free( cof_transition.inventory_owner );
+	memset( &cof_transition, 0, sizeof( cof_transition ));
+	CoF_TransitionReset( &cof_transition.tickets );
+	if( clear_history ) cof_story_map_count = 0;
+}
+
+static void CoF_TransitionResume( void )
+{
+	if( !SV_CoF_TransitionActive() || CoF_TransitionPending( &cof_transition.tickets )) return;
+	sv.loadgame = false;
+	sv.paused = false;
+	MSG_BeginServerCmd( &sv.reliable_datagram, svc_setpause );
+	MSG_WriteOneBit( &sv.reliable_datagram, false );
+	Con_Printf( "[cof-story-transition] phase=ready generation=%u map=%s\n", cof_transition.tickets.epoch, sv.name );
+	SV_CoF_TransitionReset( false );
+}
+
+qboolean SV_CoF_TransitionRestoredClient( const sv_client_t *cl )
+{
+	return CoF_TransitionNeedsSignon( &cof_transition.tickets, svs.spawncount, (int)(cl - svs.clients), cl->userid );
+}
+
+void SV_CoF_TransitionClientReady( sv_client_t *cl )
+{
+	int slot = (int)(cl - svs.clients);
+	if( CoF_TransitionReady( &cof_transition.tickets, svs.spawncount, slot, cl->userid ))
+	{
+		Con_Printf( "[cof-story-transition] phase=signon generation=%u slot=%d userid=%d map=%s\n", svs.spawncount, slot + 1, cl->userid, sv.name );
+		CoF_TransitionResume();
+	}
+}
+
+void SV_CoF_TransitionClientDrop( sv_client_t *cl )
+{
+	if( CoF_TransitionDrop( &cof_transition.tickets, (int)(cl - svs.clients), cl->userid )) CoF_TransitionResume();
+}
+
+static qboolean CoF_LiveLandmark( const char *name, vec3_t origin )
+{
+	int count = 0;
+	for( int i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		if( !SV_IsValidEdict( ent ) || Q_strcmp( SV_GetString( ent->v.classname ), "info_landmark" ) || Q_strcmp( SV_GetString( ent->v.targetname ), name )) continue;
+		VectorCopy( ent->v.origin, origin );
+		count++;
+	}
+	return count == 1;
+}
+
+qboolean SV_CoF_TransitionValidate( const char *map, const char *landmark )
+{
+	vec3_t origin;
+	if( COM_StringEmptyOrNULL( landmark ) || !CoF_LiveLandmark( landmark, origin ) || !SV_CoF_MapLandmark( map, landmark, origin ))
+	{
+		Con_Printf( S_ERROR "[cof-story-transition] rejected: unique info_landmark '%s' required in both %s and %s\n", landmark ? landmark : "", sv.name, map );
+		return false;
+	}
+	if( CoF_TransitionPending( &cof_transition.tickets ))
+	{
+		Con_Printf( S_WARN "[cof-story-transition] rejected: waiting for party sign-on\n" );
+		return false;
+	}
+	return true;
+}
+
+static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark )
+{
+	if( !SV_CoF_TransitionValidate( map, landmark )) return false;
+	if( !CoF_StoryMapSaved( sv.name ) && cof_story_map_count >= COF_STORY_MAP_HISTORY )
+	{
+		Con_Printf( S_ERROR "[cof-story-transition] rejected: session map history full\n" );
+		return false;
+	}
+	SV_CoF_TransitionReset( false );
+	CoF_TransitionBegin( &cof_transition.tickets, svs.spawncount + 1 );
+	Q_strncpy( cof_transition.source, sv.name, sizeof( cof_transition.source ));
+	Q_strncpy( cof_transition.destination, map, sizeof( cof_transition.destination ));
+	Q_strncpy( cof_transition.landmark, landmark, sizeof( cof_transition.landmark ));
+	CoF_LiveLandmark( landmark, cof_transition.source_origin );
+	SV_CoF_MapLandmark( map, landmark, cof_transition.destination_origin );
+	cof_transition.entity_count = svgame.numEntities;
+	cof_transition.inventory_owner = Mem_Calloc( host.mempool, sizeof( int ) * svgame.numEntities );
+	for( int i = 0; i < svs.maxclients; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict )) continue;
+		if( !CoF_TransitionCapture( &cof_transition.tickets, i, cl->userid ))
+		{
+			SV_CoF_TransitionReset( false );
+			return false;
+		}
+		Con_Printf( "[cof-story-transition] phase=capture generation=%u slot=%d userid=%d source=%s destination=%s landmark=%s\n", cof_transition.tickets.epoch, i + 1, cl->userid, sv.name, map, landmark );
+	}
+	if( !CoF_TransitionPending( &cof_transition.tickets ))
+	{
+		SV_CoF_TransitionReset( false );
+		return false;
+	}
+	// Inventory entities may have an owner or be attached to their player.
+	// Never follow arbitrary owner links: inter_door uses owner as activator.
+	for( int i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		const char *classname;
+		if( !SV_IsValidEdict( ent )) continue;
+		classname = SV_GetString( ent->v.classname );
+		if( Q_strncmp( classname, "weapon_", 7 ) && Q_strncmp( classname, "item_", 5 )) continue;
+		cof_transition.inventory_owner[i] = CoF_TransitionInventoryOwner( &cof_transition.tickets,
+			SV_IsValidEdict( ent->v.owner ) ? NUM_FOR_EDICT( ent->v.owner ) : 0,
+			SV_IsValidEdict( ent->v.aiment ) ? NUM_FOR_EDICT( ent->v.aiment ) : 0 );
+	}
+	{
+		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, map, landmark, exits, ARRAYSIZE( exits ));
+		SV_CoF_PartyTransitionCapture( cof_transition.tickets.epoch, cof_transition.source_origin, exits, exit_count );
+	}
+	return true;
+}
 
 /*
 ==============================================================================
@@ -35,6 +187,194 @@ half-life implementation of saverestore system
 
 #define SAVE_HEAPSIZE		0x400000				// reserve 4Mb for now
 #define SAVE_HASHSTRINGS		0xFFF				// 4095 unique strings
+
+/*
+ * Cry of Fear's stock installation keeps SAVE at the runtime root while
+ * Xash game-directory I/O is rooted at cryoffear/.  Keep the compatibility
+ * path opt-in and translate only save paths; generic filesystem searches
+ * remain unchanged.  Reads use the static root search path (SAVE/...), while
+ * writes/deletes/renames use ../SAVE/... relative to the active game path.
+ */
+static qboolean cofMenuSaveTracking;
+static qboolean cofMenuSaveIOFailed;
+
+static qboolean SV_CoFRootSaveCompat( void )
+{
+	return Cvar_VariableInteger( "cof_save_root_compat" ) && GI &&
+		!Q_stricmp( GI->gamefolder, "cryoffear" );
+}
+
+static qboolean SV_IsSavePath( const char *path )
+{
+	const char *relative;
+
+	if( !path )
+		return false;
+
+	if( !Q_strnicmp( path, DEFAULT_SAVE_DIRECTORY, 5 ) || !Q_strnicmp( path, "SAVE/", 5 ))
+		relative = path + 5;
+	else return false;
+
+	/* Direct-path writes must remain confined to the runtime-root SAVE tree. */
+	return relative[0] && !Q_strchr( relative, '\\' ) && !COM_CheckNastyPath( relative );
+}
+
+static const char *SV_SaveCompatPath( const char *path, qboolean write, char *buffer, size_t size )
+{
+	if( !SV_CoFRootSaveCompat( ) || !SV_IsSavePath( path ))
+		return path;
+
+	if( write )
+		Q_snprintf( buffer, size, "../SAVE/%s", path + 5 );
+	else
+		Q_snprintf( buffer, size, "SAVE/%s", path + 5 );
+
+	return buffer;
+}
+
+static qboolean SV_SaveWriteMode( const char *mode )
+{
+	return mode && ( mode[0] == 'w' || mode[0] == 'a' || mode[0] == 'e' || Q_strchr( mode, '+' ));
+}
+
+static file_t *SV_SaveFSOpen( const char *path, const char *mode, qboolean gamedironly )
+{
+	char mapped[MAX_SYSPATH];
+	const qboolean write = SV_SaveWriteMode( mode );
+	const qboolean translated = SV_CoFRootSaveCompat( ) && SV_IsSavePath( path );
+	const char *name = SV_SaveCompatPath( path, write, mapped, sizeof( mapped ));
+	file_t *file;
+
+	if( write && translated )
+		FS_AllowDirectPaths( true );
+	file = FS_Open( name, mode, write ? gamedironly : (name != path ? false : gamedironly) );
+	if( cofMenuSaveTracking && write && !file ) cofMenuSaveIOFailed = true;
+	if( write && translated )
+		FS_AllowDirectPaths( false );
+	return file;
+}
+
+static int SV_SaveFSFileExists( const char *path, int gamedironly )
+{
+	char mapped[MAX_SYSPATH];
+	const char *name = SV_SaveCompatPath( path, false, mapped, sizeof( mapped ));
+
+	return FS_FileExists( name, name != path ? false : gamedironly );
+}
+
+static int SV_SaveFSFileTime( const char *path, qboolean gamedironly )
+{
+	char mapped[MAX_SYSPATH];
+	const char *name = SV_SaveCompatPath( path, false, mapped, sizeof( mapped ));
+
+	return FS_FileTime( name, name != path ? false : gamedironly );
+}
+
+static search_t *SV_SaveFSSearch( const char *pattern, int caseinsensitive, int gamedironly )
+{
+	char mapped[MAX_SYSPATH];
+	const char *name = SV_SaveCompatPath( pattern, false, mapped, sizeof( mapped ));
+
+	return FS_Search( name, caseinsensitive, name != pattern ? false : gamedironly );
+}
+
+static qboolean SV_SaveFSDelete( const char *path )
+{
+	char mapped[MAX_SYSPATH];
+	const qboolean translated = SV_CoFRootSaveCompat( ) && SV_IsSavePath( path );
+	const char *name = SV_SaveCompatPath( path, true, mapped, sizeof( mapped ));
+	qboolean result;
+
+	if( translated )
+		FS_AllowDirectPaths( true );
+	result = FS_Delete( name );
+	if( translated )
+		FS_AllowDirectPaths( false );
+	return result;
+}
+
+static qboolean SV_SaveFSRename( const char *oldpath, const char *newpath )
+{
+	char oldmapped[MAX_SYSPATH], newmapped[MAX_SYSPATH];
+	const qboolean translated = SV_CoFRootSaveCompat( ) && SV_IsSavePath( oldpath ) && SV_IsSavePath( newpath );
+	const char *oldname = SV_SaveCompatPath( oldpath, true, oldmapped, sizeof( oldmapped ));
+	const char *newname = SV_SaveCompatPath( newpath, true, newmapped, sizeof( newmapped ));
+	qboolean result;
+
+	if( translated )
+		FS_AllowDirectPaths( true );
+	result = FS_Rename( oldname, newname );
+	if( translated )
+		FS_AllowDirectPaths( false );
+	return result;
+}
+
+qboolean SV_CoFSaveDelete( const char *path )
+{
+	return SV_SaveFSDelete( path );
+}
+
+/* Native save writers do not consistently propagate I/O errors. Track every
+ * write/copy/close during the optional menu transaction before discarding its
+ * recovery copy, including intermediate HL files written by SaveGameState. */
+static fs_offset_t SV_SaveFSWrite( file_t *file, const void *data, size_t size )
+{
+	fs_offset_t written = g_fsapi.Write( file, data, size );
+	if( cofMenuSaveTracking && written != (fs_offset_t)size ) cofMenuSaveIOFailed = true;
+	return written;
+}
+
+static int SV_SaveFSClose( file_t *file )
+{
+	int result = g_fsapi.Close( file );
+	if( cofMenuSaveTracking && result != 0 ) cofMenuSaveIOFailed = true;
+	return result;
+}
+
+static qboolean SV_SaveFSFileCopy( file_t *output, file_t *input, int size )
+{
+	char buffer[8192];
+	if( !cofMenuSaveTracking )
+		return output && input && size >= 0 && g_fsapi.FileCopy( output, input, size );
+	if( !output || !input || size < 0 )
+	{
+		cofMenuSaveIOFailed = true;
+		return false;
+	}
+	/* The filesystem's generic FileCopy also ignores short writes. */
+	while( size > 0 )
+	{
+		int chunk = Q_min( size, (int)sizeof( buffer ));
+		fs_offset_t count = g_fsapi.Read( input, buffer, chunk );
+		if( count <= 0 || count > chunk || g_fsapi.Write( output, buffer, count ) != count )
+		{
+			cofMenuSaveIOFailed = true;
+			return false;
+		}
+		size -= (int)count;
+	}
+	return true;
+}
+
+/* Keep the save implementation's existing calls scoped to this adapter. */
+#undef FS_Open
+#undef FS_FileExists
+#undef FS_FileTime
+#undef FS_Search
+#undef FS_Delete
+#undef FS_Rename
+#define FS_Open       SV_SaveFSOpen
+#define FS_FileExists SV_SaveFSFileExists
+#define FS_FileTime   SV_SaveFSFileTime
+#define FS_Search     SV_SaveFSSearch
+#define FS_Delete     SV_SaveFSDelete
+#define FS_Rename     SV_SaveFSRename
+#undef FS_Write
+#undef FS_Close
+#undef FS_FileCopy
+#define FS_Write      SV_SaveFSWrite
+#define FS_Close      SV_SaveFSClose
+#define FS_FileCopy   SV_SaveFSFileCopy
 
 // savedata headers
 typedef struct
@@ -647,6 +987,12 @@ static void DirectoryCopy( const char *pPath, file_t *pFile )
 	{
 		char	szName[MAX_OSPATH];
 		file_t	*pCopy = FS_Open( t->filenames[i], "rb", true );
+		if( !pCopy )
+		{
+			if( cofMenuSaveTracking ) cofMenuSaveIOFailed = true;
+			Con_Printf( S_ERROR "could not read save component %s\n", t->filenames[i] );
+			continue;
+		}
 		int	fileSize = FS_FileLength( pCopy );
 
 		memset( szName, 0, sizeof( szName )); // clearing the string to prevent garbage in output file
@@ -1212,7 +1558,7 @@ static qboolean SaveClientState( SAVERESTOREDATA *pSaveData, const char *level, 
 #endif // XASH_DEDICATED
 
 	// save viewentity to allow camera works after save\restore
-	if( SV_IsValidEdict( cl->pViewEntity ) && cl->pViewEntity != cl->edict )
+	if( svs.maxclients == 1 && SV_IsValidEdict( cl->pViewEntity ) && cl->pViewEntity != cl->edict )
 		header.viewentity = NUM_FOR_EDICT( cl->pViewEntity );
 
 	header.wateralpha = sv_wateralpha.value;
@@ -1370,7 +1716,7 @@ static void LoadClientState( SAVERESTOREDATA *pSaveData, const char *level, qboo
 	if( !adjacent )
 	{
 		// restore camera view here
-		edict_t	*pent = pSaveData->pTable[bound( 0, (word)header.viewentity, pSaveData->tableCount )].pent;
+		edict_t	*pent = pSaveData->pTable[bound( 0, (word)header.viewentity, pSaveData->tableCount - 1 )].pent;
 
 		if( !COM_StringEmpty( header.introTrack ))
 		{
@@ -1380,7 +1726,7 @@ static void LoadClientState( SAVERESTOREDATA *pSaveData, const char *level, qboo
 		}
 
 		// don't go camera across the levels
-		if( header.viewentity > svs.maxclients && !changelevel )
+		if( svs.maxclients == 1 && header.viewentity > svs.maxclients && !changelevel )
 			cl->pViewEntity = pent;
 
 		// restore some client cvars
@@ -1403,7 +1749,7 @@ static void CreateEntitiesInRestoreList( SAVERESTOREDATA *pSaveData, int levelMa
 	edict_t		*pent;
 
 	// create entity list
-	if( svgame.physFuncs.pfnCreateEntitiesInRestoreList != NULL )
+	if( svgame.physFuncs.pfnCreateEntitiesInRestoreList != NULL && !SV_CoF_TransitionActive() )
 	{
 		svgame.physFuncs.pfnCreateEntitiesInRestoreList( pSaveData, levelMask, create_world );
 	}
@@ -1413,6 +1759,27 @@ static void CreateEntitiesInRestoreList( SAVERESTOREDATA *pSaveData, int levelMa
 		{
 			pTable = &pSaveData->pTable[i];
 			pent = NULL;
+
+			if( SV_CoF_TransitionActive() )
+			{
+				qboolean player = FBitSet( pTable->flags, FENTTABLE_PLAYER ) || (pTable->id > 0 && pTable->id <= svs.maxclients);
+				// A hub snapshot owns its world, never another connection's player
+				// or the inventory that player carried away on a previous visit.
+				if( CoF_TransitionSkipSavedEntity( create_world, cof_transition.incoming, player, FBitSet( pTable->flags, FENTTABLE_COF_INVENTORY )))
+				{
+					pTable->pent = NULL;
+					continue;
+				}
+				if( player )
+				{
+					int slot = pTable->id - 1;
+					if( slot < 0 || slot >= svs.maxclients || !CoF_TransitionMatches( &cof_transition.tickets, svs.spawncount, slot, svs.clients[slot].userid ))
+					{
+						pTable->pent = NULL;
+						continue;
+					}
+				}
+			}
 
 			if( pTable->classname && pTable->size && ( !FBitSet( pTable->flags, FENTTABLE_REMOVED ) || !create_world ))
 			{
@@ -1483,6 +1850,29 @@ static SAVERESTOREDATA *SaveGameState( int changelevel )
 	// Build the adjacent map list
 	svgame.dllFuncs.pfnParmsChangeLevel();
 
+	if( SV_CoF_TransitionActive() )
+	{
+		int connection;
+		for( connection = 0; connection < pSaveData->connectionCount; connection++ )
+			if( !Q_stricmp( pSaveData->levelList[connection].mapName, cof_transition.destination ) && !Q_strcmp( pSaveData->levelList[connection].landmarkName, cof_transition.landmark )) break;
+		if( connection == pSaveData->connectionCount )
+		{
+			// A one-way map need not publish a reciprocal transition. Reserve a
+			// real landmark entry rather than falling back to a destructive load.
+			if( connection >= MAX_LEVEL_CONNECTIONS )
+			{
+				Con_Printf( S_ERROR "[cof-story-transition] rejected: no free landmark connection\n" );
+				SaveFinish( pSaveData );
+				return NULL;
+			}
+			pSaveData->connectionCount++;
+			Q_strncpy( pSaveData->levelList[connection].mapName, cof_transition.destination, sizeof( pSaveData->levelList[connection].mapName ));
+			Q_strncpy( pSaveData->levelList[connection].landmarkName, cof_transition.landmark, sizeof( pSaveData->levelList[connection].landmarkName ));
+		}
+		cof_transition.connection = connection;
+		VectorCopy( cof_transition.source_origin, pSaveData->levelList[connection].vecLandmarkOrigin );
+	}
+
 	// Write the global data
 	header.skillLevel = (int)skill.value;	// this is created from an int even though it's a float
 	header.entityCount = pSaveData->tableCount;
@@ -1545,6 +1935,37 @@ static SAVERESTOREDATA *SaveGameState( int changelevel )
 
 		if( FBitSet( pTable->pent->v.flags, FL_CLIENT ))
 			SetBits( pTable->flags, FENTTABLE_PLAYER );
+
+		if( SV_CoF_TransitionActive() && i < cof_transition.entity_count )
+		{
+			qboolean player = i > 0 && i <= svs.maxclients && CoF_TransitionMatches( &cof_transition.tickets, cof_transition.tickets.epoch, i - 1, svs.clients[i - 1].userid );
+			if( player || cof_transition.inventory_owner[i] )
+			{
+				if( !pTable->size )
+				{
+					Con_Printf( S_ERROR "[cof-story-transition] rejected: entity %d (%s) has no saved state\n", i, SV_GetString( pTable->pent->v.classname ));
+					SaveFinish( pSaveData );
+					return NULL;
+				}
+				SetBits( pTable->flags, BIT( cof_transition.connection ));
+				if( cof_transition.inventory_owner[i] ) SetBits( pTable->flags, FENTTABLE_COF_INVENTORY );
+			}
+		}
+	}
+
+	// total data what includes:
+	if( SV_CoF_TransitionActive() )
+	{
+		for( i = 0; i < svs.maxclients; i++ )
+		{
+			if( cof_transition.tickets.players[i].phase != COF_T_CAPTURED ) continue;
+			if( i + 1 >= pSaveData->tableCount || !pSaveData->pTable[i + 1].size || !FBitSet( pSaveData->pTable[i + 1].flags, FENTTABLE_PLAYER ))
+			{
+				Con_Printf( S_ERROR "[cof-story-transition] rejected: player %d not serialized\n", i + 1 );
+				SaveFinish( pSaveData );
+				return NULL;
+			}
+		}
 	}
 
 	// total data what includes:
@@ -1880,11 +2301,13 @@ static int CreateEntityTransitionList( SAVERESTOREDATA *pSaveData, int levelMask
 
 				if( svgame.dllFuncs.pfnRestore( pent, pSaveData, 0 ) < 0 )
 				{
+					if( SV_CoF_TransitionActive() && cof_transition.incoming && FBitSet( pTable->flags, FENTTABLE_PLAYER|FENTTABLE_COF_INVENTORY ))
+						Host_Error( "Story transition failed to restore player/inventory entity %d; source snapshot retained\n", pTable->id );
 					SetBits( pent->v.flags, FL_KILLME );
 				}
 				else
 				{
-					if( !FBitSet( pTable->flags, FENTTABLE_PLAYER ) && EntityInSolid( pent ))
+					if( !FBitSet( pTable->flags, FENTTABLE_PLAYER|FENTTABLE_COF_INVENTORY ) && EntityInSolid( pent ))
 					{
 						// this can happen during normal processing - PVS is just a guess,
 						// some map areas won't exist in the new map
@@ -1893,6 +2316,12 @@ static int CreateEntityTransitionList( SAVERESTOREDATA *pSaveData, int levelMask
 					}
 					else
 					{
+						if( SV_CoF_TransitionActive() && cof_transition.incoming && FBitSet( pTable->flags, FENTTABLE_PLAYER ))
+						{
+							int slot = pTable->id - 1;
+							if( slot >= 0 && slot < svs.maxclients && CoF_TransitionRestored( &cof_transition.tickets, svs.spawncount, slot, svs.clients[slot].userid ))
+								Con_Printf( "[cof-story-transition] phase=restore generation=%u slot=%d userid=%d map=%s origin=%.3f,%.3f,%.3f\n", svs.spawncount, slot + 1, svs.clients[slot].userid, sv.name, pent->v.origin[0], pent->v.origin[1], pent->v.origin[2] );
+						}
 						pTable->flags = FENTTABLE_REMOVED;
 						movedCount++;
 					}
@@ -1930,29 +2359,40 @@ static void LoadAdjacentEnts( const char *pOldLevel, const char *pLandmarkName )
 	// build the adjacent map list
 	svgame.dllFuncs.pfnParmsChangeLevel();
 
-	for( i = 0; i < currentLevelData.connectionCount; i++ )
+	for( i = 0; i < currentLevelData.connectionCount + (SV_CoF_TransitionActive() ? 1 : 0); i++ )
 	{
+		const char *adjacent;
+		if( i == currentLevelData.connectionCount )
+		{
+			if( foundprevious ) break;
+			adjacent = pOldLevel; // validated one-way edge: still bring the party
+		}
+		else adjacent = currentLevelData.levelList[i].mapName;
 		// make sure the previous level is in the connection list so we can
 		// bring over the player.
-		if( !Q_stricmp( currentLevelData.levelList[i].mapName, pOldLevel ))
+		if( !Q_stricmp( adjacent, pOldLevel ))
 			foundprevious = true;
 
 		for( test = 0; test < i; test++ )
 		{
 			// only do maps once
-			if( !Q_stricmp( currentLevelData.levelList[i].mapName, currentLevelData.levelList[test].mapName ))
+			if( !Q_stricmp( adjacent, currentLevelData.levelList[test].mapName ))
 				break;
 		}
 
 		// map was already in the list
 		if( test < i ) continue;
+		if( SV_CoF_TransitionActive() && !CoF_StoryMapSaved( adjacent )) continue;
+		cof_transition.incoming = SV_CoF_TransitionActive() && !Q_stricmp( adjacent, pOldLevel );
 
-		pSaveData = LoadSaveData( currentLevelData.levelList[i].mapName );
+		pSaveData = LoadSaveData( adjacent );
+		if( !pSaveData && cof_transition.incoming )
+			Host_Error( "Story transition cannot read source snapshot for %s\n", pOldLevel );
 
 		if( pSaveData )
 		{
 			ParseSaveTables( pSaveData, &header, false );
-			EntityPatchRead( pSaveData, currentLevelData.levelList[i].mapName );
+			EntityPatchRead( pSaveData, adjacent );
 
 			pSaveData->time = sv.time; // - header.time;
 			pSaveData->fUseLandmark = true;
@@ -1960,11 +2400,20 @@ static void LoadAdjacentEnts( const char *pOldLevel, const char *pLandmarkName )
 			index = -1;
 
 			// calculate landmark offset
-			LandmarkOrigin( &currentLevelData, landmarkOrigin, pLandmarkName );
-			LandmarkOrigin( pSaveData, pSaveData->vecLandmarkOffset, pLandmarkName );
+			if( cof_transition.incoming )
+			{
+				VectorCopy( cof_transition.destination_origin, landmarkOrigin );
+				VectorCopy( cof_transition.source_origin, pSaveData->vecLandmarkOffset );
+				SetBits( flags, BIT( cof_transition.connection ));
+			}
+			else
+			{
+				LandmarkOrigin( &currentLevelData, landmarkOrigin, pLandmarkName );
+				LandmarkOrigin( pSaveData, pSaveData->vecLandmarkOffset, pLandmarkName );
+			}
 			VectorSubtract( landmarkOrigin, pSaveData->vecLandmarkOffset, pSaveData->vecLandmarkOffset );
 
-			if( !Q_stricmp( currentLevelData.levelList[i].mapName, pOldLevel ))
+			if( !Q_stricmp( adjacent, pOldLevel ))
 				SetBits( flags, FENTTABLE_PLAYER );
 
 			while( 1 )
@@ -1979,23 +2428,30 @@ static void LoadAdjacentEnts( const char *pOldLevel, const char *pLandmarkName )
 			// if ents were moved, rewrite entity table to save file
 			if( movedCount )
 			{
-				if( !EntityPatchWrite( pSaveData, currentLevelData.levelList[i].mapName ))
+				if( !EntityPatchWrite( pSaveData, adjacent ))
 				{
 					SaveFinish( pSaveData );
 
 					Host_Error( "Level transition ERROR\nCan't write entity table for %s while transitioning to %s from %s\n",
-						currentLevelData.levelList[i].mapName, pOldLevel, sv.name );
+						adjacent, pOldLevel, sv.name );
 				}
 			}
 
 			// move the decals from another level
-			LoadClientState( pSaveData, currentLevelData.levelList[i].mapName, true, true );
+			LoadClientState( pSaveData, adjacent, true, true );
 
 			SaveFinish( pSaveData );
 		}
 	}
 
 	svgame.globals->pSaveData = NULL;
+	cof_transition.incoming = false;
+	if( SV_CoF_TransitionActive() )
+		for( i = 0; i < svs.maxclients; i++ )
+			if( cof_transition.tickets.players[i].phase == COF_T_CAPTURED )
+				Host_Error( "Story transition did not restore player slot %d userid %d; source snapshot retained\n", i + 1, cof_transition.tickets.players[i].userid );
+	if( SV_CoF_TransitionActive() )
+		SV_CoF_PartyTransitionArrive( cof_transition.tickets.epoch );
 
 	if( !foundprevious )
 		Host_Error( "Level transition ERROR\nCan't find connection to %s from %s\n", pOldLevel, sv.name );
@@ -2010,6 +2466,7 @@ loading entities from the savegame
 */
 int SV_LoadGameState( char const *level )
 {
+	SV_CoF_TransitionReset( true );
 	return LoadGameState( level, false );
 }
 
@@ -2022,6 +2479,7 @@ clear current game state
 */
 void SV_ClearGameState( void )
 {
+	SV_CoF_TransitionReset( true );
 	ClearSaveDir();
 
 	if( svgame.dllFuncs.pfnResetGlobalState != NULL )
@@ -2040,6 +2498,7 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	char		_startspot[MAX_QPATH];
 	char		*startspot = NULL;
 	SAVERESTOREDATA	*pSaveData = NULL;
+	qboolean story = loadfromsavedgame && SV_CoF_StoryCoopEnabled();
 
 	if( sv.state != ss_active )
 	{
@@ -2056,6 +2515,12 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	Q_strncpy( level, mapname, sizeof( level ));
 	Q_strncpy( oldlevel, sv.name, sizeof( oldlevel ));
 
+	if( story )
+	{
+		if( !CoF_BeginStoryTransition( level, startspot )) return;
+	}
+	else SV_CoF_TransitionReset( true );
+
 	if( loadfromsavedgame )
 	{
 		// smooth transition in-progress
@@ -2070,6 +2535,32 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 			// do not use Host_Error, so the game progress won't be lost
 			Sys_Warn( "Can't write save file for performaing change level; check permissions" );
 			svgame.globals->changelevel = false;
+			SV_CoF_TransitionReset( false );
+			return;
+		}
+		if( story && !CoF_StoryMapSaved( oldlevel ))
+			Q_strncpy( cof_story_maps[cof_story_map_count++], oldlevel, MAX_QPATH );
+	}
+
+	if( story )
+	{
+		// Verify both inputs before destroying the current world. A known hub
+		// with an unreadable snapshot must not silently respawn as a fresh map.
+		SAVERESTOREDATA *check = LoadSaveData( oldlevel );
+		qboolean readable = check != NULL;
+		SaveFinish( check );
+		if( readable && CoF_StoryMapSaved( level ))
+		{
+			check = LoadSaveData( level );
+			readable = check != NULL;
+			SaveFinish( check );
+		}
+		if( !readable )
+		{
+			Con_Printf( S_ERROR "[cof-story-transition] rejected: required snapshot unreadable; current world preserved\n" );
+			SaveFinish( pSaveData );
+			svgame.globals->changelevel = false;
+			SV_CoF_TransitionReset( false );
 			return;
 		}
 	}
@@ -2078,19 +2569,38 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	SV_FinalMessage( "", true );
 	SV_DeactivateServer ();
 
+	// Deactivation released every client's delta frames; normally the client's
+	// fresh connect reallocates them. cof_story_changelevel keeps the connection
+	// instead, and SV_ReadPackets ignores a client without frames: its "new"
+	// would be acknowledged but never run (black loading screen, no sign-on).
+	for( int i = 0; story && i < svs.maxclients; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state >= cs_connected && !FBitSet( cl->flags, FCL_FAKECLIENT ) && !cl->frames )
+			cl->frames = Mem_Calloc( host.mempool, sizeof( client_frame_t ) * SV_UPDATE_BACKUP );
+	}
+
 	if( !SV_SpawnServer( level, startspot, background ))
-		return;	// ???
+	{
+		SaveFinish( pSaveData );
+		SV_CoF_TransitionReset( false );
+		return;
+	}
 
 	if( loadfromsavedgame )
 	{
 		// finish saving gamestate
 		SaveFinish( pSaveData );
 
-		if( !LoadGameState( level, true ))
-			SV_SpawnEntities( level );
+		if( story && CoF_StoryMapSaved( level ))
+		{
+			if( !LoadGameState( level, true )) Host_Error( "Story hub snapshot became unreadable: %s\n", level );
+		}
+		else if( story || !LoadGameState( level, true )) SV_SpawnEntities( level );
+		svgame.globals->time = sv.time;
 		LoadAdjacentEnts( oldlevel, startspot );
 
-		if( sv_newunit.value )
+		if( sv_newunit.value && !story )
 			ClearSaveDir();
 		SV_ActivateServer( false );
 	}
@@ -2114,23 +2624,43 @@ qboolean SV_LoadGame( const char *pPath )
 	GAME_HEADER	gameHeader;
 	file_t		*pFile;
 	uint		flags;
+	qboolean	cofsave = ( pPath && !Q_strnicmp( pPath, DEFAULT_SAVE_DIRECTORY "cofsave", 12 ) &&
+		pPath[12] >= '1' && pPath[12] <= '5' );
+
+	if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" ))
+		Con_Reportf( "[cof-trace] SV_LoadGame entry: %s\n", pPath );
 
 	if( Host_IsDedicated() )
+	{
+		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" )) Con_Reportf( "[cof-trace] load rejected: dedicated\n" );
 		return false;
+	}
 
 	if( UI_CreditsActive( ))
+	{
+		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" )) Con_Reportf( "[cof-trace] load rejected: credits\n" );
 		return false;
+	}
 
 	if( COM_StringEmptyOrNULL( pPath ))
+	{
+		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" )) Con_Reportf( "[cof-trace] load rejected: empty path\n" );
 		return false;
+	}
 
 	// silently ignore if missed
 	if( !FS_FileExists( pPath, true ))
+	{
+		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" )) Con_Reportf( "[cof-trace] load rejected: file missing\n" );
 		return false;
+	}
 
 	// initialize game if needs
 	if( !SV_InitGame( false ))
+	{
+		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" )) Con_Reportf( "[cof-trace] load rejected: SV_InitGame failed\n" );
 		return false;
+	}
 
 	svs.initialized = true;
 	pFile = FS_Open( pPath, "rb", true );
@@ -2165,10 +2695,14 @@ qboolean SV_LoadGame( const char *pPath )
 
 	if( !validload )
 	{
+		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" ))
+			Con_Reportf( "[cof-trace] load rejected: invalid header, extraction, or map\n" );
 		Con_Printf( S_ERROR "Couldn't load %s\n", pPath );
 		return false;
 	}
 
+	if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" ))
+		Con_Reportf( "[cof-trace] load accepted: map=%s\n", gameHeader.mapName );
 	Con_Printf( "Loading game from %s...\n", pPath );
 	Cvar_FullSet( "maxplayers", "1", FCVAR_LATCH );
 	Cvar_SetValue( "deathmatch", 0 );
@@ -2223,6 +2757,149 @@ qboolean SV_SaveGame( const char *pName )
 
 	SaveBuildComment( comment, sizeof( comment ));
 	return SaveGameSlot( savename, comment );
+}
+
+/* Menu saves share CoF's five slots, but never enter the tape-use path.
+ * The quick save (cof_quicksave) is one more file written the same way, so the
+ * transaction is shared: name = the .sav base name, label = its display label
+ * in cryoffear/SAVE, title = the label text before " - <timestamp>", what =
+ * how the messages name it. */
+static qboolean SV_CoFSaveTransaction( const char *name, const char *label, const char *title, const char *what )
+{
+	char save[MAX_QPATH], saveBackup[MAX_QPATH];
+	char labelTemp[MAX_QPATH], labelBackup[MAX_QPATH];
+	char stamp[64], text[160];
+	qboolean hadSave, hadLabel, saved = false, labelMoved = false;
+	file_t *file;
+	time_t now;
+	struct tm *local;
+	fs_offset_t written;
+	int length, closeResult;
+
+	/* The original client does not always register game_menu in Xash. */
+	if( !Q_stricmp( sv.name, "c_game_menu1" ) || Cvar_VariableInteger( "game_menu" ))
+	{
+		Con_Printf( "Can't save the Cry of Fear menu map.\n" );
+		return false;
+	}
+	if( !IsValidSave() )
+		return false;
+
+	Q_snprintf( save, sizeof( save ), "save/%s.sav", name );
+	Q_snprintf( saveBackup, sizeof( saveBackup ), "%s.coffix-backup", save );
+	Q_snprintf( labelTemp, sizeof( labelTemp ), "%s.coffix-temp", label );
+	Q_snprintf( labelBackup, sizeof( labelBackup ), "%s.coffix-backup", label );
+	/* Raw filesystem calls intentionally keep metadata in cryoffear/SAVE. */
+	if( SV_SaveFSFileExists( saveBackup, true ) || g_fsapi.FileExists( labelTemp, true ) ||
+		g_fsapi.FileExists( labelBackup, true ))
+	{
+		Con_Printf( S_ERROR "%s has a pending recovery file; resolve it before saving again.\n", what );
+		return false;
+	}
+
+	now = time( NULL );
+	local = localtime( &now );
+	if( !local || !strftime( stamp, sizeof( stamp ), "%a %b %d %H:%M:%S %Y", local ))
+		return false;
+	Q_snprintf( text, sizeof( text ), "%s - %s", title, stamp );
+	length = Q_strlen( text );
+	file = g_fsapi.Open( labelTemp, "wb", true );
+	if( !file )
+	{
+		Con_Printf( S_ERROR "could not prepare save label %s\n", labelTemp );
+		return false;
+	}
+	written = g_fsapi.Write( file, text, length );
+	closeResult = g_fsapi.Close( file );
+	if( written != length || closeResult != 0 )
+	{
+		g_fsapi.Delete( labelTemp );
+		Con_Printf( S_ERROR "could not write save label %s\n", labelTemp );
+		return false;
+	}
+
+	hadSave = SV_SaveFSFileExists( save, true );
+	hadLabel = g_fsapi.FileExists( label, true );
+	if( hadSave && !SV_SaveFSRename( save, saveBackup ))
+	{
+		g_fsapi.Delete( labelTemp );
+		Con_Printf( S_ERROR "could not preserve existing save %s\n", save );
+		return false;
+	}
+	cofMenuSaveIOFailed = false;
+	cofMenuSaveTracking = true;
+	saved = SV_SaveGame( name );
+	cofMenuSaveTracking = false;
+	if( !saved || cofMenuSaveIOFailed ) goto rollback;
+	if( hadLabel )
+	{
+		if( !g_fsapi.Rename( label, labelBackup )) goto rollback;
+		labelMoved = true;
+	}
+	if( !g_fsapi.Rename( labelTemp, label )) goto rollback;
+	if( hadSave && !SV_SaveFSDelete( saveBackup ))
+		Con_Printf( S_WARN "saved, but retained recovery file %s\n", saveBackup );
+	if( labelMoved && !g_fsapi.Delete( labelBackup ))
+		Con_Printf( S_WARN "saved, but retained recovery file %s\n", labelBackup );
+	return true;
+
+rollback:
+	g_fsapi.Delete( labelTemp );
+	if( labelMoved && !g_fsapi.Rename( labelBackup, label ))
+		Con_Printf( S_ERROR "restore save label manually from %s\n", labelBackup );
+	if( saved || SV_SaveFSFileExists( save, true )) SV_SaveFSDelete( save );
+	if( hadSave && !SV_SaveFSRename( saveBackup, save ))
+		Con_Printf( S_ERROR "restore save manually from %s\n", saveBackup );
+	Con_Printf( S_ERROR "CoF %s failed; recovery of the previous files was attempted.\n", what );
+	return false;
+}
+
+qboolean SV_CoFMenuSave( int slot )
+{
+	char name[32], label[MAX_QPATH], title[96], what[32];
+
+	if( !SV_CoFRootSaveCompat() || !Cvar_VariableInteger( "cof_pause_menu_saves" ) || slot < 1 || slot > 5 )
+	{
+		Con_Printf( "Cry of Fear menu saving is disabled or the slot is invalid.\n" );
+		return false;
+	}
+
+	Q_snprintf( name, sizeof( name ), "cofsave%d", slot );
+	Q_snprintf( label, sizeof( label ), "SAVE/saveinfo%d.cof", slot );
+	Q_snprintf( title, sizeof( title ), "Pause Save (%.64s)", sv.name );
+	Q_snprintf( what, sizeof( what ), "menu save to slot %d", slot );
+	if( !SV_CoFSaveTransaction( name, label, title, what ))
+		return false;
+
+	Con_Printf( "CoF menu save committed to slot %d.\n", slot );
+	return true;
+}
+
+/* The quick save: SAVE/cofquick.sav (+ its .bmp) at the runtime root and the
+ * label cryoffear/SAVE/saveinfoquick.cof "Quick save (<map>) - <timestamp>".
+ * Whether a quick save may happen now (the option, single player, in play, no
+ * menu or panel) is decided by the caller, engine/client/cof_quicksave.c. */
+qboolean SV_CoFQuickSave( void )
+{
+	char title[96];
+
+	if( !SV_CoFRootSaveCompat( ))
+	{
+		Con_Printf( "Quick saves need the Cry of Fear root SAVE folder (cof_save_root_compat 1).\n" );
+		return false;
+	}
+
+	Q_snprintf( title, sizeof( title ), "Quick save (%.64s)", sv.name );
+	if( !SV_CoFSaveTransaction( COF_QUICKSAVE_NAME, "SAVE/saveinfoquick.cof", title, "quick save" ))
+		return false;
+
+	Con_Reportf( "CoF quick save committed (%s).\n", sv.name );
+	return true;
+}
+
+qboolean SV_CoFQuickSaveExists( void )
+{
+	return SV_CoFRootSaveCompat( ) && SV_SaveFSFileExists( DEFAULT_SAVE_DIRECTORY COF_QUICKSAVE_NAME ".sav", true );
 }
 
 static int SV_CompareFileTime( int ft1, int ft2 )
@@ -2293,7 +2970,8 @@ int GAME_EXPORT SV_GetSaveComment( const char *savename, char *comment )
 	string	mapName, description;
 	file_t	*f;
 
-	if(( f = FS_Open( savename, "rb", true )) == NULL )
+	/* Route comments through the existing CoF root-save read adapter. */
+	if(( f = SV_SaveFSOpen( savename, "rb", true )) == NULL )
 	{
 		// just not exist - clear comment
 		comment[0] = '\0';

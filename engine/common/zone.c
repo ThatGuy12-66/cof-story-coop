@@ -611,6 +611,44 @@ qboolean Mem_IsAllocatedExt( poolhandle_t poolptr, void *data )
 	return Mem_CheckAlloc( pool, data );
 }
 
+/*
+========================
+Mem_AllocatedSize
+
+Size of the live allocation that starts at data in poolptr, 0 when data is not
+the start of one. Walks the pool's chains like Mem_IsAllocatedExt.
+========================
+*/
+size_t Mem_AllocatedSize( poolhandle_t poolptr, void *data )
+{
+	mempool_t *pool;
+
+	if( !poolptr || !data )
+		return 0;
+
+	pool = Mem_FindPool( poolptr );
+	if( !pool )
+		return 0;
+
+	memheader_t *target_big = (memheader_t *)((byte *)data - sizeof( memheader_t ));
+
+	for( memheader_t *header = pool->chain; header; header = header->next )
+	{
+		if( header == target_big )
+			return header->size;
+	}
+
+	memheader_small_t *target_small = (memheader_small_t *)((byte *)data - sizeof( memheader_small_t ));
+
+	for( memheader_small_t *header = pool->chain_small; header; header = header->next )
+	{
+		if( header == target_small )
+			return header->size;
+	}
+
+	return 0;
+}
+
 void _Mem_Check( const char *filename, int fileline )
 {
 	for( size_t i = 0; i < poolcount; i++ )

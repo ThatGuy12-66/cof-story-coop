@@ -339,7 +339,11 @@ static int S_MixNormalChannelsToRoombuffer( portable_samplepair_t *dst, int end 
 			{
 				// play, playvol
 			}
-			else if(( cls.key_dest == key_menu || cl.paused ) && !FBitSet( ch->flags, FL_CHAN_LOCAL_SOUND ) && sp )
+			else if(( cls.key_dest == key_menu || cl.paused ) && !FBitSet( ch->flags, FL_CHAN_LOCAL_SOUND ) && sp
+				// Cry of Fear death page (cof_ui_death_keep_running): the world
+				// keeps running behind GAME OVER, so it has to keep sounding
+				// too - ambience, rain, a chainsaw that was already running.
+				&& !CL_CoF_DeathWorldLive( ))
 			{
 				// play only local sounds, keep pause for other
 				continue;
