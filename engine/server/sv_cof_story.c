@@ -10,6 +10,7 @@
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_share.h"
 #if XASH_WIN32
 #include <windows.h>
 #endif
@@ -176,6 +177,7 @@ void SV_CoF_StoryInit( void )
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
 	SV_CoF_RetailInit();
+	SV_CoF_ShareInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -230,12 +232,15 @@ void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
 
 void SV_CoF_StoryFrame( void )
 {
-	if( SV_CoF_StoryCoopEnabled() && sv.state == ss_active ) SV_CoF_PartyFrame();
+	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
+	SV_CoF_PartyFrame();
+	SV_CoF_ShareFrame();
 }
 
 void SV_CoF_StoryShutdown( void )
 {
 	SV_CoF_PartyShutdown();
+	SV_CoF_ShareReset();
 	CoF_StoryCloseGate();
 	SV_CoF_ClearValidation();
 }

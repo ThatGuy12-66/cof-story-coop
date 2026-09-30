@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "ref_common.h" // decals
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
+#include "sv_cof_share.h"
 #include "sv_story_transition_state.h"
 
 // Reserved outside the SDK's low 16 landmark bits and high four entity bits.
@@ -57,7 +58,13 @@ void SV_CoF_TransitionReset( qboolean clear_history )
 	if( cof_transition.inventory_owner ) Mem_Free( cof_transition.inventory_owner );
 	memset( &cof_transition, 0, sizeof( cof_transition ));
 	CoF_TransitionReset( &cof_transition.tickets );
-	if( clear_history ) cof_story_map_count = 0;
+	if( clear_history )
+	{
+		// A new session (map, save load, non-story changelevel, shutdown):
+		// nobody should be handed the previous party's items.
+		cof_story_map_count = 0;
+		SV_CoF_ShareReset();
+	}
 }
 
 static void CoF_TransitionResume( void )

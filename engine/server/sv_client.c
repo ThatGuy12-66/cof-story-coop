@@ -21,6 +21,7 @@ GNU General Public License for more details.
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
+#include "sv_cof_share.h"
 
 // challenges are valid for two consecutive windows of this size (max lifetime ~10s).
 #define CHALLENGE_WINDOW_SECONDS 5
@@ -3160,8 +3161,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 				return;
 		}
 
-		// custom client commands
+		// custom client commands; story co-op attributes their inventory changes
+		SV_CoF_ShareCommandBegin( cl );
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
+		SV_CoF_ShareCommandEnd( cl );
 		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
 			Con_Reportf( "[cof-trace] hl ClientCommand returned for cofload %s\n", cofload_slot );
 
