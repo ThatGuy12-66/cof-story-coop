@@ -702,6 +702,7 @@ void SV_CoF_TransitionReset( qboolean clear_history );
 qboolean SV_CoF_TransitionValidate( const char *map, const char *landmark );
 qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origin );
 int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max );
+qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable );
 
 //
 // sv_pmove.c

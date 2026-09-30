@@ -2919,6 +2919,36 @@ static void GAME_EXPORT pfnWriteString( const char *src )
 
 /*
 =============
+SV_CoF_SendUserMessage
+
+Cry of Fear story co-op: send one of the game DLL's registered user messages,
+found by name, to one player - the same calls the DLL itself makes.
+=============
+*/
+qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable )
+{
+	int i, j;
+
+	if( !SV_IsValidEdict( to ) || !name || size < 0 || ( size && !payload ) || svgame.msg_started )
+		return false;
+
+	for( i = 1; i < MAX_USER_MESSAGES && svgame.msg[i].name[0]; i++ )
+	{
+		if( Q_strcmp( svgame.msg[i].name, name ))
+			continue;
+		if( svgame.msg[i].size != -1 && svgame.msg[i].size != size )
+			return false;
+		pfnMessageBegin( reliable ? MSG_ONE : MSG_ONE_UNRELIABLE, svgame.msg[i].number, NULL, to );
+		for( j = 0; j < size; j++ )
+			pfnWriteByte( payload[j] );
+		pfnMessageEnd();
+		return true;
+	}
+	return false;
+}
+
+/*
+=============
 pfnWriteEntity
 
 =============

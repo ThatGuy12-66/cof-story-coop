@@ -9,6 +9,7 @@
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
+#include "sv_cof_retail.h"
 #if XASH_WIN32
 #include <windows.h>
 #endif
@@ -174,6 +175,7 @@ void SV_CoF_StoryInit( void )
 {
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
+	SV_CoF_RetailInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
