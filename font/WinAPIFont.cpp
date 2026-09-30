@@ -13,7 +13,10 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 */
 
-#if defined _WIN32 && defined(MAINUI_USE_CUSTOM_FONT_RENDER) && !defined(MAINUI_USE_STB)
+// Built even when stb_truetype is the primary backend: CFontBuilder::Create
+// falls back to this one when a shipped TTF is missing, so the menu can never
+// drop to the bitmap font.
+#if defined _WIN32 && defined(MAINUI_USE_CUSTOM_FONT_RENDER)
 #include <stdarg.h>
 #include <malloc.h>
 

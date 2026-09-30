@@ -57,6 +57,7 @@ public:
 	bool MouseMove( int x, int y ) override;
 	bool MoveView( int delta );
 	bool MoveCursor( int delta );
+	void SkipSectionHeaders( int dir );
 	int GetCurrentIndex() { return iCurItem; }
 	void SetCurrentIndex( int idx );
 	int GetSortingColumn( void ) { return m_iSortingColumn; }

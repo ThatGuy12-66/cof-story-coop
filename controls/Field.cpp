@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "Field.h"
 #include "Utils.h"
 #include "utflib.h"
+#include "CoFOsk.h"
 
 CMenuField::CMenuField() : BaseClass()
 {
@@ -54,6 +55,13 @@ CMenuField::Init
 */
 void CMenuField::VidInit( void )
 {
+	if( UI_ThemeActive( ))
+	{
+		font = uiStatic.hThemeBody;
+		charSize = THEME_BODY_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	BaseClass::VidInit();
 
 	iCursor = strlen( szBuffer );
@@ -78,6 +86,8 @@ void CMenuField::_Event( int ev )
 	case QM_GOTFOCUS:
 		EngFuncs::SetTextInputRect( m_scPos.x, m_scPos.y, m_scSize.w, m_scSize.h );
 		UI_EnableTextInput( true );
+		// Cry of Fear: the on-screen keyboard for a pad player (menus/CoFOsk.cpp)
+		UI_CoFOsk_FieldFocus( this );
 		break;
 	case QM_IMRESIZED:
 	{
@@ -141,6 +151,10 @@ CMenuField::Key
 bool CMenuField::KeyDown( int key )
 {
 	bool handled = false;
+
+	// Cry of Fear: A on a field opens the on-screen keyboard (menus/CoFOsk.cpp)
+	if( UI_CoFOsk_FieldKey( this, key ))
+		return true;
 
 	// clipboard paste
 	if( UI::Key::IsInsert( key ) && EngFuncs::KEY_IsDown( K_SHIFT ))
@@ -374,7 +388,8 @@ void CMenuField::Draw( void )
 
 	textflags |= ETF_NOSIZELIMIT;
 
-	if( szStatusText && iFlags & QMF_NOTIFY )
+	// in theme mode the framework draws one hint line in the theme font
+	if( szStatusText && iFlags & QMF_NOTIFY && !UI_ThemeActive( ))
 	{
 		int	x;
 
@@ -462,8 +477,23 @@ void CMenuField::Draw( void )
 		UI_DrawRectangle( newPos, m_scSize, uiInputFgColor );
 	}
 
-	textHeight = y - (m_scChSize * 1.5f);
-	UI_DrawString( font, m_scPos.x, textHeight, m_scSize.w, m_scChSize, szName, uiColorHelp, m_scChSize, QM_LEFT, textflags | ETF_FORCECOL );
+	if( UI_ThemeActive( ))
+	{
+		const int labelH = (int)( THEME_LABEL_TALL * uiStatic.scaleY );
+
+		textHeight = y - (int)( THEME_LABEL_TALL * 1.5f * uiStatic.scaleY );
+		UI_DrawString( uiStatic.hThemeLabel, m_scPos.x, textHeight, m_scSize.w, labelH,
+			szName, THEME_TEXT_DIM, labelH, QM_LEFT, ETF_FORCECOL | ETF_NOSIZELIMIT );
+	}
+	else
+	{
+		textHeight = y - (m_scChSize * 1.5f);
+		UI_DrawString( font, m_scPos.x, textHeight, m_scSize.w, m_scChSize, szName, uiColorHelp, m_scChSize, QM_LEFT, textflags | ETF_FORCECOL );
+	}
+
+	// the label above is menu text; what follows is what the player typed,
+	// which the language pack's string table must never replace
+	CUILangHold langHold;
 
 	if( iFlags & QMF_GRAYED )
 	{

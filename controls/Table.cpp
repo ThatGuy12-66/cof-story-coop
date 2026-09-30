@@ -45,6 +45,13 @@ CMenuTable::CMenuTable() : BaseClass(),
 
 void CMenuTable::VidInit()
 {
+	if( UI_ThemeActive( ))
+	{
+		font = uiStatic.hThemeBody;
+		charSize = THEME_BODY_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	BaseClass::VidInit();
 
 	iBackgroundColor.SetDefault( uiColorBlack );
@@ -202,24 +209,57 @@ bool CMenuTable::MoveView(int delta )
 
 bool CMenuTable::MoveCursor(int delta)
 {
+	const int step = delta < 0 ? -1 : 1;
+
 	iCurItem += delta;
+
+	// step over section captions: they are boundaries, not rows
+	while( iCurItem >= 0 && iCurItem < m_pModel->GetRows() &&
+		m_pModel->IsLineSectionHeader( iCurItem ))
+	{
+		iCurItem += step;
+	}
 
 	if( iCurItem < 0 )
 	{
 		iCurItem = 0;
+		SkipSectionHeaders( 1 );
 		return false;
 	}
 	else if( iCurItem > m_pModel->GetRows() - 1 )
 	{
 		iCurItem = m_pModel->GetRows() - 1;
+		SkipSectionHeaders( -1 );
 		return false;
 	}
 	return true;
 }
 
+/*
+=================
+CMenuTable::SkipSectionHeaders
+
+Move the cursor off a section caption in the given direction, without running
+off either end of the list.
+=================
+*/
+void CMenuTable::SkipSectionHeaders( int dir )
+{
+	const int rows = m_pModel->GetRows();
+
+	while( iCurItem >= 0 && iCurItem < rows && m_pModel->IsLineSectionHeader( iCurItem ))
+		iCurItem += dir;
+
+	iCurItem = bound( 0, iCurItem, rows > 0 ? rows - 1 : 0 );
+}
+
 void CMenuTable::SetCurrentIndex( int idx )
 {
 	iCurItem = bound( 0, idx, m_pModel->GetRows() );
+
+	// never land on a section caption
+	if( m_pModel->GetRows() > 0 && m_pModel->IsLineSectionHeader( iCurItem ))
+		SkipSectionHeaders( 1 );
 
 	if( iCurItem < iTopItem )
 		iTopItem = iCurItem;
@@ -282,7 +322,7 @@ bool CMenuTable::KeyUp( int key )
 					int offsety = uiStatic.cursorY - starty;
 					int newCur = iTopItem + offsety / m_scChSize;
 
-					if( newCur < m_pModel->GetRows() )
+					if( newCur < m_pModel->GetRows() && !m_pModel->IsLineSectionHeader( newCur ))
 					{
 						if( newCur == iCurItem )
 						{
@@ -375,9 +415,11 @@ bool CMenuTable::KeyDown( int key )
 		sound = MoveCursor( -1 ) ? uiStatic.sounds[SND_MOVE] : uiStatic.sounds[SND_BUZZ];
 	else if( key == K_MWHEELDOWN )
 		sound = MoveCursor( 1 ) ? uiStatic.sounds[SND_MOVE] : uiStatic.sounds[SND_BUZZ];
-	else if( UI::Key::IsPageUp( key ))
+	// the pad's triggers page a list too (LTRIGGER / RTRIGGER; LB/RB are
+	// taken by the tabs of a tabbed window, see controls/Framework.cpp)
+	else if( UI::Key::IsPageUp( key ) || key == K_JOY1 )
 		sound = MoveCursor( -2 ) ? uiStatic.sounds[SND_MOVE] : uiStatic.sounds[SND_BUZZ];
-	else if( UI::Key::IsPageDown( key ))
+	else if( UI::Key::IsPageDown( key ) || key == K_JOY2 )
 		sound = MoveCursor( 2 ) ? uiStatic.sounds[SND_MOVE] : uiStatic.sounds[SND_BUZZ];
 	else if( UI::Key::IsHome( key ))
 	{
@@ -517,6 +559,11 @@ void CMenuTable::DrawLine( Point p, int line, uint textColor, bool forceCol, uin
 
 		textflags |= iFlags & QMF_DROPSHADOW ? ETF_SHADOW : 0;
 
+		// ^N colour codes live inside the cell text itself (Cry of Fear's own
+		// gfx/shell/kb_act.lst is full of them); the theme wants one row colour
+		if( forceCol )
+			textflags |= ETF_FORCECOL;
+
 		if( columns[i].fStaticWidth )
 			sz.w = columns[i].flWidth * uiStatic.scaleX;
 		else
@@ -605,7 +652,11 @@ void CMenuTable::DrawLine( Point p, int line, uint textColor, bool forceCol, uin
 void CMenuTable::Draw()
 {
 	int i, y;
-	int selColor = PackRGB( 80, 56, 24 );
+	// the WON selection and hover colours were hardcoded here and unreachable
+	// from anywhere; the theme owns them now
+	const bool theme = UI_ThemeActive();
+	int selColor = theme ? THEME_SELECT_FILL : PackRGB( 80, 56, 24 );
+	int hoverColor = theme ? THEME_HOVER_FILL : 0x80383838;
 	int upFocus, downFocus, scrollbarFocus;
 
 	// HACKHACK: recalc iNumRows, to be not greater than iNumItems
@@ -685,7 +736,7 @@ void CMenuTable::Draw()
 
 	// draw the arrows base
 	UI_FillRect( upArrow.x, upArrow.y + arrow.h,
-		arrow.w, downArrow.y - upArrow.y - arrow.h, uiInputFgColor );
+		arrow.w, downArrow.y - upArrow.y - arrow.h, theme ? THEME_INPUT_BG : uiInputFgColor );
 
 	// ADAMIX
 	if( iScrollBarSliding )
@@ -696,7 +747,27 @@ void CMenuTable::Draw()
 
 	// ADAMIX END
 	// draw the arrows
-	if( iFlags & QMF_GRAYED )
+	if( theme )
+	{
+		// gfx/shell/uparrowd and friends are artwork this game does not ship
+		const bool grayed = FBitSet( iFlags, QMF_GRAYED ) != 0;
+		const int inset = arrow.w / 3;
+		Size tri( arrow.w - inset * 2, arrow.h - inset * 2 );
+
+		scrollbarFocus = UI_CursorInRect( sbarPos, sbarSize ) || iScrollBarSliding;
+
+		UI_FillRect( sbarPos, sbarSize, grayed ? THEME_DISABLED :
+			( scrollbarFocus ? THEME_ACCENT : THEME_INPUT_BORDER ));
+
+		upFocus = !grayed && UI_CursorInRect( upArrow, arrow );
+		downFocus = !grayed && UI_CursorInRect( downArrow, arrow );
+
+		UI_ThemeDrawTriangle( Point( upArrow.x + inset, upArrow.y + inset ), tri, 2,
+			grayed ? THEME_DISABLED : ( upFocus ? THEME_ACCENT : THEME_TEXT ));
+		UI_ThemeDrawTriangle( Point( downArrow.x + inset, downArrow.y + inset ), tri, 3,
+			grayed ? THEME_DISABLED : ( downFocus ? THEME_ACCENT : THEME_TEXT ));
+	}
+	else if( iFlags & QMF_GRAYED )
 	{
 		UI_DrawPic( upArrow, arrow, uiColorDkGrey, szUpArrow );
 		UI_DrawPic( downArrow, arrow, uiColorDkGrey, szDownArrow );
@@ -747,8 +818,32 @@ void CMenuTable::Draw()
 	for( i = iTopItem; i < m_pModel->GetRows() && i < iNumRows + iTopItem; i++, y += m_scChSize )
 	{
 		int color = colorBase; // predict state
-		bool forceCol = false;
+		// the theme owns the row colour: ^N colour codes inside a model's text
+		// (Cry of Fear's own gfx/shell/kb_act.lst is full of them) would
+		// otherwise paint the list in WON amber and cyan
+		bool forceCol = theme;
 		int fillColor = 0;
+
+		// a section boundary, not a row: a small uppercase caption with a
+		// hairline under it instead of the list file's row of '=' characters
+		if( theme && m_pModel->IsLineSectionHeader( i ))
+		{
+			const int capH = (int)( THEME_LABEL_TALL * uiStatic.scaleY );
+			const char *caption = m_pModel->GetCellText( i, 0 );
+
+			if( caption && caption[0] )
+			{
+				UI_DrawString( uiStatic.hThemeLabel,
+					Point( boxPos.x + (int)( 4 * uiStatic.scaleX ), y + ( m_scChSize - capH ) / 2 ),
+					Size( boxSize.w - (int)( 8 * uiStatic.scaleX ), capH ),
+					caption, THEME_TEXT_DIM, capH, QM_LEFT,
+					ETF_FORCECOL | ETF_NO_WRAP | ETF_NOSIZELIMIT );
+			}
+
+			UI_ThemeSeparator( boxPos.x, y + m_scChSize - UI_ThemeHairline(),
+				boxSize.w, THEME_SEPARATOR );
+			continue;
+		}
 
 		if( iFlags & QMF_GRAYED )
 		{
@@ -768,7 +863,7 @@ void CMenuTable::Draw()
 			}
 			else if( i == iHighlight )
 			{
-				fillColor = 0x80383838;
+				fillColor = hoverColor;
 			}
 		}
 

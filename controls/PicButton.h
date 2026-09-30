@@ -36,6 +36,7 @@ public:
 	CMenuPicButton();
 	bool KeyUp( int key ) override;
 	bool KeyDown( int key ) override;
+	void VidInit( void ) override;
 	void Draw( void ) override;
 	bool HotKey( int key ) override;
 
@@ -44,6 +45,18 @@ public:
 
 	bool bEnableTransitions;
 	bool bPulse;
+
+	// How the Source-style theme draws this button (Theme.h). Ignored when
+	// ui_theme is 0, which keeps the WON two-pass Gaussian glow.
+	enum EThemeStyle
+	{
+		THEME_PLAIN = 0, // bare left-aligned text: the main and pause menu list
+		THEME_ROW,       // full-width selectable row inside a panel
+		THEME_BOX        // a button in the panel's bottom-right row
+	};
+
+	EThemeStyle eThemeStyle;
+	bool bThemeSelected; // draws as the current choice: accent text + fill
 private:
 	bool bRollOver;
 
@@ -51,6 +64,7 @@ private:
 	void _Event( int ev ) override;
 
 	void DrawButton( int r, int g, int b, int a, wrect_t *rects, int state );
+	void DrawTheme( int state );
 
 	HIMAGE hPic;
 	int hotkey;

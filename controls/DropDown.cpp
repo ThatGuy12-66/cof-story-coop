@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "BaseMenu.h"
 #include "DropDown.h"
+#include "SelectionPopup.h"
 
 CMenuDropDown::CMenuDropDown() : BaseClass()
 {
@@ -31,12 +32,24 @@ CMenuDropDown::CMenuDropDown() : BaseClass()
 
 	bDropUp = false;
 
+	m_isOpen = false;
 	m_iState = 0;
 	m_szNames.Purge();
 }
 
 void CMenuDropDown::VidInit()
 {
+	if( UI_ThemeActive( ))
+	{
+		iBackgroundColor.SetDefault( THEME_INPUT_BG );
+		iFgTextColor.SetDefault( THEME_TEXT_HI );
+		iBgTextColor.SetDefault( THEME_TEXT );
+		colorFocus.SetDefault( THEME_HOVER_FILL );
+		font = uiStatic.hThemeBody;
+		charSize = THEME_BODY_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	iBackgroundColor.SetDefault( uiColorBlack );
 	iFgTextColor.SetDefault( uiInputFgColor );
 	iBgTextColor.SetDefault( uiPromptTextColor );
@@ -56,6 +69,12 @@ void CMenuDropDown::VidInit()
 		m_ArrowOpened.Load(UI_DOWNARROWFOCUS);
 	}
 	m_ArrowSize = EngFuncs::PIC_Size( m_ArrowClosed );
+
+	// gfx/shell arrow artwork is not shipped by this game, and PIC_Size of a
+	// missing image is the engine's fallback texture - big enough to eat the
+	// whole control. The theme draws a triangle in a square gutter instead.
+	if( UI_ThemeActive( ))
+		m_ArrowSize = Size( m_scItemSize.h, m_scItemSize.h );
 }
 
 int CMenuDropDown::IsNewStateByMouseClick()
@@ -81,11 +100,19 @@ int CMenuDropDown::IsNewStateByMouseClick()
 
 bool CMenuDropDown::KeyDown( int key )
 {
+    if(UI_CoFSelectionLists())return !(iFlags&(QMF_GRAYED|QMF_INACTIVE)) && (UI::Key::IsEnter(key)||UI::Key::IsLeftMouse(key));
 	return false;
 }
 
 bool CMenuDropDown::KeyUp( int key )
 {
+    if(UI_CoFSelectionLists())
+    {
+        if(!(iFlags&(QMF_GRAYED|QMF_INACTIVE)) && (UI::Key::IsEnter(key) ||
+            (UI::Key::IsLeftMouse(key)&&UI_CursorInRect(m_scPos,m_scSize))))
+        { UI_CoFOpenSelection(this,GetCount(),m_iState,SelectionText,SelectionCommit);return true; }
+        return false;
+    }
 	bool ret = false;
 	int state = m_iState;
 
@@ -154,6 +181,8 @@ void CMenuDropDown::SetMenuOpen( bool isOpen )
 
 void CMenuDropDown::Draw()
 {
+    if(UI_CoFSelectionLists())
+    { UI_CoFDrawSelection(this,m_szNames.IsValidIndex(m_iState)?m_szNames[m_iState]:"");return; }
 	uint textflags = ETF_NO_WRAP;
 	uint borderColor = uiInputFgColor;
 
@@ -168,7 +197,8 @@ void CMenuDropDown::Draw()
 			pt.y += m_scItemSize.h;
 
 		// all other items
-		UI_FillRect( pt.x, pt.y, m_scItemSize.w, m_scSize.h - m_scItemSize.h, 0xff000000 );
+		UI_FillRect( pt.x, pt.y, m_scItemSize.w, m_scSize.h - m_scItemSize.h,
+			UI_ThemeActive() ? THEME_PANEL : 0xff000000 );
 		for( int i = 0; i < m_szNames.Count(); i++ )
 		{
 			uint textColor = iBgTextColor;
@@ -208,11 +238,25 @@ void CMenuDropDown::Draw()
 
 	// arrow background
 	uint arrowX = selectedPos.x + selectedSize.w;
-	UI_FillRect( arrowX, selectedPos.y, m_ArrowSize.w, selectedSize.h, uiInputFgColor );
+	UI_FillRect( arrowX, selectedPos.y, m_ArrowSize.w, selectedSize.h,
+		UI_ThemeActive() ? selectedBgColor : uiInputFgColor );
 	// arrow
-	CImage &arrow = m_isOpen ? m_ArrowOpened : m_ArrowClosed;
-	Point arrowPoint( arrowX, selectedPos.y + (selectedSize.h - m_ArrowSize.h)/2 );
-	UI_DrawPic( arrowPoint, m_ArrowSize, -1, arrow );
+	if( UI_ThemeActive( ))
+	{
+		// gfx/shell arrow artwork is not shipped by this game
+		const int inset = m_ArrowSize.w / 3;
+
+		UI_ThemeDrawTriangle(
+			Point( arrowX + inset, selectedPos.y + ( selectedSize.h - m_ArrowSize.h ) / 2 + inset ),
+			Size( m_ArrowSize.w - inset * 2, m_ArrowSize.h - inset * 2 ),
+			m_isOpen ? 2 : 3, THEME_TEXT );
+	}
+	else
+	{
+		CImage &arrow = m_isOpen ? m_ArrowOpened : m_ArrowClosed;
+		Point arrowPoint( arrowX, selectedPos.y + (selectedSize.h - m_ArrowSize.h)/2 );
+		UI_DrawPic( arrowPoint, m_ArrowSize, -1, arrow );
+	}
 }
 
 void CMenuDropDownStr::UpdateEditable()
@@ -267,4 +311,16 @@ void CMenuDropDownFloat::UpdateEditable()
 
 	if( m_iState != state )
 		m_iState = state;
+}
+
+void CMenuDropDown::SelectionText(CMenuBaseItem *base,int row,char *text,int size)
+{
+    CMenuDropDown *s=static_cast<CMenuDropDown*>(base);
+    Q_strncpy(text,s->m_szNames.IsValidIndex(row)?s->m_szNames[row]:"",size);
+}
+void CMenuDropDown::SelectionCommit(CMenuBaseItem *base,int row)
+{
+    CMenuDropDown *s=static_cast<CMenuDropDown*>(base);
+    if(!s->m_szNames.IsValidIndex(row)||row==s->m_iState)return;
+    s->m_iState=row;s->SetCvar();s->_Event(QM_CHANGED);
 }

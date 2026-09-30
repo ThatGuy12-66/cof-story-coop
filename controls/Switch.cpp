@@ -87,6 +87,20 @@ int CMenuSwitch::IsNewStateByMouseClick()
 
 void CMenuSwitch::VidInit()
 {
+	if( UI_ThemeActive( ))
+	{
+		// a Source-style segmented control: the selected segment carries the
+		// accent fill and accent text, the rest is the input background
+		iSelectColor.SetDefault( THEME_SELECT_FILL );
+		iBackgroundColor.SetDefault( THEME_INPUT_BG );
+		iFgTextColor.SetDefault( THEME_ACCENT );
+		iBgTextColor.SetDefault( THEME_TEXT );
+		colorFocus.SetDefault( THEME_HOVER_FILL );
+		font = uiStatic.hThemeBody;
+		charSize = THEME_BODY_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	iSelectColor.SetDefault( uiPromptTextColor );
 	iBackgroundColor.SetDefault( uiColorBlack );
 	iFgTextColor.SetDefault( uiInputFgColor );
@@ -207,7 +221,8 @@ void CMenuSwitch::Draw( void )
 	uint selectColor = iSelectColor;
 	UI_DrawString( font, m_scTextPos, m_scTextSize, szName, uiColorHelp, m_scChSize, eTextAlignment, textflags | ETF_FORCECOL );
 
-	if( szStatusText && iFlags & QMF_NOTIFY )
+	// in theme mode the framework draws one hint line in the theme font
+	if( szStatusText && iFlags & QMF_NOTIFY && !UI_ThemeActive( ) )
 	{
 		Point coord;
 

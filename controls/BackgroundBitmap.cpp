@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "BackgroundBitmap.h"
 #include "Utils.h"
 #include "BaseWindow.h"
+#include "Theme.h"
 
 bool CMenuBackgroundBitmap::s_bEnableLogoMovie = false;
 bool CMenuBackgroundBitmap::s_bGameHasSteamBackground = false;
@@ -65,6 +66,29 @@ void CMenuBackgroundBitmap::VidInit()
 
 void CMenuBackgroundBitmap::DrawInGameBackground()
 {
+	// When ui_renderworld is on, the engine keeps drawing the world behind the
+	// menu (engine/client/cl_view.c:395). Filling the screen with the opaque
+	// background then throws that frame away. Draw a translucent scrim instead
+	// so the paused scene stays visible behind the menu, Source-style.
+	// ui_scrim_alpha controls how dark it is; the world is not being rendered
+	// otherwise, so that case keeps the original fill.
+	if( EngFuncs::GetCvarFloat( "ui_renderworld" ) != 0.0f )
+	{
+		// The death page draws over the untouched scene - Cry of Fear's own
+		// GAME OVER screen does not dim the world either, it only puts a faint
+		// strip behind each line of its own text.
+		if( UI_ThemeSceneUnveiled( ))
+			return;
+
+		int alpha = (int)EngFuncs::GetCvarFloat( "ui_scrim_alpha" );
+
+		if( alpha < 0 ) alpha = 0;
+		if( alpha > 255 ) alpha = 255;
+
+		UI_FillRect( m_scPos, m_scSize, PackRGBA( 0, 0, 0, alpha ));
+		return;
+	}
+
 	UI_FillRect( m_scPos, m_scSize, uiColorBlack );
 }
 

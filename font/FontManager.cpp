@@ -21,9 +21,13 @@ GNU General Public License for more details.
 
 #if defined(MAINUI_USE_FREETYPE)
 #include "FreeTypeFont.h"
-#elif defined(MAINUI_USE_STB)
+#endif
+#if defined(MAINUI_USE_STB)
 #include "StbFont.h"
-#elif defined(_WIN32)
+#endif
+#if defined(_WIN32) && defined(MAINUI_USE_CUSTOM_FONT_RENDER)
+// kept available alongside stb_truetype so a missing shipped TTF can still fall
+// back to an installed system family instead of the bitmap font
 #include "WinAPIFont.h"
 #endif
 
@@ -33,6 +37,43 @@ GNU General Public License for more details.
 #define DEFAULT_MENUFONT "Trebuchet MS"
 #define DEFAULT_CONFONT  "Tahoma"
 #define DEFAULT_WEIGHT   500
+
+// the three shipped Inter statics, picked by the requested weight
+#define THEME_FONT_WEIGHT_REGULAR  400
+#define THEME_FONT_WEIGHT_MEDIUM   500
+#define THEME_FONT_WEIGHT_SEMIBOLD 600
+
+/*
+=================
+AllocPrimaryFont / AllocSystemFont
+
+The primary backend is whatever the build selected (stb_truetype for this
+build). The system backend only exists on Windows and is used as a fallback so
+a missing or unreadable shipped TTF can never drop the whole menu to the
+bitmap font.
+=================
+*/
+static CBaseFont *AllocPrimaryFont( void )
+{
+#if defined(MAINUI_USE_FREETYPE)
+	return new CFreeTypeFont();
+#elif defined(MAINUI_USE_STB)
+	return new CStbFont();
+#elif defined(_WIN32) && defined(MAINUI_USE_CUSTOM_FONT_RENDER)
+	return new CWinAPIFont();
+#else
+	return new CBitmapFont();
+#endif
+}
+
+static CBaseFont *AllocSystemFont( void )
+{
+#if defined(_WIN32) && defined(MAINUI_USE_CUSTOM_FONT_RENDER)
+	return new CWinAPIFont();
+#else
+	return NULL;
+#endif
+}
 
 CFontManager *g_FontMgr;
 
@@ -74,27 +115,39 @@ void CFontManager::VidInit( void )
 #endif
 	)
 	{
+		const bool theme = UI_ThemeActive();
+		const char *menufont = theme ? UI_ThemeFontFamily() : DEFAULT_MENUFONT;
+
 		DeleteAllFonts();
-		uiStatic.hDefaultFont = CFontBuilder( DEFAULT_MENUFONT, UI_MED_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
+		uiStatic.hDefaultFont = CFontBuilder( menufont, UI_MED_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
 			.SetHandleNum( QM_DEFAULTFONT )
 			.Create();
-		uiStatic.hSmallFont   = CFontBuilder( DEFAULT_MENUFONT, UI_SMALL_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
+		uiStatic.hSmallFont   = CFontBuilder( menufont, UI_SMALL_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
 			.SetHandleNum( QM_SMALLFONT )
 			.Create();
-		uiStatic.hBigFont     = CFontBuilder( DEFAULT_MENUFONT, UI_BIG_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
+		uiStatic.hBigFont     = CFontBuilder( menufont, UI_BIG_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
 			.SetHandleNum( QM_BIGFONT )
 			.Create();
-		uiStatic.hBoldFont = CFontBuilder( DEFAULT_MENUFONT, UI_MED_CHAR_HEIGHT * scale, 1000 )
+		uiStatic.hBoldFont = CFontBuilder( menufont, UI_MED_CHAR_HEIGHT * scale, 1000 )
 			.SetHandleNum( QM_BOLDFONT )
 			.Create();
 
-		if( !uiStatic.lowmemory )
+		if( theme )
 		{
-			uiStatic.hLightBlur = CFontBuilder( DEFAULT_MENUFONT, UI_MED_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
+			// The two Gaussian blur passes only exist for the WON pic-button
+			// glow, which the theme drops. Not building them also takes the two
+			// 8*scale rasterisations out of every resolution change. Point the
+			// handles at the default font so nothing can draw with an invalid
+			// one if an untouched code path still reaches for them.
+			uiStatic.hLightBlur = uiStatic.hHeavyBlur = uiStatic.hDefaultFont;
+		}
+		else if( !uiStatic.lowmemory )
+		{
+			uiStatic.hLightBlur = CFontBuilder( menufont, UI_MED_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
 				.SetBlurParams( 2 * scale, 1.25f )
 				.Create();
 
-			uiStatic.hHeavyBlur = CFontBuilder( DEFAULT_MENUFONT, UI_MED_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
+			uiStatic.hHeavyBlur = CFontBuilder( menufont, UI_MED_CHAR_HEIGHT * scale, DEFAULT_WEIGHT )
 				.SetBlurParams( 8 * scale, 2.0f )
 				.Create();
 		}
@@ -102,6 +155,26 @@ void CFontManager::VidInit( void )
 		uiStatic.hConsoleFont = CFontBuilder( DEFAULT_CONFONT, UI_CONSOLE_CHAR_HEIGHT * scale, 500 )
 			.SetOutlineSize()
 			.Create();
+
+		if( theme )
+		{
+			// Regular for body and labels, Medium for the menu items, SemiBold
+			// for the title band, the buttons and the wordmark
+			uiStatic.hThemeTitle   = CFontBuilder( menufont, THEME_TITLE_TALL   * scale, THEME_FONT_WEIGHT_SEMIBOLD ).Create();
+			uiStatic.hThemeLabel   = CFontBuilder( menufont, THEME_LABEL_TALL   * scale, THEME_FONT_WEIGHT_REGULAR ).Create();
+			uiStatic.hThemeBody    = CFontBuilder( menufont, THEME_BODY_TALL    * scale, THEME_FONT_WEIGHT_REGULAR ).Create();
+			uiStatic.hThemeButton  = CFontBuilder( menufont, THEME_BUTTON_TALL  * scale, THEME_FONT_WEIGHT_SEMIBOLD ).Create();
+			uiStatic.hThemeItem    = CFontBuilder( menufont, THEME_ITEM_TALL    * scale, THEME_FONT_WEIGHT_MEDIUM ).Create();
+			uiStatic.hThemeLogo    = CFontBuilder( menufont, THEME_LOGO_TALL    * scale, THEME_FONT_WEIGHT_SEMIBOLD ).Create();
+			uiStatic.hThemeLogoSub = CFontBuilder( menufont, THEME_LOGOSUB_TALL * scale, THEME_FONT_WEIGHT_MEDIUM ).Create();
+		}
+		else
+		{
+			uiStatic.hThemeTitle = uiStatic.hThemeLabel = uiStatic.hThemeBody =
+			uiStatic.hThemeButton = uiStatic.hThemeItem = uiStatic.hThemeLogo =
+			uiStatic.hThemeLogoSub = uiStatic.hDefaultFont;
+		}
+
 		prevScale = scale;
 	}
 }
@@ -368,6 +441,10 @@ int CFontManager::GetTextWide(HFont font, const char *text, int size)
 {
 	int wide;
 
+	// measure what UI_DrawString will draw: the language pack's translation
+	if( size < 0 )
+		text = UI_LangText( text );
+
 	GetTextSize( font, text, &wide, NULL, size );
 
 	return wide;
@@ -403,6 +480,9 @@ int CFontManager::GetTextHeightExt( HFont fontHandle, const char *text, int heig
 	{
 		return 0;
 	}
+
+	if( size < 0 )
+		text = UI_LangText( text );
 
 	const char *text2 = text;
 	int y = 0;
@@ -444,7 +524,9 @@ void CFontManager::UploadTextureForFont(CBaseFont *font)
 	charRange_t range[] =
 	{
 	{ 0x0021, 0x007E, NULL, 0 }, // ascii printable range
-	{ 0x00C0, 0x00FF, NULL, 0 }, // latin-1 supplement (letters only)
+	// Cry of Fear language packs: from 0xA1, so the menu also has the Latin-1
+	// punctuation its translations need (Spanish inverted marks, French guillemets)
+	{ 0x00A1, 0x00FF, NULL, 0 }, // latin-1 supplement
 	{ 0x0100, 0x017F, NULL, 0 }, // latin extended a
 	{ 0x0400, 0x045F, NULL, 0 }, // cyrillic range
 	{ 0, 0, table_cp1251, V_ARRAYSIZE( table_cp1251 ) }, // cp1251
@@ -487,30 +569,58 @@ HFont CFontBuilder::Create()
 		}
 	}
 
-#if defined(MAINUI_USE_FREETYPE)
-	font = new CFreeTypeFont();
-#elif defined(MAINUI_USE_STB)
-	font = new CStbFont();
-#elif defined(_WIN32) && defined(MAINUI_USE_CUSTOM_FONT_RENDER)
-	font = new CWinAPIFont();
-#else
-	font = new CBitmapFont();
-#endif
+	font = AllocPrimaryFont();
 
 	double starttime = EngFuncs::DoubleTime();
 
 	if( !font->Create( m_szName, m_iTall, m_iWeight, m_iBlur, m_fBrighten, m_iOutlineSize, m_iScanlineOffset, m_fScanlineScale, m_iFlags ) )
 	{
-		delete font;
+		// The shipped TTF may be missing (stb_truetype), or the family may not
+		// be installed (CWinAPIFont::Create -> EnumFontFamiliesExA). Dropping
+		// straight to the bitmap font is a visible catastrophe, so walk a chain
+		// of families through the system backend before giving up.
+		bool created = false;
 
-		// fallback to bitmap font
-		font = new CBitmapFont();
+		for( int i = 0; !created; i++ )
+		{
+			const char *name = UI_ThemeFontFallback( i );
+			CBaseFont *next;
 
-		// should never fail
-		if( !font->Create( "Bitmap Font", m_iTall, m_iWeight, m_iBlur, m_fBrighten, m_iOutlineSize, m_iScanlineOffset, m_fScanlineScale, m_iFlags ) )
+			if( !name )
+				break;
+
+			next = AllocSystemFont();
+			if( !next )
+			{
+				// no second backend: retrying the same family is pointless
+				if( !stricmp( name, m_szName ))
+					continue;
+				next = AllocPrimaryFont();
+			}
+
+			delete font;
+			font = next;
+
+			created = font->Create( name, m_iTall, m_iWeight, m_iBlur, m_fBrighten,
+				m_iOutlineSize, m_iScanlineOffset, m_fScanlineScale, m_iFlags );
+
+			if( created )
+				Con_Printf( "Font \"%s\" is unavailable, using \"%s\"\n", m_szName, name );
+		}
+
+		if( !created )
 		{
 			delete font;
-			return -1;
+
+			// fallback to bitmap font
+			font = new CBitmapFont();
+
+			// should never fail
+			if( !font->Create( "Bitmap Font", m_iTall, m_iWeight, m_iBlur, m_fBrighten, m_iOutlineSize, m_iScanlineOffset, m_fScanlineScale, m_iFlags ) )
+			{
+				delete font;
+				return -1;
+			}
 		}
 	}
 
@@ -534,6 +644,20 @@ HFont CFontBuilder::Create()
 
 bool CFontManager::FindFontDataFile( const char *name, int tall, int weight, int flags, char *dataFile, size_t dataFileChars )
 {
+	// Inter (SIL Open Font License 1.1) is shipped with the game data as three
+	// static faces; stb_truetype cannot synthesise a weight, so pick the face
+	// from the requested weight.
+	if( !stricmp( name, "Inter" ))
+	{
+		if( weight >= THEME_FONT_WEIGHT_SEMIBOLD )
+			Q_strncpy( dataFile, "gfx/fonts/Inter-SemiBold.ttf", dataFileChars );
+		else if( weight >= THEME_FONT_WEIGHT_MEDIUM )
+			Q_strncpy( dataFile, "gfx/fonts/Inter-Medium.ttf", dataFileChars );
+		else
+			Q_strncpy( dataFile, "gfx/fonts/Inter-Regular.ttf", dataFileChars );
+		return true;
+	}
+
 	if( !strcmp( name, "Trebuchet MS" ))
 	{
 		Q_strncpy( dataFile, "gfx/fonts/FiraSans-Regular.ttf", dataFileChars );

@@ -45,10 +45,32 @@ CMenuCheckBox::Init
 */
 void CMenuCheckBox::VidInit( void )
 {
+	if( UI_ThemeActive( ))
+	{
+		// the stock 32x32 is sized for gfx/shell/cb_*.tga; the primitive box is
+		// 22x22 so it sits on the label's cap height
+		if( size.w == 32 && size.h == 32 )
+			SetSize( THEME_CHECK_SIZE, THEME_CHECK_SIZE );
+
+		colorText.SetDefault( THEME_TEXT );
+		font = uiStatic.hThemeBody;
+		charSize = THEME_BODY_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	colorText.SetDefault( uiColorHelp );
 	BaseClass::VidInit();
-	m_scTextPos.x = m_scPos.x + ( m_scSize.w * 1.25f );
-	m_scTextPos.y = m_scPos.y;
+
+	if( UI_ThemeActive( ))
+	{
+		m_scTextPos.x = m_scPos.x + m_scSize.w + (int)( 10 * uiStatic.scaleX );
+		m_scTextPos.y = m_scPos.y + ( m_scSize.h - m_scChSize ) / 2;
+	}
+	else
+	{
+		m_scTextPos.x = m_scPos.x + ( m_scSize.w * 1.25f );
+		m_scTextPos.y = m_scPos.y;
+	}
 
 	m_scTextSize.w = g_FontMgr->GetTextWideScaled( font, szName, m_scChSize );
 	m_scTextSize.h = m_scChSize;
@@ -111,6 +133,33 @@ CMenuCheckBox::Draw
 void CMenuCheckBox::Draw( void )
 {
 	uint textflags = ( iFlags & QMF_DROPSHADOW ? ETF_SHADOW : 0 ) | ETF_NOSIZELIMIT | ETF_FORCECOL;
+
+	if( UI_ThemeActive( ))
+	{
+		// Cry of Fear ships no gfx/shell/cb_* artwork, and UI_DrawPic silently
+		// no-ops on a null handle, so the stock control is an invisible hole
+		// with a label next to it. Draw the box from primitives instead.
+		const bool grayed = FBitSet( iFlags, QMF_GRAYED ) != 0;
+		const bool hot = !grayed && UI_THEME_HOT( this );
+
+		UI_DrawString( font, m_scTextPos, m_scTextSize, szName,
+			grayed ? THEME_DISABLED : ( hot ? THEME_TEXT_HI : colorText ),
+			m_scChSize, eTextAlignment, textflags );
+
+		UI_FillRect( m_scPos, m_scSize, THEME_INPUT_BG );
+		UI_DrawHairline( m_scPos, m_scSize,
+			grayed ? THEME_DISABLED : ( hot ? THEME_ACCENT : THEME_INPUT_BORDER ));
+
+		if( bChecked )
+		{
+			int inset = m_scSize.w / 4;
+
+			UI_ThemeDrawTick( Point( m_scPos.x + inset, m_scPos.y + inset ),
+				Size( m_scSize.w - inset * 2, m_scSize.h - inset * 2 ),
+				grayed ? THEME_DISABLED : THEME_ACCENT );
+		}
+		return;
+	}
 
 	UI_DrawString( font, m_scTextPos, m_scTextSize, szName, colorText, m_scChSize, eTextAlignment, textflags );
 

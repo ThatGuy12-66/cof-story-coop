@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "CheckBox.h"
 #include "SpinControl.h"
 #include "StringArrayModel.h"
+#include "CryOfFear.h"
 
 #define ART_BANNER			"gfx/shell/head_audio"
 
@@ -44,6 +45,7 @@ private:
 
 	CMenuSlider	soundVolume;
 	CMenuSlider	musicVolume;
+	CMenuSlider	menuVolume;
 	CMenuSlider	suitVolume;
 	CMenuSlider	vibration;
 	CMenuCheckBox noDSP;
@@ -63,6 +65,9 @@ void CMenuAudio::GetConfig( void )
 {
 	soundVolume.LinkCvar( "volume" );
 	musicVolume.LinkCvar( "MP3Volume" );
+	// the engine cvar that scales the menu library's own sounds and nothing
+	// else (engine/client/dll_int/cl_gameui.c, pfnPlaySound)
+	menuVolume.LinkCvar( "ui_sound_volume" );
 	suitVolume.LinkCvar( "suitvolume" );
 	vibration.LinkCvar( "vibration_length" );
 
@@ -98,6 +103,8 @@ void CMenuAudio::SaveAndPopMenu()
 {
 	soundVolume.WriteCvar();
 	musicVolume.WriteCvar();
+	if( menuVolume.IsVisible( ))
+		menuVolume.WriteCvar();
 	suitVolume.WriteCvar();
 	vibration.WriteCvar();
 	noDSP.WriteCvar();
@@ -117,6 +124,9 @@ void CMenuAudio::_Init( void )
 {
 	banner.SetPicture(ART_BANNER);
 
+	if( UI_ThemeActive( ))
+		SetPanel( "AUDIO", 640, 460 );
+
 	soundVolume.szName = L( "GameUI_SoundEffectVolume" );
 	soundVolume.Setup( 0.0, 1.0, 0.05f );
 	soundVolume.onChanged = CMenuEditable::WriteCvarCb;
@@ -128,6 +138,17 @@ void CMenuAudio::_Init( void )
 	musicVolume.onChanged = CMenuEditable::WriteCvarCb;
 	musicVolume.SetCoord( 320, 340 );
 	musicVolume.size.w = 300;
+
+	// Menu sounds. Only in theme mode: the WON layout is a grid of fixed
+	// coordinates and adding a row to it would move controls the ui_theme 0
+	// path promises to leave exactly as they were.
+	menuVolume.szName = L( "Menu sounds" );
+	menuVolume.szStatusText = L( "Volume of the menu's own button and rollover sounds" );
+	menuVolume.Setup( 0.0, 1.0, 0.05f );
+	menuVolume.onChanged = CMenuEditable::WriteCvarCb;
+	menuVolume.SetCoord( 320, 400 );
+	menuVolume.size.w = 300;
+	menuVolume.SetVisibility( UI_ThemeActive( ));
 
 	suitVolume.szName = L( "GameUI_HEVSuitVolume" );
 	suitVolume.Setup( 0.0, 1.0, 0.05f );
@@ -159,10 +180,13 @@ void CMenuAudio::_Init( void )
 	vibration.onChanged = VoidCb( &CMenuAudio::VibrateChanged );
 	vibration.SetCoord( 700, 560 );
 
-	AddItem( banner );
-	AddButton( L( "Done" ), nullptr, PC_DONE, VoidCb( &CMenuAudio::SaveAndPopMenu ));
+	if( !UI_ThemeActive( ))
+		AddItem( banner );
+	AddButton( UI_ThemeActive() ? L( "Close" ) : L( "Done" ), nullptr, PC_DONE,
+		VoidCb( &CMenuAudio::SaveAndPopMenu ));
 	AddItem( soundVolume );
 	AddItem( musicVolume );
+	AddItem( menuVolume );
 	AddItem( suitVolume );
 	AddItem( noDSP );
 	AddItem( useAlphaDSP );
@@ -173,6 +197,44 @@ void CMenuAudio::_Init( void )
 
 void CMenuAudio::_VidInit( )
 {
+	if( IsPanel( ))
+	{
+		// left column: the volume sliders
+		// right column: the DSP and focus checkboxes
+		// the two vibration items are mobile-only and are hidden on desktop
+		Rect left = ColumnRect( 0, 2 );
+		Rect right = ColumnRect( 1, 2 );
+		int y = left.pt.y + THEME_LABEL_TALL + 8;
+
+		// Cry of Fear has no HEV suit, so it has no suit voice to set a volume
+		// for; "suitvolume" only drives Half-Life's suit speech.
+		suitVolume.SetVisibility( !UI_IsCryOfFear( ));
+
+		soundVolume.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+		y += THEME_CTRL_PITCH;
+		musicVolume.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+		y += THEME_CTRL_PITCH;
+		menuVolume.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+
+		if( suitVolume.IsVisible( ))
+		{
+			y += THEME_CTRL_PITCH;
+			suitVolume.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+		}
+
+		y = right.pt.y + THEME_LABEL_TALL + 8;
+		noDSP.SetCoord( right.pt.x, y );
+		y += THEME_ROW_PITCH;
+		useAlphaDSP.SetCoord( right.pt.x, y );
+		y += THEME_ROW_PITCH;
+		muteFocusLost.SetCoord( right.pt.x, y );
+
+		vibrationEnable.SetVisibility( false );
+		vibration.SetVisibility( false );
+
+		RealignButtons();
+	}
+
 	GetConfig();
 }
 

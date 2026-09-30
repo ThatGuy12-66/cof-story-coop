@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "SpinControl.h"
 #include "Utils.h"
 #include "Scissor.h"
+#include "SelectionPopup.h"
 
 CMenuSpinControl::CMenuSpinControl()  : BaseClass(), m_szBackground(),
 		m_szLeftArrow(), m_szRightArrow(), m_szLeftArrowFocus(), m_szRightArrowFocus(),
@@ -44,13 +45,71 @@ CMenuSpinControl::Init
 */
 void CMenuSpinControl::VidInit( void )
 {
+	if( UI_ThemeActive( ))
+	{
+		colorBase.SetDefault( THEME_TEXT );
+		font = uiStatic.hThemeBody;
+		charSize = THEME_BODY_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	colorBase.SetDefault( uiColorHelp );
 
 	BaseClass::VidInit();
 }
 
+/*
+=================
+CMenuSpinControl::DrawTheme
+
+The arrows are gfx/shell artwork this game does not ship. Draw them as solid
+triangles inside the control's own frame instead, so the whole widget is one
+box with a value in the middle - which is also what the Source references do.
+=================
+*/
+void CMenuSpinControl::DrawTheme( void )
+{
+	if(UI_CoFSelectionLists()) { UI_CoFDrawSelection(this,m_szDisplay);return; }
+	const bool grayed = FBitSet( iFlags, QMF_GRAYED ) != 0;
+	const bool focus = !grayed && UI_THEME_HOT( this );
+	Size arrow( m_scSize.h, m_scSize.h );
+	Point left( m_scPos.x, m_scPos.y );
+	Point right( m_scPos.x + m_scSize.w - arrow.w, m_scPos.y );
+	Point valuePos( m_scPos.x + arrow.w, m_scPos.y );
+	Size valueSize( m_scSize.w - arrow.w * 2, m_scSize.h );
+	const int inset = arrow.w / 3;
+	Size tri( arrow.w - inset * 2, arrow.h - inset * 2 );
+
+	// label above the control, the existing idiom
+	UI_DrawString( uiStatic.hThemeLabel, m_scPos.x, m_scPos.y - (int)( THEME_LABEL_TALL * 1.5f * uiStatic.scaleY ),
+		m_scSize.w, (int)( THEME_LABEL_TALL * uiStatic.scaleY ), szName, THEME_TEXT_DIM,
+		(int)( THEME_LABEL_TALL * uiStatic.scaleY ), QM_LEFT, ETF_FORCECOL | ETF_NOSIZELIMIT );
+
+	UI_FillRect( m_scPos, m_scSize, THEME_INPUT_BG );
+	UI_DrawHairline( m_scPos, m_scSize,
+		grayed ? THEME_DISABLED : ( focus ? THEME_ACCENT : THEME_INPUT_BORDER ));
+
+	const bool leftHot = !grayed && UI_CursorInRect( left, arrow );
+	const bool rightHot = !grayed && UI_CursorInRect( right, arrow );
+
+	UI_ThemeDrawTriangle( Point( left.x + inset, left.y + inset ), tri, 0,
+		grayed ? THEME_DISABLED : ( leftHot ? THEME_ACCENT : THEME_TEXT ));
+	UI_ThemeDrawTriangle( Point( right.x + inset, right.y + inset ), tri, 1,
+		grayed ? THEME_DISABLED : ( rightHot ? THEME_ACCENT : THEME_TEXT ));
+
+	UI::Scissor::PushScissor( valuePos, valueSize );
+	UI_DrawString( font, Point( valuePos.x, valuePos.y + ( valueSize.h - m_scChSize ) / 2 ),
+		Size( valueSize.w, m_scChSize ), m_szDisplay,
+		grayed ? THEME_DISABLED : ( focus ? THEME_TEXT_HI : colorBase ),
+		m_scChSize, eTextAlignment, ETF_FORCECOL | ETF_NO_WRAP );
+	UI::Scissor::PopScissor();
+}
+
 bool CMenuSpinControl::KeyDown( int key )
 {
+    if(UI_CoFSelectionLists())
+        return !(iFlags&(QMF_GRAYED|QMF_INACTIVE)) &&
+            (UI::Key::IsEnter(key)||UI::Key::IsLeftMouse(key));
 	const char *sound = 0;
 
 	if( UI::Key::IsLeftArrow( key ) && !FBitSet( iFlags, QMF_MOUSEONLY ))
@@ -78,6 +137,13 @@ CMenuSpinControl::Key
 */
 bool CMenuSpinControl::KeyUp( int key )
 {
+    if(UI_CoFSelectionLists())
+    {
+        if(!(iFlags&(QMF_GRAYED|QMF_INACTIVE)) && (UI::Key::IsEnter(key) ||
+            (UI::Key::IsLeftMouse(key)&&UI_CursorInRect(m_scPos,m_scSize))))
+        { OpenSelection();return true; }
+        return false;
+    }
 	const char *sound = 0;
 	Size arrow;
 	Point left, right;
@@ -127,7 +193,8 @@ void CMenuSpinControl::Draw( void )
 	Size scCenterBox;
 	uint textflags = ( iFlags & QMF_DROPSHADOW ) ? ETF_SHADOW : 0;
 
-	if( szStatusText && iFlags & QMF_NOTIFY )
+	// in theme mode the framework draws one hint line in the theme font
+	if( szStatusText && iFlags & QMF_NOTIFY && !UI_ThemeActive( ))
 	{
 		Point coord;
 
@@ -139,6 +206,12 @@ void CMenuSpinControl::Draw( void )
 		UnpackRGB( r, g, b, uiColorHelp );
 		EngFuncs::DrawSetTextColor( r, g, b );
 		EngFuncs::DrawConsoleString( coord, szStatusText );
+	}
+
+	if( UI_ThemeActive( ))
+	{
+		DrawTheme();
+		return;
 	}
 
 	int textHeight = m_scPos.y - (m_scChSize * 1.5f);
@@ -346,4 +419,29 @@ void CMenuSpinControl::Display()
 void CMenuSpinControl::ForceDisplayString( const char *display )
 {
 	Q_strncpy( m_szDisplay, display, sizeof( m_szDisplay ));
+}
+
+int CMenuSpinControl::SelectionCount() const
+{
+    if(m_pModel)return m_pModel->GetRows();
+    if(m_flRange<=0 || m_flMaxValue<m_flMinValue)return 0;
+    return (int)ceil((m_flMaxValue-m_flMinValue)/m_flRange-0.0001f)+1;
+}
+void CMenuSpinControl::SelectionText(CMenuBaseItem *base,int row,char *text,int size)
+{
+    CMenuSpinControl *s=static_cast<CMenuSpinControl*>(base);
+    if(row<0||row>=s->SelectionCount()){text[0]=0;return;}
+    if(s->m_pModel)Q_strncpy(text,s->m_pModel->GetText(row),size);
+    else snprintf(text,size,"%.*f",s->m_iFloatPrecision,Q_min(s->m_flMaxValue,s->m_flMinValue+row*s->m_flRange));
+}
+void CMenuSpinControl::SelectionCommit(CMenuBaseItem *base,int row)
+{
+    CMenuSpinControl *s=static_cast<CMenuSpinControl*>(base);
+    if(row<0||row>=s->SelectionCount())return;
+    s->SetCurrentValue(Q_min(s->m_flMaxValue,s->m_flMinValue+row*s->m_flRange));
+}
+void CMenuSpinControl::OpenSelection()
+{
+    const int current=m_flRange>0?(int)floor((m_flCurValue-m_flMinValue)/m_flRange+0.5f):0;
+    UI_CoFOpenSelection(this,SelectionCount(),current,SelectionText,SelectionCommit);
 }

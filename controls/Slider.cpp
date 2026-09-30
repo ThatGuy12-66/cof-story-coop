@@ -51,6 +51,17 @@ void CMenuSlider::VidInit(  )
 	colorBase.SetDefault( uiColorWhite );
 	colorFocus.SetDefault( uiColorWhite );
 
+	if( UI_ThemeActive( ))
+	{
+		// a 6-unit track in a 26-unit hit box, instead of 2 + 6*2 = 14
+		if( size.h == 2 + m_iSliderOutlineWidth * 2 )
+			size.h = THEME_SLIDER_H;
+
+		font = uiStatic.hThemeLabel;
+		charSize = THEME_LABEL_TALL;
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	BaseClass::VidInit();
 
 	// scale the center box
@@ -153,7 +164,8 @@ void CMenuSlider::Draw( void )
 	int	textHeight, sliderX;
 	uint textflags = ( iFlags & QMF_DROPSHADOW ) ? ETF_SHADOW : 0;
 
-	if( szStatusText && iFlags & QMF_NOTIFY )
+	// in theme mode the framework draws one hint line in the theme font
+	if( szStatusText && iFlags & QMF_NOTIFY && !UI_ThemeActive( ))
 	{
 		Point coord;
 
@@ -175,9 +187,23 @@ void CMenuSlider::Draw( void )
 		{
 			int	dist, numSteps;
 
-			// move slider follow the holded mouse button
-			dist = uiStatic.cursorX - m_scPos.x - m_iSliderOutlineWidth - (m_scCenterBox.w/2);
-			numSteps = floor(dist / m_flDrawStep);
+			if( UI_ThemeActive( ))
+			{
+				// the theme knob is 10 virtual units wide and the track spans
+				// the whole control, so map the cursor straight onto it
+				const int knobW = (int)( 10 * uiStatic.scaleX );
+				float frac = (float)( uiStatic.cursorX - m_scPos.x - knobW / 2 ) /
+					(float)( m_scSize.w - knobW );
+
+				frac = bound( 0.0f, frac, 1.0f );
+				numSteps = (int)(( frac * ( m_flMaxValue - m_flMinValue )) / m_flRange + 0.5f );
+			}
+			else
+			{
+				// move slider follow the holded mouse button
+				dist = uiStatic.cursorX - m_scPos.x - m_iSliderOutlineWidth - (m_scCenterBox.w/2);
+				numSteps = floor(dist / m_flDrawStep);
+			}
 			m_flCurValue = bound( m_flMinValue, numSteps * m_flRange + m_flMinValue, m_flMaxValue );
 
 			// tell menu about changes
@@ -194,6 +220,29 @@ void CMenuSlider::Draw( void )
 		+ ( ( m_flCurValue - m_flMinValue ) / ( m_flMaxValue - m_flMinValue ) )  // calc fractional part
 		* ( m_scSize.w - m_iSliderOutlineWidth - (m_scCenterBox.w) );
 
+
+	if( UI_ThemeActive( ))
+	{
+		// UI_SLIDER_MAIN is gfx/shell artwork this game does not ship, so the
+		// knob is a filled rectangle and the track a filled bar.
+		const bool hot = UI_THEME_HOT( this );
+		const int trackH = (int)( THEME_SLIDER_TRACK * uiStatic.scaleY );
+		const int trackY = m_scPos.y + ( m_scSize.h - trackH ) / 2;
+		const int knobW = (int)( 10 * uiStatic.scaleX );
+		int knobX = m_scPos.x + ( ( m_flCurValue - m_flMinValue ) / ( m_flMaxValue - m_flMinValue ) )
+			* ( m_scSize.w - knobW );
+
+		UI_FillRect( m_scPos.x, trackY, m_scSize.w, trackH, THEME_TRACK );
+		// the filled part is a bar: the deep red (menufix round)
+		UI_FillRect( m_scPos.x, trackY, knobX - m_scPos.x + knobW / 2, trackH,
+			THEME_ACCENT_FILL );
+		UI_FillRect( knobX, m_scPos.y, knobW, m_scSize.h, hot ? THEME_TEXT_HI : THEME_ACCENT );
+
+		textHeight = m_scPos.y - (m_scChSize * 1.5f);
+		UI_DrawString( font, m_scPos.x, textHeight, m_scSize.w, m_scChSize, szName,
+			hot ? THEME_TEXT_HI : THEME_TEXT_DIM, m_scChSize, eTextAlignment, ETF_FORCECOL );
+		return;
+	}
 
 	UI_DrawRectangleExt( m_scPos.x + m_iSliderOutlineWidth / 2, m_scPos.y + m_iSliderOutlineWidth, m_scSize.w - m_iSliderOutlineWidth, m_scCenterBox.h, uiInputBgColor, m_iSliderOutlineWidth );
 	if( eFocusAnimation == QM_HIGHLIGHTIFFOCUS && this == m_pParent->ItemAtCursor())

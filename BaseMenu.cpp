@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "extdll_menu.h"
+#include "menus/CryOfFear.h"
 #include "BaseMenu.h"
 #include "PicButton.h"
 #include "keydefs.h"
@@ -28,6 +29,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "YesNoMessageBox.h"
 #include "BackgroundBitmap.h"
 #include "FontManager.h"
+#include "menus/CoFOptions.h"
 #include "cursor_type.h"
 #include "utflib.h"
 
@@ -37,6 +39,7 @@ cvar_t		*ui_borderclip;
 cvar_t		*ui_prefer_won_background;
 cvar_t		*ui_background_stretch;
 cvar_t		*ui_logohorizontal;
+cvar_t		*ui_scrim_alpha;
 
 uiStatic_t	uiStatic;
 static CMenuEntry	*s_pEntries = NULL;
@@ -54,6 +57,46 @@ const char	*uiSounds[] = {
 	"media/launch_deny1.wav",
 	"",
 	""
+};
+
+/*
+=================
+uiSoundsCoF
+
+Cry of Fear ships none of the Half-Life menu sounds above - no media/launch_*,
+no sound/common/launch_*, no buttons/blip*, and there is no valve/ fallback
+directory and no PAK to hide them in (measured against the canonical read-only
+copy). FS_LoadSound fails for every one of them and S_LoadSound substitutes a
+second of silence, which is why the engine menu made no sound at all.
+
+The game's own UI sounds are in cryoffear/sound/ui: 3d_click.wav and
+3d_rollover.wav (the in-world 3D menu panel) and buttonclick.wav,
+buttonclickrelease.wav, buttonrollover.wav (its VGUI2 GameUI, referenced from
+resource/*.res rather than from code). wpn_denyselect.wav in sound/common is the
+one "no" sound the game ships. Mapped in the same order as uiSounds.
+
+This cannot reach the engine's gallery-MAIN-MENU hook. That hook
+(CL_CoF_MenuPanelSound, engine/client/cl_main.c) is called only from
+pfnPlaySoundByName in engine/client/dll_int/cl_game.c - the *client DLL's*
+callback - and it only answers to volume 0.5. The menu plays through
+EngFuncs::PlayLocalSound -> pfnPlaySound (cl_gameui.c) -> S_StartLocalSound at
+VOL_NORM, a different function and a different volume, and the hook additionally
+requires cl_background 0 and ca_active, neither of which holds for the menu over
+the background map. Verified in the engine sources; ui/3d_click.wav from here is
+safe.
+=================
+*/
+const char	*uiSoundsCoF[] = {
+	"ui/3d_click.wav",		// SND_IN
+	"ui/buttonclickrelease.wav",	// SND_OUT
+	"ui/3d_click.wav",		// SND_LAUNCH
+	"ui/3d_rollover.wav",		// SND_ROLLOVER
+	"ui/buttonclick.wav",		// SND_GLOW
+	"common/wpn_denyselect.wav",	// SND_BUZZ
+	"ui/buttonclick.wav",		// SND_KEY
+	"common/wpn_denyselect.wav",	// SND_REMOVEKEY
+	"ui/3d_rollover.wav",		// SND_MOVE
+	""				// SND_NULL
 };
 
 // they match default WON colors.lst now, except alpha
@@ -286,6 +329,9 @@ int UI_DrawString( HFont font, int x, int y, int w, int h,
 
 	if( !string || !string[0] )
 		return x;
+
+	// the active language pack's translation (MenuStrings.cpp)
+	string = UI_LangText( string );
 
 	if( flags & ETF_SHADOW )
 	{
@@ -626,8 +672,20 @@ void UI_UpdateMenu( float flTime )
 		// load scr
 		UI_LoadScriptConfig();
 
+		// archived defaults the theme wants, now that config.cfg has run
+		UI_ThemeApplyDeferredDefaults();
+		// the pad button style: an older profile's 0 becomes Auto, once
+		if( UI_CoFOptionsLayout( ))
+			UI_CoFPadStyleMigrate();
+
 		loadStuff = false;
 	}
+
+	// Cry of Fear language packs: the menu's own strings follow cof_language;
+	// on a change the open pages are laid out again, since their widths
+	// depend on the text (MenuStrings.cpp)
+	if( UI_LangFrame( ))
+		uiStatic.menu.VidInit( true );
 
 	UI_DrawFinalCredits ();
 
@@ -698,6 +756,11 @@ void UI_KeyEvent( int key, int down )
 	if( !uiStatic.initialized )
 		return;
 
+	// Cry of Fear: the last input device (pad or not) and Start = resume
+	// (menus/CoFOptions.cpp)
+	if( UI_CoFInputEvent( key, down ))
+		return;
+
 	if( key == K_MOUSE1 )
 	{
 		g_bCursorDown = !!down;
@@ -758,6 +821,8 @@ void UI_MouseMove( int x, int y )
 
 	if( uiStatic.cursorX == x && uiStatic.cursorY == y )
 		return;
+
+	UI_CoFInputMouse();
 
 	if( g_bCursorDown )
 	{
@@ -995,6 +1060,10 @@ static void UI_LoadBackgroundMapList( void )
 
 static void UI_LoadSounds( void )
 {
+	// Cry of Fear substitutes its own set; every other game keeps the stock
+	// names exactly as before, including the media/ -> sound/common/ rewrite.
+	const char **table = UI_IsCryOfFear() ? uiSoundsCoF : uiSounds;
+
 	memset( uiStatic.sounds, 0, sizeof( uiStatic.sounds ) );
 
 	if ( uiStatic.lowmemory )
@@ -1002,18 +1071,32 @@ static void UI_LoadSounds( void )
 
 	for ( int i = 0; i < SND_COUNT; i++ )
 	{
-		if ( !uiSounds[i] || *uiSounds[i] == '\0' )
+		if ( !table[i] || *table[i] == '\0' )
 			continue;
 
-		if ( !EngFuncs::FileExists( uiSounds[i] ) )
+		if ( !EngFuncs::FileExists( table[i] ) )
 		{
 			size_t len = strlen( uiSoundOldPrefix );
 
-			if ( !strncmp( uiSounds[i], uiSoundOldPrefix, len ) )
-				snprintf( uiStatic.sounds[i], sizeof( uiStatic.sounds[i] ), "%s%s", uiSoundNewPrefix, uiSounds[i] + len );
+			if ( !strncmp( table[i], uiSoundOldPrefix, len ) )
+				snprintf( uiStatic.sounds[i], sizeof( uiStatic.sounds[i] ), "%s%s", uiSoundNewPrefix, table[i] + len );
+			else
+			{
+				// FS_LoadSound tries "sound/<name>" before "<name>"
+				// (engine/client/soundlib/snd_main.c), and the Cry of Fear
+				// names are relative to sound/, so a FileExists miss on the
+				// bare name is expected and the name is still correct.
+				Q_strncpy( uiStatic.sounds[i], table[i], sizeof( uiStatic.sounds[i] ) );
+			}
 		}
 		else
-			Q_strncpy( uiStatic.sounds[i], uiSounds[i], sizeof( uiStatic.sounds[i] ) );
+			Q_strncpy( uiStatic.sounds[i], table[i], sizeof( uiStatic.sounds[i] ) );
+	}
+
+	if( UI_IsCryOfFear( ))
+	{
+		for( int i = 0; i < SND_COUNT; i++ )
+			Con_DPrintf( "Cry of Fear menu sound %d: \"%s\"\n", i, uiStatic.sounds[i] );
 	}
 }
 
@@ -1051,6 +1134,8 @@ int UI_VidInit( void )
 		uiStatic.yOffset = 0;
 	}
 
+	UI_ThemeApplyMenuScale();
+
 	uiStatic.width = ScreenWidth / uiStatic.scaleX;
 	// move cursor to screen center
 	uiStatic.cursorX = ScreenWidth / 2;
@@ -1058,6 +1143,13 @@ int UI_VidInit( void )
 	uiStatic.outlineWidth = 4;
 
 	UI_ScaleCoords( NULL, NULL, &uiStatic.outlineWidth, NULL );
+
+	// The stock 4 virtual units scale to ~5.6 px at 1080p and ~11 px at 2160p,
+	// which is what makes every control read as a heavy WON frame. The Source
+	// look wants a hairline, so make the library-wide default one physical
+	// pixel per 768 units; every UI_DrawRectangle call site follows.
+	if( UI_ThemeActive( ))
+		uiStatic.outlineWidth = UI_ThemeHairline();
 
 	// trying to load chapterbackgrounds.txt
 	UI_LoadBackgroundMapList ();
@@ -1143,12 +1235,16 @@ UI_Init
 void UI_Init( void )
 {
 	// register our cvars and commands
+	EngFuncs::CvarRegister( "ui_cof_dropdowns", "1", FCVAR_ARCHIVE );
 	ui_showmodels = EngFuncs::CvarRegister( "ui_showmodels", "0", FCVAR_ARCHIVE );
 	ui_show_window_stack = EngFuncs::CvarRegister( "ui_show_window_stack", "0", FCVAR_ARCHIVE );
 	ui_borderclip = EngFuncs::CvarRegister( "ui_borderclip", "0", FCVAR_ARCHIVE );
 	ui_prefer_won_background = EngFuncs::CvarRegister( "ui_prefer_won_background", "0", FCVAR_ARCHIVE );
 	ui_background_stretch = EngFuncs::CvarRegister( "ui_background_stretch", "0", FCVAR_ARCHIVE );
 	ui_logohorizontal = EngFuncs::CvarRegister( "ui_logohorizontal", "0", FCVAR_ARCHIVE );
+	// alpha of the in-game scrim drawn behind the menu while ui_renderworld
+	// keeps the world visible. 0 = no dimming, 255 = fully opaque black.
+	ui_scrim_alpha = EngFuncs::CvarRegister( "ui_scrim_alpha", "150", FCVAR_ARCHIVE );
 
 	// show cl_predict dialog
 	EngFuncs::CvarRegister( "menu_mp_firsttime2", "1", FCVAR_ARCHIVE );
@@ -1174,6 +1270,10 @@ void UI_Init( void )
 	gMenu.m_gameinfo = *gi;
 
 	uiStatic.renderPicbuttonText = gMenu.m_gameinfo.flags & GFL_RENDER_PICBUTTON_TEXT;
+
+	// Source-style theme. Runs before colors.lst so a colors.lst still wins on
+	// the seven keys it can express.
+	UI_ThemeInit();
 
 	// trying to load colors.lst
 	UI_ApplyCustomColors ();

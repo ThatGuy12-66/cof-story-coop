@@ -118,7 +118,7 @@ CMenuVidOptions::Ownerdraw
 */
 void CMenuVidOptions::CMenuVidPreview::Draw( )
 {
-	int		color = 0xFFFF0000; // 255, 0, 0, 255
+	int		color = UI_ThemeActive() ? THEME_INPUT_BORDER : 0xFFFF0000; // 255, 0, 0, 255
 	int		viewport[4];
 	int		viewsize, size, sb_lines;
 
@@ -164,6 +164,12 @@ void CMenuVidOptions::_Init( void )
 	hTestImage = EngFuncs::PIC_Load( ART_GAMMA, PIC_KEEP_SOURCE | PIC_EXPAND_SOURCE );
 
 	banner.SetPicture( ART_BANNER );
+
+	if( UI_ThemeActive( ))
+	{
+		SetPanel( "VIDEO OPTIONS", 860, 560 );
+		done.szName = L( "GameUI_OK" );
+	}
 
 	testImage.iFlags = QMF_INACTIVE;
 	testImage.SetRect( 390, 225, 480, 450 );
@@ -304,6 +310,43 @@ void CMenuVidOptions::_VidInit()
 {
 	outlineWidth = 2;
 	UI_ScaleCoords( NULL, NULL, &outlineWidth, NULL );
+
+	if( !IsPanel( ))
+		return;
+
+	// left column: the two sliders, then the checkbox block
+	// right column: the gamma test image
+	Rect left = ColumnRect( 0, 2 );
+	Rect right = ColumnRect( 1, 2 );
+	int y = left.pt.y + THEME_LABEL_TALL + 8;
+
+#if LEGACY_VIEWSIZE
+	screenSize.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+	y += THEME_CTRL_PITCH;
+#endif
+	gammaIntensity.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+	y += THEME_CTRL_PITCH;
+	brightness.SetRect( left.pt.x, y, left.sz.w, THEME_SLIDER_H );
+	y += THEME_CTRL_PITCH + 6;
+
+	CMenuCheckBox *boxes[] = { &detailtex, &vbo, &swwater, &overbright, &filtering, &hudscale };
+
+	for( int i = 0; i < 6; i++ )
+	{
+		boxes[i]->SetCoord( left.pt.x, y );
+		y += THEME_ROW_PITCH;
+	}
+
+	// keep the preview on a 4:3 box inside the right column. Cry of Fear ships
+	// no gfx/shell/gamma, so an empty framed box would be the only thing in the
+	// column - hide it instead and let the left column keep the whole panel.
+	if( EngFuncs::PIC_Width( hTestImage ) > 0 )
+		testImage.SetRect( right.pt.x, right.pt.y, right.sz.w, right.sz.w * 3 / 4 );
+	else
+		testImage.SetVisibility( false );
+
+	CMenuPicButton *btns[] = { &done };
+	LayoutButtonRow( btns, 1 );
 }
 
 void CMenuVidOptions::Reload()

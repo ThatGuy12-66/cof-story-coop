@@ -118,7 +118,52 @@ CMenuPicButton::CMenuPicButton() : BaseClass()
 
 	size = uiStatic.buttons_draw_size;
 
+	eThemeStyle = THEME_PLAIN;
+	bThemeSelected = false;
+
 	SetCharSize( QM_DEFAULTFONT );
+
+	if( UI_ThemeActive( ))
+	{
+		// no drop shadow: ETF_SHADOW offsets by scaleX*3, ~4px at 1080p and
+		// 8px at 2160p, which is nothing like a Source drop shadow
+		iFlags = 0;
+		bEnableTransitions = false;
+		charSize = THEME_ITEM_TALL;
+	}
+}
+
+/*
+=================
+CMenuPicButton::VidInit
+
+The theme font handles only exist after CFontManager::VidInit, which runs after
+every menu has been constructed, so pick the handle here rather than in the
+constructor. A menu that set its own font keeps it.
+=================
+*/
+void CMenuPicButton::VidInit( void )
+{
+	if( UI_ThemeActive( ))
+	{
+		switch( eThemeStyle )
+		{
+		case THEME_BOX:
+			font = uiStatic.hThemeButton;
+			charSize = THEME_BUTTON_TALL;
+			break;
+		case THEME_ROW:
+			font = uiStatic.hThemeBody;
+			charSize = THEME_BODY_TALL;
+			break;
+		default:
+			font = uiStatic.hThemeItem;
+			charSize = THEME_ITEM_TALL;
+			break;
+		}
+	}
+
+	BaseClass::VidInit();
 }
 
 /*
@@ -221,6 +266,79 @@ void CMenuPicButton::DrawButton( int r, int g, int b, int a, wrect_t *rects, int
 
 /*
 =================
+CMenuPicButton::DrawTheme
+
+The Source-style path. No glow, no 512 ms decay, no colour pulse, no motion:
+the item under the cursor simply goes from THEME_TEXT to THEME_TEXT_HI, and
+rows and buttons pick up a very low-alpha fill. The status text is not drawn
+here at all - CMenuFramework draws one hint line for the whole page in the
+theme font instead of the engine bitmap console font.
+=================
+*/
+void CMenuPicButton::DrawTheme( int state )
+{
+	const bool grayed = FBitSet( iFlags, QMF_GRAYED ) != 0;
+	// Highlight follows the focus flags, never the holder's cursor index:
+	// CMenuItemsHolder::MouseMove leaves m_iCursor on the last item the pointer
+	// touched, so "this == ItemAtCursor()" keeps an item lit after the cursor
+	// has left it. QMF_HASMOUSEFOCUS is cleared for every item the cursor is
+	// not inside, and QMF_HASKEYBOARDFOCUS follows arrow-key navigation, which
+	// is exactly the state the stock pic-button path draws from.
+	const bool hot = !grayed && ( state != BUTTON_NOFOCUS );
+	unsigned int color;
+	uint textflags = ETF_FORCECOL | ETF_NO_WRAP;
+
+	if( grayed )
+		color = THEME_DISABLED;
+	else if( bThemeSelected )
+		color = THEME_ACCENT;
+	else if( hot )
+		color = THEME_TEXT_HI;
+	else
+		color = colorBase;
+
+	if( eThemeStyle == THEME_BOX )
+	{
+		UI_FillRect( m_scPos, m_scSize, m_bPressed ? THEME_PRESS_FILL :
+			( hot ? THEME_HOVER_FILL : THEME_INPUT_BG ));
+		UI_DrawHairline( m_scPos, m_scSize,
+			grayed ? THEME_DISABLED : ( hot ? THEME_ACCENT : THEME_INPUT_BORDER ));
+	}
+	else if( eThemeStyle == THEME_ROW )
+	{
+		if( bThemeSelected )
+			UI_FillRect( m_scPos, m_scSize, THEME_SELECT_FILL );
+		else if( m_bPressed )
+			UI_FillRect( m_scPos, m_scSize, THEME_PRESS_FILL );
+		else if( hot )
+			UI_FillRect( m_scPos, m_scSize, THEME_HOVER_FILL );
+	}
+	else
+	{
+		SetBits( textflags, ETF_NOSIZELIMIT );
+	}
+
+	Point pt = m_scPos;
+	Size sz = m_scSize;
+
+	if( eThemeStyle != THEME_PLAIN )
+	{
+		// vertically centre the label inside the row or the button box
+		pt.y += ( m_scSize.h - m_scChSize ) / 2;
+		sz.h = m_scChSize;
+
+		if( eThemeStyle == THEME_ROW )
+		{
+			pt.x += (int)( 10 * uiStatic.scaleX );
+			sz.w -= (int)( 20 * uiStatic.scaleX );
+		}
+	}
+
+	UI_DrawString( font, pt, sz, szName, color, m_scChSize, eTextAlignment, textflags );
+}
+
+/*
+=================
 CMenuPicButton::Draw
 =================
 */
@@ -239,6 +357,13 @@ void CMenuPicButton::Draw( )
 
 	if( iOldState == BUTTON_NOFOCUS && state != BUTTON_NOFOCUS )
 		iFocusStartTime = uiStatic.realTime;
+
+	if( UI_ThemeActive( ))
+	{
+		DrawTheme( state );
+		iOldState = state;
+		return;
+	}
 
 	if( szStatusText && FBitSet( iFlags, QMF_NOTIFY ) && !FBitSet( gMenu.m_gameinfo.flags, GFL_NOSKILLS ))
 	{

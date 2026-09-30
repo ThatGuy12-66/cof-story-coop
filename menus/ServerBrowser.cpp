@@ -1147,8 +1147,39 @@ CMenuServerBrowser::Init
 */
 void CMenuServerBrowser::_Init( void )
 {
-	AddItem( banner );
+	const bool theme = UI_ThemeActive();
 
+	if( theme )
+		SetPanel( "JOIN SERVER", 960, 620 );
+	else
+		AddItem( banner );
+
+	// In panel mode the buttons are laid out left to right in the order they
+	// are added, so the primary action has to be added last.
+	if( theme )
+	{
+		favorite = AddButton( L( "Favorite" ), nullptr, PC_FAVORITE, VoidCb( &CMenuServerBrowser::FavoriteServer ), 0, 'o' );
+		viewGameInfo = AddButton( L( "View game info" ), nullptr, PC_VIEW_GAME_INFO, VoidCb( &CMenuServerBrowser::ViewGameInfo ), QMF_GRAYED );
+
+		createGame = AddButton( L( "GameUI_GameMenu_CreateServer" ), NULL, PC_CREATE_GAME );
+		SET_EVENT_MULTI( createGame->onReleased,
+		{
+			if( ((CMenuServerBrowser*)pSelf->Parent())->m_bLanOnly )
+				EngFuncs::CvarSetValue( "public", 0.0f );
+			else EngFuncs::CvarSetValue( "public", 1.0f );
+
+			UI_CreateGame_Menu();
+		});
+
+		refresh = AddButton( L( "Refresh" ), nullptr, PC_REFRESH, VoidCb( &CMenuServerBrowser::RefreshList ) );
+		addServer = AddButton( L( "Add server" ), nullptr, PC_ADD_SERVER, VoidCb( &CMenuServerBrowser::ShowAddServerBox ));
+		AddButton( L( "Close" ), nullptr, PC_DONE, VoidCb( &CMenuServerBrowser::Hide ) );
+
+		joinGame = AddButton( L( "Join" ), nullptr, PC_JOIN_GAME, VoidCb( &CMenuServerBrowser::JoinGame ), QMF_GRAYED );
+		joinGame->onReleasedClActive = msgBox.MakeOpenEvent();
+	}
+	else
+	{
 	joinGame = AddButton( L( "Join game" ), nullptr, PC_JOIN_GAME, VoidCb( &CMenuServerBrowser::JoinGame ), QMF_GRAYED );
 	joinGame->onReleasedClActive = msgBox.MakeOpenEvent();
 
@@ -1168,6 +1199,7 @@ void CMenuServerBrowser::_Init( void )
 	addServer = AddButton( L( "Add server" ), nullptr, PC_ADD_SERVER, VoidCb( &CMenuServerBrowser::ShowAddServerBox ));
 
 	AddButton( L( "Done" ), nullptr, PC_DONE, VoidCb( &CMenuServerBrowser::Hide ) );
+	}
 
 	msgBox.SetMessage( L( "Join a network game will exit any current game, OK to exit?" ) );
 	msgBox.SetPositiveButton( L( "GameUI_OK" ), PC_OK );
@@ -1197,8 +1229,11 @@ void CMenuServerBrowser::_Init( void )
 	tabSwitch.eTextAlignment = QM_CENTER;
 	tabSwitch.bMouseToggle = false;
 	tabSwitch.bKeepToggleWidth = true;
-	tabSwitch.iSelectColor = uiInputFgColor;
-	tabSwitch.iFgTextColor = uiInputFgColor - 0x00151515; // bit darker
+	if( !UI_ThemeActive( ))
+	{
+		tabSwitch.iSelectColor = uiInputFgColor;
+		tabSwitch.iFgTextColor = uiInputFgColor - 0x00151515; // bit darker
+	}
 	tabSwitch.onChanged = VoidCb( &CMenuServerBrowser::OnTabSwitch );
 
 	// server.dll needs for reading savefiles or startup newgame
@@ -1355,6 +1390,38 @@ void CMenuServerBrowser::_VidInit()
 {
 	refreshTime = uiStatic.realTime + 500; // delay before update 0.5 sec
 	refreshTime2 = uiStatic.realTime + 500;
+
+	if( IsPanel( ))
+	{
+		// tab strip under the title band, list below it, filter row above the
+		// button row
+		Rect c = ContentRect();
+		const int tabH = 30;
+		const int filterH = THEME_CTRL_H;
+		int listY = c.pt.y + ( m_bLanOnly ? 0 : tabH + 10 );
+		int filterY = c.pt.y + c.sz.h - filterH;
+
+		tabSwitch.SetRect( c.pt.x, c.pt.y, c.sz.w, tabH );
+		tabSwitch.SetVisibility( !m_bLanOnly );
+
+		gameList.SetRect( c.pt.x, listY, c.sz.w, filterY - listY - 12 );
+
+		int x = c.pt.x;
+
+		filterPing.SetCoord( x, filterY );
+		x += filterPing.size.w + 10;
+		filterEmpty.SetCoord( x, filterY );
+		x += filterEmpty.size.w + 10;
+		filterFull.SetCoord( x, filterY );
+		x += filterFull.size.w + 10;
+		filterMap.SetCoord( x, filterY );
+
+		filterPing.MenuClose( );
+		filterEmpty.MenuClose( );
+		filterFull.MenuClose( );
+		filterMap.MenuClose( );
+		return;
+	}
 
 	if( m_bLanOnly )
 	{

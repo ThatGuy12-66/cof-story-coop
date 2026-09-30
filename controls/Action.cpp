@@ -34,6 +34,24 @@ CMenuAction::Init
 */
 void CMenuAction::VidInit( )
 {
+	// VidInit runs on every resolution change, so only remap once
+	if( UI_ThemeActive() && font != uiStatic.hThemeLabel && font != uiStatic.hThemeBody )
+	{
+		// labels and captions follow the theme scale: anything the menu asked
+		// to be small becomes the label size, everything else the body size
+		if( charSize <= UI_SMALL_CHAR_HEIGHT )
+		{
+			font = uiStatic.hThemeLabel;
+			charSize = THEME_LABEL_TALL;
+		}
+		else
+		{
+			font = uiStatic.hThemeBody;
+			charSize = THEME_BODY_TALL;
+		}
+		iFlags &= ~QMF_DROPSHADOW;
+	}
+
 	m_iBackcolor.SetDefault( 0 );
 
 	if( !forceCalcW )
@@ -143,7 +161,8 @@ void CMenuAction::Draw( )
 		}
 	}
 
-	if( szStatusText && iFlags & QMF_NOTIFY )
+	// in theme mode the framework draws one hint line in the theme font
+	if( szStatusText && iFlags & QMF_NOTIFY && !UI_ThemeActive( ) )
 	{
 		Point coord;
 

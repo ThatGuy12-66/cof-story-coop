@@ -222,13 +222,28 @@ void CMenuCreateGame::_Init( void )
 	nat.bChecked = false;
 	nat.LinkCvar( "sv_nat" );
 
+	if( UI_ThemeActive( ))
+		SetPanel( "HOST SERVER", 900, 560 );
+	else
+		AddItem( banner );
+
 	// add them here, so "done" button can be used by mapsListModel::Update
-	AddItem( banner );
 	CMenuPicButton *advOpt = AddButton( L( "Adv. Options" ), nullptr, PC_ADV_OPT, UI_AdvServerOptions_Menu );
 	advOpt->SetGrayed( !UI_AdvServerOptions_IsAvailable() );
 
-	done = AddButton( L( "GameUI_OK" ), nullptr, PC_OK, Begin );
-	done->onReleasedClActive = msgBox.MakeOpenEvent();
+	if( UI_ThemeActive( ))
+	{
+		// secondary first: Adv. Options, Cancel, Start
+		AddButton( L( "GameUI_Cancel" ), nullptr, PC_CANCEL, VoidCb( &CMenuCreateGame::Hide ) );
+		done = AddButton( L( "Start" ), nullptr, PC_OK, Begin );
+		done->onReleasedClActive = msgBox.MakeOpenEvent();
+		msgBox.szPanelTitle = "START SERVER";
+	}
+	else
+	{
+		done = AddButton( L( "GameUI_OK" ), nullptr, PC_OK, Begin );
+		done->onReleasedClActive = msgBox.MakeOpenEvent();
+	}
 
 	mapsList.SetCharSize( QM_SMALLFONT );
 	mapsList.SetupColumn( 0, L( "GameUI_Map" ), 0.5f );
@@ -288,7 +303,8 @@ void CMenuCreateGame::_Init( void )
 	msgBox.SetMessage( L( "Starting a new game will exit any current game, OK to exit?" ) );
 	msgBox.Link( this );
 
-	AddButton( L( "GameUI_Cancel" ), nullptr, PC_CANCEL, VoidCb( &CMenuCreateGame::Hide ) );
+	if( !UI_ThemeActive( ))
+		AddButton( L( "GameUI_Cancel" ), nullptr, PC_CANCEL, VoidCb( &CMenuCreateGame::Hide ) );
 	AddItem( hostName );
 	AddItem( maxClients );
 	AddItem( password );
@@ -298,6 +314,25 @@ void CMenuCreateGame::_Init( void )
 
 void CMenuCreateGame::_VidInit()
 {
+	if( IsPanel( ))
+	{
+		Rect left = ColumnRect2( 0, 0.42f );
+		Rect right = ColumnRect2( 1, 0.42f );
+		int y = left.pt.y + THEME_LABEL_TALL + 8;
+
+		hostName.SetRect( left.pt.x, y, left.sz.w, THEME_CTRL_H );
+		y += THEME_CTRL_PITCH;
+		maxClients.SetRect( left.pt.x, y, 140, THEME_CTRL_H );
+		y += THEME_CTRL_PITCH;
+		password.SetRect( left.pt.x, y, left.sz.w, THEME_CTRL_H );
+		y += THEME_CTRL_PITCH;
+		nat.SetCoord( left.pt.x, y );
+		nat.Hide();
+
+		mapsList.SetRect( right.pt.x, right.pt.y, right.sz.w, right.sz.h );
+		return;
+	}
+
 	nat.SetCoord( 72, 685 );
 	nat.Hide();
 	// if( !EngFuncs::GetCvarFloat("public") )

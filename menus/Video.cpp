@@ -28,6 +28,25 @@ class CMenuVideo : public CMenuFramework
 {
 public:
 	CMenuVideo() : CMenuFramework( "CMenuVideo" ) { }
+
+	void _VidInit( void ) override
+	{
+		if( !IsPanel( ))
+			return;
+
+		for( int i = 0; i < 2; i++ )
+		{
+			Rect r = RowRect( i );
+
+			row[i].SetRect( r.pt.x, r.pt.y, r.sz.w, r.sz.h );
+		}
+
+		CMenuPicButton *btns[] = { &close };
+		LayoutButtonRow( btns, 1 );
+	}
+
+	CMenuPicButton row[2];
+	CMenuPicButton close;
 };
 
 ADD_MENU3( menu_video, CMenuVideo, UI_Video_Menu );
@@ -39,6 +58,16 @@ UI_Video_Menu
 */
 void UI_Video_Menu( void )
 {
+	// Feedback round: this hub was one screen with two rows on the way to two
+	// screens that between them fit on one. In theme mode Video modes and
+	// Video options are merged into a single page (menus/VideoModes.cpp) and
+	// Options > Video opens it directly, so the hub is skipped entirely.
+	if( UI_ThemeActive( ))
+	{
+		UI_VidModes_Menu();
+		return;
+	}
+
 	if( !menu_video->WasInit() )
 	{
 		menu_video->banner.SetPicture( ART_BANNER );

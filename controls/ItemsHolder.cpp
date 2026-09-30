@@ -18,6 +18,8 @@ GNU General Public License for more details.
 #include "PicButton.h"
 #include "ItemsHolder.h"
 #include "Scissor.h"
+#include "CoFOptions.h"
+#include "SelectionPopup.h"
 #include <string.h>
 
 CMenuItemsHolder::CMenuItemsHolder() :
@@ -170,6 +172,27 @@ bool CMenuItemsHolder::Key( const int key, const bool down )
 	{
 		int direction;
 		cursorPrev = m_iCursorPrev = m_iCursor;
+
+		// Cry of Fear options layout: the focus follows where the controls
+		// are on the screen, not the order they were added in
+		if( UI_CoFOptionsLayout( ))
+		{
+			const int target = UI_CoFNavTarget( this, m_iCursor, key, m_bWrapCursor );
+
+			if( target != COF_NAV_STOCK )
+			{
+				if( target < 0 || target == m_iCursor || !m_pItems.IsValidIndex( target ))
+					return false;
+
+				m_iCursor = target;
+				CursorMoved();
+				m_pItems[m_iCursor]->PlayLocalSound( uiStatic.sounds[SND_MOVE] );
+				if( m_pItems.IsValidIndex( m_iCursorPrev ))
+					ClearBits( m_pItems[m_iCursorPrev]->iFlags, QMF_HASKEYBOARDFOCUS );
+				SetBits( m_pItems[m_iCursor]->iFlags, QMF_HASKEYBOARDFOCUS );
+				return true;
+			}
+		}
 
 		if( UI::Key::IsUpArrow( key ) || UI::Key::IsLeftArrow( key ))
 			direction = -1;
@@ -359,6 +382,289 @@ void CMenuItemsHolder::Think( void )
 
 /*
 =================
+UI_CoFNavTarget
+
+Cry of Fear options layout (theme on): pad and arrow-key focus follows where
+the controls are drawn (their render rectangles), not the order they were
+added in, which the pages never kept in step with their layout.
+
+  * edge rows: a control lying wholly below (footer: the button row) or
+    above (header) every control not on its own row, by at least 16 units,
+    belongs to no column;
+  * columns: the other controls whose horizontal extents overlap by at
+    least 30 % of the narrower one, joined transitively (a two-column page
+    has two, a full-width list joins everything);
+  * up / down (Tab = down, Shift+Tab = up) stay in the column: the nearest
+    control beyond the focused one by vertical gap (not on its row), ties to
+    the closest left edge; past the column's end, the nearest edge row
+    control that way (vertical gap + 2 x the distance between the left
+    edges: the button row under either column); past that, the other end of the same column when
+    the holder wraps. From an edge row control: the nearest control that way
+    (the same measure), else (wrapping) the farthest one the other way;
+  * left / right: a control on the same row, or one in another column (not
+    an edge row) - the one at the nearest height (8 x vertical gap +
+    horizontal gap, then the centre distance); never wrapping; nothing that
+    way = the key is not used.
+
+A focused slider, spin control, field or list keeps its own use of the keys
+(value, caret, rows) - only keys it does not use get here. Candidates are
+the items the stock order stops on: visible, not inactive, not mouse-only,
+not greyed. Returns the index to focus, -1 for none, or COF_NAV_STOCK when
+the stock creation order should handle the key (too many items).
+=================
+*/
+struct cofNavBox_t
+{
+	int l, t, r, b;
+};
+
+static int UI_CoFNavOverlap( int a0, int a1, int b0, int b1 )
+{
+	const int o = Q_min( a1, b1 ) - Q_max( a0, b0 );
+	return o > 0 ? o : 0;
+}
+
+static int UI_CoFNavGap( int a0, int a1, int b0, int b1 )
+{
+	const int g = Q_max( a0, b0 ) - Q_min( a1, b1 );
+	return g > 0 ? g : 0;
+}
+
+static bool UI_CoFNavSameColumn( const cofNavBox_t &a, const cofNavBox_t &b )
+{
+	const int narrow = Q_min( a.r - a.l, b.r - b.l );
+	return narrow > 0 && UI_CoFNavOverlap( a.l, a.r, b.l, b.r ) * 10 >= narrow * 3;
+}
+
+static bool UI_CoFNavSameRow( const cofNavBox_t &a, const cofNavBox_t &b )
+{
+	const int low = Q_min( a.b - a.t, b.b - b.t );
+	return low > 0 && UI_CoFNavOverlap( a.t, a.b, b.t, b.b ) * 2 >= low;
+}
+
+bool UI_CoFNavUsable( CMenuBaseItem *item )
+{
+	return item && item->IsVisible() &&
+		!FBitSet( item->iFlags, QMF_INACTIVE | QMF_MOUSEONLY | QMF_GRAYED | QMF_HIDDENBYPARENT ) &&
+		item->GetRenderSize().w > 0 && item->GetRenderSize().h > 0;
+}
+
+#define COF_NAV_MAX	160
+
+int UI_CoFNavTarget( CMenuItemsHolder *holder, int cur, int key, bool wrap )
+{
+	const int count = holder ? holder->ItemCount() : 0;
+	int dx = 0, dy = 0;
+
+	if( UI::Key::IsUpArrow( key )) dy = -1;
+	else if( UI::Key::IsDownArrow( key )) dy = 1;
+	else if( UI::Key::IsLeftArrow( key )) dx = -1;
+	else if( UI::Key::IsRightArrow( key )) dx = 1;
+	else if( key == K_TAB ) dy = EngFuncs::KEY_IsDown( K_SHIFT ) ? -1 : 1;
+	else return COF_NAV_STOCK;
+
+	if( count <= 0 || count > COF_NAV_MAX )
+		return COF_NAV_STOCK;
+
+	cofNavBox_t box[COF_NAV_MAX];
+	bool use[COF_NAV_MAX], edge[COF_NAV_MAX];
+	int group[COF_NAV_MAX];
+
+	for( int i = 0; i < count; i++ )
+	{
+		CMenuBaseItem *item = holder->GetItemByIndex( i );
+
+		use[i] = UI_CoFNavUsable( item );
+		edge[i] = false;
+		group[i] = i;
+		if( item )
+		{
+			const Point p = item->GetRenderPosition();
+			const Size sz = item->GetRenderSize();
+
+			box[i].l = p.x;
+			box[i].t = p.y;
+			box[i].r = p.x + sz.w;
+			box[i].b = p.y + sz.h;
+		}
+		else memset( &box[i], 0, sizeof( box[i] ));
+	}
+
+	// no focus yet (or on nothing that has a place): the top-left control
+	if( cur < 0 || cur >= count || !holder->GetItemByIndex( cur ) ||
+		box[cur].r <= box[cur].l || box[cur].b <= box[cur].t )
+	{
+		int best = -1;
+		for( int i = 0; i < count; i++ )
+		{
+			if( use[i] && ( best < 0 || box[i].t < box[best].t ||
+				( box[i].t == box[best].t && box[i].l < box[best].l )))
+				best = i;
+		}
+		return best;
+	}
+
+
+    if(dy && UI_CoFSelectionLists())
+    {
+        int order[COF_NAV_MAX], n=0;
+        for(int i=0;i<count;i++)if(use[i])order[n++]=i;
+        // Sort by top, then left; insertion index is the stable tie breaker.
+        for(int i=1;i<n;i++)for(int j=i;j>0;j--)
+        {
+            int a=order[j-1],b=order[j];
+            if(box[a].t<box[b].t || (box[a].t==box[b].t &&
+                (box[a].l<box[b].l || (box[a].l==box[b].l && a<b))))break;
+            order[j-1]=b;order[j]=a;
+        }
+        if(!n)return -1;
+        int at=-1;for(int i=0;i<n;i++)if(order[i]==cur)at=i;
+        if(at<0)return dy>0?order[0]:order[n-1];
+        at+=dy;
+        if(at<0||at>=n){if(!wrap)return -1;at=at<0?n-1:0;}
+        return order[at];
+    }
+	// edge rows (header / footer)
+	const int edgeGap = Q_max( 1, (int)( 16 * uiStatic.scaleY ));
+	for( int i = 0; i < count; i++ )
+	{
+		if( !use[i] && i != cur )
+			continue;
+
+		bool below = true, above = true, others = false;
+		for( int j = 0; j < count && ( below || above ); j++ )
+		{
+			if( j == i || ( !use[j] && j != cur ) || UI_CoFNavSameRow( box[i], box[j] ))
+				continue;
+			others = true;
+			if( box[j].b + edgeGap > box[i].t ) below = false;
+			if( box[j].t < box[i].b + edgeGap ) above = false;
+		}
+		edge[i] = others && ( below || above );
+	}
+
+	// columns: union of the non-edge usable items (and the focused one) that
+	// overlap horizontally, transitively
+	for( int pass = 0; pass < count; pass++ )
+	{
+		bool changed = false;
+
+		for( int i = 0; i < count; i++ )
+		{
+			if(( !use[i] && i != cur ) || edge[i] )
+				continue;
+			for( int j = i + 1; j < count; j++ )
+			{
+				if(( !use[j] && j != cur ) || edge[j] || group[i] == group[j] )
+					continue;
+				if( !UI_CoFNavSameColumn( box[i], box[j] ))
+					continue;
+
+				const int from = Q_max( group[i], group[j] ), to = Q_min( group[i], group[j] );
+				for( int k = 0; k < count; k++ )
+				{
+					if( group[k] == from )
+						group[k] = to;
+				}
+				changed = true;
+			}
+		}
+		if( !changed )
+			break;
+	}
+
+	const cofNavBox_t &c = box[cur];
+	const int cx2 = c.l + c.r, cy2 = c.t + c.b;
+	int best = -1;
+	long bestA = 0, bestB = 0;
+
+	auto better = [&]( int i, long a, long b ) -> void
+	{
+		if( best < 0 || a < bestA || ( a == bestA && b < bestB ))
+		{
+			best = i;
+			bestA = a;
+			bestB = b;
+		}
+	};
+	auto beyond = [&]( int i ) -> bool
+	{
+		const int oy2 = box[i].t + box[i].b;
+		return ( dy > 0 ? oy2 > cy2 : oy2 < cy2 ) && !UI_CoFNavSameRow( box[i], c );
+	};
+
+	if( dx )
+	{
+		for( int i = 0; i < count; i++ )
+		{
+			if( !use[i] || i == cur )
+				continue;
+
+			const cofNavBox_t &o = box[i];
+			const int ox2 = o.l + o.r;
+
+			if(( dx > 0 && ox2 <= cx2 ) || ( dx < 0 && ox2 >= cx2 ) || UI_CoFNavSameColumn( o, c ))
+				continue;
+			if( !UI_CoFNavSameRow( o, c ) && ( edge[cur] || edge[i] || group[i] == group[cur] ))
+				continue;
+
+			better( i, 8L * UI_CoFNavGap( c.t, c.b, o.t, o.b ) + UI_CoFNavGap( c.l, c.r, o.l, o.r ),
+				abs(( o.t + o.b ) - cy2 ));
+		}
+		return best;
+	}
+
+	if( edge[cur] )
+	{
+		// from the button row (or a header): the nearest control that way
+		for( int i = 0; i < count; i++ )
+		{
+			if( use[i] && i != cur && beyond( i ))
+				better( i, UI_CoFNavGap( c.t, c.b, box[i].t, box[i].b ) + 2L * abs( box[i].l - c.l ), i );
+		}
+		if( best >= 0 || !wrap )
+			return best;
+
+		// wrapping: the farthest control the other way
+		for( int i = 0; i < count; i++ )
+		{
+			if( !use[i] || i == cur || UI_CoFNavSameRow( box[i], c ))
+				continue;
+			better( i, dy > 0 ? box[i].t : -box[i].b, UI_CoFNavGap( c.l, c.r, box[i].l, box[i].r ));
+		}
+		return best;
+	}
+
+	// up / down in the column
+	for( int i = 0; i < count; i++ )
+	{
+		if( use[i] && i != cur && !edge[i] && group[i] == group[cur] && beyond( i ))
+			better( i, UI_CoFNavGap( c.t, c.b, box[i].t, box[i].b ), abs( box[i].l - c.l ));
+	}
+	if( best >= 0 )
+		return best;
+
+	// past the column's end: the edge row that way (the button row)
+	for( int i = 0; i < count; i++ )
+	{
+		if( use[i] && i != cur && edge[i] && beyond( i ))
+			better( i, UI_CoFNavGap( c.t, c.b, box[i].t, box[i].b ) + 2L * abs( box[i].l - c.l ), i );
+	}
+	if( best >= 0 || !wrap )
+		return best;
+
+	// past everything: the other end of the same column
+	for( int i = 0; i < count; i++ )
+	{
+		if( !use[i] || i == cur || edge[i] || group[i] != group[cur] || UI_CoFNavSameRow( box[i], c ))
+			continue;
+		better( i, dy > 0 ? box[i].t : -box[i].b, abs( box[i].l - c.l ));
+	}
+	return best;
+}
+
+/*
+=================
 UI_AdjustCursor
 
 This functiont takes the given menu, the direction, and attempts to
@@ -374,7 +680,10 @@ wrap:
 	while( m_iCursor >= 0 && m_iCursor < m_pItems.Count() )
 	{
 		item = m_pItems[m_iCursor];
-		if( !item->IsVisible() || item->iFlags & (QMF_INACTIVE|QMF_MOUSEONLY) )
+		// Cry of Fear theme: a greyed control is skipped as well - focus on
+		// it is invisible and does nothing (pad and arrow-key navigation)
+		if( !item->IsVisible() || item->iFlags & (QMF_INACTIVE|QMF_MOUSEONLY) ||
+			( UI_ThemeActive() && ( item->iFlags & QMF_GRAYED )))
 		{
 			m_iCursor += dir;
 		}

@@ -18,8 +18,11 @@ GNU General Public License for more details.
 
 #include "BaseModel.h"
 #include "Utils.h"
+#include "Theme.h"
 #include "enginecallback_menu.h"
 #include "utlvector.h"
+#include "CoFOptions.h"
+#include <ctype.h>
 
 // Shared model over gfx/shell/kb_act.lst, the list of game actions used
 // for the keyboard configuration screen and (read-only) the touch button
@@ -44,6 +47,7 @@ public:
 		char bind[64];     // empty when entry is a separator
 		char first[20];    // formatted first bound key  (VIEW_BINDINGS only)
 		char second[20];   // formatted second bound key (VIEW_BINDINGS only)
+		bool header;       // a section caption (theme mode, see CollapseSections)
 	};
 
 	void Update() override
@@ -81,7 +85,11 @@ public:
 				if( !pfile )
 					break;
 
-				FormatLabel( token, e.display, sizeof( e.display ));
+				// Cry of Fear options layout: the game's "Tertiary Attack"
+				// (+attack3) is its aim down sights, so the list calls it "Aim"
+				if( m_view == VIEW_BINDINGS && UI_CoFOptionsLayout( ) && !stricmp( e.bind, "+attack3" ))
+					FormatLabel( L( "Aim" ), e.display, sizeof( e.display ));
+				else FormatLabel( token, e.display, sizeof( e.display ));
 
 				if( m_view == VIEW_BINDINGS )
 				{
@@ -96,6 +104,124 @@ public:
 		}
 
 		EngFuncs::COM_FreeFile( afile );
+
+		// the sprint toggle and the quick turn (gamepad rounds 2 and 3),
+		// added in code like the crouch toggle below (which lands between
+		// Crouch and Quick turn)
+		if( m_view == VIEW_BINDINGS && UI_CoFOptionsLayout( ))
+		{
+			AddAfter( "+sprint", "cof_sprint_toggle_press", L( "Sprint (toggle)" ));
+			AddAfter( "+duck", "cof_quickturn", L( "Quick turn" ));
+		}
+
+		// Cry of Fear options layout: the engine's crouch toggle
+		// (cof_duck_toggle, gamepad round) under the game's own Crouch row,
+		// unless the list already has it - the game's kb_act.lst is not
+		// shipped modified
+		if( m_view == VIEW_BINDINGS && UI_CoFOptionsLayout( ))
+			AddAfter( "+duck", "cof_duck_toggle", L( "Crouch (toggle)" ));
+
+		// quick save / quick load (engine cof_quicksave / cof_quickload,
+		// F5 / F9 by default, patches/cof-mainui-quicksave.patch) under the
+		// game's own "Pause game" row, added in code like the crouch toggle
+		if( m_view == VIEW_BINDINGS && UI_CoFOptionsLayout( ))
+		{
+			AddAfter( "pause", "cof_quicksave", L( "Quick save" ));
+			AddAfter( "cof_quicksave", "cof_quickload", L( "Quick load" ));
+		}
+
+		if( UI_ThemeActive( ))
+			CollapseSections();
+	}
+
+	void AddAfter( const char *after, const char *bind, const char *label )
+	{
+		int at = -1;
+
+		for( int i = 0; i < entries.Count(); i++ )
+		{
+			if( !stricmp( entries[i].bind, bind ))
+				return;
+			if( !stricmp( entries[i].bind, after ))
+				at = i;
+		}
+
+		entry_t e = { 0 };
+		Q_strncpy( e.bind, bind, sizeof( e.bind ));
+		FormatLabel( label, e.display, sizeof( e.display ));
+
+		int keys[2];
+		LookupBoundKeys( e.bind, keys );
+		FormatKey( keys[0], e.first, sizeof( e.first ));
+		FormatKey( keys[1], e.second, sizeof( e.second ));
+
+		if( at < 0 )
+			entries.AddToTail( e );
+		else
+			entries.InsertAfter( at, e );
+	}
+
+	/*
+	=================
+	CollapseSections
+
+	gfx/shell/kb_act.lst marks a section the GoldSrc way:
+
+	    "blank" "=========================="
+	    "blank" "Controls - Movement"
+	    "blank" "=========================="
+
+	The WON list simply drew all three, which in a themed table reads as two
+	rows of noise around the caption. Drop every rule-of-equals row and turn
+	what is left of each separator into a real section caption, uppercased and
+	free of colour codes; CMenuTable draws those as a small dim label with a
+	hairline under it and skips them when navigating.
+	=================
+	*/
+	void CollapseSections()
+	{
+		for( int i = entries.Count() - 1; i >= 0; i-- )
+		{
+			if( entries[i].bind[0] )
+				continue; // a real binding row
+
+			if( IsRule( entries[i].display ))
+			{
+				entries.Remove( i );
+				continue;
+			}
+
+			entries[i].header = true;
+			StripAndUpper( entries[i].display, sizeof( entries[i].display ));
+		}
+	}
+
+	// true for a label that is nothing but '=' (and colour codes)
+	static bool IsRule( const char *s )
+	{
+		bool any = false;
+
+		for( ; *s; s++ )
+		{
+			if( IsColorString( s )) { s++; continue; }
+			if( *s == '=' ) { any = true; continue; }
+			return false;
+		}
+		return any;
+	}
+
+	static void StripAndUpper( char *s, size_t size )
+	{
+		char tmp[96];
+		size_t n = 0;
+
+		for( const char *p = s; *p && n < sizeof( tmp ) - 1; p++ )
+		{
+			if( IsColorString( p )) { p++; continue; }
+			tmp[n++] = (char)toupper( (unsigned char)*p );
+		}
+		tmp[n] = 0;
+		Q_strncpy( s, tmp, size );
 	}
 
 	int GetColumns() const override { return m_view == VIEW_BINDINGS ? 3 : 2; }
@@ -126,6 +252,11 @@ public:
 		return entries.IsValidIndex( line ) && entries[line].bind[0] != 0;
 	}
 
+	bool IsLineSectionHeader( int line ) const override
+	{
+		return entries.IsValidIndex( line ) && entries[line].header;
+	}
+
 	// Walk all keys, return up to two bound to `command` (in input order, then swapped).
 	static void LookupBoundKeys( const char *command, int twoKeys[2] )
 	{
@@ -139,6 +270,11 @@ public:
 
 			const char *b = EngFuncs::KEY_GetBinding( i );
 			if( !b )
+				continue;
+
+			// Cry of Fear options layout: pad buttons are the Gamepad
+			// controls page's (menus/CoFOptions.cpp)
+			if( UI_CoFOptionsLayout( ) && UI_CoFIsPadKey( i ))
 				continue;
 
 			if( !stricmp( command, b ))

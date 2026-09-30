@@ -46,6 +46,13 @@ public:
 	virtual bool GetLineColor( int line, unsigned int &fillColor, bool &force ) const { return false; }
 	virtual bool GetCellColors( int line, int column, unsigned int &textColor, bool &force ) const { return false; }
 	virtual bool IsCellTextWrapped( int line, int column ) { return true; }
+
+	// A section boundary rather than a row of data. In theme mode CMenuTable
+	// draws these as a small uppercase caption with a hairline under it, does
+	// not fill or select them, and keyboard navigation steps over them.
+	// GoldSrc list files mark sections with a row of '=' characters
+	// (gfx/shell/kb_act.lst); those rows are the ones this hides.
+	virtual bool IsLineSectionHeader( int line ) const { return false; }
 	// virtual CMenuBaseItem *GetCellItem( int line, int column ) { return NULL; }
 
 	// sorting

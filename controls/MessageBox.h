@@ -26,8 +26,12 @@ public:
 	CMenuMessageBox( const char *name = "Unnamed MessageBox" );
 
 	void SetMessage( const char *sz );
+
+	// title shown in the theme's title band
+	const char *szPanelTitle;
 private:
 	void _Init() override;
+	void _VidInit() override;
 	void Draw() override;
 
 	CMenuAction dlgMessage;

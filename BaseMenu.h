@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "WindowSystem.h"
 #include "Image.h"
 #include "utlstring.h"
+#include "Theme.h"
 
 #define UI_PULSE_DIVISOR		75.0f
 
@@ -62,6 +63,7 @@ extern cvar_t	*ui_borderclip;
 extern cvar_t	*ui_prefer_won_background;
 extern cvar_t	*ui_background_stretch;
 extern cvar_t	*ui_logohorizontal;
+extern cvar_t	*ui_scrim_alpha;
 
 enum EUISounds
 {
@@ -96,6 +98,18 @@ typedef struct
 	HFont hBoldFont;
 	HFont hLightBlur;
 	HFont hHeavyBlur;
+
+	// Source-style theme handles. On Windows the menu uses the GDI backend and
+	// CBaseFont::DrawCharacter ignores the charH argument (SCALE_FONTS is not
+	// defined for win32), so a new text size needs a new HFont, not a new
+	// charSize. See Theme.h for the sizes.
+	HFont hThemeTitle;
+	HFont hThemeLabel;
+	HFont hThemeBody;
+	HFont hThemeButton;
+	HFont hThemeItem;
+	HFont hThemeLogo;
+	HFont hThemeLogoSub;
 
 	bool	m_fDemosPlayed;
 	bool	m_fNoOldBackground;
@@ -220,6 +234,9 @@ int UI_CreditsActive( void );
 void UI_DrawFinalCredits( void );
 
 void UI_CloseMenu( void );
+
+// starts one of scripts/chapterbackgrounds.txt maps, if any is available
+bool UI_StartBackGroundMap( void );
 
 // SCR support
 void UI_LoadScriptConfig( void );

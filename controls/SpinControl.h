@@ -47,6 +47,11 @@ public:
 	void ForceDisplayString( const char *display );
 
 private:
+	void OpenSelection();
+	int SelectionCount() const;
+	static void SelectionText( CMenuBaseItem *, int, char *, int );
+	static void SelectionCommit( CMenuBaseItem *, int );
+	void DrawTheme( void );
 	const char *MoveLeft();
 	const char *MoveRight();
 	void Display();

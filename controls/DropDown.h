@@ -108,6 +108,8 @@ protected:
 	bool m_isOpen;
 
 private:
+	static void SelectionText( CMenuBaseItem *, int, char *, int );
+	static void SelectionCommit( CMenuBaseItem *, int );
 	int IsNewStateByMouseClick();
 
 	CUtlVector<const char *> m_szNames;

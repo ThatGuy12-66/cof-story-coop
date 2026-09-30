@@ -149,6 +149,21 @@ const char *L( const char *szStr ) __attribute__(( format_arg( 1 ))); // L means
 #else
 const char *L( const char *szStr ); // L means Localize!
 #endif
+
+// Cry of Fear language packs: the menu's own strings from
+// languages/<cof_language>/strings/menu-strings.tsv (MenuStrings.cpp).
+// UI_LangText is applied where text is drawn and measured; UI_LangFrame
+// reloads the table when cof_language changes (true = re-lay out the pages);
+// UI_LangHold keeps editable text out of it.
+const char *UI_LangText( const char *text );
+bool UI_LangFrame( void );
+void UI_LangHold( bool hold );
+class CUILangHold
+{
+public:
+	CUILangHold() { UI_LangHold( true ); }
+	~CUILangHold() { UI_LangHold( false ); }
+};
 void UI_FreeCustomStrings( void );
 
 inline size_t Q_strncpy( char *dst, const char *src, size_t size )

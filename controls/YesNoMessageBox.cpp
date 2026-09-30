@@ -27,6 +27,7 @@ CMenuYesNoMessageBox::CMenuYesNoMessageBox( bool alert ) : BaseClass( "YesNoMess
 	bAutoHide = true;
 	m_bIsAlert = alert;
 	iFlags |= QMF_DIALOG;
+	szPanelTitle = alert ? "NOTICE" : "CONFIRM";
 
 	dlgMessage1.iFlags = QMF_INACTIVE|QMF_DROPSHADOW;
 	dlgMessage1.eTextAlignment = QM_TOP;
@@ -105,6 +106,52 @@ CMenuYesNoMessageBox::VidInit
 */
 void CMenuYesNoMessageBox::_VidInit()
 {
+	if( UI_ThemeActive( ))
+	{
+		// a centred Source panel: title band, message in the content rect,
+		// button row bottom-right with the primary action on the right.
+		// The panel is sized to the wrapped message (UI_ThemeMessagePanelSize),
+		// not fixed, so a two-sentence warning no longer runs out of lines and
+		// ellipsises itself into the button row.
+		int w = 520, h = 200;
+
+		UI_ThemeMessagePanelSize( dlgMessage1.szName, &w, &h );
+
+		SetRect(( uiStatic.width - w ) / 2, ( 768 - h ) / 2, w, h );
+		pos.x += uiStatic.xOffset;
+		pos.y += uiStatic.yOffset;
+		CalcPosition();
+		CalcSizes();
+
+		// QM_TOP, not QM_CENTER: UI_DrawString's vertically centred path starts
+		// halfway down the rect and still stops a line short of its bottom, so
+		// it fits only about half as many lines as the rect has room for - which
+		// is why a wrapped message ran into the button row. QM_TOP keeps the
+		// horizontal centring (QM_CENTER is 0) and uses the whole height.
+		dlgMessage1.eTextAlignment = QM_TOP;
+		dlgMessage1.SetRect( THEME_PAD_X, THEME_TITLE_BAND_H + THEME_PAD_TOP,
+			w - THEME_PAD_X * 2,
+			h - THEME_TITLE_BAND_H - THEME_PAD_TOP - THEME_PAD_BOTTOM
+				- THEME_BTNROW_H - THEME_BTNROW_GAP );
+		dlgMessage1.font = uiStatic.hThemeBody;
+		dlgMessage1.charSize = THEME_BODY_TALL;
+		dlgMessage1.iFlags &= ~QMF_DROPSHADOW;
+
+		const int wYes = UI_ThemeButtonWidth( yes.szName );
+		const int wNo  = UI_ThemeButtonWidth( no.szName );
+		const int right = w - THEME_PAD_X;
+		const int rowY = h - THEME_PAD_BOTTOM - THEME_BTNROW_H;
+
+		yes.eThemeStyle = CMenuPicButton::THEME_BOX;
+		yes.eTextAlignment = QM_CENTER;
+		yes.SetRect( right - wYes, rowY, wYes, THEME_BTNROW_H );
+
+		no.eThemeStyle = CMenuPicButton::THEME_BOX;
+		no.eTextAlignment = QM_CENTER;
+		no.SetRect( right - wYes - THEME_BTN_GAP - wNo, rowY, wNo, THEME_BTNROW_H );
+		return;
+	}
+
 	SetRect( DLG_X + 192, 256, 640, 256 );
 	pos.x += uiStatic.xOffset;
 	pos.y += uiStatic.yOffset;
@@ -114,11 +161,40 @@ void CMenuYesNoMessageBox::_VidInit()
 
 /*
 ==============
+CMenuYesNoMessageBox::Show
+
+The message is set immediately before the box is shown (the quit dialog alone
+has three different texts), and the panel is sized to the wrapped message, so
+the layout has to be redone here rather than only on a resolution change.
+==============
+*/
+void CMenuYesNoMessageBox::Show()
+{
+	BaseClass::Show();
+
+	if( UI_ThemeActive( ) && WasInit( ))
+		VidInit();
+}
+
+/*
+==============
 CMenuYesNoMessageBox::Draw
 ==============
 */
 void CMenuYesNoMessageBox::Draw()
 {
+	if( UI_ThemeActive( ))
+	{
+		UI_FillRect( 0, 0, gpGlobals->scrWidth, gpGlobals->scrHeight, THEME_SCRIM );
+		UI_ThemeDrawDialogPanel( m_scPos, m_scSize, szPanelTitle );
+		UI_ThemeSeparator( m_scPos.x + (int)( THEME_PAD_X * uiStatic.scaleX ),
+			m_scPos.y + m_scSize.h - (int)(( THEME_PAD_BOTTOM + THEME_BTNROW_H + THEME_BTNROW_GAP / 2 ) * uiStatic.scaleY ),
+			m_scSize.w - (int)( THEME_PAD_X * 2 * uiStatic.scaleX ), THEME_SEPARATOR );
+
+		CMenuBaseWindow::Draw();
+		return;
+	}
+
 	UI_FillRect( 0, 0, gpGlobals->scrWidth, gpGlobals->scrHeight, 0x40000000 );
 
 	EngFuncs::FillRGBA( m_scPos.x, m_scPos.y, m_scSize.w, m_scSize.h, 20, 20, 20, 235 );

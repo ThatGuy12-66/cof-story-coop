@@ -29,6 +29,7 @@ public:
 
 	void _Init() override;
 	void _VidInit() override;
+	void Show() override;
 	void Draw() override;
 	bool KeyDown( int key ) override;
 	void SetMessage( const char *msg );
@@ -49,6 +50,10 @@ public:
 	CEventCallback onNegative;
 
 	bool bAutoHide;
+
+	// title shown in the theme's title band
+	const char *szPanelTitle;
+
 	CMenuAction		dlgMessage1;
 	CMenuPicButton	yes;
 	CMenuPicButton	no;
