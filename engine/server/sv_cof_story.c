@@ -239,6 +239,7 @@ void SV_CoF_StoryFrame( void )
 
 void SV_CoF_StoryShutdown( void )
 {
+	SV_CoF_CommandSender( NULL ); // an engine error inside a command leaves it set
 	SV_CoF_PartyShutdown();
 	SV_CoF_ShareReset();
 	CoF_StoryCloseGate();

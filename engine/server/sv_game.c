@@ -26,6 +26,7 @@ GNU General Public License for more details.
 #include "cof_language.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
+#include "sv_cof_sender.h"
 
 // GameAPI functions declarations
 static int GAME_EXPORT pfnModelIndex( const char *m );
@@ -1554,6 +1555,41 @@ static void GAME_EXPORT pfnChangePitch( edict_t* ent )
 	ent->v.angles[PITCH] = SV_AngleMod( ent->v.idealpitch, ent->v.angles[PITCH], ent->v.pitch_speed );
 }
 
+// Cry of Fear story co-op: the player whose client command the game DLL is
+// running right now (NULL outside one). Inside it, a search for "the first
+// player" answers with that sender, then everyone else (sv_cof_sender.h).
+static edict_t *cof_command_sender;
+
+void SV_CoF_CommandSender( edict_t *sender )
+{
+	cof_command_sender = sender;
+}
+
+// true: *e is the answer. false: search on from *e as usual.
+static qboolean CoF_SenderFind( const char *pszField, const char *pszValue, int *e )
+{
+	byte present[MAX_CLIENTS + 1];
+	int i, sender;
+
+	if( !cof_command_sender || *e > svs.maxclients || svs.maxclients > MAX_CLIENTS ||
+		Q_strcmp( pszField, "classname" ) || Q_strcmp( pszValue, "player" ))
+		return false;
+	sender = NUM_FOR_EDICT( cof_command_sender );
+	if( sender < 1 || sender > svs.maxclients ) return false;
+	memset( present, 0, sizeof( present ));
+	for( i = 1; i <= svs.maxclients; i++ )
+	{
+		edict_t *ed = SV_EdictNum( i );
+		present[i] = (byte)( SV_IsValidEdict( ed ) && SV_ClientFromEdict( ed, true ) &&
+			!Q_strcmp( SV_GetString( ed->v.classname ), "player" ));
+	}
+	if( !present[sender] ) return false;
+	i = CoF_SenderNextPlayer( *e, sender, svs.maxclients, present );
+	if( !i ) *e = svs.maxclients; // past the clients the plain search goes on
+	else *e = i;
+	return i != 0;
+}
+
 /*
 =========
 SV_FindEntityByString
@@ -1569,6 +1605,9 @@ static edict_t *GAME_EXPORT SV_FindEntityByString( edict_t *pStartEdict, const c
 		return svgame.edicts;
 
 	if( pStartEdict ) e = NUM_FOR_EDICT( pStartEdict );
+
+	if( CoF_SenderFind( pszField, pszValue, &e ))
+		return SV_EdictNum( e );
 
 	for( int i = 0; i < ARRAYSIZE( gEntvarsDescription ); i++ )
 	{

@@ -3162,8 +3162,11 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 		}
 
 		// custom client commands; story co-op attributes their inventory changes
+		// and makes the sender "the first player" for the game's lookups
 		SV_CoF_ShareCommandBegin( cl );
+		SV_CoF_CommandSender( cl->state == cs_spawned && SV_CoF_StoryCoopEnabled() ? cl->edict : NULL );
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
+		SV_CoF_CommandSender( NULL );
 		SV_CoF_ShareCommandEnd( cl );
 		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
 			Con_Reportf( "[cof-trace] hl ClientCommand returned for cofload %s\n", cofload_slot );
