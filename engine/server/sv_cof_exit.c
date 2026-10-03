@@ -16,12 +16,14 @@ static cof_exit_state_t cof_exit;
 static int cof_exit_models[COF_EXIT_MODELS], cof_exit_model_count;
 static char cof_exit_unholdable[COF_EXIT_NAME]; // already reported in this map
 static int cof_exit_unholdable_generation = -1;
+static int cof_exit_gone_generation = -1; // the hold was released in this map: the trigger still being touched must not start another
 
 void SV_CoF_ExitReset( void )
 {
 	CoF_ExitClear( &cof_exit );
 	cof_exit_model_count = 0;
 	cof_exit_unholdable_generation = -1;
+	cof_exit_gone_generation = -1;
 }
 
 // Everyone who counts, by client slot, against the exit last asked for.
@@ -52,6 +54,12 @@ static const char *CoF_ExitName( int userid )
 	return "your partner";
 }
 
+// A hold that belongs to an earlier map is dead even before the frame notices.
+static qboolean CoF_ExitLive( void )
+{
+	return cof_exit.active && cof_exit.generation == svs.spawncount;
+}
+
 qboolean SV_CoF_ExitRequest( const char *level, const char *landmark )
 {
 	cof_exit_player_t players[COF_EXIT_PLAYERS];
@@ -66,9 +74,24 @@ qboolean SV_CoF_ExitRequest( const char *level, const char *landmark )
 	if( Q_strlen( level ) >= sizeof( map )) return true;
 	Q_strncpy( map, level, sizeof( map ));
 	COM_StripExtension( map );
-	// An exit the engine is going to refuse is not worth waiting at.
-	if( !SV_CoF_LiveLandmark( landmark, spot )) return true;
-	count = SV_CoF_MapExitModels( sv.name, map, landmark, models, COF_EXIT_MODELS, &fires );
+	if( cof_exit_gone_generation == svs.spawncount ) return true;
+	if( cof_exit.active && cof_exit.generation == svs.spawncount && !Q_strcmp( cof_exit.level, map ) && !Q_strcmp( cof_exit.landmark, landmark ))
+	{
+		// the game asks again every frame of a hold: reuse what the first request found
+		count = cof_exit_model_count;
+		VectorCopy( cof_exit.spot, spot );
+	}
+	else
+	{
+		// An exit the engine is going to refuse is not worth waiting at.
+		if( !SV_CoF_LiveLandmark( landmark, spot )) return true;
+		count = SV_CoF_MapExitModels( sv.name, map, landmark, models, COF_EXIT_MODELS, &fires );
+		if( !fires )
+		{
+			memcpy( cof_exit_models, models, sizeof( models ));
+			cof_exit_model_count = count;
+		}
+	}
 	if( fires )
 	{
 		// The game fires this exit's targets on every request; holding it
@@ -80,8 +103,6 @@ qboolean SV_CoF_ExitRequest( const char *level, const char *landmark )
 		CoF_ExitClear( &cof_exit );
 		return true;
 	}
-	memcpy( cof_exit_models, models, sizeof( models ));
-	cof_exit_model_count = count;
 	n = CoF_ExitPlayers( players );
 	if( CoF_ExitRequest( &cof_exit, players, n, svs.spawncount, map, landmark, spot, sv.time, &began ) == COF_EXIT_GO )
 	{
@@ -104,6 +125,7 @@ static void CoF_ExitGo( const char *phase )
 	Q_strncpy( landmark, cof_exit.landmark, sizeof( landmark ));
 	Con_Printf( "cofstory phase=%s destination=%s landmark=%s waiter=%d waited=%.1f\n", phase, level, landmark, cof_exit.waiter, sv.time - cof_exit.began );
 	CoF_ExitClear( &cof_exit );
+	cof_exit_gone_generation = svs.spawncount;
 	SV_QueueChangeLevel( level, landmark );
 }
 
@@ -156,7 +178,9 @@ void SV_CoF_ExitFrame( void )
 qboolean SV_CoF_ExitWarpKey( sv_client_t *cl )
 {
 	char text[96];
-	int left, answer = CoF_ExitEscape( &cof_exit, cl->userid, sv.time, &left );
+	int left, answer;
+	if( !CoF_ExitLive()) return false;
+	answer = CoF_ExitEscape( &cof_exit, cl->userid, sv.time, &left );
 	if( !answer ) return false;
 	if( answer > 0 )
 	{
@@ -170,10 +194,10 @@ qboolean SV_CoF_ExitWarpKey( sv_client_t *cl )
 
 int SV_CoF_ExitWaiter( void )
 {
-	return cof_exit.active ? cof_exit.waiter : 0;
+	return CoF_ExitLive() ? cof_exit.waiter : 0;
 }
 
 qboolean SV_CoF_ExitQuietAlert( const char *text )
 {
-	return cof_exit.active && !Q_strncmp( text, "CHANGE LEVEL: ", 14 );
+	return CoF_ExitLive() && !Q_strncmp( text, "CHANGE LEVEL: ", 14 );
 }

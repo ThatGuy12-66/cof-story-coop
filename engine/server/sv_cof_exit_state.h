@@ -24,11 +24,12 @@ typedef struct { int userid, spawned, alive, touching; float origin[3]; } cof_ex
 typedef struct
 {
 	int active; // an exit is being held
-	int walkin; // the waiter stood in the exit: stepping out cancels
+	int walkin; // the waiter stood in the exit: walking away from it cancels
 	int waiter; // userid; 0 while nobody is alive to wait
 	int generation; // the map this hold belongs to
 	char level[COF_EXIT_NAME], landmark[COF_EXIT_NAME];
 	float spot[3]; // the exit's landmark: a scripted exit's waiter is the nearest player
+	float where[3]; // a walk-in waiter's origin at the hold's start (or last touch)
 	double began, prompt_at;
 } cof_exit_state_t;
 
@@ -148,6 +149,12 @@ static int CoF_ExitRequest( cof_exit_state_t *s, const cof_exit_player_t *player
 	}
 	s->waiter = waiter;
 	s->walkin = walkin;
+	{
+		// A once-only trigger removes itself just after firing, so "touching"
+		// drops while the waiter has not moved: remember where they stood.
+		const cof_exit_player_t *w = CoF_ExitFind( players, n, waiter );
+		if( w && ( *began || w->touching )) memcpy( s->where, w->origin, sizeof( s->where ));
+	}
 	return COF_EXIT_HOLD;
 }
 
@@ -164,9 +171,12 @@ static int CoF_ExitFrame( cof_exit_state_t *s, const cof_exit_player_t *players,
 		return COF_EXIT_IDLE;
 	}
 	w = CoF_ExitFind( players, n, s->waiter );
-	if( s->walkin && ( !CoF_ExitCanWait( w ) || !w->touching ))
+	if( s->walkin && ( !CoF_ExitCanWait( w ) ||
+		( !w->touching && CoF_ExitDistanceSquared( w->origin, s->where ) > COF_EXIT_NEAR * COF_EXIT_NEAR )))
 	{
-		CoF_ExitClear( s ); // stepped out, died or left: the trigger asks again if someone returns
+		// walked away, died or left: the trigger asks again if someone returns.
+		// Merely not touching is no reason: a once-only trigger vanishes after firing.
+		CoF_ExitClear( s );
 		return COF_EXIT_CANCELLED;
 	}
 	if( !CoF_ExitCanWait( w ))
