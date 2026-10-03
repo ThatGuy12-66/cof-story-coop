@@ -20,4 +20,13 @@ qboolean SV_CoF_RetailItemName( const char *descriptor, char *out, size_t size )
 qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable );
 // The game's ScreenFade: seconds go out as x4096 shorts; flags 0 fades in from the colour.
 qboolean SV_CoF_RetailScreenFade( sv_client_t *cl, float duration, float hold, int flags, int r, int g, int b, int a );
+// The cof_document this player is reading right now (m_hDocument), or NULL.
+edict_t *SV_CoF_RetailOpenDocument( sv_client_t *cl );
+// Archive a document for a player through the game's own AddDocument: it
+// dedupes, saves, tells the player and sends AddNote.
+qboolean SV_CoF_RetailAddDocument( sv_client_t *cl, edict_t *doc );
+// Give a player a code note as cof_addcodenote does: placeholder slot, then AddNote.
+qboolean SV_CoF_RetailCodeNote( sv_client_t *cl, int code, int style );
+// Used document slots (of 16), or -1 without a verified, spawned player.
+int SV_CoF_RetailDocumentCount( sv_client_t *cl );
 #endif

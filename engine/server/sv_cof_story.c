@@ -125,6 +125,22 @@ qboolean SV_CoF_StoryCoopEnabled( void )
 #endif
 }
 
+// A retail thiscall member taking one pointer (ret 4), at a known RVA of the
+// hash-verified game DLL. __fastcall puts self in ecx and a dummy in edx; the
+// argument goes on the stack and the callee pops it, exactly as thiscall does.
+qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg )
+{
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	typedef void ( __fastcall *cof_member_t )( void *self, void *edx, void *arg );
+	dll_user_t *lib = (dll_user_t *)svgame.hInstance;
+	if( !self || !SV_CoF_StoryCoopEnabled() || !lib || !lib->hInstance || lib->custom_loader || lib->encrypted ) return false;
+	((cof_member_t)((byte *)lib->hInstance + rva ))( self, NULL, arg );
+	return true;
+#else
+	return false;
+#endif
+}
+
 static void CoF_StoryStatus_f( void )
 {
 	int i, j;
