@@ -14,6 +14,7 @@
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
+#include "sv_cof_retail.h"
 
 #define COF_PARTY_DOOR_FLAG 0x1EA4
 #define COF_PARTY_PREVIOUS_ORIGIN 0x618
@@ -65,6 +66,8 @@ typedef struct
 	qboolean pending[MAX_CLIENTS];
 	vec3_t destination, angles, start;
 	double deadline;
+	edict_t *door; // the inter_door that began it, to see whether it removed itself
+	int door_serial;
 } cof_party_door_t;
 
 // Who fired a story exit and who was elsewhere, recorded at capture for the
@@ -418,9 +421,13 @@ static void CoF_PartyWatchDoors( void )
 			VectorCopy( exit->v.angles, event->angles );
 			VectorCopy( cl->edict->v.origin, event->start );
 			event->deadline = sv.time + 8.0;
+			event->door = door;
+			event->door_serial = door->serialnumber;
 			for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
 			{
 				if( j == slot || !CoF_PartyAvailable( &svs.clients[j] )) continue;
+				// Only a partner right beside the opener goes through with them.
+				if( CoF_PartyDistanceSquared( svs.clients[j].edict->v.origin, cl->edict->v.origin ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
 				event->companions[j] = CoF_PartyIdentity( &svs.clients[j] );
 				event->pending[j] = true;
 			}
@@ -491,6 +498,31 @@ static void CoF_PartyFeet( const sv_client_t *mover, const edict_t *at, vec3_t f
 	feet[2] += mover->edict->v.mins[2] - 1.0f;
 }
 
+// The door that began this event is still there to be used again.
+static qboolean CoF_PartyDoorRemains( const cof_party_door_t *event )
+{
+	return SV_IsValidEdict( event->door ) && event->door->serialnumber == event->door_serial &&
+		!( event->door->v.flags & FL_KILLME ) && !Q_strcmp( SV_GetString( event->door->v.classname ), "inter_door" );
+}
+
+// The owner went where the others cannot walk after them. Tell every living
+// player who was not taken along and is not already there how to follow.
+static void CoF_PartyCutOff( int slot, const cof_party_door_t *event, const char *kind )
+{
+	sv_client_t *owner = &svs.clients[slot];
+	char text[96];
+	int i;
+	Q_snprintf( text, sizeof( text ), "%s went somewhere you can't follow. Press J to join.", owner->name );
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( i == slot || event->pending[i] || ( cl->flags & FCL_FAKECLIENT ) || !CoF_PartyPlayer( cl )) continue;
+		if( CoF_PartyDistanceSquared( cl->edict->v.origin, owner->edict->v.origin ) <= COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
+		SV_CoF_RetailProFont( cl, 1, text, true );
+		Con_Printf( "cofstory phase=cut-off userid=%d owner=%d kind=%s\n", cl->userid, owner->userid, kind );
+	}
+}
+
 static void CoF_PartyFinishDoors( void )
 {
 	int slot, i;
@@ -530,6 +562,8 @@ static void CoF_PartyFinishDoors( void )
 			}
 			event->completed = true;
 			event->deadline = sv.time + 5.0;
+			// A one-shot door is gone now: nobody else can take it.
+			if( !CoF_PartyDoorRemains( event )) CoF_PartyCutOff( slot, event, "door" );
 		}
 		for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 		{
@@ -626,11 +660,14 @@ static void CoF_PartyTeleports( void )
 				!CoF_PartySamePlayer( &cof_party_players[j].identity, other )) continue;
 			// A partner already beside the destination was part of the scene.
 			if( CoF_PartyDistanceSquared( other->edict->v.origin, cl->edict->v.origin ) <= COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
+			// Only a partner who stood beside the activator is taken along.
+			if( CoF_PartyDistanceSquared( other->edict->v.origin, p->teleport_from ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
 			event->companions[j] = cof_party_players[j].identity;
 			event->pending[j] = true;
 			count++;
 		}
 		Con_Printf( "cofstory phase=teleport-begin userid=%d target=%s companions=%d\n", cl->userid, SV_GetString( dest->v.targetname ), count );
+		CoF_PartyCutOff( i, event, "teleport" );
 		if( !count ) event->active = false;
 	}
 }
