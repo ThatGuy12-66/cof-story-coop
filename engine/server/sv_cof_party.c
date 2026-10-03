@@ -15,6 +15,7 @@
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_exit.h"
 
 #define COF_PARTY_DOOR_FLAG 0x1EA4
 #define COF_PARTY_PREVIOUS_ORIGIN 0x618
@@ -28,6 +29,7 @@
 #define COF_PARTY_JOIN_WANDER 64.0f
 #define COF_PARTY_TELEPORT_MIN 96.0f
 #define COF_PARTY_TELEPORT_WAIT 10.0
+#define COF_PARTY_WARP_COOLDOWN 2.0
 
 static const char *cof_party_starters[] = { "weapon_mobile", "weapon_switchblade" };
 static const char *cof_party_starter_descriptors[] = {
@@ -56,6 +58,7 @@ typedef struct
 	vec3_t place_start;
 	qboolean teleported;
 	vec3_t teleport_from, teleport_to;
+	double warp_after; // the next moment this player's warp key works
 } cof_party_player_t;
 
 typedef struct
@@ -929,6 +932,77 @@ void SV_CoF_PartyTransitionArrive( unsigned int epoch )
 			Con_Printf( "cofstory phase=arrival-overlapped userid=%d beside=%d\n", cl->userid, svs.clients[anchor].userid );
 		else Con_Printf( "cofstory phase=arrival-stranded userid=%d\n", cl->userid );
 	}
+}
+
+static void CoF_PartyWarpRefused( sv_client_t *cl, const char *reason, const char *text )
+{
+	Con_Printf( "cofstory phase=warp-refused userid=%d reason=%s\n", cl->userid, reason );
+	if( text ) SV_CoF_RetailProFont( cl, 1, text, false );
+}
+
+// cof_warp (bound to J): join the partner, wherever they are.
+static void CoF_PartyWarp( sv_client_t *cl )
+{
+	int i = CoF_PartySlot( cl ), j, waiter = SV_CoF_ExitWaiter();
+	sv_client_t *partner = NULL;
+	float best = 0.0f, d;
+	vec3_t feet, landing, angles = { 0, 0, 0 };
+	char text[96];
+	byte *pv;
+	if( i < 0 ) return;
+	CoF_PartyCheckGeneration();
+	if( !( pv = CoF_PartyPlayer( cl )))
+	{
+		CoF_PartyWarpRefused( cl, "dead", NULL ); // the game's respawn prompt already speaks to them
+		return;
+	}
+	if( pv[COF_PARTY_DOOR_FLAG] )
+	{
+		CoF_PartyWarpRefused( cl, "door", NULL ); // the door sequence moves them itself
+		return;
+	}
+	if( sv.time < cof_party_players[i].warp_after ) return;
+	for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+	{
+		sv_client_t *other = &svs.clients[j];
+		byte *opv = CoF_PartyPlayer( other );
+		if( j == i || !opv || opv[COF_PARTY_DOOR_FLAG] || ( other->flags & FCL_FAKECLIENT )) continue;
+		// During an exit hold the one waiting at the exit is the place to be.
+		if( waiter && other->userid == waiter )
+		{
+			partner = other;
+			break;
+		}
+		d = CoF_PartyDistanceSquared( cl->edict->v.origin, other->edict->v.origin );
+		if( !partner || d < best ) { partner = other; best = d; }
+	}
+	if( !partner )
+	{
+		CoF_PartyWarpRefused( cl, "no-partner", "Nobody to join right now." );
+		return;
+	}
+	CoF_PartyFeet( cl, partner->edict, feet );
+	angles[1] = partner->edict->v.angles[1];
+	if( !CoF_PartyLanding( cl, partner->edict, feet, landing ) || !CoF_PartyMove( cl, landing, angles ))
+	{
+		Q_snprintf( text, sizeof( text ), "No room next to %s.", partner->name );
+		CoF_PartyWarpRefused( cl, "no-room", text );
+		return;
+	}
+	cof_party_players[i].warp_after = sv.time + COF_PARTY_WARP_COOLDOWN;
+	// Black, fading in over half a second: the retail co-op door's blink. The
+	// warp does not depend on it being seen.
+	SV_CoF_RetailScreenFade( cl, 0.5f, 0.0f, 0, 0, 0, 0, 255 );
+	Con_Printf( "cofstory phase=warp userid=%d partner=%d origin=%.3f,%.3f,%.3f\n", cl->userid, partner->userid, landing[0], landing[1], landing[2] );
+}
+
+// Client commands the story layer answers itself, before the game DLL sees them.
+qboolean SV_CoF_PartyClientCommand( sv_client_t *cl )
+{
+	if( Q_strcmp( Cmd_Argv( 0 ), "cof_warp" ) || sv.state != ss_active || !SV_CoF_StoryCoopEnabled() ) return false;
+	// A held exit's waiter uses the same key as the escape hatch.
+	if( cl->state == cs_spawned && !SV_CoF_ExitWarpKey( cl )) CoF_PartyWarp( cl );
+	return true;
 }
 
 void SV_CoF_PartyFrame( void )

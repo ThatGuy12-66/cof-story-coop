@@ -3121,6 +3121,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	if( SV_CoF_CheatsClientCommand( cl ))
 		return;
 
+	// Cry of Fear story co-op: cof_warp
+	if( SV_CoF_PartyClientCommand( cl ))
+		return;
+
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )
 	{
 		if( !Q_strcmp( Cmd_Argv( 0 ), ucmds[i].name ))
