@@ -9,6 +9,9 @@ void SV_CoF_PartyFrame( void );
 void SV_CoF_PartyShutdown( void );
 // Standing in one of these exit brush models, or in a trigger that fires one.
 qboolean SV_CoF_PartyInExit( const edict_t *player, const int *models, int count );
+// Something can still ask for this exit by touch: its own trigger_changelevel
+// (not use-only), or a live trigger that fires it by name.
+qboolean SV_CoF_PartyExitRefires( const int *models, int count );
 // cof_warp and other commands the story layer handles itself; true when handled.
 qboolean SV_CoF_PartyClientCommand( sv_client_t *cl );
 #endif

@@ -30,6 +30,7 @@
 #define COF_PARTY_TELEPORT_MIN 96.0f
 #define COF_PARTY_TELEPORT_WAIT 10.0
 #define COF_PARTY_WARP_COOLDOWN 2.0
+#define COF_PARTY_CHANGELEVEL_USEONLY 2 // SF_CHANGELEVEL_USEONLY: Spawn (101105D0) sets no touch
 
 static const char *cof_party_starters[] = { "weapon_mobile", "weapon_switchblade" };
 static const char *cof_party_starter_descriptors[] = {
@@ -804,6 +805,31 @@ qboolean SV_CoF_PartyInExit( const edict_t *player, const int *models, int count
 	return false;
 }
 
+// Whether anything can still ask for this exit by touch: its trigger_changelevel
+// takes touches itself, or a live trigger fires it by name. A once-only
+// trigger removes itself after firing; if it was the only way in, the exit is
+// never asked for again.
+qboolean SV_CoF_PartyExitRefires( const int *models, int count )
+{
+	int i, j;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *level = SV_EdictNum( i );
+		const char *name;
+		if( !CoF_PartyIsExit( level, models, count )) continue;
+		if( !( level->v.spawnflags & COF_PARTY_CHANGELEVEL_USEONLY )) return true;
+		name = SV_GetString( level->v.targetname );
+		for( j = svs.maxclients + 1; name[0] && j < svgame.numEntities; j++ )
+		{
+			edict_t *trigger = SV_EdictNum( j );
+			if( SV_IsValidEdict( trigger ) && !( trigger->v.flags & FL_KILLME ) &&
+				!Q_strncmp( SV_GetString( trigger->v.classname ), "trigger_", 8 ) &&
+				!Q_strcmp( SV_GetString( trigger->v.target ), name )) return true;
+		}
+	}
+	return false;
+}
+
 // Called once a story transition has captured the party, before teardown.
 // A story transition carries every player at its offset from the exit's
 // landmark. The one who fired the exit arrives where the map expects; a
@@ -934,8 +960,10 @@ void SV_CoF_PartyTransitionArrive( unsigned int epoch )
 	}
 }
 
-static void CoF_PartyWarpRefused( sv_client_t *cl, const char *reason, const char *text )
+// A refusal starts the cooldown too, so a mashed key logs one line per cooldown.
+static void CoF_PartyWarpRefused( sv_client_t *cl, int slot, const char *reason, const char *text )
 {
+	cof_party_players[slot].warp_after = sv.time + COF_PARTY_WARP_COOLDOWN;
 	Con_Printf( "cofstory phase=warp-refused userid=%d reason=%s\n", cl->userid, reason );
 	if( text ) SV_CoF_RetailProFont( cl, 1, text, false );
 }
@@ -951,17 +979,17 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	byte *pv;
 	if( i < 0 ) return;
 	CoF_PartyCheckGeneration();
+	if( sv.time < cof_party_players[i].warp_after ) return;
 	if( !( pv = CoF_PartyPlayer( cl )))
 	{
-		CoF_PartyWarpRefused( cl, "dead", NULL ); // the game's respawn prompt already speaks to them
+		CoF_PartyWarpRefused( cl, i, "dead", NULL ); // the game's respawn prompt already speaks to them
 		return;
 	}
 	if( pv[COF_PARTY_DOOR_FLAG] )
 	{
-		CoF_PartyWarpRefused( cl, "door", NULL ); // the door sequence moves them itself
+		CoF_PartyWarpRefused( cl, i, "door", NULL ); // the door sequence moves them itself
 		return;
 	}
-	if( sv.time < cof_party_players[i].warp_after ) return;
 	for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
 	{
 		sv_client_t *other = &svs.clients[j];
@@ -978,7 +1006,7 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	}
 	if( !partner )
 	{
-		CoF_PartyWarpRefused( cl, "no-partner", "Nobody to join right now." );
+		CoF_PartyWarpRefused( cl, i, "no-partner", "Nobody to join right now." );
 		return;
 	}
 	CoF_PartyFeet( cl, partner->edict, feet );
@@ -986,7 +1014,7 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	if( !CoF_PartyLanding( cl, partner->edict, feet, landing ) || !CoF_PartyMove( cl, landing, angles ))
 	{
 		Q_snprintf( text, sizeof( text ), "No room next to %s.", partner->name );
-		CoF_PartyWarpRefused( cl, "no-room", text );
+		CoF_PartyWarpRefused( cl, i, "no-room", text );
 		return;
 	}
 	cof_party_players[i].warp_after = sv.time + COF_PARTY_WARP_COOLDOWN;

@@ -111,8 +111,22 @@ static int CoF_ExitPickWaiter( const cof_exit_player_t *players, int n, const fl
 	return best < 0 ? 0 : players[best].userid;
 }
 
+// First come, first served: a hold for another exit in this map whose waiter
+// still stands in it. Without this, two players in two exits would replace
+// each other's hold every frame.
+static int CoF_ExitTaken( const cof_exit_state_t *s, const cof_exit_player_t *players, int n, int generation,
+	const char *level, const char *landmark )
+{
+	const cof_exit_player_t *w;
+	if( !s->active || s->generation != generation || ( !strcmp( s->level, level ) && !strcmp( s->landmark, landmark ))) return 0;
+	w = CoF_ExitFind( players, n, s->waiter );
+	return CoF_ExitCanWait( w ) && w->touching;
+}
+
 // The game asked to change level. GO: change now. HOLD: the exit is held and
-// CoF_ExitFrame lets it go. *began is set when this request started a new hold.
+// CoF_ExitFrame lets it go, or another exit's hold came first and this request
+// is left for its trigger to make again. *began is set when this request
+// started a new hold.
 static int CoF_ExitRequest( cof_exit_state_t *s, const cof_exit_player_t *players, int n, int generation,
 	const char *level, const char *landmark, const float *spot, double time, int *began )
 {
@@ -124,6 +138,7 @@ static int CoF_ExitRequest( cof_exit_state_t *s, const cof_exit_player_t *player
 		CoF_ExitClear( s );
 		return COF_EXIT_GO;
 	}
+	if( CoF_ExitTaken( s, players, n, generation, level, landmark )) return COF_EXIT_HOLD;
 	if( same && CoF_ExitFind( players, n, s->waiter ))
 	{
 		waiter = s->waiter;
@@ -160,7 +175,11 @@ static int CoF_ExitRequest( cof_exit_state_t *s, const cof_exit_player_t *player
 
 // Once per server frame. READY leaves the state for the caller to read the
 // level and landmark; the caller clears it.
-static int CoF_ExitFrame( cof_exit_state_t *s, const cof_exit_player_t *players, int n, int generation, double time )
+// refires: something can still ask for this exit by touch (its own
+// trigger_changelevel, or a trigger that fires it). Only then may a walk-in
+// hold be cancelled: a use-only exit fired by a once-only trigger is never
+// asked for again, so cancelling it would strand the party for good.
+static int CoF_ExitFrame( cof_exit_state_t *s, const cof_exit_player_t *players, int n, int generation, double time, int refires )
 {
 	const cof_exit_player_t *w;
 	(void)time;
@@ -176,8 +195,13 @@ static int CoF_ExitFrame( cof_exit_state_t *s, const cof_exit_player_t *players,
 	{
 		// walked away, died or left: the trigger asks again if someone returns.
 		// Merely not touching is no reason: a once-only trigger vanishes after firing.
-		CoF_ExitClear( s );
-		return COF_EXIT_CANCELLED;
+		if( refires )
+		{
+			CoF_ExitClear( s );
+			return COF_EXIT_CANCELLED;
+		}
+		// Nothing will ask again: keep the exit as a scripted hold instead.
+		s->walkin = 0;
 	}
 	if( !CoF_ExitCanWait( w ))
 	{

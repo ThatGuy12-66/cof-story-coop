@@ -1005,21 +1005,27 @@ qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origi
 // Brush model numbers of the map's trigger_changelevel entities leading to one
 // destination/landmark pair: the party code uses them to tell who fired a
 // story exit. Their map/landmark keys live only in game private data.
-// *fires: such an exit carries target, killtarget or changetarget, which the
-// game fires again on every request (ChangeLevelNow 10109D40).
+// *fires: holding such an exit would repeat side effects. Either the exit
+// carries target, killtarget or changetarget, which the game fires again on
+// every request (ChangeLevelNow 10109D40), or a trigger that fires it by name
+// (a trigger_multiple fires again every wait while the waiter stands in it)
+// has a killtarget, or shares that name with something other than an exit,
+// which it would toggle every time. Its noise or message repeating is accepted.
 int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max, qboolean *fires )
 {
-	int flags, count = 0;
+	int flags, count = 0, named = 0, fired = 0, shared = 0, i;
 	char *entities = SV_ReadEntityScript( map, &flags ), *cursor;
 	char key[MAX_TOKEN], value[MAX_TOKEN], classname[MAX_TOKEN], next[MAX_TOKEN], name[MAX_TOKEN], model[MAX_TOKEN];
-	qboolean extra;
+	char targetname[MAX_TOKEN], target[MAX_TOKEN];
+	char names[8][64]; // the matching exits' targetnames; bit i of fired and shared is names[i]
+	qboolean extra, kills;
 	if( fires ) *fires = false;
 	if( !entities ) return 0;
 	cursor = entities;
 	while( count < max && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
 	{
 		if( Q_strcmp( key, "{" )) break;
-		classname[0] = next[0] = name[0] = model[0] = 0;
+		classname[0] = next[0] = name[0] = model[0] = targetname[0] = 0;
 		extra = false;
 		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && Q_strcmp( key, "}" ))
 		{
@@ -1029,12 +1035,47 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 			else if( !Q_strcmp( key, "map" )) Q_strncpy( next, value, sizeof( next ));
 			else if( !Q_strcmp( key, "landmark" )) Q_strncpy( name, value, sizeof( name ));
 			else if( !Q_strcmp( key, "model" )) Q_strncpy( model, value, sizeof( model ));
+			else if( !Q_strcmp( key, "targetname" )) Q_strncpy( targetname, value, sizeof( targetname ));
 			else if( value[0] && ( !Q_strcmp( key, "target" ) || !Q_strcmp( key, "killtarget" ) || !Q_strcmp( key, "changetarget" ))) extra = true;
 		}
 		if( Q_strcmp( classname, "trigger_changelevel" ) || Q_stricmp( next, destination ) || Q_strcmp( name, landmark )) continue;
 		if( fires && extra ) *fires = true;
+		if( fires && targetname[0] )
+		{
+			// a name too long to keep, or too many: its triggers cannot be checked, so do not hold
+			if( named < (int)( sizeof( names ) / sizeof( names[0] )) && Q_strlen( targetname ) < sizeof( names[0] ))
+				Q_strncpy( names[named++], targetname, sizeof( names[0] ));
+			else *fires = true;
+		}
 		if( model[0] == '*' ) models[count++] = Q_atoi( model + 1 );
 	}
+	// Second pass: whatever fires those exits by name, wherever it stands in the script.
+	cursor = entities;
+	while( fires && !*fires && named && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
+	{
+		if( Q_strcmp( key, "{" )) break;
+		classname[0] = targetname[0] = target[0] = 0;
+		kills = false;
+		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && Q_strcmp( key, "}" ))
+		{
+			cursor = COM_ParseFile( cursor, value, sizeof( value ));
+			if( !cursor ) break;
+			if( !Q_strcmp( key, "classname" )) Q_strncpy( classname, value, sizeof( classname ));
+			else if( !Q_strcmp( key, "targetname" )) Q_strncpy( targetname, value, sizeof( targetname ));
+			else if( !Q_strcmp( key, "target" )) Q_strncpy( target, value, sizeof( target ));
+			else if( !Q_strcmp( key, "killtarget" ) && value[0] ) kills = true;
+		}
+		for( i = 0; i < named; i++ )
+		{
+			if( !Q_strcmp( target, names[i] ))
+			{
+				fired |= 1 << i;
+				if( kills ) *fires = true;
+			}
+			if( !Q_strcmp( targetname, names[i] ) && Q_strcmp( classname, "trigger_changelevel" )) shared |= 1 << i;
+		}
+	}
+	if( fires && ( fired & shared )) *fires = true;
 	Mem_Free( entities );
 	return count;
 }
