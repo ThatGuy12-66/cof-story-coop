@@ -27,6 +27,7 @@ GNU General Public License for more details.
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_sender.h"
+#include "sv_cof_exit.h"
 
 // GameAPI functions declarations
 static int GAME_EXPORT pfnModelIndex( const char *m );
@@ -1004,17 +1005,22 @@ qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origi
 // Brush model numbers of the map's trigger_changelevel entities leading to one
 // destination/landmark pair: the party code uses them to tell who fired a
 // story exit. Their map/landmark keys live only in game private data.
-int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max )
+// *fires: such an exit carries target, killtarget or changetarget, which the
+// game fires again on every request (ChangeLevelNow 10109D40).
+int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max, qboolean *fires )
 {
 	int flags, count = 0;
 	char *entities = SV_ReadEntityScript( map, &flags ), *cursor;
 	char key[MAX_TOKEN], value[MAX_TOKEN], classname[MAX_TOKEN], next[MAX_TOKEN], name[MAX_TOKEN], model[MAX_TOKEN];
+	qboolean extra;
+	if( fires ) *fires = false;
 	if( !entities ) return 0;
 	cursor = entities;
 	while( count < max && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
 	{
 		if( Q_strcmp( key, "{" )) break;
 		classname[0] = next[0] = name[0] = model[0] = 0;
+		extra = false;
 		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && Q_strcmp( key, "}" ))
 		{
 			cursor = COM_ParseFile( cursor, value, sizeof( value ));
@@ -1023,10 +1029,11 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 			else if( !Q_strcmp( key, "map" )) Q_strncpy( next, value, sizeof( next ));
 			else if( !Q_strcmp( key, "landmark" )) Q_strncpy( name, value, sizeof( name ));
 			else if( !Q_strcmp( key, "model" )) Q_strncpy( model, value, sizeof( model ));
+			else if( value[0] && ( !Q_strcmp( key, "target" ) || !Q_strcmp( key, "killtarget" ) || !Q_strcmp( key, "changetarget" ))) extra = true;
 		}
-		if( !Q_strcmp( classname, "trigger_changelevel" ) && !Q_stricmp( next, destination ) &&
-			!Q_strcmp( name, landmark ) && model[0] == '*' )
-			models[count++] = Q_atoi( model + 1 );
+		if( Q_strcmp( classname, "trigger_changelevel" ) || Q_stricmp( next, destination ) || Q_strcmp( name, landmark )) continue;
+		if( fires && extra ) *fires = true;
+		if( model[0] == '*' ) models[count++] = Q_atoi( model + 1 );
 	}
 	Mem_Free( entities );
 	return count;
@@ -1477,6 +1484,9 @@ static void GAME_EXPORT pfnChangeLevel( const char *level, const char *landmark 
 #else
 	Q_strncpy( landname, landmark, sizeof( landname ));
 #endif
+	// Cry of Fear story co-op: wait until the whole party is at the exit
+	if( !SV_CoF_ExitRequest( level, landname ))
+		return;
 	SV_QueueChangeLevel( level, landname );
 }
 
@@ -3048,6 +3058,10 @@ static void GAME_EXPORT pfnAlertMessage( ALERT_TYPE type, char *szFmt, ... )
 	va_start( args, szFmt );
 	Q_vsnprintf( buffer, sizeof( buffer ), szFmt, args );
 	va_end( args );
+
+	// Cry of Fear story co-op: a held exit repeats its console line every frame
+	if( type == at_console && SV_CoF_ExitQuietAlert( buffer ))
+		return;
 
 	// check message for pass
 	switch( type )

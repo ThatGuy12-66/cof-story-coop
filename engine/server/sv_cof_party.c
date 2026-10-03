@@ -740,7 +740,7 @@ static qboolean CoF_PartyIsExit( edict_t *ent, const int *models, int count )
 
 // Standing in this transition's exit: its trigger_changelevel, or a trigger
 // that fires it (the c_apartment exits are use-only, fired by trigger_multiple).
-static qboolean CoF_PartyInExit( const edict_t *player, const int *models, int count )
+qboolean SV_CoF_PartyInExit( const edict_t *player, const int *models, int count )
 {
 	int i, j;
 	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
@@ -782,7 +782,7 @@ void SV_CoF_PartyTransitionCapture( unsigned int epoch, const vec3_t landmark, c
 		qboolean in_exit;
 		float d;
 		if( ( cl->flags & FCL_FAKECLIENT ) || !CoF_PartyPlayer( cl )) continue;
-		in_exit = CoF_PartyInExit( cl->edict, exit_models, exit_count );
+		in_exit = SV_CoF_PartyInExit( cl->edict, exit_models, exit_count );
 		d = CoF_PartyDistanceSquared( cl->edict->v.origin, landmark );
 		// Whoever stands in the exit fired it; otherwise (a scripted exit)
 		// the player nearest its landmark is the one the scene was about.

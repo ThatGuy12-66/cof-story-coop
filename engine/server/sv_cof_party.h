@@ -7,4 +7,6 @@ void SV_CoF_PartyTransitionCapture( unsigned int epoch, const vec3_t landmark, c
 void SV_CoF_PartyTransitionArrive( unsigned int epoch );
 void SV_CoF_PartyFrame( void );
 void SV_CoF_PartyShutdown( void );
+// Standing in one of these exit brush models, or in a trigger that fires one.
+qboolean SV_CoF_PartyInExit( const edict_t *player, const int *models, int count );
 #endif

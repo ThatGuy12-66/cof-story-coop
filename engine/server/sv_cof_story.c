@@ -11,6 +11,7 @@
 #include "sv_cof_party.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_share.h"
+#include "sv_cof_exit.h"
 #if XASH_WIN32
 #include <windows.h>
 #endif
@@ -250,6 +251,7 @@ void SV_CoF_StoryFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	SV_CoF_PartyFrame();
+	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();
 }
 
@@ -257,6 +259,7 @@ void SV_CoF_StoryShutdown( void )
 {
 	SV_CoF_CommandSender( NULL ); // an engine error inside a command leaves it set
 	SV_CoF_PartyShutdown();
+	SV_CoF_ExitReset();
 	SV_CoF_ShareReset();
 	CoF_StoryCloseGate();
 	SV_CoF_ClearValidation();
