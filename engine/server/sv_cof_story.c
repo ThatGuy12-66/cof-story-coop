@@ -11,6 +11,7 @@
 #include "sv_cof_party.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_share.h"
+#include "sv_cof_trace.h"
 #include "sv_cof_exit.h"
 #if XASH_WIN32
 #include <windows.h>
@@ -195,6 +196,7 @@ void SV_CoF_StoryInit( void )
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
 	SV_CoF_RetailInit();
 	SV_CoF_ShareInit();
+	SV_CoF_TraceInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -253,6 +255,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_PartyFrame();
 	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();
+	SV_CoF_TraceFrame();
 }
 
 void SV_CoF_StoryShutdown( void )

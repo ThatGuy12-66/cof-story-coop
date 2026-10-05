@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #include "sv_cof_party.h"
 #include "sv_cof_sender.h"
 #include "sv_cof_exit.h"
+#include "sv_cof_trace.h"
 
 // GameAPI functions declarations
 static int GAME_EXPORT pfnModelIndex( const char *m );
@@ -2788,6 +2789,9 @@ static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float 
 		Q_strcmp( svgame.msg_name, "ReqState" );
 
 	if( svgame.msg_trace ) Con_Printf( "^3%s( %i, %s )\n", __func__, msg_dest, svgame.msg_name );
+
+	// story co-op log: user messages only, observed and never changed
+	if( msg_num > svc_lastmsg ) SV_CoF_TraceMsgBegin( svgame.msg_name, msg_dest, ed );
 }
 
 /*
@@ -2802,6 +2806,7 @@ static void GAME_EXPORT pfnMessageEnd( void )
 	float		*org = NULL;
 	word realsize;
 
+	SV_CoF_TraceMsgEnd(); // first, so no early return leaves a capture open
 	if( svgame.msg_name ) name = svgame.msg_name;
 	if( !svgame.msg_started ) Host_Error( "%s: called with no active message\n", __func__ );
 	svgame.msg_started = false;
@@ -2920,6 +2925,7 @@ static void GAME_EXPORT pfnWriteByte( int iValue )
 {
 	if( iValue == -1 ) iValue = 0xFF; // convert char to byte
 	MSG_WriteByte( &sv.multicast, (byte)iValue );
+	SV_CoF_TraceMsgByte( iValue );
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %i )\n", __func__, iValue );
 	svgame.msg_realsize++;
 }
@@ -2933,6 +2939,7 @@ pfnWriteChar
 static void GAME_EXPORT pfnWriteChar( int iValue )
 {
 	MSG_WriteChar( &sv.multicast, (signed char)iValue );
+	SV_CoF_TraceMsgByte( iValue );
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %i )\n", __func__, iValue );
 	svgame.msg_realsize++;
 }
@@ -2946,6 +2953,7 @@ pfnWriteShort
 static void GAME_EXPORT pfnWriteShort( int iValue )
 {
 	MSG_WriteShort( &sv.multicast, (short)iValue );
+	SV_CoF_TraceMsgShort( iValue );
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %i )\n", __func__, iValue );
 	svgame.msg_realsize += 2;
 }
@@ -2959,6 +2967,7 @@ pfnWriteLong
 static void GAME_EXPORT pfnWriteLong( int iValue )
 {
 	MSG_WriteLong( &sv.multicast, iValue );
+	SV_CoF_TraceMsgOther();
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %i )\n", __func__, iValue );
 	svgame.msg_realsize += 4;
 }
@@ -2975,6 +2984,7 @@ static void GAME_EXPORT pfnWriteAngle( float flValue )
 	int	iAngle = ((int)(( flValue ) * 256 / 360) & 255);
 
 	MSG_WriteChar( &sv.multicast, iAngle );
+	SV_CoF_TraceMsgOther();
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %f )\n", __func__, flValue );
 	svgame.msg_realsize += 1;
 }
@@ -2988,6 +2998,7 @@ pfnWriteCoord
 static void GAME_EXPORT pfnWriteCoord( float flValue )
 {
 	MSG_WriteCoord( &sv.multicast, flValue );
+	SV_CoF_TraceMsgOther();
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %f )\n", __func__, flValue );
 	svgame.msg_realsize += 2;
 }
@@ -3001,6 +3012,7 @@ pfnWriteString
 static void GAME_EXPORT pfnWriteString( const char *src )
 {
 	MSG_WriteString( &sv.multicast, src );
+	SV_CoF_TraceMsgString( src );
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %s )\n", __func__, src );
 
 	// NOTE: some messages with constant string length can be marked as known sized
@@ -3048,6 +3060,7 @@ static void GAME_EXPORT pfnWriteEntity( int iValue )
 	if( iValue < 0 || iValue >= svgame.numEntities )
 		Host_Error( "%s: invalid entnumber %i\n", __func__, iValue );
 	MSG_WriteShort( &sv.multicast, (short)iValue );
+	SV_CoF_TraceMsgOther();
 	if( svgame.msg_trace ) Con_Printf( "\t^3%s( %i )\n", __func__, iValue );
 	svgame.msg_realsize += 2;
 }
