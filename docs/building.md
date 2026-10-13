@@ -44,26 +44,28 @@ cof-story-coop/                          this repository, branch main
         build-local-20260927/            build output
 ```
 
-Keep the checkout path short; the engine sits deep inside it. In PowerShell:
+Keep the checkout path short (for example `C:\src\cof-story-coop`); the engine sits deep inside
+it. In PowerShell:
 
 ```powershell
 git clone https://github.com/charliee1w/cof-story-coop.git
 Set-Location cof-story-coop
 git clone https://github.com/hajdawery/cof-enhanced.git upstream/cof-enhanced
 git -C upstream/cof-enhanced checkout --detach e4cdbfaa260696eb886cf6c9bd4c371d53377427
-git clone --branch story-coop --recurse-submodules https://github.com/charliee1w/cof-story-coop-engine.git upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a
+$engine = 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a'
+git clone --branch story-coop https://github.com/charliee1w/cof-story-coop-engine.git $engine
+git -C $engine submodule update --init --recursive 3rdparty/mainui 3rdparty/freevgui 3rdparty/MultiEmulator 3rdparty/bzip2/bzip2 3rdparty/extras/xash-extras 3rdparty/libogg/libogg 3rdparty/library_suffix 3rdparty/opus/opus 3rdparty/opusfile/opusfile 3rdparty/vorbis/vorbis-src
 ```
 
-`--recurse-submodules` fetches the two private UI submodules plus the public ones (opus, vorbis,
-bzip2 and others). It needs your GitHub sign-in for the private two. If you cloned without it:
+These are the submodules this build uses; `mainui` and `freevgui` come from the private
+repositories and need your GitHub sign-in. Don't use `--recurse-submodules` or a plain
+`submodule update --init --recursive`: they also fetch `mbedtls` (unused, the build runs with
+`--disable-mbedtls`), whose paths are too long for Windows, and the failure stops the other
+submodules from being fetched. If git still stops with "Filename too long", turn on long paths
+once with `git config --global core.longpaths true`.
 
-```powershell
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a submodule update --init --recursive
-```
-
-The build machine's engine tree has only these submodules populated, and it builds: mainui (with
-its `miniutl`), freevgui, MultiEmulator, bzip2, xash-extras, libogg, library_suffix, opus,
-opusfile and vorbis. The others are fetched but not needed for this build.
+This exact sequence was checked on 2026-10-13 from a fresh clone: configure, build and the test
+suite all passed.
 
 Submodules are checked out at the engine's recorded commits (detached HEAD). To work on one,
 switch it to its branch first: `git -C <submodule path> switch story-coop`.

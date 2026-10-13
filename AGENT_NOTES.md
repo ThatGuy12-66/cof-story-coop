@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-10-13 morning: the second live session passed the intro fixes; a main-game test from `c_start` was started (see "Latest").
+Last updated: 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
@@ -30,6 +30,10 @@ The user asked to make the repository ready for invited playtesters and helpers 
 - Launcher cleanup: README rewritten for newcomers; `docs/building.md`, `docs/playtesting.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `docs/launcher.md` (the retail-engine launcher's old README sections) are new; old journals moved to `docs/history/` (links repointed; `docs/history/README.md` explains the anonymised names); the remote friend's name, personal paths and the user's handle scrubbed from all tracked files (scripts `scrub_docs.py`, `fix_links.py` in the session scratchpad only); `.superpowers/` ignored.
 - Tools: the friend package is a generic playtester package (`CoF-Story-Tester-v<N>.zip`, blank name field, setup default `Player`); session `remote`, `state/enhanced-remote-session.json`, `cof_remote_host.cfg`, `story-remote-host.log`. The agent **copied** (not renamed) the local session state and host config, which carried the friend's name, to the new names; the originals are untouched. `tools/hlre.py` finds `hl.dll` relative to the repo. Launcher default player name `Player` (the user's saved setting keeps theirs).
 - Tester package fixes (TDD): Enter and keypad Enter bound to `cof_skip`; the join writes `story-tester.log` (`-log -logtime`) and first moves the previous one to `story-logs/` (the engine opens logs with `w+`). The setup exe must be rebuilt (`tools/build_friend_setup.py`) before the next package; building or sending a package needs the user's go-ahead.
+- Offline: full suite **156 OK** (`evidence/repo-cleanup-20261013/full-suite-final.log`).
+- Published 2026-10-13 ~11:13 (private, created with `gh` as `charliee1w`): `cof-story-coop` (`main` = `5005823`, one commit; only `main` pushed, `split-play-stage3` stays local), `cof-story-coop-engine` (`story-coop` = `39d7254`, full FWGS history), `cof-story-coop-freevgui` (`981e45a`), `cof-story-coop-mainui` (`15edd2b`); default branches `main` / `story-coop`. Local remotes: launcher `origin` = the private repo; in the engine and both submodules the private repo is `coop`, and `origin` stays the FWGS upstream.
+- Fresh-clone check (`evidence/repo-cleanup-20261013/fresh-clone.log`, script `fresh-clone.ps1` in the session scratchpad): the `docs/building.md` sequence from the private repos into `%TEMP%\cofcheck` (deleted afterwards): private submodules resolve, SDL2 download + hash, configure 13 s, build 33 s (all four DLLs), tests 156 OK (28 skipped without local game files). `--recurse-submodules` fails on Windows (`mbedtls` paths too long, and it stops the rest), so the guide initialises only the submodules the build uses. The session scratchpad itself is too deep for the engine's submodule git dirs.
+- Not done: no one invited (the user chooses); no tester package built; the user's commit email stays visible (they did not ask for the no-reply address).
 
 ## Earlier (2026-10-12 late night): first live campaign session, and fixes
 
@@ -206,8 +210,9 @@ For native inspection, use the installed computer-use skill and `node_repl` / `@
    - Fall-death floors (`c_subwaysick1`, `c_ending1b–3b`, `c_ending5`): only the faller dies.
    - Checkpoints: save, load, autosave and team-wipe recovery on the new format; the inventory-load scenario of the previous session.
    - The AI companion (`-Mode companion`): it is dropped and re-added cleanly at a level change (no second bot, no stuck slot); it takes a story gun in hand and fires/reloads (is one usercmd per press enough?); CPR on the host and the get-up; the syringe partner heal; its flashlight beam is drawn; it fires no exit, script or item; the `monster_crazybitch` struggle; monster damage scaling with it present. In `-Mode solo`, taking the guest over and handing it back.
-4. Deploying `3D860BC7…` to the normal pair (`runtimes/enhanced`, `runtimes/enhanced-local-client`, and `state/enhanced-remote-session.json`'s hash) or building a new package for the remote friend needs the user's explicit go-ahead; nothing was deployed there.
-5. Known, not addressed: delayed-chain look-at/grey fade/logos/zoom/blur on one player; `c_asylumb` puzzle view for a guest solver; `c_ending1c–3c` strangle host-only input; `c_college1` dropped-weapon restore; per-player phone-disable, hoodie, health cap, boss bar after respawn, two telephone users; no intro skip in multiplayer.
+4. Playtesters (2026-10-13 goal): with the user's go-ahead, deploy a build to `runtimes/enhanced` (+ the session state's hash), rebuild the setup exe (`tools/build_friend_setup.py`) and the package (`tools/package_enhanced_story.py`, now `CoF-Story-Tester-v<N>.zip`), then the user invites testers to the private repos; testers follow `docs/playtesting.md` and report with the issue template.
+5. Deploying `3D860BC7…` to the normal pair (`runtimes/enhanced`, `runtimes/enhanced-local-client`, and `state/enhanced-remote-session.json`'s hash) or building a new package for the remote friend needs the user's explicit go-ahead; nothing was deployed there.
+6. Known, not addressed: delayed-chain look-at/grey fade/logos/zoom/blur on one player; `c_asylumb` puzzle view for a guest solver; `c_ending1c–3c` strangle host-only input; `c_college1` dropped-weapon restore; per-player phone-disable, hoodie, health cap, boss bar after respawn, two telephone users; no intro skip in multiplayer.
 
 ## Further context
 
