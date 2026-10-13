@@ -1,0 +1,9 @@
+baseline/
+upstream/
+runtimes/
+state/
+evidence/
+__pycache__/
+*.pyc
+.pytest_cache/
+.superpowers/

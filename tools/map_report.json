@@ -1,0 +1,7908 @@
+{
+ "maps": {
+  "c_apartment1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment2",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment2",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment2",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment5",
+     "landmark": "land5",
+     "targetname": "changelevel5"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment2",
+     "landmark": "ap2la",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_start",
+     "landmark": "stla",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 55,
+    "inter_door_exit": 23,
+    "trigger_changelevel": 6,
+    "info_player_start": 1,
+    "cof_giveitems": 2,
+    "cof_keypad": 1,
+    "cof_interdooronoff": 4,
+    "cof_document": 4,
+    "cof_teleport": 2,
+    "cof_triggeron": 2,
+    "cof_camerazoom": 1,
+    "cof_developer_commentary": 4,
+    "cof_hint": 1,
+    "cof_hoodie": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_apartment2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "land4",
+     "targetname": "changelevel4"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "ap2la",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 16,
+    "inter_door_exit": 4,
+    "trigger_changelevel": 5,
+    "cof_teleport": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_apartment3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment4",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment4",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment4",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartmentsick",
+     "landmark": "landfitta",
+     "targetname": "changefitta"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment5",
+     "landmark": "ap5la",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 37,
+    "inter_door_exit": 16,
+    "trigger_changelevel": 5,
+    "info_player_start": 1,
+    "cof_keypad": 1,
+    "cof_interdooronoff": 1,
+    "cof_updatekeypad": 1,
+    "cof_document": 3,
+    "cof_teleport": 1,
+    "cof_addcodenote": 1,
+    "cof_developer_commentary": 3,
+    "cof_objective": 1
+   }
+  },
+  "c_apartment3sick": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment4sick",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment4sick",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment4sick",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_avlopp",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_down",
+     "landmark": "down_li",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 38,
+    "inter_door_exit": 15,
+    "trigger_changelevel": 5,
+    "cof_document": 3,
+    "info_player_start": 1,
+    "cof_teleport": 2
+   }
+  },
+  "c_apartment4": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 23,
+    "inter_door_exit": 15,
+    "trigger_changelevel": 3,
+    "info_player_start": 1,
+    "cof_developer_commentary": 1,
+    "cof_objective": 1,
+    "cof_interdooronoff": 1
+   }
+  },
+  "c_apartment4sick": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3sick",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3sick",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3sick",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 15,
+    "inter_door_exit": 3,
+    "trigger_changelevel": 3,
+    "info_player_start": 1
+   }
+  },
+  "c_apartment5": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "land5",
+     "targetname": "changelevel5"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3",
+     "landmark": "ap5la",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 9,
+    "inter_door_exit": 3,
+    "trigger_changelevel": 2,
+    "cof_interdooronoff": 2,
+    "cof_giveitems": 1,
+    "cof_teleport": 2,
+    "info_player_start": 1,
+    "cof_camerazoom": 1,
+    "cof_developer_commentary": 2,
+    "cof_objective": 1
+   }
+  },
+  "c_apartmentsick": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3",
+     "landmark": "landfitta",
+     "targetname": "changefitta"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_basement",
+     "landmark": "landkuk",
+     "targetname": "changekuk"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_keypad": 1,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_teleport": 2,
+    "inter_door": 1,
+    "inter_door_exit": 1,
+    "cof_killmp3": 1,
+    "cof_triggeron": 1,
+    "cof_bosshealthbar": 1,
+    "cof_developer_commentary": 2,
+    "cof_objective": 1
+   }
+  },
+  "c_aresaka": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nalopex",
+     "landmark": "aresaka_to_nalopex_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_tazo",
+     "landmark": "nerdrage_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 1,
+    "cof_blackandwhite": 1,
+    "cof_clearitems": 1,
+    "cof_chapter": 1,
+    "inter_door_exit": 1,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 5,
+    "cof_objective": 1
+   }
+  },
+  "c_arvooti": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_rumpel2",
+     "landmark": "lm2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_tricky",
+     "landmark": "lm3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 4,
+    "inter_door": 4,
+    "info_player_start": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "cof_chapter": 1
+   }
+  },
+  "c_arvuti": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_drean",
+     "landmark": "hunk_is_a_faggot",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_lensflare": 1,
+    "cof_chapter": 1,
+    "cof_killmp3": 2,
+    "inter_door": 3,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 1,
+    "cof_begingame": 1
+   }
+  },
+  "c_asylum1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum2",
+     "landmark": "as1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_attic",
+     "landmark": "aa1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest7",
+     "landmark": "fal",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 20,
+    "inter_door_exit": 11,
+    "cof_speedchange": 1,
+    "cof_teleport": 10,
+    "trigger_changelevel": 3,
+    "cof_weapontrigger": 1,
+    "cof_yesno": 1,
+    "cof_clearitems": 1,
+    "cof_giveitems": 1,
+    "inter_door_disable": 3,
+    "cof_maxhealthchange": 2,
+    "cof_camerazoom": 1,
+    "cof_telescope": 1,
+    "cof_telescope_camera": 1,
+    "cof_telephone": 1,
+    "info_player_start": 1,
+    "cof_interdooronoff": 1,
+    "cof_keypad": 1,
+    "cof_keypad3": 1,
+    "cof_barshoot": 1,
+    "cof_doctorweaponset": 2,
+    "cof_updatekeypad": 1,
+    "cof_triggeron": 2,
+    "cof_ending": 1,
+    "cof_developer_commentary": 3,
+    "cof_objective": 3
+   }
+  },
+  "c_asylum1dark": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest7",
+     "landmark": "fal2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum2dark",
+     "landmark": "as1dark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "info_player_start": 2,
+    "inter_door": 9,
+    "inter_door_exit": 4,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_developer_commentary": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_asylum1day": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forestday",
+     "landmark": "fod",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_attic",
+     "landmark": "aa1d",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 5
+   },
+   "cof_classes": {
+    "inter_door": 18,
+    "inter_door_exit": 8,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 5,
+    "cof_objective": 1
+   }
+  },
+  "c_asylum2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1",
+     "landmark": "as1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylumb",
+     "landmark": "asb",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 8,
+    "inter_door_exit": 6,
+    "cof_document": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_asylum2dark": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1dark",
+     "landmark": "as1dark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylumb",
+     "landmark": "asb2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "inter_door_exit": 4,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 1
+   }
+  },
+  "c_asylumb": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum2",
+     "landmark": "asb",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum2dark",
+     "landmark": "asb2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 3,
+    "inter_door_exit": 4,
+    "cof_triggeron": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_puzzlebarbutton": 1,
+    "cof_telescope_camera": 1,
+    "cof_giveitems": 1,
+    "cof_inter_door_exitchange": 1,
+    "cof_puzzlebar5": 1,
+    "cof_puzzlebar4": 1,
+    "cof_puzzlebar3": 1,
+    "cof_puzzlebar2": 1,
+    "cof_puzzlebar": 1,
+    "cof_developer_commentary": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_attic": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1",
+     "landmark": "aa1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1day",
+     "landmark": "aa1d",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_teleport": 6,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "info_player_start": 1,
+    "cof_inter_door_exitchange": 1,
+    "cof_bosshealthbar": 1,
+    "cof_interdooronoff": 1,
+    "cof_killplayer": 1,
+    "cof_killmp3": 2,
+    "cof_doctorweapontrigger": 3,
+    "cof_chapter": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 2,
+    "cof_doctorshoot": 4,
+    "cof_mdlcutscene": 1,
+    "cof_doctorweaponset": 2,
+    "cof_developer_commentary": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_avlopp": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3sick",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_city",
+     "landmark": "landca",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 7,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 4,
+    "cof_teleport": 2,
+    "info_player_start": 1,
+    "cof_interdooronoff": 1,
+    "cof_ladder_manager": 4,
+    "cof_ladder_manager_use": 8,
+    "cof_developer_commentary": 2
+   }
+  },
+  "c_base": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_lobbys",
+     "landmark": "al_4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ls2",
+     "landmark": "al_5",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_esewer",
+     "landmark": "sl_1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 11,
+    "inter_door_exit": 9,
+    "trigger_changelevel": 3,
+    "cof_teleport": 3,
+    "inter_door_disable": 2,
+    "cof_bosshealthbar": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_basement": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartmentsick",
+     "landmark": "landkuk",
+     "targetname": "changekuk"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sewer",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "inter_door": 16,
+    "inter_door_exit": 15,
+    "cof_teleport": 1,
+    "cof_camerazoom": 1,
+    "cof_blackandwhite": 2,
+    "cof_blur": 1,
+    "cof_chapter": 1,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_document": 1,
+    "cof_phonecheck": 1,
+    "cof_addcodenote": 1,
+    "cof_phonecall": 1,
+    "cof_keypad4": 1,
+    "cof_keypad": 1,
+    "cof_interdooronoff": 1,
+    "cof_developer_commentary": 3,
+    "cof_hint": 1
+   }
+  },
+  "c_bridge": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_broscene",
+     "landmark": "trll3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest1",
+     "landmark": "f1l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_teleport": 2,
+    "inter_door": 3,
+    "trigger_changelevel": 2,
+    "cof_clearitems": 1,
+    "inter_door_exit": 3,
+    "cof_chapter": 1,
+    "cof_developer_commentary": 1,
+    "cof_objective": 1,
+    "cof_hoodie": 1,
+    "cof_clothesmenu": 1
+   }
+  },
+  "c_broscene": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_trainride",
+     "landmark": "trll2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_bridge",
+     "landmark": "trll3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 1
+   }
+  },
+  "c_buscity": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_city",
+     "landmark": "landbc",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_buscity2",
+     "landmark": "bu2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st1",
+     "landmark": "lilladill",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 5
+   },
+   "cof_classes": {
+    "info_player_start": 5,
+    "inter_door": 35,
+    "inter_door_exit": 9,
+    "trigger_changelevel": 3,
+    "cof_teleport": 3,
+    "cof_interdooronoff": 1,
+    "cof_monster_random_spawn": 15,
+    "cof_billboard": 1
+   }
+  },
+  "c_buscity2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_buscity",
+     "landmark": "bu2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park3",
+     "landmark": "pa3l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park3",
+     "landmark": "pa3l2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "trigger_changelevel": 3,
+    "inter_door_exit": 3,
+    "cof_teleport": 3,
+    "inter_door": 6,
+    "info_player_start": 2,
+    "cof_interdooronoff": 2,
+    "cof_triggeron": 1
+   }
+  },
+  "c_carnie1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_carnie2",
+     "landmark": "carnie1_to_carnie2_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_drean",
+     "landmark": "drean_to_carnie_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "inter_door": 1,
+    "inter_door_exit": 1,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 1
+   }
+  },
+  "c_carnie2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_carnie1",
+     "landmark": "carnie1_to_carnie2_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_tazo",
+     "landmark": "nerds_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "cof_killmp3": 1,
+    "inter_door": 1,
+    "inter_door_exit": 1
+   }
+  },
+  "c_city": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_city2",
+     "landmark": "ciheh1",
+     "targetname": "chci2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sewer3",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_buscity",
+     "landmark": "landbc",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_avlopp",
+     "landmark": "landca",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 9,
+    "inter_door_exit": 8,
+    "info_player_start": 1,
+    "trigger_changelevel": 4,
+    "cof_teleport": 5,
+    "cof_billboard": 1,
+    "cof_interdooronoff": 1,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_monster_random_spawn": 6,
+    "cof_developer_commentary": 2,
+    "cof_objective": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_city2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_city",
+     "landmark": "ciheh1",
+     "targetname": "chci2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park",
+     "landmark": "ci2helie",
+     "targetname": "chci21"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "inter_door_exit": 18,
+    "inter_door": 31,
+    "cof_teleport": 2,
+    "cof_triggeron": 1,
+    "info_player_start": 1,
+    "cof_billboard": 1,
+    "cof_developer_commentary": 2
+   }
+  },
+  "c_cof_alley": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_street",
+     "landmark": "",
+     "targetname": "exitdoor"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 33,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "info_player_start": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 14
+   }
+  },
+  "c_cof_asylum1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest7",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 10,
+    "cof_coop_spawn1": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_killmp3": 1,
+    "cof_monster_random_spawn": 22,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_asylum1day": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "cof_campaign_01_p2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 17,
+    "inter_door_exit": 4,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_asylum2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_asylum1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_document": 1,
+    "inter_door": 3,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 12,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_bridge": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_changelevel",
+     "key": "message",
+     "map": "cof_campaign_01_p3",
+     "landmark": "",
+     "targetname": "changethalvl"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "func_coopallplayersbutton": 1,
+    "cof_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_buscity": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_city",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 28,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 20,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_cabin": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "cof_coop_stats",
+     "key": "message",
+     "map": "cof_manhunt_campaign",
+     "landmark": "",
+     "targetname": "trigger_stats"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_coop_stats": 1,
+    "trigger_coop_changelevel": 1,
+    "func_coopallplayersbutton": 1,
+    "cof_credits": 3,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_blur": 1,
+    "cof_triggeron": 1,
+    "cof_bosshealthbar": 1,
+    "cof_blackandwhite": 2,
+    "cof_greyfade": 2,
+    "cof_killmp3": 1
+   }
+  },
+  "c_cof_city": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "cof_campaign_01_p4",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "cof_billboard": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "cof_monster_random_spawn": 17,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_city2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_park",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 14,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 32,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_coopend": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "cof_blackandwhite": 2,
+    "cof_greyfade": 1,
+    "cof_camerazoom": 2,
+    "cof_blur": 2,
+    "cof_credits": 4,
+    "cof_mdlcutscene": 1,
+    "info_player_start": 1,
+    "cof_coop_stats": 1
+   }
+  },
+  "c_cof_forest1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_bridge",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_forest2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 8,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_forest3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_bosshealthbar": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_forest4": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest3",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "cof_killmp3": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1
+   }
+  },
+  "c_cof_forest5": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest4",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 2,
+    "cof_teleport": 2,
+    "inter_door": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_forest6": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest5",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_forest7": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forest6",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_forestday": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_asylum1day",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_monster_random_spawn": 11,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_foresttrail1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_hospital",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1,
+    "inter_door": 2,
+    "cof_chapter": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1
+   }
+  },
+  "c_cof_foresttrail2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_foresttrail3",
+     "landmark": "",
+     "targetname": "coopdoor"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_killmp3": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door": 1
+   }
+  },
+  "c_cof_foresttrail3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_cabin",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_cof_fsewer1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_lake",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_killmp3": 1,
+    "cof_monster_random_spawn": 26,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_gasstation": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_changelevel",
+     "key": "message",
+     "map": "c_cof_truckride",
+     "landmark": "",
+     "targetname": "changelevelplzthx"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1,
+    "inter_door": 4,
+    "func_coopallplayersbutton": 1,
+    "trigger_coop_changelevel": 1,
+    "cof_changelevel": 1
+   }
+  },
+  "c_cof_hospital": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_foresttrail2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 4,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_giveitems": 1,
+    "cof_triggeron": 1,
+    "cof_billboard": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_cof_lake": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_forestday",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_park": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_park2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn1": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn1": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_park2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_stad",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 11,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_killmp3": 1,
+    "cof_monster_random_spawn": 13,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_stad": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_subway1st1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 3,
+    "cof_coop_spawn1": 1,
+    "cof_billboard": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_street": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_subway1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "inter_door": 8,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1
+   }
+  },
+  "c_cof_subway1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_subway2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "inter_door": 4,
+    "cof_chapter": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1
+   }
+  },
+  "c_cof_subway1st1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_coopend",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "cof_billboard": 2,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 16,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_subway2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_subway3",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "inter_door": 5,
+    "cof_barshoot": 2,
+    "cof_triggeron": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1,
+    "cof_simpletext": 3
+   }
+  },
+  "c_cof_subway2st1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_buscity",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "cof_billboard": 2,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 14,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_subway2st2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_subway2st1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 6,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 23,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_subway2st3": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_subway2st2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 4,
+    "cof_coop_spawn3": 2,
+    "cof_coop_spawn1": 2,
+    "cof_coop_spawn2": 2,
+    "cof_coop_spawn4": 2
+   },
+   "cof_classes": {
+    "cof_billboard": 2,
+    "inter_door": 2,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 9,
+    "info_player_start": 4,
+    "cof_coop_spawn3": 2,
+    "cof_coop_spawn1": 2,
+    "cof_coop_spawn2": 2,
+    "cof_coop_spawn4": 2,
+    "cof_spawnpointonoff": 8
+   }
+  },
+  "c_cof_subway3": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "func_button",
+     "key": "message",
+     "map": "c_cof_alley",
+     "landmark": "",
+     "targetname": ""
+    },
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_gasstation",
+     "landmark": "",
+     "targetname": "exitdoor"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "inter_door": 5,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_monster_random_spawn": 23,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_bosshealthbar": 1,
+    "cof_triggeron": 1
+   }
+  },
+  "c_cof_trainride": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_changelevel",
+     "key": "message",
+     "map": "c_cof_subway2st3",
+     "landmark": "",
+     "targetname": "changgfg"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "cof_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_trainride2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_trainride",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_truckride": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_foresttrail1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 2,
+    "cof_coop_spawn3": 2,
+    "cof_coop_spawn4": 2,
+    "cof_coop_spawn2": 2,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_triggeron": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1,
+    "cof_spawnpointonoff": 8,
+    "cof_coop_spawn1": 2,
+    "cof_coop_spawn3": 2,
+    "cof_coop_spawn4": 2,
+    "cof_coop_spawn2": 2,
+    "info_player_start": 1,
+    "cof_simpletext": 2
+   }
+  },
+  "c_cof_village1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_fsewer1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 16,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_monster_random_spawn": 26,
+    "info_player_start": 1
+   }
+  },
+  "c_cof_village2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_village1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 7,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 21,
+    "info_player_start": 1
+   }
+  },
+  "c_collab_credits": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_swift",
+     "landmark": "credits_nerds_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_credits": 1,
+    "info_player_start": 1,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_college1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college2",
+     "landmark": "c1_1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn3",
+     "landmark": "hcl",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 37,
+    "inter_door_exit": 8,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_entityrestore": 1,
+    "cof_developer_commentary": 1,
+    "cof_hoodie": 1
+   }
+  },
+  "c_college1dark": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college2",
+     "landmark": "c1_12",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn3",
+     "landmark": "hcl2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn3",
+     "landmark": "2hcl2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 35,
+    "inter_door_exit": 7,
+    "trigger_changelevel": 3,
+    "cof_teleport": 3,
+    "cof_giveitems": 1,
+    "inter_door_disable": 1,
+    "cof_triggeron": 1,
+    "cof_killmp3": 1,
+    "cof_entityrestore": 1,
+    "cof_monster_random_spawn": 14
+   }
+  },
+  "c_college2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college1",
+     "landmark": "c1_1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college1dark",
+     "landmark": "c1_12",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_interdooronoff": 1,
+    "cof_giveitems": 1,
+    "cof_teleport": 1,
+    "cof_inter_door_exitchange": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_difficulty_settings": {
+   "worldspawn": {},
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "game_player_equip": 1,
+    "cof_difficultysettings": 1
+   }
+  },
+  "c_doc_apartment3sick": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment4sick",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment4sick",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment4sick",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_ending",
+     "landmark": "down_li",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 30,
+    "inter_door_exit": 12,
+    "trigger_changelevel": 4,
+    "cof_teleport": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_doc_apartment4sick": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment3sick",
+     "landmark": "land1",
+     "targetname": "changelevel1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment3sick",
+     "landmark": "land2",
+     "targetname": "changelevel2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment3sick",
+     "landmark": "land3",
+     "targetname": "changelevel3"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_appark",
+     "landmark": "f2l2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 12,
+    "inter_door_exit": 4,
+    "trigger_changelevel": 4,
+    "cof_teleport": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_doc_appark": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_basement",
+     "landmark": "f2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment4sick",
+     "landmark": "f2l2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "inter_door_exit": 4,
+    "cof_teleport": 2,
+    "inter_door": 5,
+    "info_player_start": 1
+   }
+  },
+  "c_doc_basement": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_sewer",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_appark",
+     "landmark": "f2l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 16,
+    "inter_door_exit": 16,
+    "trigger_changelevel": 2,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "info_player_start": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_doc_city": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_sewer3",
+     "landmark": "f5l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 9,
+    "inter_door_exit": 5,
+    "cof_teleport": 3,
+    "cof_billboard": 1,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "info_player_start": 1,
+    "trigger_changelevel": 1,
+    "cof_startdoctormode": 1,
+    "cof_begingame": 1,
+    "cof_introduction": 1
+   }
+  },
+  "c_doc_ending": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_apartment3sick",
+     "landmark": "down_li",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 1,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1,
+    "info_player_start": 1,
+    "cof_credits": 2,
+    "cof_blackandwhite": 1,
+    "cof_stats": 1
+   }
+  },
+  "c_doc_hallo_aom_1": {
+   "worldspawn": {
+    "startdark": "1",
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_hallo_aom_2",
+     "landmark": "from_aom1_aom2_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_hallo_e3",
+     "landmark": "e3_hidden_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "inter_door_exit": 4,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_simpletext": 1,
+    "cof_chapter": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_doc_hallo_aom_2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "worldspawn",
+     "key": "doctormap",
+     "map": "c_doc_hallo_e3",
+     "landmark": "",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_hallo_aom_1",
+     "landmark": "from_aom1_aom2_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "info_player_start": 1,
+    "cof_teleport": 1,
+    "trigger_changelevel": 1,
+    "inter_door_exit": 1,
+    "cof_bosshealthbar": 1,
+    "cof_triggeron": 1,
+    "cof_credits": 1,
+    "cof_simpletext": 2
+   }
+  },
+  "c_doc_hallo_e3": {
+   "worldspawn": {
+    "skyname": "black",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_hallo_aom_1",
+     "landmark": "e3_hidden_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_theevina",
+     "landmark": "theevina_e3_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 15,
+    "info_player_start": 1,
+    "cof_begingame": 1,
+    "cof_giveitems": 1,
+    "cof_teleport": 5,
+    "cof_lookat": 1,
+    "cof_chapter": 1,
+    "cof_ladder_manager_use": 4,
+    "cof_ladder_manager": 2,
+    "cof_simpletext": 6,
+    "cof_killmp3": 1,
+    "cof_developer_commentary": 1,
+    "inter_door_exit": 8,
+    "cof_killplayer": 1,
+    "cof_clearitems": 3,
+    "cof_maxhealthchange": 1,
+    "cof_playerbreathetoggle": 2,
+    "trigger_changelevel": 2,
+    "cof_bosshealthbar": 1,
+    "cof_triggeron": 1,
+    "cof_credits": 1
+   }
+  },
+  "c_doc_sewer": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_basement",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_sewer2",
+     "landmark": "f5l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "inter_door_exit": 4,
+    "inter_door": 4,
+    "info_player_start": 1,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_teleport": 1
+   }
+  },
+  "c_doc_sewer2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_sewer3",
+     "landmark": "swheh13",
+     "targetname": "chsw13"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_sewer",
+     "landmark": "f5l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 12,
+    "inter_door": 12,
+    "trigger_changelevel": 2,
+    "cof_ladder_manager": 2,
+    "cof_ladder_manager_use": 4,
+    "info_player_start": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_doc_sewer3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_sewer2",
+     "landmark": "swheh13",
+     "targetname": "chsw13"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_city",
+     "landmark": "f5l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 10,
+    "inter_door": 11,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_doc_swift": {
+   "worldspawn": {
+    "skyname": "black",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_collab_credits",
+     "landmark": "credits_nerds_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_theevina",
+     "landmark": "evi_to_swift_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 23,
+    "inter_door_exit": 22,
+    "cof_startdoctormode": 1,
+    "cof_begingame": 1,
+    "cof_chapter": 1,
+    "cof_bosshealthbar": 1,
+    "trigger_changelevel": 2
+   }
+  },
+  "c_down": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment3sick",
+     "landmark": "down_li",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 7,
+    "info_player_start": 1,
+    "inter_door_exit": 5,
+    "cof_interdooronoff": 2,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1,
+    "cof_blur": 1,
+    "cof_ladder_manager_use": 1,
+    "cof_ladder_manager": 1,
+    "cof_developer_commentary": 3
+   }
+  },
+  "c_drean": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_arvuti",
+     "landmark": "hunk_is_a_faggot",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_carnie1",
+     "landmark": "drean_to_carnie_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "inter_door": 12,
+    "inter_door_exit": 10,
+    "cof_simpletext": 5,
+    "cof_clothesmenu": 1,
+    "trigger_changelevel": 2,
+    "cof_bosshealthbar": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_ec10": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ec9bc",
+     "landmark": "fl_1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ec11",
+     "landmark": "fl_2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "cof_yesno": 1,
+    "cof_clearitems": 1,
+    "cof_teleport": 3,
+    "cof_weapontrigger": 1,
+    "cof_simpletext": 1,
+    "cof_goodpoints": 1,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_monster_random_spawn": 8
+   }
+  },
+  "c_ec11": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ec10",
+     "landmark": "fl_2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 6,
+    "inter_door_exit": 9,
+    "cof_goodpointstrigger": 1,
+    "cof_inter_door_exitchange": 1,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1,
+    "cof_chapter": 1,
+    "info_player_start": 1,
+    "cof_simpletext": 1
+   }
+  },
+  "c_ec9bc": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_esewer",
+     "landmark": "sl_2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ec10",
+     "landmark": "fl_1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_teleport": 4,
+    "inter_door_exit": 3,
+    "trigger_changelevel": 2,
+    "inter_door": 1
+   }
+  },
+  "c_egypt1": {
+   "worldspawn": {
+    "skyname": "black",
+    "startdark": "1",
+    "message": "Temple Of Shaimoon"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_egypt2",
+     "landmark": "egyptian_lands",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_exit": 4,
+    "cof_simpletext": 28,
+    "cof_chapter": 1,
+    "cof_teleport": 13,
+    "cof_bosshealthbar": 1,
+    "trigger_changelevel": 2,
+    "inter_door": 17,
+    "cof_document": 1,
+    "cof_begingame": 1
+   }
+  },
+  "c_egypt2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_egypt1",
+     "landmark": "egyptian_lands",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_egypt3",
+     "landmark": "egyptian_falls",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 10,
+    "trigger_changelevel": 2,
+    "cof_teleport": 5,
+    "inter_door_exit": 3,
+    "cof_simpletext": 4,
+    "cof_killmp3": 2
+   }
+  },
+  "c_egypt3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_egypt2",
+     "landmark": "egyptobelisk",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_simpletext": 8,
+    "cof_chapter": 1,
+    "cof_triggeron": 1,
+    "inter_door": 19,
+    "inter_door_exit": 9,
+    "cof_teleport": 1,
+    "cof_killmp3": 4,
+    "cof_document": 1,
+    "cof_credits": 3,
+    "cof_blackandwhite": 1
+   }
+  },
+  "c_ending1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village3",
+     "landmark": "e1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending1b",
+     "landmark": "e1b",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_teleport": 3,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 1,
+    "info_player_start": 1,
+    "cof_mdlcutscene": 2,
+    "cof_blur": 1,
+    "cof_blackandwhite": 2,
+    "cof_simonspeak": 2
+   }
+  },
+  "c_ending1b": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending1",
+     "landmark": "e1b",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending1c",
+     "landmark": "e1c",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "info_player_start": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_chapter": 1,
+    "inter_door_exit": 1,
+    "inter_door": 1,
+    "cof_blur": 1,
+    "cof_killplayer": 1
+   }
+  },
+  "c_ending1c": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending1b",
+     "landmark": "e1c",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 2,
+    "cof_mdlcutscene": 3,
+    "cof_strangle": 1,
+    "cof_bosshealthbar": 1,
+    "cof_killmp3": 3,
+    "cof_blur": 2,
+    "cof_credits": 3,
+    "cof_blackandwhite": 3,
+    "cof_teleport": 4,
+    "inter_door": 2,
+    "trigger_changelevel": 1,
+    "info_player_start": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_ending2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending2b",
+     "landmark": "e1b",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village3",
+     "landmark": "e2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "info_player_start": 1,
+    "cof_mdlcutscene": 2,
+    "cof_blur": 1,
+    "cof_blackandwhite": 2,
+    "cof_teleport": 3,
+    "trigger_changelevel": 2,
+    "cof_simonspeak": 2,
+    "inter_door_exit": 1
+   }
+  },
+  "c_ending2b": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending2",
+     "landmark": "e1b",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending2c",
+     "landmark": "e1c",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "info_player_start": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_chapter": 1,
+    "inter_door_exit": 1,
+    "inter_door": 1,
+    "cof_blur": 1,
+    "cof_killplayer": 1
+   }
+  },
+  "c_ending2c": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending2b",
+     "landmark": "e1c",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 2,
+    "cof_mdlcutscene": 3,
+    "cof_strangle": 1,
+    "cof_bosshealthbar": 1,
+    "cof_killmp3": 3,
+    "cof_blur": 2,
+    "cof_credits": 3,
+    "cof_blackandwhite": 3,
+    "cof_teleport": 4,
+    "inter_door": 2,
+    "trigger_changelevel": 1,
+    "info_player_start": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_ending3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village3",
+     "landmark": "e3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending3b",
+     "landmark": "e1b",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_teleport": 3,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 1,
+    "info_player_start": 1,
+    "cof_mdlcutscene": 2,
+    "cof_blur": 1,
+    "cof_blackandwhite": 2,
+    "cof_simonspeak": 2
+   }
+  },
+  "c_ending3b": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending3",
+     "landmark": "e1b",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending3c",
+     "landmark": "e1c",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "info_player_start": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_chapter": 1,
+    "inter_door_exit": 1,
+    "inter_door": 1,
+    "cof_blur": 1,
+    "cof_killplayer": 1
+   }
+  },
+  "c_ending3c": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending3b",
+     "landmark": "e1c",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 2,
+    "cof_mdlcutscene": 3,
+    "cof_strangle": 1,
+    "cof_bosshealthbar": 1,
+    "cof_killmp3": 3,
+    "cof_blur": 2,
+    "cof_credits": 3,
+    "cof_blackandwhite": 3,
+    "cof_teleport": 4,
+    "inter_door": 2,
+    "trigger_changelevel": 1,
+    "info_player_start": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_ending4": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending4b",
+     "landmark": "e5b",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village3",
+     "landmark": "e4",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "info_player_start": 1,
+    "cof_mdlcutscene": 4,
+    "cof_blur": 1,
+    "cof_blackandwhite": 1,
+    "cof_teleport": 3,
+    "trigger_changelevel": 2,
+    "cof_simonspeak": 2,
+    "inter_door_exit": 1,
+    "cof_greyfade": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_ending4b": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending4",
+     "landmark": "e5b",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_teleport": 4,
+    "trigger_changelevel": 1,
+    "cof_wheelchairmode": 1,
+    "info_player_start": 1,
+    "cof_blur": 3,
+    "cof_bosshealthbar": 1,
+    "cof_blackandwhite": 3,
+    "cof_credits": 3,
+    "cof_mdlcutscene": 1,
+    "cof_stopwheelchair": 1
+   }
+  },
+  "c_ending5": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending1b",
+     "landmark": "e1b",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village3",
+     "landmark": "e5",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending5b",
+     "landmark": "e5blols",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 3
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "info_player_start": 3,
+    "cof_teleport": 3,
+    "trigger_changelevel": 3,
+    "inter_door_exit": 1,
+    "cof_killplayer": 1
+   }
+  },
+  "c_ending5b": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending5",
+     "landmark": "e5blols",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending5c",
+     "landmark": "f6l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_teleport": 2,
+    "cof_ladder_manager_use": 3,
+    "cof_ladder_manager": 2,
+    "inter_door_exit": 1,
+    "inter_door": 1
+   }
+  },
+  "c_ending5c": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending5b",
+     "landmark": "f6l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 1,
+    "inter_door_exit": 1,
+    "cof_teleport": 1,
+    "inter_door": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_ladder_manager": 1,
+    "cof_credits": 1,
+    "cof_blackandwhite": 1,
+    "cof_blur": 1,
+    "cof_killmp3": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_esewer": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_base",
+     "landmark": "sl_1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ec9bc",
+     "landmark": "sl_2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "inter_door_exit": 6,
+    "trigger_changelevel": 2,
+    "cof_teleport": 3,
+    "cof_chapter": 1,
+    "info_player_start": 1,
+    "cof_clearitems": 1
+   }
+  },
+  "c_forest1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest2",
+     "landmark": "f2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_bridge",
+     "landmark": "f1l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "cof_teleport": 2,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_forest2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest3",
+     "landmark": "f3l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest1",
+     "landmark": "f2l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "info_player_start": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "cof_teleport": 2,
+    "cof_killmp3": 1
+   }
+  },
+  "c_forest3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest2",
+     "landmark": "f3l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest4",
+     "landmark": "f4l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 4
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "info_player_start": 4,
+    "cof_playerbreathetoggle": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 4,
+    "cof_teleport": 2,
+    "cof_interdooronoff": 1,
+    "inter_door_disable": 1,
+    "cof_hoodie": 1
+   }
+  },
+  "c_forest4": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest3",
+     "landmark": "f4l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest5",
+     "landmark": "f5l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 3,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "cof_teleport": 2,
+    "cof_interdooronoff": 1,
+    "cof_killmp3": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_forest5": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest4",
+     "landmark": "f5l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest6",
+     "landmark": "f6l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "cof_teleport": 2,
+    "info_player_start": 1,
+    "cof_playerbreathetoggle": 2,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_forest6": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest5",
+     "landmark": "f6l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest7",
+     "landmark": "f7l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 4
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 4,
+    "cof_teleport": 2,
+    "info_player_start": 4,
+    "cof_blur": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_forest7": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forest6",
+     "landmark": "f7l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1",
+     "landmark": "fal",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1dark",
+     "landmark": "fal2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "inter_door": 2,
+    "trigger_changelevel": 3,
+    "inter_door_exit": 3,
+    "cof_teleport": 3,
+    "info_player_start": 2,
+    "cof_inter_door_exitchange": 1,
+    "cof_camerazoom": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_forestday": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_asylum1day",
+     "landmark": "fod",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_lake",
+     "landmark": "la1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "inter_door": 2,
+    "info_player_start": 2
+   }
+  },
+  "c_fsewer1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_lake",
+     "landmark": "se1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village1",
+     "landmark": "vi1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 7
+   },
+   "cof_classes": {
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "inter_door": 3,
+    "info_player_start": 7,
+    "cof_triggeron": 1,
+    "cof_giveitems": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_ladder_manager": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_game_menu1": {
+   "worldspawn": {
+    "skyname": "blue22"
+   },
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_blackandwhite": 1,
+    "cof_gamemenu": 1
+   }
+  },
+  "c_garden": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_lobby",
+     "landmark": "al_2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_lobbys",
+     "landmark": "al_3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "inter_door": 13,
+    "inter_door_exit": 9,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "inter_door_disable": 2,
+    "cof_simpletext": 1,
+    "cof_triggeron": 1
+   }
+  },
+  "c_gards": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ls2",
+     "landmark": "al_6",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ks",
+     "landmark": "al_7",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "inter_door": 8,
+    "inter_door_exit": 6,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2
+   }
+  },
+  "c_genpat": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_lobby",
+     "landmark": "al_1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nmare",
+     "landmark": "nl_0",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 10,
+    "inter_door": 25,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_chapter": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_hallo_carnc": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_zikshadow",
+     "landmark": "carnie_zikshadow_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_darkydude",
+     "landmark": "darky_carnie_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 4,
+    "cof_simpletext": 3,
+    "cof_chapter": 1,
+    "inter_door_exit": 3,
+    "cof_triggeron": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 1,
+    "cof_clearitems": 1
+   }
+  },
+  "c_hallo_cofbrony": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_theevina",
+     "landmark": "jonsplitz_theevina_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_zikshadow",
+     "landmark": "zik_jonsplitz_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_simpletext": 10,
+    "inter_door": 9,
+    "inter_door_exit": 9,
+    "cof_chapter": 1,
+    "cof_killplayer": 1,
+    "cof_addcodenote": 1,
+    "cof_passwordnote": 2,
+    "cof_developer_commentary": 1,
+    "cof_interdooronoff": 1,
+    "cof_bosshealthbar": 1,
+    "cof_clearitems": 1,
+    "cof_triggeron": 1,
+    "cof_computer": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2
+   }
+  },
+  "c_hallo_darkydude": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_carnc",
+     "landmark": "darky_carnie_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_nalopex",
+     "landmark": "nalopex_darky_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "inter_door_exit": 11,
+    "inter_door": 16,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 1,
+    "cof_document": 2,
+    "cof_killmp3": 1,
+    "cof_simpletext": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 1,
+    "cof_clothesmenu": 1
+   }
+  },
+  "c_hallo_iambulletproof": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_nalopex",
+     "landmark": "bullet_nalopex_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 1,
+    "info_player_start": 1,
+    "cof_begingame": 1,
+    "cof_chapter": 1,
+    "cof_giveitems": 3,
+    "inter_door": 11,
+    "inter_door_exit": 8,
+    "cof_interdooronoff": 3,
+    "cof_triggeron": 2,
+    "cof_simpletext": 2,
+    "cof_teleport": 1
+   }
+  },
+  "c_hallo_nalopex": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_darkydude",
+     "landmark": "nalopex_darky_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_iambulletproof",
+     "landmark": "bullet_nalopex_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "inter_door_exit": 3,
+    "inter_door": 3,
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "cof_clearitems": 1,
+    "cof_teleport": 1,
+    "cof_simpletext": 1
+   }
+  },
+  "c_hallo_theevina": {
+   "worldspawn": {
+    "skyname": "black",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_hallo_e3",
+     "landmark": "theevina_e3_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_cofbrony",
+     "landmark": "jonsplitz_theevina_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 6,
+    "cof_blackandwhite": 2,
+    "cof_ladder_manager_use": 2,
+    "cof_ladder_manager": 1,
+    "inter_door_exit": 3,
+    "cof_teleport": 3,
+    "cof_simpletext": 9,
+    "trigger_changelevel": 2,
+    "cof_triggeron": 1,
+    "cof_killplayer": 1,
+    "cof_chapter": 1
+   }
+  },
+  "c_hallo_zikshadow": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_cofbrony",
+     "landmark": "zik_jonsplitz_landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hallo_carnc",
+     "landmark": "carnie_zikshadow_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "cof_simpletext": 13,
+    "cof_blackandwhite": 2,
+    "inter_door_exit": 4,
+    "inter_door": 12,
+    "cof_lookat": 1,
+    "cof_teleport": 2,
+    "cof_clearitems": 7,
+    "trigger_changelevel": 2
+   }
+  },
+  "c_hamn": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_stad",
+     "landmark": "sd",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn2",
+     "landmark": "ha2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 6
+   },
+   "cof_classes": {
+    "inter_door": 11,
+    "info_player_start": 6,
+    "inter_door_exit": 8,
+    "cof_interdooronoff": 4,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_triggeron": 1
+   }
+  },
+  "c_hamn2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn3",
+     "landmark": "h2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn",
+     "landmark": "ha2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 10,
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "cof_teleport": 2,
+    "cof_triggeron": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_hamn3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn2",
+     "landmark": "h2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college1",
+     "landmark": "hcl",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college1dark",
+     "landmark": "hcl2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_college1dark",
+     "landmark": "2hcl2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "trigger_changelevel": 4,
+    "inter_door_exit": 4,
+    "cof_teleport": 4,
+    "inter_door": 8,
+    "cof_billboard": 1,
+    "cof_inter_door_exitchange": 1,
+    "cof_interdooronoff": 1,
+    "cof_ending": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_her1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her2",
+     "landmark": "her1to2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 2,
+    "cof_killmp3": 1,
+    "inter_door": 7,
+    "inter_door_exit": 3,
+    "cof_simpletext": 1,
+    "cof_giveitems": 1,
+    "cof_document": 1,
+    "cof_teleport": 1,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_her2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her1",
+     "landmark": "her1to2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her3",
+     "landmark": "her2to3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 3,
+    "trigger_changelevel": 3,
+    "info_player_start": 1,
+    "cof_teleport": 1,
+    "inter_door_exit": 1
+   }
+  },
+  "c_her3": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her2",
+     "landmark": "her2to3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her4",
+     "landmark": "her3to4",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "inter_door_exit": 3,
+    "cof_simpletext": 1,
+    "cof_document": 5,
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2
+   }
+  },
+  "c_her4": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her3",
+     "landmark": "her3to4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her5",
+     "landmark": "her4to5",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "info_player_start": 1,
+    "inter_door_exit": 1,
+    "cof_teleport": 1,
+    "trigger_changelevel": 2,
+    "cof_document": 1
+   }
+  },
+  "c_her5": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_her4",
+     "landmark": "her4to5",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 1,
+    "cof_killmp3": 1,
+    "info_player_start": 1,
+    "cof_document": 1
+   }
+  },
+  "c_hole1": {
+   "worldspawn": {
+    "skyname": "BLACK"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole2",
+     "landmark": "hole1to2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole2",
+     "landmark": "to_weapons_room",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole_ending",
+     "landmark": "toending2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 18,
+    "cof_giveitems": 2,
+    "info_player_start": 1,
+    "cof_teleport": 4,
+    "inter_door_exit": 11,
+    "cof_simpletext": 5,
+    "cof_chapter": 1,
+    "cof_phonedisable": 1,
+    "cof_credits": 2,
+    "cof_ladder_manager_use": 2,
+    "cof_ladder_manager": 1,
+    "trigger_changelevel": 3,
+    "cof_clothesmenu": 1
+   }
+  },
+  "c_hole2": {
+   "worldspawn": {
+    "skyname": "BLACK"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole1",
+     "landmark": "hole1to2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole3",
+     "landmark": "hole2to3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole1",
+     "landmark": "to_weapons_room",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 9,
+    "inter_door": 13,
+    "cof_teleport": 4,
+    "cof_simpletext": 8,
+    "cof_interdooronoff": 2,
+    "info_player_start": 1,
+    "trigger_changelevel": 3
+   }
+  },
+  "c_hole3": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole2",
+     "landmark": "hole2to3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole4",
+     "landmark": "hole3to4",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 4,
+    "info_player_start": 1,
+    "cof_simpletext": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "inter_door_exit": 1
+   }
+  },
+  "c_hole4": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole3",
+     "landmark": "hole3to4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole_ending",
+     "landmark": "toending1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole5",
+     "landmark": "to_secret_map",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_simpletext": 10,
+    "inter_door": 3,
+    "cof_bosshealthbar": 1,
+    "inter_door_exit": 2,
+    "cof_teleport": 5,
+    "cof_clearitems": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_ladder_manager": 1,
+    "trigger_changelevel": 3,
+    "cof_triggeron": 5,
+    "cof_credits": 2
+   }
+  },
+  "c_hole5": {
+   "worldspawn": {
+    "skyname": "BLACK"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole4",
+     "landmark": "to_secret_map",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole_ending",
+     "landmark": "toending3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "cof_simpletext": 5,
+    "cof_greyfade": 2,
+    "inter_door": 1,
+    "cof_teleport": 1,
+    "cof_credits": 2,
+    "cof_triggeron": 1,
+    "cof_killplayer": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_hole_ending": {
+   "worldspawn": {
+    "skyname": "BLACK"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole1",
+     "landmark": "toending2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole4",
+     "landmark": "toending1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hole5",
+     "landmark": "toending3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_stats": 1,
+    "trigger_changelevel": 3,
+    "cof_clearitems": 1
+   }
+  },
+  "c_iambulletproof": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sebcollab_1",
+     "landmark": "lm5",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_theevinas",
+     "landmark": "lm6",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "inter_door": 10,
+    "inter_door_exit": 10,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_simpletext": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "cof_triggeron": 1,
+    "cof_interdooronoff": 1
+   }
+  },
+  "c_intro": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare",
+     "landmark": "landakukej",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_logo": 7,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1,
+    "cof_introduction": 1
+   }
+  },
+  "c_is_farm1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_is_park1",
+     "landmark": "hai",
+     "targetname": "switch1"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 4,
+    "inter_door_exit": 2,
+    "cof_entteleport": 1,
+    "cof_chapter": 2,
+    "cof_customiseplayer": 1,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_is_nm1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_is_park1",
+     "landmark": "swnm1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_bosshealthbar": 1,
+    "info_player_start": 1,
+    "cof_customiseplayer": 1,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_is_park1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_is_farm1",
+     "landmark": "hai",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_is_nm1",
+     "landmark": "swnm1",
+     "targetname": "leave"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_exit": 1,
+    "cof_customiseplayer": 1,
+    "trigger_changelevel": 2,
+    "inter_door": 1
+   }
+  },
+  "c_ks": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_gards",
+     "landmark": "al_7",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "inter_door": 4,
+    "inter_door_exit": 3,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_lake": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_forestday",
+     "landmark": "la1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_fsewer1",
+     "landmark": "se1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "inter_door": 2,
+    "cof_developer_commentary": 2
+   }
+  },
+  "c_loadgame": {
+   "worldspawn": {},
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "game_player_equip": 1,
+    "cof_loadgame": 1
+   }
+  },
+  "c_lobby": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_genpat",
+     "landmark": "al_1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_garden",
+     "landmark": "al_2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 15,
+    "inter_door_exit": 10,
+    "cof_simpletext": 2,
+    "cof_phonedisable": 1,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "inter_door_disable": 1,
+    "cof_triggeron": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_lobbys": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_garden",
+     "landmark": "al_3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_base",
+     "landmark": "al_4",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "inter_door": 6,
+    "inter_door_exit": 5,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2
+   }
+  },
+  "c_ls2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_gards",
+     "landmark": "al_6",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_base",
+     "landmark": "al_5",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "inter_door": 6,
+    "inter_door_exit": 4,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2
+   }
+  },
+  "c_nalopex": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_theevina",
+     "landmark": "nelo_to_evi_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_aresaka",
+     "landmark": "aresaka_to_nalopex_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 8,
+    "cof_chapter": 1,
+    "inter_door_exit": 7,
+    "trigger_changelevel": 2,
+    "cof_killmp3": 1,
+    "cof_simpletext": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_nightmare": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_start",
+     "landmark": "landea",
+     "targetname": "changelevelea"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_intro",
+     "landmark": "landakukej",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 4
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "info_player_start": 4,
+    "cof_blur": 2,
+    "cof_giveitems": 1,
+    "cof_teleport": 4,
+    "cof_killmp3": 2,
+    "cof_developer_commentary": 4,
+    "cof_camerazoom": 1,
+    "cof_begingame": 1
+   }
+  },
+  "c_nightmare1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare2",
+     "landmark": "landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_simpletext": 3,
+    "inter_door": 1,
+    "trigger_changelevel": 1,
+    "inter_door_exit": 1,
+    "cof_teleport": 1,
+    "cof_clearitems": 1
+   }
+  },
+  "c_nightmare2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare1",
+     "landmark": "landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare3",
+     "landmark": "landmark2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 2,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_simpletext": 1
+   }
+  },
+  "c_nightmare3": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare2",
+     "landmark": "landmark2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare4",
+     "landmark": "landmark3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_document": 1,
+    "inter_door": 14,
+    "inter_door_exit": 15,
+    "cof_interdooronoff": 4,
+    "cof_triggeron": 2,
+    "cof_simpletext": 4,
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2
+   }
+  },
+  "c_nightmare4": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare3",
+     "landmark": "landmark3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_teleport": 2,
+    "cof_simpletext": 3,
+    "cof_credits": 1,
+    "inter_door_exit": 1,
+    "trigger_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_nmare": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_genpat",
+     "landmark": "nl_0",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 3,
+    "inter_door": 2,
+    "cof_simpletext": 1,
+    "cof_triggeron": 1,
+    "info_player_start": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_outofit0": {
+   "worldspawn": {
+    "skyname": "sorgard",
+    "startdark": "1"
+   },
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_simpletext": 1
+   }
+  },
+  "c_outofit00": {
+   "worldspawn": {},
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1
+   }
+  },
+  "c_outofit1": {
+   "worldspawn": {
+    "message": "Out Of It",
+    "startdark": "1",
+    "skyname": "sorgard"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit2",
+     "landmark": "l1_l2",
+     "targetname": "change_level1"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_exit": 4,
+    "inter_door": 4,
+    "trigger_changelevel": 1,
+    "cof_simpletext": 6,
+    "cof_giveitems": 1,
+    "cof_objective": 1,
+    "cof_hint": 1,
+    "cof_chapter": 1
+   }
+  },
+  "c_outofit10": {
+   "worldspawn": {
+    "skyname": "sorgard"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit11",
+     "landmark": "l10_l11",
+     "targetname": "change_level10"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_exit": 11,
+    "inter_door": 11,
+    "cof_simpletext": 6,
+    "cof_giveitems": 2,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_outofit11": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit10",
+     "landmark": "l10_l11",
+     "targetname": "change_level10"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 1,
+    "inter_door": 1,
+    "trigger_changelevel": 1,
+    "info_player_start": 1,
+    "cof_simpletext": 1
+   }
+  },
+  "c_outofit12": {
+   "worldspawn": {
+    "skyname": "sorgard",
+    "startdark": "1"
+   },
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_simpletext": 3,
+    "cof_clothesmenu": 1
+   }
+  },
+  "c_outofit2": {
+   "worldspawn": {
+    "message": "Out Of It",
+    "skyname": "sorgard"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit1",
+     "landmark": "l1_l2",
+     "targetname": "change_level2"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit3",
+     "landmark": "l2_l3",
+     "targetname": "change_level3"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 10,
+    "inter_door_exit": 10,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 3,
+    "info_player_start": 1
+   }
+  },
+  "c_outofit3": {
+   "worldspawn": {
+    "message": "Out Of It",
+    "skyname": "sorgard"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit2",
+     "landmark": "l2_l3",
+     "targetname": "change_level3"
+    },
+    {
+     "class": "cof_changelevel",
+     "key": "message",
+     "map": "c_outofit4",
+     "landmark": "",
+     "targetname": "changelvl"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 10,
+    "inter_door_exit": 10,
+    "trigger_changelevel": 1,
+    "cof_simpletext": 4,
+    "cof_phonecall": 1,
+    "cof_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_outofit4": {
+   "worldspawn": {
+    "message": "Out Of It",
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit5",
+     "landmark": "l4_l5",
+     "targetname": "change_level33"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_giveitems": 2,
+    "inter_door": 2,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_outofit5": {
+   "worldspawn": {
+    "message": "Out Of It",
+    "skyname": "sorgard"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit6",
+     "landmark": "l5_l6",
+     "targetname": "change_level5"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit4",
+     "landmark": "l4_l5",
+     "targetname": "change_level41"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 8,
+    "inter_door": 7,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_outofit6": {
+   "worldspawn": {
+    "message": "Out Of It",
+    "skyname": "sorgard"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit5",
+     "landmark": "l5_l6",
+     "targetname": "change_level6"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit7",
+     "landmark": "l6_l7",
+     "targetname": "change_level7"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 6,
+    "inter_door_exit": 6,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_outofit7": {
+   "worldspawn": {
+    "message": "Out Of It"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit6",
+     "landmark": "l6_l7",
+     "targetname": "change_level8"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit8",
+     "landmark": "l7_l8",
+     "targetname": "change_level80"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 12,
+    "inter_door_exit": 12,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 2,
+    "info_player_start": 1
+   }
+  },
+  "c_outofit8": {
+   "worldspawn": {
+    "skyname": "sorgard",
+    "message": "Out Of It"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_outofit7",
+     "landmark": "l7_l8",
+     "targetname": "change_level10"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 3,
+    "inter_door_exit": 3,
+    "trigger_changelevel": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_outofit9": {
+   "worldspawn": {
+    "startdark": "1"
+   },
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1
+   }
+  },
+  "c_park": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_city2",
+     "landmark": "ci2helie",
+     "targetname": "chci21"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park2",
+     "landmark": "swheh1ea",
+     "targetname": "chsw1ea"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 4,
+    "cof_interdooronoff": 2,
+    "inter_door_exit": 4,
+    "trigger_changelevel": 2,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_park2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park",
+     "landmark": "swheh1ea",
+     "targetname": "chsw1ea"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park3",
+     "landmark": "swheh1kl",
+     "targetname": "chsw1kl"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_stad",
+     "landmark": "stpark2l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 5
+   },
+   "cof_classes": {
+    "inter_door": 24,
+    "trigger_changelevel": 3,
+    "inter_door_exit": 13,
+    "info_player_start": 5,
+    "cof_teleport": 2,
+    "cof_developer_commentary": 1,
+    "inter_door_disable": 4
+   }
+  },
+  "c_park3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park2",
+     "landmark": "swheh1kl",
+     "targetname": "chsw1kl"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_roofs",
+     "landmark": "swheh15",
+     "targetname": "chsw15"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_roofs2",
+     "landmark": "swheh15",
+     "targetname": "chsw152"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_buscity2",
+     "landmark": "pa3l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_buscity2",
+     "landmark": "pa3l2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "inter_door_exit": 6,
+    "trigger_changelevel": 5,
+    "inter_door": 6,
+    "cof_billboard": 2,
+    "info_player_start": 2,
+    "cof_phonecall": 1,
+    "cof_teleport": 4,
+    "cof_interdooronoff": 4,
+    "cof_blackandwhite": 2,
+    "cof_camerazoom": 1,
+    "cof_blur": 1,
+    "cof_triggeron": 1,
+    "cof_chapter": 1,
+    "cof_developer_commentary": 2,
+    "cof_giveitems": 1
+   }
+  },
+  "c_roofs": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park3",
+     "landmark": "swheh15",
+     "targetname": "chsw15"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_roofs2",
+     "landmark": "rlm1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 15,
+    "inter_door_exit": 3,
+    "trigger_changelevel": 2,
+    "cof_teleport": 3,
+    "cof_camerazoom": 1,
+    "cof_ladder_manager_use": 5,
+    "cof_ladder_manager": 4,
+    "cof_developer_commentary": 1,
+    "cof_hoodie": 1
+   }
+  },
+  "c_roofs2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park3",
+     "landmark": "swheh15",
+     "targetname": "chsw15"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_roofs",
+     "landmark": "rlm1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 15,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 3,
+    "cof_teleport": 5,
+    "cof_yesno": 1,
+    "cof_interdooronoff": 2,
+    "cof_bosshealthbar": 1,
+    "cof_killmp3": 1,
+    "info_player_start": 1,
+    "cof_ladder_manager_use": 5,
+    "cof_ending": 1,
+    "cof_developer_commentary": 2,
+    "cof_ladder_manager": 4
+   }
+  },
+  "c_rumpel1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_rumpel2",
+     "landmark": "f6l",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "inter_door": 5,
+    "info_player_start": 2,
+    "cof_blackandwhite": 2,
+    "cof_giveitems": 1,
+    "cof_chapter": 1,
+    "cof_blur": 1,
+    "cof_camerazoom": 1,
+    "trigger_changelevel": 1,
+    "inter_door_exit": 1,
+    "cof_teleport": 1,
+    "cof_simpletext": 1,
+    "cof_begingame": 1
+   }
+  },
+  "c_rumpel2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_rumpel1",
+     "landmark": "f6l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_arvooti",
+     "landmark": "lm2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "inter_door_exit": 3,
+    "cof_teleport": 13,
+    "inter_door": 3,
+    "cof_killplayer": 1,
+    "cof_simpletext": 32,
+    "cof_blur": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_sdkmap1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sdkmap2",
+     "landmark": "sdk_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_begingame": 1,
+    "inter_door_exit": 5,
+    "inter_door": 6,
+    "cof_clothesmenu": 1,
+    "cof_developer_commentary": 1,
+    "cof_chapter": 1,
+    "cof_giveitems": 1,
+    "cof_ladder_manager_use": 4,
+    "cof_ladder_manager": 2,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1,
+    "cof_simpletext": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_sdkmap2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sdkmap1",
+     "landmark": "sdk_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 1,
+    "inter_door_exit": 5,
+    "cof_teleport": 1,
+    "inter_door": 5,
+    "info_player_start": 1,
+    "cof_monster_random_spawn": 4,
+    "cof_bosshealthbar": 1,
+    "cof_credits": 3,
+    "cof_blackandwhite": 1,
+    "cof_interdooronoff": 1,
+    "cof_triggeron": 1
+   }
+  },
+  "c_sebcollab_1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_tricky",
+     "landmark": "lm4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_iambulletproof",
+     "landmark": "lm5",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_clothesmenu": 1,
+    "inter_door": 21,
+    "inter_door_exit": 19,
+    "cof_teleport": 4,
+    "cof_simpletext": 3,
+    "trigger_changelevel": 2,
+    "cof_chapter": 1
+   }
+  },
+  "c_sewer": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_basement",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sewer2",
+     "landmark": "kalalale",
+     "targetname": "chsw55"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "trigger_changelevel": 2,
+    "inter_door_exit": 4,
+    "inter_door": 4,
+    "info_player_start": 1,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_sewer2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sewer",
+     "landmark": "kalalale",
+     "targetname": "chsw55"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sewer3",
+     "landmark": "swheh13",
+     "targetname": "chsw13"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 12,
+    "inter_door": 12,
+    "trigger_changelevel": 2,
+    "info_player_start": 1,
+    "cof_interdooronoff": 2,
+    "cof_document": 1,
+    "cof_keypad": 1,
+    "cof_giveitems": 1,
+    "cof_keypad2": 1,
+    "cof_camerazoom": 1,
+    "cof_teleport": 1,
+    "cof_monster_random_spawn": 9,
+    "cof_ladder_manager": 2,
+    "cof_ladder_manager_use": 3,
+    "cof_developer_commentary": 2
+   }
+  },
+  "c_sewer3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_city",
+     "landmark": "swheh1",
+     "targetname": "chsw1"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sewer2",
+     "landmark": "swheh13",
+     "targetname": "chsw13"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "inter_door_exit": 13,
+    "inter_door": 16,
+    "cof_teleport": 4,
+    "cof_interdooronoff": 5,
+    "cof_cracker": 1,
+    "cof_giveitems": 1,
+    "trigger_changelevel": 2,
+    "info_player_start": 2,
+    "cof_killmp3": 2,
+    "cof_bosshealthbar": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 2,
+    "cof_chapter": 1,
+    "cof_developer_commentary": 3
+   }
+  },
+  "c_stad": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_park2",
+     "landmark": "stpark2l",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_hamn",
+     "landmark": "sd",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway1st1",
+     "landmark": "st11",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 5,
+    "info_player_start": 1,
+    "cof_billboard": 1,
+    "trigger_changelevel": 3,
+    "inter_door_exit": 3,
+    "cof_teleport": 3,
+    "cof_interdooronoff": 2,
+    "cof_giveitems": 1,
+    "cof_monster_random_spawn": 12,
+    "cof_developer_commentary": 2,
+    "cof_hoodie": 1,
+    "inter_door_disable": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_start": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "land2b",
+     "targetname": "changelevel2b"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nightmare",
+     "landmark": "landea",
+     "targetname": "changelevelea"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_start2",
+     "landmark": "hahaland",
+     "targetname": "haehecl"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_apartment1",
+     "landmark": "stla",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "inter_door": 16,
+    "inter_door_exit": 12,
+    "info_player_start": 2,
+    "trigger_changelevel": 4,
+    "cof_teleport": 6,
+    "cof_clearitems": 1,
+    "cof_giveitems": 2,
+    "cof_blur": 1,
+    "cof_camerazoom": 1,
+    "cof_interdooronoff": 2,
+    "cof_hint": 8,
+    "cof_chapter": 1,
+    "cof_ladder_manager": 3,
+    "cof_ladder_manager_use": 6,
+    "cof_developer_commentary": 4,
+    "cof_objective": 2,
+    "cof_clothesmenu": 1,
+    "cof_triggeron": 1
+   }
+  },
+  "c_start2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_start",
+     "landmark": "hahaland",
+     "targetname": "haehecl"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 8,
+    "inter_door_exit": 5,
+    "trigger_changelevel": 1,
+    "cof_passwordnote": 2,
+    "cof_computer": 1,
+    "cof_killmp3": 1,
+    "cof_hint": 1,
+    "info_player_start": 1,
+    "cof_triggeron": 1,
+    "inter_door_disable": 1,
+    "cof_developer_commentary": 2
+   }
+  },
+  "c_subtunnel1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway1st1",
+     "landmark": "swheh1u",
+     "targetname": "chsw1u"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subtunnel2",
+     "landmark": "swheh1t",
+     "targetname": "chsw1t"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 4,
+    "trigger_changelevel": 2,
+    "inter_door": 4,
+    "info_player_start": 1,
+    "cof_ladder_manager_use": 10,
+    "cof_ladder_manager": 5,
+    "cof_developer_commentary": 1,
+    "cof_hoodie": 1,
+    "cof_deadcat": 1
+   }
+  },
+  "c_subtunnel2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subtunnel1",
+     "landmark": "swheh1t",
+     "targetname": "chsw1t"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st1",
+     "landmark": "2lilladill",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 5
+   },
+   "cof_classes": {
+    "inter_door_exit": 6,
+    "inter_door": 6,
+    "trigger_changelevel": 2,
+    "info_player_start": 5,
+    "cof_teleport": 1,
+    "cof_ladder_manager_use": 4,
+    "cof_ladder_manager": 2
+   }
+  },
+  "c_subway1st1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subtunnel1",
+     "landmark": "swheh1u",
+     "targetname": "chsw1u"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_stad",
+     "landmark": "st11",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 18,
+    "inter_door_exit": 12,
+    "cof_interdooronoff": 5,
+    "trigger_changelevel": 2,
+    "cof_billboard": 2,
+    "cof_teleport": 1,
+    "cof_phonedisable": 1,
+    "cof_triggeron": 2,
+    "cof_monster_random_spawn": 10,
+    "cof_developer_commentary": 2,
+    "cof_objective": 1
+   }
+  },
+  "c_subway2st1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st2",
+     "landmark": "swheh1t",
+     "targetname": "chsw1t"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_buscity",
+     "landmark": "lilladill",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subtunnel2",
+     "landmark": "2lilladill",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subwaysick2",
+     "landmark": "sts2st1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st3",
+     "landmark": "sts2st3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "info_player_start": 2,
+    "inter_door": 6,
+    "trigger_changelevel": 5,
+    "inter_door_exit": 4,
+    "cof_teleport": 8,
+    "cof_billboard": 2,
+    "cof_interdooronoff": 2,
+    "cof_triggeron": 1,
+    "cof_chapter": 1,
+    "cof_blur": 1,
+    "cof_giveitems": 1,
+    "inter_door_disable": 1,
+    "cof_developer_commentary": 2,
+    "cof_objective": 2
+   }
+  },
+  "c_subway2st2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st1",
+     "landmark": "swheh1t",
+     "targetname": "chsw1t"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st3",
+     "landmark": "swheh1n",
+     "targetname": "chsw1n"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subwaysick1",
+     "landmark": "s2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st3",
+     "landmark": "e2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 7
+   },
+   "cof_classes": {
+    "info_player_start": 7,
+    "inter_door_exit": 4,
+    "inter_door": 7,
+    "trigger_changelevel": 4,
+    "inter_door_disable": 1,
+    "cof_teleport": 1,
+    "cof_killmp3": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_subway2st3": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st2",
+     "landmark": "swheh1n",
+     "targetname": "chsw1n"
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st1",
+     "landmark": "sts2st3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st2",
+     "landmark": "e2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_trainscene",
+     "landmark": "ts",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "trigger_changelevel": 4,
+    "inter_door": 7,
+    "info_player_start": 2,
+    "inter_door_exit": 5,
+    "cof_billboard": 2,
+    "cof_teleport": 6,
+    "cof_triggeron": 3,
+    "cof_mdlcutscene": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_ladder_manager": 1,
+    "cof_developer_commentary": 1,
+    "cof_objective": 2,
+    "cof_killmp3": 1
+   }
+  },
+  "c_subwaysick1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st2",
+     "landmark": "s2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subwaysick2",
+     "landmark": "ss2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 3
+   },
+   "cof_classes": {
+    "inter_door": 5,
+    "info_player_start": 3,
+    "inter_door_exit": 5,
+    "cof_blur": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_killplayer": 1,
+    "cof_developer_commentary": 2
+   }
+  },
+  "c_subwaysick2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subwaysick1",
+     "landmark": "ss2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st1",
+     "landmark": "sts2st1",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 19,
+    "trigger_changelevel": 2,
+    "cof_teleport": 3,
+    "inter_door_exit": 9,
+    "info_player_start": 1,
+    "cof_document": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 2,
+    "cof_billboard": 7,
+    "cof_developer_commentary": 3
+   }
+  },
+  "c_tazo": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_carnie2",
+     "landmark": "nerds_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_aresaka",
+     "landmark": "nerdrage_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "cof_clearitems": 1,
+    "cof_chapter": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_the_stairway1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway2",
+     "landmark": "landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door_exit": 9,
+    "inter_door": 11,
+    "cof_chapter": 1,
+    "trigger_changelevel": 1,
+    "cof_clothesmenu": 1,
+    "info_player_start": 1,
+    "cof_simpletext": 2,
+    "cof_begingame": 1,
+    "cof_killmp3": 1,
+    "cof_blackandwhite": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_the_stairway2": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway1",
+     "landmark": "landmark",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway3",
+     "landmark": "landmark_3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 8,
+    "trigger_changelevel": 2,
+    "cof_chapter": 1,
+    "inter_door_exit": 6,
+    "cof_bosshealthbar": 1,
+    "info_player_start": 1
+   }
+  },
+  "c_the_stairway3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway2",
+     "landmark": "landmark_3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway4",
+     "landmark": "landmark_4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway5",
+     "landmark": "stair3_stair5_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_ladder_manager_use": 6,
+    "cof_ladder_manager": 3,
+    "cof_chapter": 1,
+    "trigger_changelevel": 3,
+    "inter_door": 14,
+    "inter_door_exit": 10,
+    "cof_clothesmenu": 1,
+    "cof_maxhealthchange": 1,
+    "cof_triggeron": 1,
+    "cof_clearitems": 1,
+    "cof_simpletext": 2
+   }
+  },
+  "c_the_stairway4": {
+   "worldspawn": {
+    "skyname": "black",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway3",
+     "landmark": "landmark_4",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 5,
+    "inter_door_exit": 4,
+    "cof_chapter": 1,
+    "cof_credits": 1,
+    "cof_closeallvgui": 1,
+    "cof_simpletext": 2,
+    "trigger_changelevel": 1,
+    "cof_killmp3": 1
+   }
+  },
+  "c_the_stairway5": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_the_stairway3",
+     "landmark": "stair3_stair5_landmark",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_chapter": 1,
+    "cof_clearitems": 1,
+    "cof_blackandwhite": 1,
+    "inter_door": 2,
+    "inter_door_exit": 2,
+    "cof_killplayer": 1,
+    "cof_bosshealthbar": 1,
+    "cof_triggeron": 1,
+    "cof_killmp3": 1,
+    "cof_credits": 1,
+    "trigger_changelevel": 1,
+    "cof_teleport": 1
+   }
+  },
+  "c_theevina": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_doc_swift",
+     "landmark": "evi_to_swift_lm",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_nalopex",
+     "landmark": "nelo_to_evi_lm",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 26,
+    "inter_door_exit": 1,
+    "trigger_changelevel": 2,
+    "cof_chapter": 1,
+    "cof_clearitems": 1
+   }
+  },
+  "c_theevinas": {
+   "worldspawn": {
+    "skyname": "BLACK"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_iambulletproof",
+     "landmark": "lm6",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_vr_nalopex1",
+     "landmark": "lm7",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 1,
+    "cof_teleport": 7,
+    "inter_door_exit": 1,
+    "trigger_changelevel": 2,
+    "cof_simpletext": 2,
+    "cof_chapter": 1,
+    "cof_killmp3": 1,
+    "cof_blur": 1,
+    "cof_triggeron": 1
+   }
+  },
+  "c_trainride": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_trainride2",
+     "landmark": "trll",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_broscene",
+     "landmark": "trll2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_trainscene",
+     "landmark": "trasi",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_exit": 5,
+    "inter_door": 6,
+    "trigger_changelevel": 3,
+    "cof_teleport": 2,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_trainride2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_trainride",
+     "landmark": "trll",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door_exit": 5,
+    "inter_door": 6,
+    "trigger_changelevel": 1
+   }
+  },
+  "c_trainscene": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_subway2st3",
+     "landmark": "ts",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_trainride",
+     "landmark": "trasi",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "cof_camerazoom": 3,
+    "cof_killmp3": 1
+   }
+  },
+  "c_tricky": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_arvooti",
+     "landmark": "lm3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_sebcollab_1",
+     "landmark": "lm4",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 9,
+    "inter_door_exit": 8,
+    "cof_simpletext": 4,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "cof_chapter": 1,
+    "cof_blur": 1
+   }
+  },
+  "c_unlockables": {
+   "worldspawn": {},
+   "links": [],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "game_player_equip": 1,
+    "cof_unlockables": 1
+   }
+  },
+  "c_village1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_fsewer1",
+     "landmark": "vi1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village2",
+     "landmark": "vi2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "inter_door": 17,
+    "info_player_start": 1,
+    "cof_ladder_manager": 1,
+    "cof_ladder_manager_use": 2,
+    "cof_monster_random_spawn": 8,
+    "cof_developer_commentary": 1
+   }
+  },
+  "c_village2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village1",
+     "landmark": "vi2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village3",
+     "landmark": "vi3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "inter_door_exit": 2,
+    "inter_door": 8,
+    "info_player_start": 2,
+    "cof_monster_random_spawn": 17
+   }
+  },
+  "c_village3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_village2",
+     "landmark": "vi3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending1",
+     "landmark": "e1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending2",
+     "landmark": "e2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending3",
+     "landmark": "e3",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending4",
+     "landmark": "e4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_ending5",
+     "landmark": "e5",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 2
+   },
+   "cof_classes": {
+    "info_player_start": 2,
+    "inter_door": 8,
+    "cof_teleport": 6,
+    "trigger_changelevel": 6,
+    "inter_door_exit": 6,
+    "cof_killmp3": 1,
+    "cof_lookat": 1,
+    "cof_objective": 1
+   }
+  },
+  "c_volcomator1": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator2a",
+     "landmark": "hospital1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_vr_nalopex3",
+     "landmark": "lm10",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "cof_simpletext": 7,
+    "cof_chapter": 1,
+    "cof_triggeron": 1,
+    "cof_clearitems": 1,
+    "inter_door": 6,
+    "inter_door_exit": 5,
+    "cof_blur": 1,
+    "cof_killmp3": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2
+   }
+  },
+  "c_volcomator2a": {
+   "worldspawn": {
+    "skyname": "sorgard",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator1",
+     "landmark": "hospital1",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator2b",
+     "landmark": "hospital2",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 24,
+    "inter_door_exit": 12,
+    "cof_simpletext": 3,
+    "info_player_start": 1,
+    "cof_triggeron": 1,
+    "cof_interdooronoff": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2
+   }
+  },
+  "c_volcomator2b": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator2a",
+     "landmark": "hospital2",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator2c",
+     "landmark": "hospital3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 15,
+    "inter_door_exit": 6,
+    "cof_interdooronoff": 2,
+    "cof_triggeron": 1,
+    "cof_ladder_manager_use": 4,
+    "cof_ladder_manager": 2,
+    "cof_simpletext": 1,
+    "cof_billboard": 1,
+    "trigger_changelevel": 2,
+    "cof_teleport": 2,
+    "info_player_start": 1
+   }
+  },
+  "c_volcomator2c": {
+   "worldspawn": {},
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator3",
+     "landmark": "hospital4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator2b",
+     "landmark": "hospital3",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 29,
+    "inter_door_exit": 16,
+    "cof_simpletext": 1,
+    "cof_document": 1,
+    "cof_interdooronoff": 1,
+    "cof_teleport": 2,
+    "trigger_changelevel": 2,
+    "info_player_start": 1
+   }
+  },
+  "c_volcomator3": {
+   "worldspawn": {
+    "skyname": "sorgard",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator2c",
+     "landmark": "hospital4",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_zikshadow",
+     "landmark": "lmz",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 25,
+    "inter_door_exit": 13,
+    "trigger_changelevel": 2,
+    "cof_teleport": 4,
+    "info_player_start": 1,
+    "cof_document": 1,
+    "cof_killmp3": 1,
+    "cof_blur": 1,
+    "cof_clearitems": 1,
+    "cof_simpletext": 2
+   }
+  },
+  "c_vr_nalopex1": {
+   "worldspawn": {
+    "startdark": "1",
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_theevinas",
+     "landmark": "lm7",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_vr_nalopex2",
+     "landmark": "lm8",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_giveitems": 1,
+    "cof_simpletext": 3,
+    "cof_clearitems": 1,
+    "cof_chapter": 1,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 3,
+    "info_player_start": 1
+   }
+  },
+  "c_vr_nalopex2": {
+   "worldspawn": {
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_vr_nalopex1",
+     "landmark": "lm8",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_vr_nalopex3",
+     "landmark": "lm9",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "cof_clearitems": 2,
+    "cof_simpletext": 1,
+    "cof_giveitems": 2,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 3
+   }
+  },
+  "c_vr_nalopex3": {
+   "worldspawn": {
+    "skyname": "black",
+    "startdark": "1"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_vr_nalopex2",
+     "landmark": "lm9",
+     "targetname": ""
+    },
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator1",
+     "landmark": "lm10",
+     "targetname": ""
+    }
+   ],
+   "spawns": {},
+   "cof_classes": {
+    "cof_giveitems": 1,
+    "cof_clearitems": 1,
+    "cof_killmp3": 1,
+    "inter_door_exit": 2,
+    "trigger_changelevel": 2,
+    "cof_teleport": 3,
+    "cof_triggeron": 1
+   }
+  },
+  "c_zikshadow": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "trigger_changelevel",
+     "key": "map",
+     "map": "c_volcomator3",
+     "landmark": "lmz",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_simpletext": 6,
+    "cof_chapter": 1,
+    "inter_door": 23,
+    "cof_blackandwhite": 2,
+    "cof_credits": 1,
+    "cof_killmp3": 1,
+    "cof_teleport": 1,
+    "inter_door_exit": 1,
+    "trigger_changelevel": 1,
+    "cof_clearitems": 1
+   }
+  },
+  "cof_campaign_01": {
+   "worldspawn": {
+    "iuser1": "1",
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_village2",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 7,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1,
+    "cof_lobby_start": 1,
+    "cof_mdlcutscene": 1,
+    "cof_introduction": 1,
+    "cof_chapter": 1
+   }
+  },
+  "cof_campaign_01_p2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_asylum1",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_document": 1,
+    "inter_door": 3,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 12,
+    "info_player_start": 1,
+    "cof_chapter": 1
+   }
+  },
+  "cof_campaign_01_p3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_trainride",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn4": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "info_player_start": 1,
+    "cof_chapter": 1
+   }
+  },
+  "cof_campaign_01_p4": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_park",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 14,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "trigger_coop_changelevel": 1,
+    "inter_door_coop_changelevel": 1,
+    "cof_monster_random_spawn": 32,
+    "info_player_start": 1,
+    "cof_bosshealthbar": 1,
+    "cof_chapter": 1,
+    "cof_teleport": 1
+   }
+  },
+  "cof_manhunt_campaign": {
+   "worldspawn": {
+    "iuser1": "1",
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "inter_door_coop_changelevel",
+     "key": "message",
+     "map": "c_cof_alley",
+     "landmark": "",
+     "targetname": "exitdoor"
+    },
+    {
+     "class": "func_button",
+     "key": "message",
+     "map": "c_cof_alley",
+     "landmark": "",
+     "targetname": ""
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 21,
+    "cof_chapter": 1,
+    "inter_door_coop_changelevel": 1,
+    "trigger_coop_changelevel": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_lobby_start": 1,
+    "cof_simpletext": 2,
+    "cof_monster_random_spawn": 4
+   }
+  },
+  "cof_suicide1": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_coop_stats",
+     "key": "message",
+     "map": "cof_suicide2",
+     "landmark": "",
+     "targetname": "trigger_stats"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "inter_door": 5,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_survivalmode": 1,
+    "cof_mdlcutscene": 2,
+    "cof_randomtimedspawner": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 4,
+    "cof_coopgameover": 1,
+    "cof_killmp3": 1,
+    "cof_coop_stats": 1
+   }
+  },
+  "cof_suicide2": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_coop_stats",
+     "key": "message",
+     "map": "cof_suicide3",
+     "landmark": "",
+     "targetname": "trigger_stats"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "cof_billboard": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1,
+    "cof_survivalmode": 1,
+    "cof_mdlcutscene": 2,
+    "cof_randomtimedspawner": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 4,
+    "cof_coopgameover": 1,
+    "cof_killmp3": 1,
+    "cof_coop_stats": 1
+   }
+  },
+  "cof_suicide3": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_coop_stats",
+     "key": "message",
+     "map": "cof_suicide4",
+     "landmark": "",
+     "targetname": "trigger_stats"
+    }
+   ],
+   "spawns": {
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1
+   },
+   "cof_classes": {
+    "inter_door": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "info_player_start": 1,
+    "cof_survivalmode": 1,
+    "cof_mdlcutscene": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 4,
+    "cof_coopgameover": 1,
+    "cof_killmp3": 1,
+    "cof_randomtimedspawner": 1,
+    "cof_coop_stats": 1
+   }
+  },
+  "cof_suicide4": {
+   "worldspawn": {
+    "skyname": "black"
+   },
+   "links": [
+    {
+     "class": "cof_coop_stats",
+     "key": "message",
+     "map": "cof_suicide1",
+     "landmark": "",
+     "targetname": "trigger_stats"
+    }
+   ],
+   "spawns": {
+    "info_player_start": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1
+   },
+   "cof_classes": {
+    "info_player_start": 1,
+    "cof_survivalmode": 1,
+    "cof_coop_spawn1": 1,
+    "cof_coop_spawn2": 1,
+    "cof_coop_spawn3": 1,
+    "cof_coop_spawn4": 1,
+    "cof_mdlcutscene": 1,
+    "cof_blur": 1,
+    "cof_blackandwhite": 4,
+    "cof_coopgameover": 1,
+    "cof_killmp3": 1,
+    "cof_coop_stats": 1,
+    "cof_randomtimedspawner": 1,
+    "cof_teleport": 1
+   }
+  }
+ },
+ "errors": {}
+}

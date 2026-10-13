@@ -1,0 +1,3584 @@
+{
+ "c_apartment1": [
+  {
+   "origin": "-851 732 195",
+   "custommsg": "You got a handgun.",
+   "message": "weapon_glock",
+   "targetname": "giveitem1",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-851 718 195",
+   "model": "models/items/nyckel2.mdl",
+   "message": "inventoryitems/hallkey.txt",
+   "targetname": "giveitem2",
+   "spawnflags": "3",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "165 446 -147",
+   "target": "teleportap2_dest",
+   "targetname": "teleportap2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-664 4 -325",
+   "target": "teleportst_dest",
+   "targetname": "teleportst",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_apartment2": [
+  {
+   "origin": "165 446 -147",
+   "target": "teleportap1_dest",
+   "targetname": "teleportap1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_apartment3": [
+  {
+   "origin": "79 303 -301",
+   "target": "teleportap5_dest",
+   "targetname": "teleportap5",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_apartment3sick": [
+  {
+   "origin": "308 576 -221",
+   "target": "atataek2",
+   "targetname": "atataek",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "371 -369 377",
+   "target": "teleportusd_1_dest",
+   "targetname": "teleportusd_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_apartment5": [
+  {
+   "origin": "168 156 496",
+   "message": "inventoryitems/basementkey.txt",
+   "targetname": "waterkey",
+   "spawnflags": "3",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "45 158 478",
+   "target": "landapa",
+   "targetname": "bajsiballe",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "79 303 -301",
+   "target": "teleportap3_dest",
+   "targetname": "teleportap3",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_apartmentsick": [
+  {
+   "origin": "-2237 970 -638",
+   "target": "telehaha22",
+   "targetname": "telemiehaeh",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2258 969 -638",
+   "target": "telehaha222",
+   "targetname": "teleportusus",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_aresaka": [
+  {
+   "origin": "-751 305 112",
+   "targetname": "killweps_yow",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-744 251 120",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 5 : Aresaka",
+   "targetname": "chapter",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_arvooti": [
+  {
+   "origin": "1411 -291 -157",
+   "target": "teleportlm2_des",
+   "targetname": "teleportlm2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "431 -1958 -157",
+   "target": "teleportlm3_des",
+   "targetname": "teleportlm3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-534 -110 1110",
+   "message": "Chapter 2 - Arvuti",
+   "targetname": "chaptername",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_arvuti": [
+  {
+   "origin": "-1757 1137 -171",
+   "message": "Arvuti's Map",
+   "targetname": "chapterarvuti",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_asylum1": [
+  {
+   "origin": "1285 336 -499",
+   "target": "teleporta1_1ld",
+   "targetname": "teleporta1_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1285 462 -499",
+   "target": "teleportaa1_1ld",
+   "targetname": "teleportaa1_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-712 536 176",
+   "target": "teledestts1",
+   "targetname": "teledestts1t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-422 71 188",
+   "target": "teledestts2",
+   "targetname": "teledestts2t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-309 71 188",
+   "target": "4teledestts2",
+   "targetname": "4teledestts2t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-272 71 188",
+   "target": "5teledestts2",
+   "targetname": "5teledestts2t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-712 536 192",
+   "target": "4teledestts1",
+   "targetname": "4teledestts1t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-712 536 208",
+   "target": "5teledestts1",
+   "targetname": "5teledestts1t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-309 205 207",
+   "message": "weapon_p345",
+   "targetname": "removep228",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-422 12 207",
+   "message": "inventoryitems/gatekey2.txt",
+   "targetname": "givethekey",
+   "spawnflags": "3",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-1204 2282 -1538",
+   "target": "teleportfa_1ld",
+   "targetname": "teleportfa_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-128 1000 233",
+   "target": "phonetele_ld",
+   "targetname": "phonetele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-224 0 239",
+   "iuser1": "1",
+   "targetname": "endingtrigger",
+   "classname": "cof_ending"
+  }
+ ],
+ "c_asylum1dark": [
+  {
+   "origin": "-970 2282 -1538",
+   "target": "teleportfa_1ld2",
+   "targetname": "teleportfa_12",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1534 332 -499",
+   "target": "teleporta1_1ld",
+   "targetname": "teleporta1_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_asylum1day": [
+  {
+   "origin": "641 1581 -499",
+   "target": "teleportfod_1ld",
+   "targetname": "teleportfod_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1513 462 -499",
+   "target": "teleportaa1_lld2",
+   "targetname": "teleportaa1_l",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_asylum2": [
+  {
+   "origin": "1147 336 -499",
+   "target": "teleporta1_2ld",
+   "targetname": "teleporta1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1147 210 -499",
+   "target": "teleportab_1ld",
+   "targetname": "teleportab_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_asylum2dark": [
+  {
+   "origin": "1396 332 -499",
+   "target": "teleporta1_2ld",
+   "targetname": "teleporta1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1147 -114 -499",
+   "target": "teleportab_1ld2",
+   "targetname": "teleportab_12",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_asylumb": [
+  {
+   "origin": "1285 210 -499",
+   "target": "teleportab_2ld",
+   "targetname": "teleportab_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1285 -114 -499",
+   "target": "teleportab_2ld2",
+   "targetname": "teleportab_22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "816 -277 -396",
+   "message": "weapon_flashlight",
+   "targetname": "giveflsh",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_attic": [
+  {
+   "origin": "1147 462 -499",
+   "target": "teleportaa1_2ld",
+   "targetname": "teleportaa1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1375 462 -499",
+   "target": "teleportaa1_2ld2",
+   "targetname": "teleportaa1_22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-280 72 320",
+   "target": "dateleport1_des",
+   "targetname": "dateleport1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-495 263 379",
+   "targetname": "deathuknow",
+   "spawnflags": "39",
+   "classname": "cof_killplayer"
+  },
+  {
+   "origin": "-374 846 319",
+   "target": "teleportblack_des",
+   "targetname": "teleportblack",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-368 822 319",
+   "target": "deteleport1_des",
+   "targetname": "deteleport1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-387 780 288",
+   "message": "Chapter 7 - Only safe at home",
+   "targetname": "chapterss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-244 87 356",
+   "target": "dteleport_des",
+   "targetname": "dteleport",
+   "message": "doctorboss",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_avlopp": [
+  {
+   "origin": "308 657 -211",
+   "target": "telekamer2",
+   "targetname": "telekamer",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-432 -729 -29",
+   "target": "teleportca2_dest",
+   "targetname": "teleportca2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_base": [
+  {
+   "origin": "-1370 1640 -353",
+   "target": "lobbys_exit",
+   "targetname": "tp3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1152 1750 -353",
+   "target": "lobbys_exit",
+   "targetname": "tp5",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1184 2234 -351",
+   "target": "lobbys_exit",
+   "targetname": "tp8",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_basement": [
+  {
+   "origin": "-3211 2528 391",
+   "target": "landada",
+   "targetname": "fittjaevel",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3090 2984 526",
+   "message": "Chapter 2 - Who is that doctor?",
+   "targetname": "chapterlils",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "2275 1514 782",
+   "iuser1": "1",
+   "subtitletime12": "2",
+   "target": "addnotemm",
+   "audiofile": "subtitles/magphone.wav",
+   "subtitletime11": "3.8",
+   "subtitletime10": "3.16",
+   "subtitletime9": "5.562",
+   "subtitletime8": "1.646",
+   "subtitletime7": "3.013",
+   "subtitletime6": "2.188",
+   "subtitletime5": "2.874",
+   "subtitletime4": "1.025",
+   "subtitletime3": "2.054",
+   "subtitletime2": "1.827",
+   "subtitletime1": "0.34",
+   "subtitlenumber12": "313",
+   "subtitlenumber11": "296",
+   "subtitlenumber10": "295",
+   "subtitlenumber9": "294",
+   "subtitlenumber8": "293",
+   "subtitlenumber7": "292",
+   "subtitlenumber6": "291",
+   "subtitlenumber5": "290",
+   "subtitlenumber4": "289",
+   "subtitlenumber3": "288",
+   "subtitlenumber2": "287",
+   "subtitlenumber1": "286",
+   "targetname": "basementcall",
+   "classname": "cof_phonecall"
+  }
+ ],
+ "c_bridge": [
+  {
+   "origin": "-1344 -2399.28 -853.284",
+   "angles": "0 0 0",
+   "target": "mia",
+   "targetname": "telemia",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-990.019 1359.96 -675.481",
+   "spawnflags": "5",
+   "angles": "0 0 0",
+   "targetname": "bagremove",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-957 -623 -1143",
+   "angles": "0 0 0",
+   "target": "teleportf1_2ld",
+   "targetname": "teleportf1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1094.89 947.608 0",
+   "angles": "0 0 0",
+   "message": "Chapter 6 - It's not over yet",
+   "targetname": "chaptersss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_broscene": [
+  {
+   "origin": "-937 431 0",
+   "target": "kanalkuk",
+   "targetname": "kanalkuk2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_buscity": [
+  {
+   "origin": "-499 -1152 -29",
+   "target": "teleportbc2_dest",
+   "targetname": "teleportbc2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-310 -1154 -315",
+   "target": "teleportbu2_1ld",
+   "targetname": "teleportbu2_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1075 -2930 185",
+   "target": "teleportyes2s",
+   "targetname": "teleportyes2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_buscity2": [
+  {
+   "origin": "-172 -1154 -315",
+   "target": "teleportbu2_2ld",
+   "targetname": "teleportbu2_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "548 1259 -315",
+   "target": "teleportpa3_1ld",
+   "targetname": "teleportpa3_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "544 1127 -315",
+   "target": "teleportpa3_2ld",
+   "targetname": "teleportpa3_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_carnie1": [
+  {
+   "origin": "1153 815 -126",
+   "message": "Chapter 3 : A tricky Carnie",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_city": [
+  {
+   "origin": "-2679 3728 -3083",
+   "target": "kalas",
+   "targetname": "telelole22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "48 -1196 256",
+   "target": "teletvo1",
+   "targetname": "teletvo1c",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "69 -1197 256",
+   "target": "teletvo12",
+   "targetname": "teletvo1c2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-499 -1152 -29",
+   "target": "teleportbc1_dest",
+   "targetname": "teleportbc1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-432 -729 -29",
+   "target": "teleportca1_dest",
+   "targetname": "teleportca1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_city2": [
+  {
+   "origin": "360 -408 -1397",
+   "target": "teleze",
+   "targetname": "teleziee",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1290 3680 -1125",
+   "target": "sawtele1",
+   "targetname": "telesawman",
+   "message": "sawbossheh",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_cof_forest5": [
+  {
+   "origin": "1725 191 -631",
+   "target": "teleportf5_1ld",
+   "targetname": "teleportf5_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1725 70 -631",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_cof_foresttrail1": [
+  {
+   "origin": "-2200 -1176 112",
+   "message": "Chapter 3 - The end is nigh",
+   "targetname": "chapterts",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_cof_hospital": [
+  {
+   "origin": "-464 374 12",
+   "message": "weapon_shotgun",
+   "targetname": "receive1",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_cof_subway1": [
+  {
+   "origin": "-1432 2054 76",
+   "message": "Chapter 2 - Unsafe transportations",
+   "targetname": "chapterstart",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_college1": [
+  {
+   "origin": "353 1223 -68",
+   "targetname": "teleport1c_1",
+   "target": "c1_lm1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1661 1869 -618",
+   "target": "teleporthc_1ld",
+   "targetname": "teleporthc_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_college1dark": [
+  {
+   "origin": "353 1345 -68",
+   "targetname": "teleport2c_2",
+   "target": "c1_lm1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1657 1758 -615",
+   "target": "teleporthc_1lm",
+   "targetname": "teleporthc_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1433 1748 -1130",
+   "target": "2teleporthc_1ld",
+   "targetname": "2teleporthc_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-807 -1959 578",
+   "message": "inventoryitems/firekey.txt",
+   "targetname": "givefirekey",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_college2": [
+  {
+   "origin": "262 1030 94",
+   "message": "inventoryitems/fuse.txt",
+   "targetname": "givefuse",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "300 1345 -68",
+   "targetname": "teleport1c_2",
+   "target": "c2_lm1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_apartment3sick": [
+  {
+   "origin": "371 -369 377",
+   "target": "teleportusd_1_dest",
+   "targetname": "teleportusd_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_apartment4sick": [
+  {
+   "origin": "-2867 1242 341",
+   "target": "teleportf3_2ld2",
+   "targetname": "teleportf3_22",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_appark": [
+  {
+   "origin": "-3008 1367 341",
+   "target": "teleportf3_2ld",
+   "targetname": "teleportf3_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3005 1242 341",
+   "target": "teleportf3_2ld2",
+   "targetname": "teleportf3_22",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_basement": [
+  {
+   "origin": "-2870 1367 341",
+   "target": "teleportf3_2ld",
+   "targetname": "teleportf3_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_city": [
+  {
+   "origin": "-2679 3728 -3083",
+   "target": "kalas",
+   "targetname": "telelole22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2817 -872 467",
+   "target": "teleze",
+   "targetname": "teleziee",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2700 24 -37",
+   "target": "teleportf4_2ld",
+   "targetname": "teleportf4_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_ending": [
+  {
+   "origin": "258 -369 377",
+   "target": "teleportusd_1_dest",
+   "targetname": "teleportusd_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_hallo_aom_1": [
+  {
+   "origin": "-1120 752 32",
+   "message": "Hidden Chapter - Heaven",
+   "targetname": "chapter",
+   "noise": "common/null.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-1331 -471 41",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_e3",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_hallo_aom_2": [
+  {
+   "origin": "-2 314 -279",
+   "target": "ex_hole",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_hallo_e3": [
+  {
+   "origin": "-2619 1352 -238",
+   "message": "weapon_revolver",
+   "targetname": "givemehweponz",
+   "spawnflags": "18",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-2648 1295 -237",
+   "target": "intro_teldest",
+   "targetname": "intro_teleport",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2602 1028 -332",
+   "noise": "e3collab3/null.wav",
+   "message": "Chapter 8: E3Pointman",
+   "targetname": "chaptershit",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-2528 64 -174",
+   "target": "flashtele_dest",
+   "targetname": "flashteleheh",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3072 3378 -446",
+   "targetname": "killmeplsnoa",
+   "spawnflags": "35",
+   "classname": "cof_killplayer"
+  },
+  {
+   "origin": "-3072 3410 -460",
+   "targetname": "cleritemzzzzzzz",
+   "spawnflags": "3",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-2616 -2580 -2396",
+   "targetname": "p_tele1",
+   "target": "p_tel1p",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2616 -2564 -2396",
+   "targetname": "p_tele2",
+   "target": "p_tel2p",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1967 1671 -219",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_theevina",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2600 1352 -280",
+   "targetname": "clearweapons",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-2555 1352 -245",
+   "targetname": "clearrrr",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_doc_sewer": [
+  {
+   "origin": "-1381 -1370 -1132",
+   "target": "teleportf4_2ld",
+   "targetname": "teleportf4_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_sewer2": [
+  {
+   "origin": "-1243 -1370 -1132",
+   "target": "teleportf4_2ld",
+   "targetname": "teleportf4_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_sewer3": [
+  {
+   "origin": "-2838 24 -37",
+   "target": "teleportf4_2ld",
+   "targetname": "teleportf4_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_doc_swift": [
+  {
+   "origin": "342 111 14",
+   "message": "Chapter 8 : E3Pointman",
+   "noise": "ambience/new_chapter.wav",
+   "targetname": "chapter",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_down": [
+  {
+   "origin": "371 -369 377",
+   "target": "teleportusd_2_dest",
+   "targetname": "teleportusd_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_drean": [
+  {
+   "origin": "37 165 -469",
+   "message": "Chapter 2 : Recbhunk",
+   "noise": "ambience/new_chapter.wav",
+   "targetname": "chapty",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_ec10": [
+  {
+   "origin": "-2992 -3377 16",
+   "message": "weapon_lantern",
+   "targetname": "clearitems",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-2959 -3376 32",
+   "target": "yes_exit",
+   "targetname": "yes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1710 -854 -395",
+   "target": "ec9bc_exit",
+   "targetname": "tp10",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "528 -310 -527",
+   "target": "ec9bc_exit",
+   "targetname": "tp10",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ec11": [
+  {
+   "origin": "384 -310 -527",
+   "target": "ec10_exit",
+   "targetname": "tp11",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-32 144 16",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 3 - Closure",
+   "targetname": "new_chapter",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_ec9bc": [
+  {
+   "origin": "145 304 48",
+   "target": "tele1_exit1",
+   "targetname": "tele1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2721 -3393 -113",
+   "target": "tele2_exit1",
+   "targetname": "tele2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1568 -966 -399",
+   "target": "sewer_exit",
+   "targetname": "tp9",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1564 -854 -399",
+   "target": "ec10_exit",
+   "targetname": "tp10",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_egypt1": [
+  {
+   "origin": "241 56 76",
+   "targetname": "chapter1",
+   "message": "Temple Of Shaimoon",
+   "noise": "ambience/pain.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "499 1589 71",
+   "target": "bosshorror",
+   "targetname": "boss1scene1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-692 1088 253",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-180 1620 71",
+   "target": "bosshorrorback",
+   "targetname": "scare1back",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-410 1618 71",
+   "target": "bosshorrorback",
+   "targetname": "scare1back",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "48 1612 71",
+   "target": "bosshorrorback",
+   "targetname": "scare1back",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "474 1587 78",
+   "target": "bosshorror3",
+   "targetname": "boss1scene3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "524 1587 81",
+   "target": "bosshorror2",
+   "targetname": "boss1scene2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "256 1664 78",
+   "target": "scare1back3target",
+   "targetname": "scare1back3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "704 1664 78",
+   "target": "scare1back2target",
+   "targetname": "scare1back2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "448 1664 78",
+   "target": "scare1back1target",
+   "targetname": "scare1back1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-188 1700 78",
+   "target": "bosstarget",
+   "targetname": "boss",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "524 1753 65",
+   "target": "backagaintorealtarget",
+   "targetname": "backagaintorealtarg",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "785 235 110",
+   "target": "teleport_destinationfirstmap",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_egypt2": [
+  {
+   "origin": "-619 -136 -467",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2638 -547 -670",
+   "target": "level_exitforegypt3",
+   "targetname": "egypt3start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2664 -1771 -102",
+   "target": "the_book",
+   "targetname": "teleporttohal",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2593 -269 -467",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2699 -308 -558",
+   "target": "level_exit",
+   "targetname": "level_exitportal",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_egypt3": [
+  {
+   "origin": "24 112 -1169",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 2 : Beneath The Pyramid",
+   "targetname": "chaptername",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "2160 -1365 -1099",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending1": [
+  {
+   "origin": "-1800 -2298 -1155",
+   "target": "teleportse1_2ld",
+   "targetname": "teleportse1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2954 -3323 -36",
+   "target": "e_e2b",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1803 -2151 -1155",
+   "target": "teleportseld",
+   "targetname": "teleportse",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending1b": [
+  {
+   "origin": "-3406 -1731 -285",
+   "target": "teledes",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3454 -1706 -252",
+   "message": "Chapter 8 - My life ends here",
+   "targetname": "chapterlols",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "1325 165 -808",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3464 -380 -315",
+   "targetname": "fuckingdie",
+   "spawnflags": "39",
+   "classname": "cof_killplayer"
+  }
+ ],
+ "c_ending1c": [
+  {
+   "origin": "-3459 123 2262",
+   "target": "cteledes",
+   "targetname": "cteletele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "3053 -510 -671",
+   "target": "temptele_des",
+   "targetname": "temptele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1463 165 -808",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1802 -1133 -2684",
+   "target": "tele_nice",
+   "targetname": "tele_niceye",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending2": [
+  {
+   "origin": "-2954 -3323 -36",
+   "target": "e_e2b",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1803 -2151 -1155",
+   "target": "teleportseld",
+   "targetname": "teleportse",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1800 -2423 -1155",
+   "target": "teleportse1_2ld",
+   "targetname": "teleportse1_12",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending2b": [
+  {
+   "origin": "-3406 -1731 -285",
+   "target": "teledes",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3454 -1706 -252",
+   "message": "Chapter 8 - My life ends here",
+   "targetname": "chapterlols",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "1325 165 -808",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3464 -380 -306",
+   "targetname": "fuckingdie",
+   "spawnflags": "39",
+   "classname": "cof_killplayer"
+  }
+ ],
+ "c_ending2c": [
+  {
+   "origin": "3053 -510 -671",
+   "target": "temptele_des",
+   "targetname": "temptele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1463 165 -808",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1133 -575 745",
+   "target": "cteledes",
+   "targetname": "cteletele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1802 -1133 -2684",
+   "target": "tele_nice",
+   "targetname": "tele_niceye",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending3": [
+  {
+   "origin": "-1800 -2551 -1155",
+   "target": "teleportse1_2ld",
+   "targetname": "teleportse1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2954 -3323 -36",
+   "target": "e_e2b",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1803 -2151 -1155",
+   "target": "teleportseld",
+   "targetname": "teleportse",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending3b": [
+  {
+   "origin": "-3406 -1731 -285",
+   "target": "teledes",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3454 -1706 -252",
+   "message": "Chapter 8 - My life ends here",
+   "targetname": "chapterlols",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "1325 165 -808",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3470 -380 -299",
+   "targetname": "fuckingdie",
+   "spawnflags": "39",
+   "classname": "cof_killplayer"
+  }
+ ],
+ "c_ending3c": [
+  {
+   "origin": "3053 -510 -671",
+   "target": "temptele_des",
+   "targetname": "temptele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1463 165 -808",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2461 2704 -2330",
+   "target": "cteledes",
+   "targetname": "cteletele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1802 -1133 -2684",
+   "target": "tele_nice",
+   "targetname": "tele_niceye",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending4": [
+  {
+   "origin": "-2954 -3323 -36",
+   "target": "e_e2b",
+   "targetname": "teledes_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1803 -2151 -1155",
+   "target": "teleportseld",
+   "targetname": "teleportse",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1800 -2670 -1155",
+   "target": "teleportse1_2ld",
+   "targetname": "teleportse1_14",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending4b": [
+  {
+   "origin": "-1943 -2151 -1155",
+   "target": "telelol",
+   "targetname": "teleportse",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-947 1580 -120",
+   "message": "simon",
+   "target": "bookdes",
+   "targetname": "teleportbook",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1506 2827 963",
+   "target": "cteledes",
+   "targetname": "cteletele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2217 -1575 -120",
+   "target": "telelol",
+   "targetname": "fitttth",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending5": [
+  {
+   "origin": "-1928 -2621 -1155",
+   "target": "teleportseld",
+   "targetname": "teleportse",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1798 -2793 -1155",
+   "target": "teleportse1_2ld",
+   "targetname": "teleportse1_15",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "689 -2629 -61",
+   "target": "tellme",
+   "targetname": "tellemenow",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-371 1824 -2269",
+   "targetname": "killmefuck",
+   "spawnflags": "6",
+   "classname": "cof_killplayer"
+  }
+ ],
+ "c_ending5b": [
+  {
+   "origin": "1704 -1806 -2209",
+   "target": "lollipopp",
+   "targetname": "lollipopp_t",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2481 -895 -2156",
+   "target": "teleportaom_2ld",
+   "targetname": "teleportaom_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ending5c": [
+  {
+   "origin": "-2343 -895 -2156",
+   "target": "teleportaom_2ld",
+   "targetname": "teleportaom_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_esewer": [
+  {
+   "origin": "1328 2234 -351",
+   "target": "base_exit",
+   "targetname": "tp8",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1712 -973 -399",
+   "target": "base_exit",
+   "targetname": "tp9",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1104 496 64",
+   "target": "level_exit9",
+   "targetname": "exit_tp",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "32 177 16",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 2 - Escape",
+   "targetname": "new_chapter",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-1121 497 64",
+   "targetname": "clear_inv",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_forest1": [
+  {
+   "origin": "-1394 262 -631",
+   "target": "teleportf3_2ld",
+   "targetname": "teleportf3_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-819 -623 -631",
+   "target": "teleportf1_1ld",
+   "targetname": "teleportf1_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forest2": [
+  {
+   "origin": "-228 24 -631",
+   "target": "teleportf3_1ld",
+   "targetname": "teleportf3_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1256 262 -631",
+   "target": "teleportf3_2ld",
+   "targetname": "teleportf3_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forest3": [
+  {
+   "origin": "-530 609 -631",
+   "target": "teleportf2_1ld",
+   "targetname": "teleportf2_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1725 312 -631",
+   "target": "teleportf3_1ld",
+   "targetname": "teleportf3_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forest4": [
+  {
+   "origin": "1863 312 -631",
+   "target": "teleportf4_1ld",
+   "targetname": "teleportf4_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1863 191 -631",
+   "target": "teleportf4_2ld",
+   "targetname": "teleportf4_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forest5": [
+  {
+   "origin": "1725 191 -631",
+   "target": "teleportf5_1ld",
+   "targetname": "teleportf5_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1725 70 -631",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forest6": [
+  {
+   "origin": "1863 70 -631",
+   "target": "teleportf6_1ld",
+   "targetname": "teleportf6_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1514 963 -1537",
+   "target": "teleportf6_2ld",
+   "targetname": "teleportf6_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forest7": [
+  {
+   "origin": "-1652 963 -1537",
+   "target": "teleportf7_1ld",
+   "targetname": "teleportf7_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1342 2282 -1538",
+   "target": "teleportf7_2ld",
+   "targetname": "teleportf7_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1108 2282 -1538",
+   "target": "teleportfa_2ld2",
+   "targetname": "teleportfa_22",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_forestday": [
+  {
+   "origin": "503 1581 -499",
+   "target": "teleportfod_2ld",
+   "targetname": "teleportfod_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1034 -3271 -1155",
+   "target": "teleportla1_1ld",
+   "targetname": "teleportla1_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_fsewer1": [
+  {
+   "origin": "-1537 -682 -1155",
+   "target": "teleportse1_1ld",
+   "targetname": "teleportse1_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1537 -809 -1155",
+   "target": "teleportsvi1_1ld",
+   "targetname": "teleportsvi1_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-995 1794 -476",
+   "message": "inventoryitems/fsewerkey.txt",
+   "targetname": "givekeys",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_garden": [
+  {
+   "origin": "-1504 1866 256",
+   "target": "lobby_exit",
+   "targetname": "tp1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1504 1754 256",
+   "target": "lobby_exit",
+   "targetname": "tp3",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_gards": [
+  {
+   "origin": "-1372 1754 -351",
+   "target": "ls2_exit",
+   "targetname": "tp5",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1520 1870 -351",
+   "target": "ks_exit",
+   "targetname": "tp7",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_genpat": [
+  {
+   "origin": "-1568 1974 256",
+   "target": "lobby_exit",
+   "targetname": "tp1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-288 31 48",
+   "message": "Chapter 1 - Relapse",
+   "noise": "ambience/new_chapter.wav",
+   "targetname": "chapter1",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-2492 422 -715",
+   "target": "begin_exit",
+   "targetname": "tp0",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hallo_carnc": [
+  {
+   "origin": "-344 -433 -256",
+   "message": "Chapter 4: A Tricky Carnie",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-502 -602 -187",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_darkydude",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-321 -393 -201",
+   "targetname": "clearitmt",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_hallo_cofbrony": [
+  {
+   "origin": "-234 -575 -208",
+   "message": "Chapter 6: JonSplitz",
+   "targetname": "Pumpkin",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-698 -221 60",
+   "targetname": "killhim",
+   "classname": "cof_killplayer"
+  },
+  {
+   "origin": "-261 -576 -202",
+   "targetname": "bye",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "352 -618 -131",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_zikshadow",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-459 1220 -472",
+   "target": "teleport_to_theevina",
+   "targetname": "teleport_theevina",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hallo_darkydude": [
+  {
+   "origin": "-469 -812 12",
+   "message": "Chapter 3 - Darkydude",
+   "targetname": "chapter",
+   "noise": "ambience/darkydude_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-44 127 -91",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_nalopex",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hallo_iambulletproof": [
+  {
+   "origin": "-569 -630 -458",
+   "message": "Chapter 1 - IamBulletProof",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-577 -638 -386",
+   "message": "weapon_glock",
+   "targetname": "giveglock",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-577 -638 -338",
+   "message": "weapon_flashlight",
+   "targetname": "giveflashlight",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "1302 734 -414",
+   "message": "inventoryitems/fuse.txt",
+   "targetname": "givefuse",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-811 741 -393",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_nalopex",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hallo_nalopex": [
+  {
+   "origin": "312 249 -150",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 2 - Nalopex",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "346 270 -150",
+   "targetname": "removeitems",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "0 80 -145",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_bulletproof",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hallo_theevina": [
+  {
+   "origin": "1285 2080 -128",
+   "target": "lantern_hall",
+   "targetname": "to_lantern_hall",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-663 -1062 -98",
+   "target": "from_theevina_e3pointman",
+   "targetname": "teleport_to_e3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1976 1671 -184",
+   "targetname": "kill_player",
+   "classname": "cof_killplayer"
+  },
+  {
+   "origin": "-180 -41 285",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_jonsplitz",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-32 32 64",
+   "message": "Chapter 7: Theevina",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_hallo_zikshadow": [
+  {
+   "origin": "156 -860 -424",
+   "noise": "ambience/thunder4.wav",
+   "message": "Chapter 5: ZikShadow",
+   "targetname": "chaptertext",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "2333 1484 -634",
+   "target": "unknownendingendlevel",
+   "targetname": "unknownending",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2309 1480 -634",
+   "targetname": "clearitems",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "432 -1706 -627",
+   "target": "teleport_startpoint",
+   "targetname": "teleport_from_carnie",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "288 -816 -424",
+   "message": "weapon_nightstick",
+   "targetname": "removestick",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "312 -816 -424",
+   "message": "weapon_flare",
+   "targetname": "removeflare",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "336 -816 -424",
+   "message": "weapon_p345",
+   "targetname": "removep345",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "360 -816 -424",
+   "message": "weapon_sledgehammer",
+   "targetname": "removeshovel",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "336 -792 -424",
+   "message": "weapon_flashlight",
+   "targetname": "removeflashlight",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "360 -792 -424",
+   "message": "weapon_glock",
+   "targetname": "removeglock",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_hamn": [
+  {
+   "origin": "-204 -488 -437",
+   "target": "teleportsd_1ld",
+   "targetname": "teleportsd_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1609 -1496 -491",
+   "target": "teleportha2_1ld",
+   "targetname": "teleportha2_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hamn2": [
+  {
+   "origin": "-1665 2056 -618",
+   "target": "teleporth2_2ld",
+   "targetname": "teleporth2_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1471 -1496 -491",
+   "target": "teleportha2_2ld",
+   "targetname": "teleportha2_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hamn3": [
+  {
+   "origin": "-1527 2056 -618",
+   "target": "teleporth3_1ld",
+   "targetname": "teleporth3_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1522 1869 -618",
+   "target": "teleporthc_2ld",
+   "targetname": "teleporthc_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1273 1748 -618",
+   "target": "2teleporthc_2ld",
+   "targetname": "2teleporthc_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1526 1737 -618",
+   "target": "teleporthc_2ld2",
+   "targetname": "teleporthc_22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "912 -997 -23",
+   "iuser1": "2",
+   "targetname": "endingtrigger",
+   "classname": "cof_ending"
+  }
+ ],
+ "c_her1": [
+  {
+   "origin": "-2200 1304 432",
+   "noise": "ambience/new_chapter.wav",
+   "message": "HER",
+   "targetname": "chapter2",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-2240 1304 432",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Jonathan 'Lockdown' Jones",
+   "targetname": "chapter1",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-2476 1412 417",
+   "message": "weapon_flashlight",
+   "targetname": "phonegive",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-2688 2112 610",
+   "target": "to_next_map",
+   "targetname": "next_map_tele",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_her2": [
+  {
+   "origin": "-3137 2439 728",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_her3": [
+  {
+   "origin": "79 2039 728",
+   "target": "map_beginning",
+   "targetname": "start_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2369 2439 728",
+   "target": "map_start2",
+   "targetname": "teleport_to_start2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_her4": [
+  {
+   "origin": "-2369 2439 728",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_her5": [
+  {
+   "origin": "-2369 2439 728",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2849 3264 272",
+   "target": "endtele",
+   "targetname": "end",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hole1": [
+  {
+   "origin": "-3792 -2046 72",
+   "targetname": "give_gun",
+   "message": "weapon_glock",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-2817 -1224 84",
+   "target": "enter_map",
+   "targetname": "teleport_to_tunnel",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3773 -2046 72",
+   "targetname": "give_phone",
+   "message": "weapon_mobile",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-2873 -1224 65",
+   "noise": "ambience/new_chapter.wav",
+   "targetname": "chapter_display",
+   "message": "The Hole",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-1073 -1033 96",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-271 -1351 -432",
+   "target": "weapons_room_door",
+   "targetname": "teleport_to_weapons_room",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-368 -479 -560",
+   "target": "to_ending",
+   "targetname": "go_to_ending_map",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hole2": [
+  {
+   "origin": "1832 31 -112",
+   "targetname": "go_to_nightmare_hall",
+   "target": "nightmare_hall",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1073 -1033 96",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1071 1223 -1960",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1089 -401 248",
+   "target": "outside_wr_door",
+   "targetname": "teleport_to_street",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hole3": [
+  {
+   "origin": "1071 1223 -1960",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2367 -745 -1592",
+   "target": "back_to_end",
+   "targetname": "teleport_to_end",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hole4": [
+  {
+   "origin": "-2920 -2216 -3000",
+   "message": "boss",
+   "target": "boss_start_location",
+   "targetname": "teleport_boss",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2857 -2279 -3000",
+   "target": "ending_teleport_location",
+   "targetname": "ending_teleport",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2857 -2311 -3000",
+   "targetname": "remove_inventory",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "2367 -745 -1592",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3921 -607 -3064",
+   "target": "conclusion_box",
+   "targetname": "teleport_to_black_box",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1720 -1031 -3056",
+   "target": "to_ending",
+   "targetname": "teleport_to_creditslevel",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_hole5": [
+  {
+   "origin": "1928 -767 -1360",
+   "target": "to_ending",
+   "targetname": "teleport_to_creditslevel",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "248 -1719 -760",
+   "targetname": "die",
+   "classname": "cof_killplayer"
+  }
+ ],
+ "c_hole_ending": [
+  {
+   "origin": "104 39 8",
+   "targetname": "no_items",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_iambulletproof": [
+  {
+   "origin": "-3014 -151 -192",
+   "message": "Chapter 5 - IamBulletProof",
+   "targetname": "chapterss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "572 -1931 -157",
+   "target": "teleportlm5_des",
+   "targetname": "teleportlm5",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "567 -1790 -157",
+   "target": "teleportlm6_des",
+   "targetname": "teleportlm6",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_intro": [
+  {
+   "origin": "-408 -2196 162",
+   "target": "kunitei",
+   "targetname": "kunitei2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_is_farm1": [
+  {
+   "origin": "-1056 -2712 24",
+   "angles": "0 90 0",
+   "targetname": "Teleend",
+   "classname": "cof_entteleport"
+  },
+  {
+   "origin": "-272 -536 152",
+   "noise": "ambience/new_chapter.wav",
+   "message": "iSolation, by Aresaka",
+   "targetname": "intro",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-272 -504 152",
+   "message": "Chapter 1: A damn good question",
+   "targetname": "chap1",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_ks": [
+  {
+   "origin": "-1377 1870 -351",
+   "target": "gards_exit",
+   "targetname": "tp6",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_lake": [
+  {
+   "origin": "-896 -3271 -1155",
+   "target": "teleportla1_2ld",
+   "targetname": "teleportla1_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1877 2838 -1155",
+   "target": "teleportse1_2ld",
+   "targetname": "teleportse1_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_lobby": [
+  {
+   "origin": "-1716 1979 255",
+   "target": "genpat_exit",
+   "targetname": "tp0",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1356 1862 255",
+   "target": "garden_exit",
+   "targetname": "tp2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_lobbys": [
+  {
+   "origin": "-1368 1750 -351",
+   "target": "garden_exit",
+   "targetname": "tp2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1516 1642 -351",
+   "target": "base_exit",
+   "targetname": "tp4",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_ls2": [
+  {
+   "origin": "-1516 1754 -351",
+   "target": "gards_exit",
+   "targetname": "tp6",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1296 1750 -353",
+   "target": "base_exit",
+   "targetname": "tp5",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_nalopex": [
+  {
+   "origin": "64 255 32",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 6 : Nalopex",
+   "targetname": "chapter",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_nightmare": [
+  {
+   "origin": "-852 -1121 986",
+   "message": "weapon_camera",
+   "targetname": "kakkaej",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-35 -101 47",
+   "target": "kokalek2",
+   "targetname": "pulla",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-742 -1662 -258",
+   "target": "teleea45",
+   "targetname": "teleportea45",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-754 -1637 -258",
+   "target": "teleea",
+   "targetname": "teleportea",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-768 -1619 -258",
+   "target": "beforetelet",
+   "targetname": "beforetele",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_nightmare1": [
+  {
+   "origin": "-1319 1254 -690",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2629 -87 -477",
+   "targetname": "clearItems",
+   "spawnflags": "4",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_nightmare2": [
+  {
+   "origin": "-1177 323 -402",
+   "target": "teleport_destination1",
+   "targetname": "teleport_from_level1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2129 283 -403",
+   "target": "teleport_destination2",
+   "targetname": "teleport_from_level2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_nightmare3": [
+  {
+   "origin": "1991 283 -403",
+   "target": "teleport_destination2",
+   "targetname": "teleport_from_level2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1996 141 -403",
+   "target": "teleport_destination3",
+   "targetname": "teleport_from_level3",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_nightmare4": [
+  {
+   "origin": "84 238 -1608",
+   "target": "teleport_destinationEnd",
+   "targetname": "cof_teleportEnd",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2133 141 -403",
+   "target": "teleport_destination3",
+   "targetname": "teleport_from_level3",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_nmare": [
+  {
+   "origin": "1871 3009 -400",
+   "target": "level_exit",
+   "targetname": "exit_tp",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2348 422 -715",
+   "target": "door1_exit2",
+   "targetname": "tp1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_outofit1": [
+  {
+   "origin": "-545 -634 -19",
+   "message": "weapon_mobile",
+   "targetname": "start_give",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-548 -534 82",
+   "message": "Chapter 1 - A Bad Trip",
+   "targetname": "start_give",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_outofit10": [
+  {
+   "origin": "207 40 49",
+   "message": "weapon_switchblade",
+   "targetname": "begin_text",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "206 40 68",
+   "targetname": "begin_text",
+   "message": "weapon_mobile",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_outofit3": [
+  {
+   "origin": "-210 1048 -220",
+   "audiofile": "aompa/skuggfa.wav",
+   "subtitletime1": "7",
+   "targetname": "prank",
+   "classname": "cof_phonecall"
+  }
+ ],
+ "c_outofit4": [
+  {
+   "origin": "258 -0 64",
+   "targetname": "start_give",
+   "message": "weapon_mobile",
+   "spawnflags": "16",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "192 0 96",
+   "targetname": "start_give",
+   "message": "weapon_switchblade",
+   "spawnflags": "16",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_park2": [
+  {
+   "origin": "-1540 947 -260",
+   "target": "teleportstp2_1_dest",
+   "targetname": "teleportstp2_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1212 -3001 -66",
+   "target": "spawnsc2_des",
+   "targetname": "spawnsc2",
+   "message": "fagno",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_park3": [
+  {
+   "origin": "1535 -1138 727",
+   "target": "gateinter",
+   "audiofile": "cutscene/park_call.wav",
+   "subtitletime9": "5.02",
+   "subtitletime8": "5.8",
+   "subtitletime7": "5.08",
+   "subtitletime6": "6.47",
+   "subtitletime5": "3.9",
+   "subtitletime4": "3.9",
+   "subtitletime3": "2.83",
+   "subtitletime2": "1.6",
+   "subtitletime1": "1.45",
+   "subtitlenumber9": "176",
+   "subtitlenumber8": "175",
+   "subtitlenumber7": "174",
+   "subtitlenumber6": "173",
+   "subtitlenumber5": "172",
+   "subtitlenumber4": "171",
+   "subtitlenumber3": "170",
+   "subtitlenumber2": "169",
+   "subtitlenumber1": "168",
+   "targetname": "sophiecall",
+   "classname": "cof_phonecall"
+  },
+  {
+   "origin": "410 1259 -315",
+   "target": "teleportpa3_12ld",
+   "targetname": "teleportpa3_12",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "406 1127 -315",
+   "target": "teleportpa3_22ld",
+   "targetname": "teleportpa3_22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "3069 279 240",
+   "target": "isteleport1_des",
+   "targetname": "isteleport1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "3069 255 240",
+   "target": "isteleport2_des",
+   "targetname": "isteleport2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1780 -256 667",
+   "message": "Chapter 4 - Drowned in sorrow",
+   "targetname": "chapterlehe",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "1845 -233 719",
+   "message": "inventoryitems/card.txt",
+   "targetname": "givekeys",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_roofs": [
+  {
+   "origin": "2141 434 1081",
+   "target": "teleportfall2",
+   "targetname": "teleportfall",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2128 -24 1256",
+   "target": "teleport2_dest",
+   "targetname": "teleport2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2112 -24 1256",
+   "target": "teleport1_dest",
+   "targetname": "teleport1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_roofs2": [
+  {
+   "origin": "2141 434 1081",
+   "target": "teleportfall2",
+   "targetname": "teleportfall",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2160 -96 1264",
+   "target": "teleport4_dest",
+   "targetname": "teleportia4",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2144 -96 1264",
+   "target": "teleport3_dest",
+   "targetname": "teleportia3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2176 -96 1264",
+   "target": "teleport42_dest",
+   "targetname": "teleportia42",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2128 -96 1264",
+   "target": "teleport2_dest",
+   "targetname": "teleportia2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2221 -395 1194",
+   "targetname": "endingtrigger",
+   "classname": "cof_ending"
+  }
+ ],
+ "c_rumpel1": [
+  {
+   "origin": "424 432 72",
+   "message": "weapon_switchblade",
+   "targetname": "giveswitchblade",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "424 408 56",
+   "message": "Chapter 1 - ruMpel",
+   "targetname": "chapter",
+   "noise": "common/nothing.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-1251 183 -157",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_rumpel2": [
+  {
+   "origin": "-1113 183 -157",
+   "target": "teleportf5_2ld",
+   "targetname": "teleportf5_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-820 266 -143",
+   "target": "deathtele_des",
+   "targetname": "deathtele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-770 273 -145",
+   "targetname": "playerdeath",
+   "spawnflags": "2",
+   "classname": "cof_killplayer"
+  },
+  {
+   "origin": "-1051 -882 620",
+   "message": "monster1",
+   "target": "monstertel1",
+   "targetname": "teleportmonsters1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1029 -882 620",
+   "message": "monster2",
+   "target": "monstertel2",
+   "targetname": "teleportmonsters1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-173 -434 620",
+   "message": "monster3",
+   "target": "monstertel3",
+   "targetname": "teleportmonsters2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-154 -433 620",
+   "message": "monster4",
+   "target": "monstertel4",
+   "targetname": "teleportmonsters2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-127 -435 620",
+   "message": "monster5",
+   "target": "monstertel5",
+   "targetname": "teleportmonsters2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-102 -435 620",
+   "message": "monster6",
+   "target": "monstertel6",
+   "targetname": "teleportmonsters2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "423 -701 620",
+   "message": "monster7",
+   "target": "monstertel7",
+   "targetname": "teleportmonsters3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "442 -700 620",
+   "message": "monster8",
+   "target": "monstertel8",
+   "targetname": "teleportmonsters3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "469 -702 620",
+   "message": "monster9",
+   "target": "monstertel9",
+   "targetname": "teleportmonsters3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "494 -702 620",
+   "message": "monster10",
+   "target": "monstertel10",
+   "targetname": "teleportmonsters3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1549 -291 -157",
+   "target": "teleportlm2_des",
+   "targetname": "teleportlm2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_sdkmap1": [
+  {
+   "origin": "-160 48 16",
+   "message": "Chapter 1 - Lost in a SDK",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-168 40 88",
+   "message": "weapon_switchblade",
+   "targetname": "giveswitchblade",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-459 643 862",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_sdkmap2": [
+  {
+   "origin": "-321 643 862",
+   "target": "teleport_destination",
+   "targetname": "teleport_from_level",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_sebcollab_1": [
+  {
+   "origin": "348 3036 -548",
+   "target": "destination",
+   "targetname": "teleport",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-818 711 -375",
+   "target": "lastroom",
+   "targetname": "lastroomtele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "431 -2109 -157",
+   "target": "teleportlm4_des",
+   "targetname": "teleportlm4",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "434 -1931 -157",
+   "target": "teleportlm5_des",
+   "targetname": "teleportlm5",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-60 -353 -153",
+   "message": "Chapter 4 - SebMarsh",
+   "targetname": "chapterr",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_sewer2": [
+  {
+   "origin": "443 -406 -1504",
+   "custommsg": "He was holding a shotgun.",
+   "targetname": "kutteahe",
+   "message": "weapon_shotgun",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "424 -365 -1532",
+   "target": "sdes",
+   "targetname": "stele",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_sewer3": [
+  {
+   "origin": "-302 -551 -30",
+   "target": "kulorimagen",
+   "targetname": "kulorimagen2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "54 72 -16",
+   "message": "inventoryitems/rustykey.txt",
+   "targetname": "giveitem2",
+   "spawnflags": "3",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "18 -581 -9",
+   "target": "teleportlik",
+   "targetname": "teleport_till_lik",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3247 199 -58",
+   "target": "sew3alt_dest",
+   "targetname": "sew3alt_tele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3223 196 -58",
+   "target": "sew3alt_dest2",
+   "targetname": "sew3alt_tele2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-3313 199 -48",
+   "message": "Chapter 3 - The city is not safe",
+   "targetname": "chapterheh",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_stad": [
+  {
+   "origin": "-1540 947 -260",
+   "target": "teleportstp2_2_dest",
+   "targetname": "teleportstp2_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-66 -488 -437",
+   "target": "teleportsd_2ld",
+   "targetname": "teleportsd_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-421 -494 -437",
+   "target": "teleportst11_1ld",
+   "targetname": "teleportst11_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-534 -112 -241",
+   "message": "inventoryitems/fuse.txt",
+   "targetname": "givefusls",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_start": [
+  {
+   "origin": "3134 -3547 -743",
+   "target": "lol_move_simon1",
+   "targetname": "lol_simon_teleport",
+   "angles": "0 90 0",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1258 -3573.13 -724.899",
+   "angles": "0 0 0",
+   "target": "telekuk",
+   "targetname": "kahshe",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "608 -2760.46 -577.169",
+   "angles": "0 0 0",
+   "message": "weapon_camera",
+   "targetname": "removecamera",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "608 -2759.97 -592.888",
+   "angles": "0 0 0",
+   "message": "weapon_mobile",
+   "targetname": "givemobile",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "608 -2759.97 -607.888",
+   "angles": "0 0 0",
+   "message": "weapon_switchblade",
+   "targetname": "giveswitchblade",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-152 -2692 -789",
+   "angles": "0 0 0",
+   "target": "teleportdes",
+   "targetname": "mainteleport",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "640 -2824 -624",
+   "angles": "0 0 0",
+   "target": "teleportdes1",
+   "targetname": "1teleport",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "3023 -2363 -734",
+   "angles": "0 0 0",
+   "target": "teleportdes2",
+   "targetname": "2teleport",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-664 4 -325",
+   "angles": "0 0 0",
+   "target": "teleportap1_dest",
+   "targetname": "teleportap1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "597 -2825.8 -692.963",
+   "angles": "0 0 0",
+   "message": "Chapter 1 - Lost in a city",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_subtunnel2": [
+  {
+   "origin": "-2983 -1395 -1276",
+   "target": "2teleportyes2s",
+   "targetname": "2teleportyes2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_subway1st1": [
+  {
+   "origin": "-559 -494 -437",
+   "target": "teleportst11_2ld",
+   "targetname": "teleportst11_2",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_subway2st1": [
+  {
+   "origin": "1075 -2930 -327",
+   "target": "teleportyes1s",
+   "targetname": "teleportyes1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2983 -1395 -1276",
+   "target": "2teleportyes2s2",
+   "targetname": "2teleportyes22",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-266 827 -280",
+   "target": "tbteleport1h_dest",
+   "targetname": "tbteleport1h",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-285 828 -280",
+   "target": "tbteleport2h_dest",
+   "targetname": "tbteleport2h",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1222 1575 -497",
+   "target": "tb2teleport1_dest",
+   "targetname": "tb2teleport1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1203 1577 -497",
+   "target": "tb2teleport2_dest",
+   "targetname": "tb2teleport2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-446 1168 -1032",
+   "target": "2teleportion_ld",
+   "targetname": "2teleportion",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-446 1031 -1032",
+   "target": "2teleportion_ld2",
+   "targetname": "2teleportion2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-320 -1671 -123",
+   "message": "Chapter 5 - Leaving this for good",
+   "targetname": "chapterx",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-211 -251 -340",
+   "message": "inventoryitems/fuse.txt",
+   "targetname": "givefuseffs",
+   "spawnflags": "1",
+   "classname": "cof_giveitems"
+  }
+ ],
+ "c_subway2st2": [
+  {
+   "origin": "-127 -1434 -1032",
+   "target": "teleports2_1ld",
+   "targetname": "teleports2_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_subway2st3": [
+  {
+   "origin": "11 -1434 -1032",
+   "target": "teleports2_2ld",
+   "targetname": "teleports2_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-137 -61 -559",
+   "target": "telestopp",
+   "targetname": "telechange",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-132 -28 -559",
+   "target": "telestopp2",
+   "targetname": "telechange2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-584 1031 -1032",
+   "target": "2teleportion3_ld2",
+   "targetname": "2teleportion3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-440 1939 -523",
+   "target": "traintele_des",
+   "targetname": "traintele",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-102 -61 -563",
+   "target": "teleblack_des",
+   "targetname": "teleblack",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_subwaysick1": [
+  {
+   "origin": "12 -1293 -1032",
+   "target": "teleports2_2ld",
+   "targetname": "teleports2_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1579 323 -1032",
+   "target": "teleportss2_2ld",
+   "targetname": "teleportss2_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-322 -2075 -178",
+   "targetname": "fuckingdie",
+   "spawnflags": "39",
+   "classname": "cof_killplayer"
+  }
+ ],
+ "c_subwaysick2": [
+  {
+   "origin": "1441 323 -1032",
+   "target": "teleportss2_1ld",
+   "targetname": "teleportss2_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2188 1717 -418",
+   "target": "isteleport1_des",
+   "targetname": "isteleport1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "1824 1768 -418",
+   "target": "isteleportx_des",
+   "targetname": "isteleportx",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_tazo": [
+  {
+   "origin": "-409 -1411 -380",
+   "targetname": "remove_items_again",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-399 -1459 -344",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 4 : Tazo",
+   "targetname": "chapter",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_the_stairway1": [
+  {
+   "origin": "-152 448 -72",
+   "targetname": "chapterts",
+   "message": "Chapter 1 - Where am I?",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-439 360 -80",
+   "target": "teleze",
+   "targetname": "teleziee",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_the_stairway2": [
+  {
+   "origin": "-256 -224 -104",
+   "message": "Chapter 2 - Night Descent",
+   "targetname": "chapter2",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_the_stairway3": [
+  {
+   "origin": "-2592 448 -96",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 3 - Time to End this",
+   "targetname": "chapter3",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "3343 3040 -424",
+   "targetname": "remove_item1",
+   "spawnflags": "5",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_the_stairway4": [
+  {
+   "origin": "-768 -128 -186",
+   "message": "Chapter 4: It's not over yet",
+   "targetname": "chapter4",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_the_stairway5": [
+  {
+   "origin": "-2880 2080 -224",
+   "message": "Final Chapter - You Will Die",
+   "targetname": "chapter5",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-2812 2096 -201",
+   "targetname": "removeallitems",
+   "spawnflags": "5",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-1000 1632 -680",
+   "targetname": "hangkill",
+   "classname": "cof_killplayer"
+  },
+  {
+   "origin": "-2791 2522 -95",
+   "target": "teleport_start",
+   "targetname": "teleport_from_stair4",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_theevina": [
+  {
+   "origin": "190 56 120",
+   "message": "Chapter 7 : Theevina",
+   "targetname": "chapter",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "608 -112 208",
+   "targetname": "clearweapons_last",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "c_theevinas": [
+  {
+   "origin": "429 -1790 -157",
+   "target": "teleportlm6_des",
+   "targetname": "teleportlm6",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "96 135 158",
+   "message": "Chapter 6 - Theevina",
+   "targetname": "chapterr",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "2473 1300 755",
+   "targetname": "fittatata",
+   "target": "exitlvl7",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2471 1283 755",
+   "targetname": "fittatata",
+   "target": "exitlvl7",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2487 1278 755",
+   "targetname": "fittatata",
+   "target": "exitlvl7",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2511 1301 755",
+   "targetname": "fittatata",
+   "target": "exitlvl7",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2512 1316 755",
+   "targetname": "fittatata",
+   "target": "exitlvl7",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2483 1327 755",
+   "targetname": "fittatata",
+   "target": "exitlvl7",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_trainride": [
+  {
+   "origin": "1832 1750 212",
+   "target": "teleportering1",
+   "targetname": "dansame",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-997 215 -1382",
+   "target": "teletrs_ld",
+   "targetname": "teletrs",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_trainscene": [
+  {
+   "origin": "-901 358 -1382",
+   "target": "teleportero_ld",
+   "targetname": "teleportero",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-997 215 -1382",
+   "target": "teleportoar",
+   "targetname": "teleportoar_df",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_tricky": [
+  {
+   "origin": "569 -1958 -157",
+   "target": "teleportlm3_des",
+   "targetname": "teleportlm3",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "569 -2109 -157",
+   "target": "teleportlm4_des",
+   "targetname": "teleportlm4",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-13 -345 -192",
+   "message": "Chapter 3 - A Tricky Carnie",
+   "targetname": "chapterrr",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "c_village1": [
+  {
+   "origin": "-1399 -809 -1155",
+   "target": "teleportsvi2_1ld",
+   "targetname": "teleportsvi2_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1157 -1573 -1155",
+   "target": "teleportsvi21_1ld",
+   "targetname": "teleportsvi21_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_village2": [
+  {
+   "origin": "-1295 -1573 -1155",
+   "target": "teleportsvi21_2ld",
+   "targetname": "teleportsvi21_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1940 -2139 -1155",
+   "target": "teleportsvi3_1ld",
+   "targetname": "teleportsvi3_1",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_village3": [
+  {
+   "origin": "-1802 -2139 -1155",
+   "target": "teleportsvi3_2ld",
+   "targetname": "teleportsvi3_2",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1940 -2298 -1155",
+   "target": "teleportse1_1ld",
+   "targetname": "teleportse1_1",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1940 -2423 -1155",
+   "target": "teleportse1_1ld",
+   "targetname": "teleportse1_12",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1940 -2550 -1155",
+   "target": "teleportse1_1ld",
+   "targetname": "teleportse1_13",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1940 -2670 -1155",
+   "target": "teleportse1_1ld",
+   "targetname": "teleportse1_14",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-1939 -2793 -1155",
+   "target": "teleportse1_1ld",
+   "targetname": "teleportse1_15",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_volcomator1": [
+  {
+   "origin": "-438 1220 75",
+   "message": "Chapter 8 - Volcomator",
+   "targetname": "startstuff",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-431 1309 80",
+   "targetname": "startstuff",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-1184 -359 -456",
+   "targetname": "tele_to_end",
+   "target": "to_next_map",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "432 -1239 -669",
+   "target": "teleportlm10_des",
+   "targetname": "teleportlm10",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_volcomator2a": [
+  {
+   "origin": "-3168 -1021 -196",
+   "target": "map_start",
+   "targetname": "tele_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "34 655 640",
+   "target": "map_end",
+   "targetname": "teleport_to_end",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_volcomator2b": [
+  {
+   "origin": "192 704 640",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "192 704 968",
+   "target": "map_end",
+   "targetname": "teleport_to_end",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_volcomator2c": [
+  {
+   "origin": "-3056 -2824 -237",
+   "target": "to_next_map",
+   "targetname": "tele_to_end",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "40 696 968",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_volcomator3": [
+  {
+   "origin": "-2942 -2536 -272",
+   "target": "map_start",
+   "targetname": "teleport_to_start",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-356 2453 812",
+   "targetname": "strip_inventory",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "416 2144 618",
+   "target": "tele_dest2",
+   "targetname": "teleport_simon",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "2316 -2625 -601",
+   "target": "teleportlmz_des",
+   "targetname": "teleportlmz",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-378 1600 35",
+   "target": "exitlvl6",
+   "targetname": "telelelll",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_vr_nalopex1": [
+  {
+   "origin": "-2903 3032 89",
+   "targetname": "givestart1",
+   "message": "weapon_p345",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-2934 3011 111",
+   "targetname": "remove1",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-2918 2922 57",
+   "message": "Chapter 7 - Nalopex",
+   "targetname": "chchch",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "573 -1653 -157",
+   "target": "teleportlm7_des",
+   "targetname": "teleportlm7",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "572 -1526 -157",
+   "target": "teleportlm8_des",
+   "targetname": "teleportlm8",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-2634 2810 57",
+   "targetname": "teleportnext1",
+   "target": "exitlvl8",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_vr_nalopex2": [
+  {
+   "origin": "422 30 -305",
+   "targetname": "remove2",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-51 598 -305",
+   "targetname": "remove1",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "-20 619 -327",
+   "targetname": "givestart1",
+   "message": "weapon_p345",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "-39 619 -327",
+   "targetname": "givestart2",
+   "message": "weapon_p345",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "434 -1526 -669",
+   "target": "teleportlm8_des",
+   "targetname": "teleportlm8",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "431 -1383 -669",
+   "target": "teleportlm9_des",
+   "targetname": "teleportlm9",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "403 89 -371",
+   "targetname": "teleportnext1",
+   "target": "exitlvl9",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_vr_nalopex3": [
+  {
+   "origin": "938 -458 171",
+   "targetname": "givestart1",
+   "message": "weapon_p345",
+   "classname": "cof_giveitems"
+  },
+  {
+   "origin": "907 -479 193",
+   "targetname": "remove1",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  },
+  {
+   "origin": "569 -1383 -669",
+   "target": "teleportlm9_des",
+   "targetname": "teleportlm9",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "570 -1239 -669",
+   "target": "teleportlm10_des",
+   "targetname": "teleportlm10",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "582 -256 69",
+   "targetname": "changellll",
+   "target": "exitlvl10",
+   "classname": "cof_teleport"
+  }
+ ],
+ "c_zikshadow": [
+  {
+   "origin": "-221 -392 -219",
+   "noise": "ambience/new_chapter.wav",
+   "message": "Chapter 9 - ZikShadow",
+   "targetname": "zikshadow",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "2454 -2625 -601",
+   "target": "teleportlmz_des",
+   "targetname": "teleportlmz",
+   "classname": "cof_teleport"
+  },
+  {
+   "origin": "-294 -340 -198",
+   "targetname": "clearitems",
+   "spawnflags": "1",
+   "classname": "cof_clearitems"
+  }
+ ],
+ "cof_campaign_01": [
+  {
+   "origin": "-675 -1124 -11",
+   "message": "Chapter 9 - Where is Simon?",
+   "targetname": "chapterss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "cof_campaign_01_p2": [
+  {
+   "origin": "-497 1104 -53",
+   "message": "Chapter 10 - Many Thoughts",
+   "targetname": "chapterss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "cof_campaign_01_p3": [
+  {
+   "origin": "1835 -197 270",
+   "message": "Chapter 11 - Where it all begins",
+   "targetname": "chapterss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "cof_campaign_01_p4": [
+  {
+   "origin": "-2721 2980 -1184",
+   "message": "Chapter 12 - Close to the end and beginning",
+   "targetname": "chapterss",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  },
+  {
+   "origin": "-1445 2812 -1133",
+   "message": "theboss",
+   "target": "sawtelele",
+   "targetname": "sawtelelesas",
+   "classname": "cof_teleport"
+  }
+ ],
+ "cof_manhunt_campaign": [
+  {
+   "origin": "-1680 2482 0",
+   "message": "Chapter 1 - A new beginning",
+   "targetname": "chaptertitle",
+   "noise": "ambience/new_chapter.wav",
+   "classname": "cof_chapter"
+  }
+ ],
+ "cof_suicide4": [
+  {
+   "origin": "-662 889 -68",
+   "target": "teleloll_des",
+   "targetname": "teleloll",
+   "classname": "cof_teleport"
+  }
+ ]
+}
