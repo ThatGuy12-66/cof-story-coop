@@ -1296,6 +1296,12 @@ void CL_EmitEntities( void )
 	if( !cl.frames[cl.parsecountmod].valid )
 		return;
 
+	// The listen server loaded another world in place and this client has not
+	// set it up yet (live 2026-10-12: the retail client.dll's HUD_CreateEntities
+	// then read the new world's sky surfaces before R_NewMap built them).
+	if( cl.world_generation != Mod_WorldGeneration( ))
+		return;
+
 	// animate lightestyles
 	ref.dllFuncs.CL_RunLightStyles( CL_GetLightStyle( 0 ));
 

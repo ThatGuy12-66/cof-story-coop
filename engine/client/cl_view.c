@@ -471,6 +471,9 @@ void V_RenderView( void )
 	if( !cl.video_prepped || ( !ui_renderworld.value && UI_IsVisible() && !cl.background ))
 		return; // still loading
 
+	if( cl.world_generation != Mod_WorldGeneration( ))
+		return; // the listen server loaded another world in place: not set up for drawing yet
+
 	V_CalcViewRect ();	// compute viewport rectangle
 	V_SetRefParams( &rp );
 	V_SetupViewModel ();

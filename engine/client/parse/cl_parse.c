@@ -1707,6 +1707,7 @@ void CL_RegisterResources( sizebuf_t *msg, connprotocol_t proto )
 
 			// tell rendering system we have a new set of models.
 			ref.dllFuncs.R_NewMap ();
+			cl.world_generation = Mod_WorldGeneration();
 
 			Mod_LoadDetailTextures( cl.worldmodel );
 

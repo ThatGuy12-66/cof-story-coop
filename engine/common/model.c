@@ -485,6 +485,17 @@ static void Mod_PurgeStudioCache( void )
 	Mod_ClearStudioCache();
 }
 
+// Counts the worlds loaded into mod_known[0]. On a listen server the server
+// replaces the world in place (a story checkpoint of another map, for one)
+// while the local client still holds the previous one; the client draws only
+// a world its renderer was set up for (CL_RegisterResources records this).
+static int mod_world_generation;
+
+int Mod_WorldGeneration( void )
+{
+	return mod_world_generation;
+}
+
 /*
 ==================
 Mod_LoadWorld
@@ -497,6 +508,8 @@ model_t *Mod_LoadWorld( const char *name, qboolean preload )
 	// already loaded?
 	if( !Q_stricmp( mod_known->name, name ))
 		return mod_known;
+
+	mod_world_generation++;
 
 	// free sequence files on studiomodels
 	Mod_PurgeStudioCache();

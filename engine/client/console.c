@@ -329,7 +329,10 @@ Con_ClearNotify
 void Con_ClearNotify( void )
 {
 	for( int i = 0; i < CON_LINES_COUNT; i++ )
+	{
+		if( CON_LINES( i ).addtime < 0.0 ) continue; // a story log line stays off the screen
 		CON_LINES( i ).addtime = 0.0;
+	}
 }
 
 /*
@@ -532,6 +535,20 @@ static char *Con_BytesLeft( int length )
 
 /*
 ================
+Con_StoryLogLine
+
+Cry of Fear story co-op: its running log (cof_story_trace and the story
+modules) is for the log file and the console, never the notify lines drawn
+over the game, where it flickers all game long.
+================
+*/
+static qboolean Con_StoryLogLine( const char *line )
+{
+	return !Q_strncmp( line, "cofstory ", 9 ) || !Q_strncmp( line, "[cof-story-transition]", 22 );
+}
+
+/*
+================
 Con_AddLine
 
 Appends a given string as a new line to the console.
@@ -555,6 +572,9 @@ static void Con_AddLine( const char *line, int length, qboolean newline )
 	con_lineinfo_t *p;
 	if( newline )
 	{
+		// a story line wider than the console goes on in the next line
+		qboolean story = Con_StoryLogLine( line ) || ( con.lines_count > 0 && CON_LINES_LAST().addtime < -1.0e8 &&
+			Q_strlen( CON_LINES_LAST().start ) >= con.linewidth - 1 );
 		memcpy( putpos, line, length );
 		putpos[length - 1] = '\0';
 		con.lines_count++;
@@ -562,7 +582,7 @@ static void Con_AddLine( const char *line, int length, qboolean newline )
 		p = &CON_LINES_LAST();
 		p->start = putpos;
 		p->length = length;
-		p->addtime = cl.time;
+		p->addtime = story ? -1.0e9 : cl.time; // never a notify line
 	}
 	else
 	{
@@ -571,7 +591,7 @@ static void Con_AddLine( const char *line, int length, qboolean newline )
 		memcpy( putpos, line, length - 1 );
 		p->length = Q_strlen( p->start );
 		putpos[p->length] = '\0';
-		p->addtime = cl.time;
+		if( !Con_StoryLogLine( line )) p->addtime = cl.time;
 		p->length++;
 	}
 }

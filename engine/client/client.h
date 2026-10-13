@@ -202,6 +202,7 @@ typedef struct
 
 	qboolean		video_prepped;		// false if on new level or new ref dll
 	qboolean		audio_prepped;		// false if on new level or new snd dll
+	int		world_generation;	// Mod_WorldGeneration() the renderer was set up for (R_NewMap)
 
 	int		delta_sequence;		// acknowledged sequence number
 
