@@ -1,6 +1,6 @@
 [submodule "mainui"]
 	path = 3rdparty/mainui
-	url = https://github.com/FWGS/mainui_cpp
+	url = https://github.com/charliee1w/cof-story-coop-mainui.git
 [submodule "ref_gl/nanogl"]
 	path = 3rdparty/nanogl
 	url = https://github.com/FWGS/nanogl
@@ -45,4 +45,4 @@
 	url = https://github.com/FWGS/mbedtls-releases.git
 [submodule "3rdparty/freevgui"]
 	path = 3rdparty/freevgui
-	url = https://github.com/FWGS/freevgui
+	url = https://github.com/charliee1w/cof-story-coop-freevgui.git
