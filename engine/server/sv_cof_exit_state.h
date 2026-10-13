@@ -139,13 +139,16 @@ static int CoF_ExitRequest( cof_exit_state_t *s, const cof_exit_player_t *player
 		return COF_EXIT_GO;
 	}
 	if( CoF_ExitTaken( s, players, n, generation, level, landmark )) return COF_EXIT_HOLD;
-	if( same && CoF_ExitFind( players, n, s->waiter ))
+	if( same && CoF_ExitCanWait( CoF_ExitFind( players, n, s->waiter )))
 	{
 		waiter = s->waiter;
 		walkin = s->walkin;
 	}
 	else waiter = CoF_ExitPickWaiter( players, n, spot, &walkin );
-	if( CoF_ExitCounted( players, n ) <= 1 || !waiter || !CoF_ExitMissing( players, n, waiter ))
+	// Nobody alive (a corpse lying in the exit still asks for it): the dead are never
+	// taken to the next map. Held for whoever is back first; a team-wipe recovery or
+	// the game's own restart may come first and end the hold with the map.
+	if( waiter ? CoF_ExitCounted( players, n ) <= 1 || !CoF_ExitMissing( players, n, waiter ) : !CoF_ExitCounted( players, n ))
 	{
 		CoF_ExitClear( s );
 		return COF_EXIT_GO;

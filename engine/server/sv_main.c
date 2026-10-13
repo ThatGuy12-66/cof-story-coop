@@ -16,6 +16,7 @@ GNU General Public License for more details.
 #include "common.h"
 #include "server.h"
 #include "sv_cof_story.h"
+#include "sv_cof_scene.h"
 #include "net_encode.h"
 #include "platform/platform.h"
 
@@ -667,8 +668,15 @@ static qboolean SV_RunGameFrame( void )
 	}
 	else
 	{
-		SV_Physics();
-		sv.time += sv.frametime;
+		// Cry of Fear story co-op: a skipped cutscene runs several steps a frame
+		// (sv_cof_scene_state.h), each of the usual length.
+		int i, steps = SV_CoF_SceneSkipSteps();
+
+		for( i = 0; i < steps; i++ )
+		{
+			SV_Physics();
+			sv.time += sv.frametime;
+		}
 		return true;
 	}
 }

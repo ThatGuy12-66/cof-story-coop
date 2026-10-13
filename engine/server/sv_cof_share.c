@@ -14,11 +14,13 @@
 #endif
 
 static cof_share_state_t cof_share;
+static cof_share_archive_t cof_share_saved;
 static int cof_share_command_slot = -1, cof_share_command_kind, cof_share_generation = -1;
 
 void SV_CoF_ShareReset( void )
 {
 	CoF_ShareReset( &cof_share );
+	memset( &cof_share_saved, 0, sizeof( cof_share_saved ));
 	cof_share_command_slot = -1;
 	cof_share_generation = -1;
 }
@@ -98,7 +100,18 @@ void SV_CoF_ShareFrame( void )
 	{
 		sv_client_t *cl = &svs.clients[i];
 		if( cl->state < cs_connected || FBitSet( cl->flags, FCL_FAKECLIENT )) CoF_ShareObserve( &cof_share, i, 0, 0, NULL );
-		else if( CoF_ShareRead( cl, slots, &alive )) CoF_ShareObserve( &cof_share, i, cl->userid, alive, slots );
+		else if( CoF_ShareRead( cl, slots, &alive ))
+		{
+			int entry, fresh = cof_share.players[i].userid != cl->userid;
+			for( entry = 0; fresh && entry < COF_SHARE_PLAYERS; entry++ )
+				if( !Q_stricmp( cof_share_saved.names[entry], cl->name ))
+				{
+					SV_CoF_ShareRecovered( cl );
+					CoF_ShareRead( cl, slots, &alive );
+					break;
+				}
+			CoF_ShareObserve( &cof_share, i, cl->userid, alive, slots );
+		}
 		// connected but not spawned (joining, or mid level change): keep what we know
 	}
 	CoF_ShareDrain();
@@ -126,6 +139,55 @@ void SV_CoF_ShareFrame( void )
 			Con_Printf( "cofstory phase=item-deferred userid=%d item=%s reason=inventory-full\n", cl->userid, item );
 		}
 	}
+}
+
+void SV_CoF_ShareRemember( void )
+{
+	SV_CoF_ShareExport( &cof_share_saved );
+}
+
+void SV_CoF_ShareRecovered( sv_client_t *cl )
+{
+	char slots[COF_SHARE_SLOTS][COF_SHARE_NAME];
+	int alive, index, slot = CoF_ShareClientSlot( cl );
+	if( slot < 0 || !CoF_ShareRead( cl, slots, &alive )) return;
+	for( index = 0; index < COF_SHARE_SLOTS; index++ )
+		if( CoF_IsStoryItem( slots[index] ) && CoF_ShareSetFind( &cof_share.party, slots[index] ) < 0 )
+			SV_CoF_RetailRemoveItem( cl, slots[index] );
+	if( !CoF_ShareRead( cl, slots, &alive )) return;
+	cof_share.players[slot].userid = cl->userid;
+	cof_share.players[slot].alive = alive;
+	CoF_ShareStoryOnly( cof_share.players[slot].held, slots );
+	for( index = 0; index < COF_SHARE_PLAYERS; index++ )
+		if( !Q_stricmp( cof_share_saved.names[index], cl->name )) cof_share.players[slot].set_down = cof_share_saved.dropped[index];
+}
+
+void SV_CoF_ShareExport( cof_share_archive_t *archive )
+{
+	int slot, entry;
+	*archive = cof_share_saved;
+	archive->party = cof_share.party;
+	for( slot = 0; slot < svs.maxclients && slot < COF_SHARE_PLAYERS; slot++ )
+	{
+		sv_client_t *client = &svs.clients[slot];
+		if( client->state < cs_connected || !client->name[0] || cof_share.players[slot].userid != client->userid ) continue;
+		for( entry = 0; entry < COF_SHARE_PLAYERS; entry++ ) if( !Q_stricmp( archive->names[entry], client->name )) break;
+		if( entry == COF_SHARE_PLAYERS )
+			for( entry = 0; entry < COF_SHARE_PLAYERS; entry++ ) if( !archive->names[entry][0] ) break;
+		if( entry == COF_SHARE_PLAYERS ) continue;
+		Q_strncpy( archive->names[entry], client->name, sizeof( archive->names[entry] ));
+		archive->dropped[entry] = cof_share.players[slot].set_down;
+	}
+	cof_share_saved = *archive;
+}
+
+qboolean SV_CoF_ShareImport( const cof_share_archive_t *archive )
+{
+	if( !archive || !CoF_ShareArchiveValid( archive )) return false;
+	SV_CoF_ShareReset();
+	cof_share_saved = *archive;
+	cof_share.party = archive->party;
+	return true;
 }
 
 static void CoF_ShareLedger_f( void )

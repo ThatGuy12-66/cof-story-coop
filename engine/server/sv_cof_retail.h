@@ -2,6 +2,7 @@
  * and user messages. GPL-3.0-or-later. */
 #ifndef SV_COF_RETAIL_H
 #define SV_COF_RETAIL_H
+#include "sv_cof_state_data.h"
 #define COF_RETAIL_SLOTS 6 // usable inventory slots 1..6 (the game never uses index 0)
 #define COF_RETAIL_ITEM 64 // descriptor path buffer
 
@@ -29,4 +30,55 @@ qboolean SV_CoF_RetailAddDocument( sv_client_t *cl, edict_t *doc );
 qboolean SV_CoF_RetailCodeNote( sv_client_t *cl, int code, int style );
 // Used document slots (of 16), or -1 without a verified, spawned player.
 int SV_CoF_RetailDocumentCount( sv_client_t *cl );
+qboolean SV_CoF_RetailStoryRead( sv_client_t *cl, cof_story_values_t *values );
+qboolean SV_CoF_RetailStoryWrite( sv_client_t *cl, const cof_story_values_t *values );
+qboolean SV_CoF_RetailArchiveNote( sv_client_t *cl, int slot, const byte *payload, int size );
+int SV_CoF_RetailNoteSlot( sv_client_t *cl, const char *note, int start );
+qboolean SV_CoF_RetailThreeSlots( sv_client_t *cl );
+
+// The AI companion (docs/research/2026-10-12-companion-*.md, project repo).
+enum { COF_ARMS_NONE, COF_ARMS_MELEE, COF_ARMS_GUN, COF_ARMS_HEAL };
+typedef struct
+{
+	int weapon; // COF_ARMS_*: what the player holds (a gun with no rounds at all counts as none)
+	int ready; // the held weapon can act now: not switching, not between shots
+	int sights, reloading;
+	int struggle; // a monster turned the held gun on its holder: the game wants attack pressed again and again
+	int clip, reserve; // the held gun's rounds, loaded and in reserve
+	int has_gun, has_melee, has_heal; // carries a gun with rounds, a melee weapon, a syringe
+	char gun[32], melee[32], heal[32]; // the best of each to take in hand
+} cof_retail_arms_t;
+qboolean SV_CoF_RetailArms( sv_client_t *cl, cof_retail_arms_t *arms );
+// Take a carried weapon in hand through the game's own SelectItem (refused mid-shot, on a ladder...).
+qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname );
+// A companion bot never runs dry: the game's own infinite-ammo switch, and a
+// magazine in reserve for every gun it carries (a syringe for the syringe).
+void SV_CoF_RetailSupply( sv_client_t *cl );
+// Set the game's infinite-ammo switch alone (no shot, syringe or flare spent): what it was
+// before (0 or 1), or -1 without a verified player (nothing written).
+int SV_CoF_RetailInfiniteAmmo( sv_client_t *cl, qboolean on );
+// A weapon of this kind (main classname; aliases count): 0 not carried, 1 carried, 2 in hand;
+// -1 without a verified player or for a weapon the table does not know.
+int SV_CoF_RetailCarrying( sv_client_t *cl, const char *classname );
+// Riding the c_ending4b wheelchair, which took every weapon and gave its own.
+qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl );
+// On a phone call, which refuses every weapon switch.
+qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl );
+// CPR: doing it on someone; having it done; a body it can start on now.
+qboolean SV_CoF_RetailReviving( sv_client_t *cl );
+qboolean SV_CoF_RetailRevived( sv_client_t *cl );
+qboolean SV_CoF_RetailRevivable( sv_client_t *cl );
+// Start the game's CPR (the player's own Use) on a body; true once it runs.
+qboolean SV_CoF_RetailRevive( sv_client_t *reviver, sv_client_t *body );
+// A reviver who died mid-CPR leaves the body linked to them, refusing every later
+// CPR until it respawns: unlink such bodies. A reviver whose body came alive is
+// left in its CPR state: let it get up.
+void SV_CoF_RetailCprRepair( void );
+// A hard landing holds the player down until the getting-up command.
+qboolean SV_CoF_RetailFallen( sv_client_t *cl );
+// One of the game's client commands, as if the player sent it ("flashlight", "tapgetup").
+qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command );
+// 0: leave it be (a friend, a scripted actor, a boss before its entrance);
+// 1: a monster the companion may attack; 2: one already after a player.
+int SV_CoF_RetailHostile( edict_t *monster );
 #endif

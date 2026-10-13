@@ -54,6 +54,28 @@ typedef struct
 	cof_share_event_t events[COF_SHARE_EVENTS];
 } cof_share_state_t;
 
+typedef struct
+{
+	cof_share_set_t party;
+	char names[COF_SHARE_PLAYERS][32];
+	cof_share_set_t dropped[COF_SHARE_PLAYERS];
+} cof_share_archive_t;
+
+static int CoF_ShareArchiveValid( const cof_share_archive_t *archive )
+{
+	int player, item;
+	if( archive->party.count < 0 || archive->party.count > COF_SHARE_ITEMS ) return 0;
+	for( item = 0; item < archive->party.count; item++ )
+		if( !memchr( archive->party.items[item].name, 0, COF_SHARE_NAME ) || !CoF_DescriptorSafe( archive->party.items[item].name )) return 0;
+	for( player = 0; player < COF_SHARE_PLAYERS; player++ )
+	{
+		if( !memchr( archive->names[player], 0, 32 ) || archive->dropped[player].count < 0 || archive->dropped[player].count > COF_SHARE_ITEMS ) return 0;
+		for( item = 0; item < archive->dropped[player].count; item++ )
+			if( !memchr( archive->dropped[player].items[item].name, 0, COF_SHARE_NAME ) || !CoF_DescriptorSafe( archive->dropped[player].items[item].name )) return 0;
+	}
+	return 1;
+}
+
 static void CoF_ShareCopy( char *dst, const char *src )
 {
 	size_t i;

@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "library.h"
 #include "voice.h"
 #include "pm_local.h"
+#include "sv_cof_state.h"
 
 #if XASH_LOW_MEMORY != 2
 int SV_UPDATE_BACKUP = SINGLEPLAYER_BACKUP;
@@ -595,6 +596,7 @@ void SV_ActivateServer( int runPhysics )
 
 	// Activate the DLL server code
 	svgame.globals->time = sv.time;
+	SV_CoF_StateActivate();
 	svgame.dllFuncs.pfnServerActivate( svgame.edicts, svgame.numEntities, svs.maxclients );
 
 	SV_SetStringArrayMode( true );

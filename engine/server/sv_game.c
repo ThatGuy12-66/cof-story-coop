@@ -29,6 +29,9 @@ GNU General Public License for more details.
 #include "sv_cof_sender.h"
 #include "sv_cof_exit.h"
 #include "sv_cof_trace.h"
+#include "sv_cof_state.h"
+#include "sv_cof_session.h"
+#include "sv_cof_moments.h"
 
 // GameAPI functions declarations
 static int GAME_EXPORT pfnModelIndex( const char *m );
@@ -1012,7 +1015,7 @@ qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origi
 // (a trigger_multiple fires again every wait while the waiter stands in it)
 // has a killtarget, or shares that name with something other than an exit,
 // which it would toggle every time. Its noise or message repeating is accepted.
-int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max, qboolean *fires )
+int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max, qboolean *fires, qboolean *scripted )
 {
 	int flags, count = 0, named = 0, fired = 0, shared = 0, i;
 	char *entities = SV_ReadEntityScript( map, &flags ), *cursor;
@@ -1021,6 +1024,7 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 	char names[8][64]; // the matching exits' targetnames; bit i of fired and shared is names[i]
 	qboolean extra, kills;
 	if( fires ) *fires = false;
+	if( scripted ) *scripted = false;
 	if( !entities ) return 0;
 	cursor = entities;
 	while( count < max && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
@@ -1041,18 +1045,22 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 		}
 		if( Q_strcmp( classname, "trigger_changelevel" ) || Q_stricmp( next, destination ) || Q_strcmp( name, landmark )) continue;
 		if( fires && extra ) *fires = true;
-		if( fires && targetname[0] )
+		if(( fires || scripted ) && targetname[0] )
 		{
 			// a name too long to keep, or too many: its triggers cannot be checked, so do not hold
 			if( named < (int)( sizeof( names ) / sizeof( names[0] )) && Q_strlen( targetname ) < sizeof( names[0] ))
 				Q_strncpy( names[named++], targetname, sizeof( names[0] ));
-			else *fires = true;
+			else
+			{
+				if( fires ) *fires = true;
+				if( scripted ) *scripted = true;
+			}
 		}
 		if( model[0] == '*' ) models[count++] = Q_atoi( model + 1 );
 	}
 	// Second pass: whatever fires those exits by name, wherever it stands in the script.
 	cursor = entities;
-	while( fires && !*fires && named && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
+	while( named && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
 	{
 		if( Q_strcmp( key, "{" )) break;
 		classname[0] = targetname[0] = target[0] = 0;
@@ -1071,7 +1079,8 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 			if( !Q_strcmp( target, names[i] ))
 			{
 				fired |= 1 << i;
-				if( kills ) *fires = true;
+				if( scripted ) *scripted = true;
+				if( fires && kills ) *fires = true;
 			}
 			if( !Q_strcmp( targetname, names[i] ) && Q_strcmp( classname, "trigger_changelevel" )) shared |= 1 << i;
 		}
@@ -1503,6 +1512,7 @@ static void GAME_EXPORT pfnChangeLevel( const char *level, const char *landmark 
 
 	if( COM_StringEmptyOrNULL( level ) || sv.state != ss_active )
 		return; // ???
+	if( SV_CoF_SessionWipe( level, landmark )) return;
 
 	// make sure we don't issue two changelevels
 	if( svs.spawncount == last_spawncount )
@@ -1611,10 +1621,26 @@ static void GAME_EXPORT pfnChangePitch( edict_t* ent )
 // running right now (NULL outside one). Inside it, a search for "the first
 // player" answers with that sender, then everyone else (sv_cof_sender.h).
 static edict_t *cof_command_sender;
+// A player the story layer wants first (the wheelchair's rider in c_ending4b,
+// whose stop and teleport must find them even when the partner lands the
+// boss's last hit), or NULL.
+static edict_t *cof_first_preference;
+// The player whose movement command (+use, touches, think) is running.
+static edict_t *cof_usercmd_sender;
 
 void SV_CoF_CommandSender( edict_t *sender )
 {
 	cof_command_sender = sender;
+}
+
+void SV_CoF_PreferFirst( edict_t *player )
+{
+	cof_first_preference = player;
+}
+
+void SV_CoF_UsercmdSender( edict_t *player )
+{
+	cof_usercmd_sender = player;
 }
 
 // true: *e is the answer. false: search on from *e as usual.
@@ -1622,11 +1648,12 @@ static qboolean CoF_SenderFind( const char *pszField, const char *pszValue, int 
 {
 	byte present[MAX_CLIENTS + 1];
 	int i, sender;
+	edict_t *first = cof_command_sender ? cof_command_sender : cof_first_preference ? cof_first_preference : cof_usercmd_sender;
 
-	if( !cof_command_sender || *e > svs.maxclients || svs.maxclients > MAX_CLIENTS ||
-		Q_strcmp( pszField, "classname" ) || Q_strcmp( pszValue, "player" ))
+	if( !first || *e > svs.maxclients || svs.maxclients > MAX_CLIENTS ||
+		Q_strcmp( pszField, "classname" ) || Q_strcmp( pszValue, "player" ) || !SV_CoF_StoryCoopEnabled() )
 		return false;
-	sender = NUM_FOR_EDICT( cof_command_sender );
+	sender = NUM_FOR_EDICT( first );
 	if( sender < 1 || sender > svs.maxclients ) return false;
 	memset( present, 0, sizeof( present ));
 	for( i = 1; i <= svs.maxclients; i++ )
@@ -2910,6 +2937,11 @@ static void GAME_EXPORT pfnMessageEnd( void )
 	if( !VectorIsNull( svgame.msg_org )) org = svgame.msg_org;
 	svgame.msg_dest = bound( MSG_BROADCAST, svgame.msg_dest, MSG_SPEC );
 
+	if( svgame.msg_index > 0 && svgame.msg_size_index >= 0 )
+	{
+		SV_CoF_StateMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
+		SV_CoF_MomentsMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
+	}
 	SV_Multicast( svgame.msg_dest, org, svgame.msg_ent, true, false );
 
 	if( svgame.msg_trace ) Con_Printf( "^3%s()\n", __func__ );

@@ -21,8 +21,14 @@ GNU General Public License for more details.
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
+#include "sv_cof_moments.h"
+#include "sv_cof_companion.h"
 #include "sv_cof_share.h"
 #include "sv_cof_trace.h"
+#include "sv_cof_state.h"
+#include "sv_cof_recovery.h"
+#include "sv_cof_session.h"
+#include "sv_cof_scene.h"
 
 // challenges are valid for two consecutive windows of this size (max lifetime ~10s).
 #define CHALLENGE_WINDOW_SECONDS 5
@@ -432,6 +438,10 @@ static void SV_ConnectClient( netadr_t from )
 		// connect the client if there are empty slots.
 		newcl = SV_FindEmptySlot();
 
+		// Cry of Fear story co-op: an AI companion gives its place to a person
+		if( !newcl && SV_CoF_CompanionMakeRoom( ))
+			newcl = SV_FindEmptySlot();
+
 		if( !newcl )
 		{
 			SV_RejectConnection( from, "server is full\n" );
@@ -444,6 +454,9 @@ static void SV_ConnectClient( netadr_t from )
 	// A deliberate reconnect is a new identity. Never leave the displaced
 	// restore ticket pending, nor let the replacement inherit its inventory.
 	SV_CoF_TransitionClientDrop( newcl );
+	SV_CoF_MomentsDrop( newcl );
+	SV_CoF_RecoveryDrop( newcl );
+	SV_CoF_RecoveryDropDone( newcl );
 	sv.current_client = newcl;
 	frames = Mem_Realloc( host.mempool, newcl->frames, sizeof( client_frame_t ) * SV_UPDATE_BACKUP );
 	memset( frames, 0, sizeof( client_frame_t ) * SV_UPDATE_BACKUP );
@@ -633,6 +646,9 @@ void SV_DropClient( sv_client_t *cl, qboolean crash )
 		return;	// already dropped
 
 	SV_CoF_TransitionClientDrop( cl );
+	SV_CoF_MomentsDrop( cl );
+	SV_CoF_CompanionDrop( cl );
+	SV_CoF_RecoveryDrop( cl );
 
 	if( !crash )
 	{
@@ -653,6 +669,7 @@ void SV_DropClient( sv_client_t *cl, qboolean crash )
 		}
 	}
 
+	SV_CoF_RecoveryDropDone( cl );
 	ClearBits( cl->flags, FCL_FAKECLIENT );
 	ClearBits( cl->flags, FCL_HLTV_PROXY );
 	cl->state = cs_zombie; // become free in a few seconds
@@ -1406,6 +1423,7 @@ static void SV_PutClientInServer( sv_client_t *cl )
 		// fisrt entering
 		svgame.globals->time = sv.time;
 		svgame.dllFuncs.pfnClientPutInServer( ent );
+		SV_CoF_RecoveryJoin( cl );
 		fresh = true;
 
 		if( sv.background )	// don't attack player in background mode
@@ -3110,6 +3128,7 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	char cofload_slot[2] = { '\0', '\0' };
 
 	Cmd_TokenizeString( s );
+	if( SV_CoF_SessionClientCommand( cl )) return;
 	cofload = ( Cmd_Argc() == 2 && !Q_stricmp( Cmd_Argv( 0 ), "cofload" ) &&
 		Cmd_Argv( 1 )[0] >= '1' && Cmd_Argv( 1 )[0] <= '5' && Cmd_Argv( 1 )[1] == '\0' );
 	if( cofload )
@@ -3124,6 +3143,18 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 
 	// Cry of Fear story co-op: cof_warp
 	if( SV_CoF_PartyClientCommand( cl ))
+		return;
+
+	// Cry of Fear story co-op: only a player who was asked answers a yes/no
+	if( SV_CoF_MomentsClientCommand( cl ))
+		return;
+
+	// Cry of Fear story co-op: orders for the AI companion
+	if( SV_CoF_CompanionClientCommand( cl ))
+		return;
+
+	// Cry of Fear story co-op: cof_skip (Enter) skips a cutscene for the party
+	if( SV_CoF_SceneClientCommand( cl ))
 		return;
 
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )
@@ -3169,11 +3200,13 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 		// custom client commands; story co-op attributes their inventory changes
 		// and makes the sender "the first player" for the game's lookups
 		SV_CoF_TraceCommand( cl );
+		SV_CoF_StateCommandBegin( cl );
 		SV_CoF_ShareCommandBegin( cl );
 		SV_CoF_CommandSender( cl->state == cs_spawned && SV_CoF_StoryCoopEnabled() ? cl->edict : NULL );
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
 		SV_CoF_CommandSender( NULL );
 		SV_CoF_ShareCommandEnd( cl );
+		SV_CoF_StateCommandEnd( cl );
 		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))
 			Con_Reportf( "[cof-trace] hl ClientCommand returned for cofload %s\n", cofload_slot );
 

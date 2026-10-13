@@ -86,6 +86,8 @@ void SV_CoF_TraceCommand( sv_client_t *cl )
 	int i, slot;
 
 	if( !CoF_TraceOn() || !cl || cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT )) return;
+	// The voice handshake: every client sends both every few seconds, all game long.
+	if( !Q_stricmp( Cmd_Argv( 0 ), "VModEnable" ) || !Q_stricmp( Cmd_Argv( 0 ), "vban" )) return;
 	slot = (int)( cl - svs.clients );
 	if( slot < 0 || slot >= COF_TRACE_SLOTS ) return;
 

@@ -963,7 +963,9 @@ void SV_InactivateClients( void )
 		if( !cl->edict  )
 			continue;
 
-		if( FBitSet( cl->edict->v.flags, FL_FAKECLIENT ))
+		// Cry of Fear: the game's player Spawn clears the edict flag, so a bot
+		// (the story AI companion) is known by its client flag; it never times out
+		if( FBitSet( cl->edict->v.flags, FL_FAKECLIENT ) || FBitSet( cl->flags, FCL_FAKECLIENT ))
 		{
 			SV_DropClient( cl, false );
 			continue;

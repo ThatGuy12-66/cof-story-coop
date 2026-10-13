@@ -13,6 +13,13 @@
 #include "sv_cof_share.h"
 #include "sv_cof_trace.h"
 #include "sv_cof_exit.h"
+#include "sv_cof_state.h"
+#include "sv_cof_recovery.h"
+#include "sv_cof_session.h"
+#include "sv_cof_scene.h"
+#include "sv_cof_moments.h"
+#include "sv_cof_companion.h"
+#include "sv_cof_testgun.h"
 #if XASH_WIN32
 #include <windows.h>
 #endif
@@ -143,6 +150,57 @@ qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg )
 #endif
 }
 
+// The verified game DLL's load address (0 without one): thinks and other
+// function pointers it stores are compared against base + RVA.
+uintptr_t SV_CoF_StoryBase( void )
+{
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	dll_user_t *lib = (dll_user_t *)svgame.hInstance;
+	if( !SV_CoF_StoryCoopEnabled() || !lib || !lib->hInstance || lib->custom_loader || lib->encrypted ) return 0;
+	return (uintptr_t)lib->hInstance;
+#else
+	return 0;
+#endif
+}
+
+// The game's FireTargets( name, activator, caller, USE_TOGGLE, 0 ) (cdecl,
+// 10101FF0), as an entity of its own would call it.
+qboolean SV_CoF_StoryFireTargets( const char *name, void *activator, void *caller )
+{
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	typedef void ( __cdecl *cof_fire_t )( const char *name, void *activator, void *caller, int use_type, float value );
+	uintptr_t base = SV_CoF_StoryBase();
+	if( !base || !name || !name[0] ) return false;
+	((cof_fire_t)( base + 0x101FF0 ))( name, activator, caller, 3, 0.0f );
+	return true;
+#else
+	return false;
+#endif
+}
+
+qboolean SV_CoF_StoryDeployWeapon( void *self )
+{
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	typedef int ( __fastcall *deploy_t )( void *self, void *unused );
+	dll_user_t *library = (dll_user_t *)svgame.hInstance;
+	uintptr_t base, end, table, function;
+	IMAGE_DOS_HEADER *dos;
+	IMAGE_NT_HEADERS *headers;
+	if( !self || !SV_CoF_StoryCoopEnabled() || !library || !library->hInstance || library->custom_loader || library->encrypted ) return false;
+	base = (uintptr_t)library->hInstance;
+	dos = (IMAGE_DOS_HEADER *)base;
+	headers = (IMAGE_NT_HEADERS *)( base + dos->e_lfanew );
+	end = base + headers->OptionalHeader.SizeOfImage;
+	memcpy( &table, self, sizeof( table ));
+	if( table < base || table > end - 82 * sizeof( void * )) return false;
+	memcpy( &function, (const void *)( table + 81 * sizeof( void * )), sizeof( function ));
+	if( function < base || function >= end ) return false;
+	return ((deploy_t)function)( self, NULL ) != 0;
+#else
+	return false;
+#endif
+}
+
 static void CoF_StoryStatus_f( void )
 {
 	int i, j;
@@ -195,8 +253,14 @@ void SV_CoF_StoryInit( void )
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
 	SV_CoF_RetailInit();
+	SV_CoF_PartyInit();
+	SV_CoF_CompanionInit();
+	SV_CoF_TestGunInit();
+	SV_CoF_SceneInit();
 	SV_CoF_ShareInit();
 	SV_CoF_TraceInit();
+	SV_CoF_RecoveryInit();
+	SV_CoF_SessionInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -252,18 +316,33 @@ void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
 void SV_CoF_StoryFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
+	SV_CoF_RecoveryFrame();
+	SV_CoF_SceneFrame();
+	SV_CoF_MomentsFrame();
+	SV_CoF_CompanionFrame();
 	SV_CoF_PartyFrame();
+	SV_CoF_TestGunFrame();
 	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();
+	SV_CoF_StateFrame();
+	SV_CoF_SessionFrame();
 	SV_CoF_TraceFrame();
 }
 
 void SV_CoF_StoryShutdown( void )
 {
 	SV_CoF_CommandSender( NULL ); // an engine error inside a command leaves it set
+	SV_CoF_UsercmdSender( NULL );
 	SV_CoF_PartyShutdown();
+	SV_CoF_SceneReset();
+	SV_CoF_MomentsReset();
+	SV_CoF_CompanionReset();
+	SV_CoF_TestGunReset();
 	SV_CoF_ExitReset();
 	SV_CoF_ShareReset();
+	SV_CoF_StateReset();
+	SV_CoF_RecoveryReset();
+	SV_CoF_SessionReset();
 	CoF_StoryCloseGate();
 	SV_CoF_ClearValidation();
 }

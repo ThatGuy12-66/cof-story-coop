@@ -16,6 +16,7 @@
 #include "sv_cof_party.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_exit.h"
+#include "sv_cof_scene.h"
 
 #define COF_PARTY_DOOR_FLAG 0x1EA4
 #define COF_PARTY_PREVIOUS_ORIGIN 0x618
@@ -31,12 +32,36 @@
 #define COF_PARTY_TELEPORT_WAIT 10.0
 #define COF_PARTY_WARP_COOLDOWN 2.0
 #define COF_PARTY_CHANGELEVEL_USEONLY 2 // SF_CHANGELEVEL_USEONLY: Spawn (101105D0) sets no touch
+// Retail multiplayer Killed (100E9230) sets both to time + 60: the first "press
+// jump to respawn" prompt, and the moment jump respawns (PreThink 100EF569).
+#define COF_PARTY_DEADNOTIFY_AT 0x3D0
+#define COF_PARTY_RESPAWN_AT 0x3D4
+// The ending door (c_village3, target "endingcheck"): EndSequence (100481AE)
+// picks ending_exitN from its opener's RoofBossKilled / GivenP345 /
+// DeliveredPackage bytes, which the shared story state keeps equal for all.
+#define COF_PARTY_ENDING_FLAGS 0x4CD
+#define COF_PARTY_ENDING_ROOM 40.0f // the rooms' level-change triggers are 80 x 92 and 125 apart
 
+// Weapons every player gets once anyone has one: the c_start starter kit, and
+// every weapon a story script hands out (cof_giveitems with a classname, Use
+// 100A6BC0 gives it to its activator only, from one-shot sources: the glock in
+// c_apartment1, the flashlight in c_asylumb, the camera in c_nightmare, the
+// shotgun in c_sewer2). The list grows as maps with such gifts are visited.
+#define COF_PARTY_SHARED 8
 static const char *cof_party_starters[] = { "weapon_mobile", "weapon_switchblade" };
-static const char *cof_party_starter_descriptors[] = {
-	"inventoryitems/weapons/weapon_mobile.txt",
-	"inventoryitems/weapons/weapon_switchblade.txt"
-};
+static struct
+{
+	char classname[32];
+	char descriptor[64];
+} cof_party_shared[COF_PARTY_SHARED];
+static int cof_party_shared_count;
+// Which shared weapons each player has had (by userid), kept across map
+// changes: a weapon they dropped on purpose is not handed back on the next map.
+static struct
+{
+	int userid;
+	unsigned int seen;
+} cof_party_seen[MAX_CLIENTS];
 
 typedef struct
 {
@@ -49,7 +74,7 @@ typedef struct
 {
 	cof_party_identity_t identity;
 	unsigned int seen_items;
-	double retry_after[2];
+	double retry_after[COF_PARTY_SHARED];
 	qboolean was_alive, seen_dead;
 	// Retail multiplayer PostThink sets NODRAW while the door flag is up and
 	// never clears it; remember that this player's current hide is a door's.
@@ -65,6 +90,12 @@ typedef struct
 typedef struct
 {
 	qboolean active, completed, teleport;
+	qboolean ending; // the ending door: everyone goes, frozen and faded like the opener
+	qboolean froze[MAX_CLIENTS];
+	// While held, a companion is out of the fight like the opener (whose door
+	// flag makes them invulnerable): what we changed, to give it back.
+	qboolean notarget_added[MAX_CLIENTS];
+	float takedamage[MAX_CLIENTS];
 	cof_party_identity_t owner;
 	cof_party_identity_t companions[MAX_CLIENTS];
 	qboolean pending[MAX_CLIENTS];
@@ -92,6 +123,7 @@ static int cof_party_regroup[MAX_CLIENTS]; // userid of an arrival still to be m
 static int cof_party_hidden[MAX_CLIENTS]; // userid still owed a door-hide undo after a map change
 static int cof_party_generation = -1;
 static double cof_party_inventory_time;
+static convar_t *cof_party_respawn_delay;
 
 static qboolean CoF_PartyVectorValid( const vec3_t v )
 {
@@ -168,8 +200,46 @@ static int CoF_PartySlot( const sv_client_t *cl )
 	return -1;
 }
 
+void SV_CoF_PartyInit( void )
+{
+	cof_party_respawn_delay = Cvar_Get( "cof_story_respawn_delay", "10", 0, "story co-op: seconds a dead player waits before jump respawns (retail 60)" );
+}
+
+static void CoF_PartyShareWeapon( const char *classname )
+{
+	int i;
+	if( Q_strncmp( classname, "weapon_", 7 ) || Q_strlen( classname ) >= sizeof( cof_party_shared[0].classname )) return;
+	for( i = 0; i < cof_party_shared_count; i++ )
+		if( !Q_strcmp( cof_party_shared[i].classname, classname )) return;
+	if( cof_party_shared_count == COF_PARTY_SHARED ) return;
+	Q_strncpy( cof_party_shared[i].classname, classname, sizeof( cof_party_shared[i].classname ));
+	Q_snprintf( cof_party_shared[i].descriptor, sizeof( cof_party_shared[i].descriptor ), "inventoryitems/weapons/%s.txt", classname );
+	cof_party_shared_count++;
+	if( i >= (int)ARRAYSIZE( cof_party_starters )) Con_Printf( "cofstory phase=gift-shared class=%s\n", classname );
+}
+
+// The scripted weapon gifts of the map just loaded (not the descriptor kind,
+// spawnflag 1: story items go through the item ledger).
+static void CoF_PartyFindGifts( void )
+{
+	int i;
+	for( i = 0; i < (int)ARRAYSIZE( cof_party_starters ); i++ ) CoF_PartyShareWeapon( cof_party_starters[i] );
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *gift = SV_EdictNum( i );
+		if( !SV_IsValidEdict( gift ) || ( gift->v.flags & FL_KILLME ) || ( gift->v.spawnflags & 1 ) ||
+			Q_strcmp( SV_GetString( gift->v.classname ), "cof_giveitems" )) continue;
+		CoF_PartyShareWeapon( SV_GetString( gift->v.message ));
+	}
+}
+
 void SV_CoF_PartyShutdown( void )
 {
+	int i;
+	memset( cof_party_seen, 0, sizeof( cof_party_seen ));
+	cof_party_shared_count = 0;
+	memset( cof_party_shared, 0, sizeof( cof_party_shared ));
+	for( i = 0; i < (int)ARRAYSIZE( cof_party_starters ); i++ ) CoF_PartyShareWeapon( cof_party_starters[i] );
 	memset( cof_party_players, 0, sizeof( cof_party_players ));
 	memset( cof_party_doors, 0, sizeof( cof_party_doors ));
 	memset( cof_party_fresh, 0, sizeof( cof_party_fresh ));
@@ -206,15 +276,22 @@ static qboolean CoF_PartyMove( sv_client_t *cl, const vec3_t landing, const vec3
 
 static void CoF_PartyCheckGeneration( void )
 {
-	int i, hidden[MAX_CLIENTS];
+	int i, hidden[MAX_CLIENTS], shared_count = cof_party_shared_count;
+	char shared[sizeof( cof_party_shared )], seen[sizeof( cof_party_seen )];
 	if( cof_party_generation == svs.spawncount ) return;
 	// A door can lead straight into a level change while its NODRAW is still
 	// set; the snapshot keeps the flag, so keep the obligation to undo it.
 	for( i = 0; i < MAX_CLIENTS; i++ )
 		hidden[i] = cof_party_players[i].door_hidden ? cof_party_players[i].identity.userid : cof_party_hidden[i];
+	memcpy( shared, cof_party_shared, sizeof( shared )); // the session's gifts outlive the map
+	memcpy( seen, cof_party_seen, sizeof( seen ));
 	SV_CoF_PartyShutdown();
 	memcpy( cof_party_hidden, hidden, sizeof( hidden ));
+	memcpy( cof_party_shared, shared, sizeof( shared ));
+	memcpy( cof_party_seen, seen, sizeof( seen ));
+	cof_party_shared_count = shared_count;
 	cof_party_generation = svs.spawncount;
+	CoF_PartyFindGifts();
 }
 
 static void CoF_PartySchedulePlacement( sv_client_t *cl, cof_party_player_t *p, qboolean regroup )
@@ -231,7 +308,7 @@ static void CoF_PartySchedulePlacement( sv_client_t *cl, cof_party_player_t *p, 
 // usually adopted later by CoF_PartyTrackLife; carry the fresh mark by userid.
 void SV_CoF_PartyPlayerReady( sv_client_t *cl, qboolean fresh )
 {
-	int i = CoF_PartySlot( cl );
+	int i = CoF_PartySlot( cl ), k;
 	cof_party_player_t *p;
 	if( !SV_CoF_StoryCoopEnabled() || i < 0 ) return;
 	CoF_PartyCheckGeneration();
@@ -240,7 +317,8 @@ void SV_CoF_PartyPlayerReady( sv_client_t *cl, qboolean fresh )
 	cof_party_fresh[i] = fresh ? cl->userid : 0;
 	p->identity = CoF_PartyIdentity( cl );
 	p->was_alive = CoF_PartyPlayer( cl ) != NULL;
-	p->retry_after[0] = p->retry_after[1] = sv.time + 1.0;
+	if( cof_party_seen[i].userid == cl->userid ) p->seen_items = cof_party_seen[i].seen;
+	for( k = 0; k < COF_PARTY_SHARED; k++ ) p->retry_after[k] = sv.time + 1.0;
 	if( p->identity.edict )
 	{
 		if( cof_party_hidden[i] && cof_party_hidden[i] == cl->userid ) p->door_hidden = true;
@@ -287,16 +365,33 @@ static unsigned int CoF_PartyInventory( sv_client_t *cl )
 		string_t name;
 		memcpy( &name, pv + COF_PARTY_INVENTORY + i * sizeof( name ), sizeof( name ));
 		if( !name ) continue;
-		for( j = 0; j < (int)ARRAYSIZE( cof_party_starter_descriptors ); j++ )
-			if( !Q_strcmp( SV_GetString( name ), cof_party_starter_descriptors[j] )) mask |= 1U << j;
+		for( j = 0; j < cof_party_shared_count; j++ )
+			if( !Q_strcmp( SV_GetString( name ), cof_party_shared[j].descriptor )) mask |= 1U << j;
 	}
 	return mask;
+}
+
+// A respawn gives back everything the player carried (sv_cof_recovery), so the
+// retail minute of waiting only punishes. Bring the jump-respawn and its prompt
+// forward; CPR revive and the retail auto-respawn are left as they are.
+static void CoF_PartyRespawnSooner( sv_client_t *cl )
+{
+	float delay = cof_party_respawn_delay ? cof_party_respawn_delay->value : 60.0f, at, current;
+	byte *pv;
+	if( !( delay >= 0.0f && delay < 60.0f ) || !( pv = SV_CoF_StoryEntityPrivate( cl->edict, COF_PARTY_PLAYER_SIZE ))) return;
+	at = (float)sv.time + delay;
+	memcpy( &current, pv + COF_PARTY_RESPAWN_AT, sizeof( current ));
+	if( !( current > at )) return; // already sooner
+	memcpy( pv + COF_PARTY_RESPAWN_AT, &at, sizeof( at ));
+	memcpy( &current, pv + COF_PARTY_DEADNOTIFY_AT, sizeof( current ));
+	if( current > at ) memcpy( pv + COF_PARTY_DEADNOTIFY_AT, &at, sizeof( at ));
+	Con_Printf( "cofstory phase=respawn-sooner userid=%d delay=%.0f\n", cl->userid, delay );
 }
 
 // Per-frame identity and life bookkeeping; everything else keys off it.
 static void CoF_PartyTrackLife( void )
 {
-	int i;
+	int i, j;
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
@@ -308,7 +403,8 @@ static void CoF_PartyTrackLife( void )
 			p->identity = CoF_PartyIdentity( cl );
 			if( !p->identity.edict ) continue;
 			p->was_alive = alive;
-			p->retry_after[0] = p->retry_after[1] = sv.time + 1.0;
+			if( cof_party_seen[i].userid == cl->userid ) p->seen_items = cof_party_seen[i].seen;
+			for( j = 0; j < COF_PARTY_SHARED; j++ ) p->retry_after[j] = sv.time + 1.0;
 			if( cof_party_hidden[i] && cof_party_hidden[i] == cl->userid ) p->door_hidden = true;
 			cof_party_hidden[i] = 0;
 			if(( cof_party_fresh[i] && cof_party_fresh[i] == cl->userid ) ||
@@ -325,11 +421,15 @@ static void CoF_PartyTrackLife( void )
 		{
 			p->seen_dead = true;
 			p->place_pending = false;
+			CoF_PartyRespawnSooner( cl );
 		}
 		if( alive && !p->was_alive )
 		{
+			// A respawn may hand back what the death took; the recovery usually has.
 			p->seen_items = 0;
-			p->retry_after[0] = p->retry_after[1] = sv.time + 1.0;
+			cof_party_seen[i].userid = cl->userid;
+			cof_party_seen[i].seen = 0;
+			for( j = 0; j < COF_PARTY_SHARED; j++ ) p->retry_after[j] = sv.time + 1.0;
 			// Multiplayer respawns at the map's first spawn point, often far
 			// behind (or inside) the partner; bring them back together.
 			if( p->seen_dead )
@@ -356,37 +456,55 @@ static void CoF_PartyItems( void )
 		carried[i] = CoF_PartyInventory( cl );
 		party_items |= carried[i];
 		p->seen_items |= carried[i];
+		cof_party_seen[i].userid = cl->userid;
+		cof_party_seen[i].seen = p->seen_items;
 	}
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
 		cof_party_player_t *p = &cof_party_players[i];
 		if( !CoF_PartyAvailable( cl )) continue;
-		for( j = 0; j < (int)ARRAYSIZE( cof_party_starters ); j++ )
+		for( j = 0; j < cof_party_shared_count; j++ )
 		{
 			unsigned int bit = 1U << j;
 			qboolean accepted;
 			if( !( party_items & bit ) || ( p->seen_items & bit ) || sv.time < p->retry_after[j] ) continue;
 			p->retry_after[j] = sv.time + 5.0;
-			accepted = SV_CoF_StoryGiveItem( cl, cof_party_starters[j] );
+			accepted = SV_CoF_StoryGiveItem( cl, cof_party_shared[j].classname );
 			if( CoF_PartyInventory( cl ) & bit )
 			{
 				p->seen_items |= bit;
-				Con_Printf( "cofstory phase=starter-shared userid=%d class=%s\n", cl->userid, cof_party_starters[j] );
+				cof_party_seen[i].userid = cl->userid;
+				cof_party_seen[i].seen = p->seen_items;
+				Con_Printf( "cofstory phase=starter-shared userid=%d class=%s\n", cl->userid, cof_party_shared[j].classname );
 			}
 			else
-				Con_Printf( "cofstory phase=starter-deferred userid=%d class=%s reason=%s\n", cl->userid, cof_party_starters[j], accepted ? "inventory-unconfirmed" : "pickup-refused" );
+				Con_Printf( "cofstory phase=starter-deferred userid=%d class=%s reason=%s\n", cl->userid, cof_party_shared[j].classname, accepted ? "inventory-unconfirmed" : "pickup-refused" );
 		}
 	}
 }
 
-static edict_t *CoF_PartyDoorExit( edict_t *door )
+static edict_t *CoF_PartyDoorExit( edict_t *door, qboolean *ending )
 {
 	int i;
 	const char *target;
+	char room[16];
+	*ending = false;
 	if( !door->v.target ) return NULL;
 	target = SV_GetString( door->v.target );
 	if( !target[0] ) return NULL;
+	if( !Q_strcmp( target, "endingcheck" ))
+	{
+		// The room EndSequence will choose for this opener (same table, 100481AE).
+		byte *pv = SV_IsValidEdict( door->v.owner ) ? SV_CoF_StoryEntityPrivate( door->v.owner, COF_PARTY_PLAYER_SIZE ) : NULL;
+		int roof, p345, package;
+		if( !pv ) return NULL;
+		roof = pv[COF_PARTY_ENDING_FLAGS], p345 = pv[COF_PARTY_ENDING_FLAGS + 1], package = pv[COF_PARTY_ENDING_FLAGS + 2];
+		if( roof > 1 || p345 > 1 || package > 1 ) return NULL; // the game finds no room either
+		Q_snprintf( room, sizeof( room ), "ending_exit%d", package ? 5 : 1 + 2 * roof + p345 );
+		target = room;
+		*ending = true;
+	}
 	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
 	{
 		edict_t *ent = SV_EdictNum( i );
@@ -394,15 +512,65 @@ static edict_t *CoF_PartyDoorExit( edict_t *door )
 			Q_strcmp( SV_GetString( ent->v.targetname ), target )) continue;
 		// Match the DLL's first target-name result, not an arbitrary later exit.
 		if( Q_strcmp( SV_GetString( ent->v.classname ), "inter_door_exit" ) ||
-			!CoF_PartyVectorValid( ent->v.origin ) || !CoF_PartyVectorValid( ent->v.angles )) return NULL;
+			!CoF_PartyVectorValid( ent->v.origin ) || !CoF_PartyVectorValid( ent->v.angles )) { *ending = false; return NULL; }
 		return ent;
 	}
+	*ending = false;
 	return NULL;
+}
+
+// The retail door's own presentation for a companion of the ending door:
+// black out and hold still now (BeginSequence 10048CB0), fade back in on arrival.
+static void CoF_PartyEndingHold( cof_party_door_t *event, int slot, qboolean hold )
+{
+	sv_client_t *cl = &svs.clients[slot];
+	edict_t *ent = cl->edict;
+	if( hold )
+	{
+		SV_CoF_RetailScreenFade( cl, 0.5f, 2.0f, 5, 0, 0, 0, 255 );
+		if( !( ent->v.flags & FL_FROZEN ))
+		{
+			ent->v.flags |= FL_FROZEN;
+			VectorClear( ent->v.velocity );
+			event->froze[slot] = true;
+			event->notarget_added[slot] = !( ent->v.flags & FL_NOTARGET );
+			ent->v.flags |= FL_NOTARGET;
+			event->takedamage[slot] = ent->v.takedamage;
+			ent->v.takedamage = DAMAGE_NO;
+		}
+		return;
+	}
+	SV_CoF_RetailScreenFade( cl, 0.5f, 0.0f, 0, 0, 0, 0, 255 );
+	if( event->froze[slot] && SV_IsValidEdict( ent ))
+	{
+		ent->v.flags &= ~FL_FROZEN;
+		if( event->notarget_added[slot] ) ent->v.flags &= ~FL_NOTARGET;
+		if( ent->v.takedamage == DAMAGE_NO ) ent->v.takedamage = event->takedamage[slot];
+	}
+	event->froze[slot] = event->notarget_added[slot] = false;
+}
+
+// An ending event ends for a companion without arriving: never leave them held.
+static void CoF_PartyEndingRelease( cof_party_door_t *event )
+{
+	int i;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+		if( event->froze[i] ) CoF_PartyEndingHold( event, i, false );
+}
+
+qboolean SV_CoF_PartyHolding( void )
+{
+	int slot, i;
+	for( slot = 0; slot < MAX_CLIENTS; slot++ )
+		for( i = 0; cof_party_doors[slot].active && i < MAX_CLIENTS; i++ )
+			if( cof_party_doors[slot].froze[i] ) return true;
+	return false;
 }
 
 static void CoF_PartyWatchDoors( void )
 {
 	int i, slot, j;
+	qboolean ending;
 	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
 	{
 		edict_t *door = SV_EdictNum( i ), *exit;
@@ -416,8 +584,9 @@ static void CoF_PartyWatchDoors( void )
 			if(( event->active && !event->completed ) || cl->edict != door->v.owner ) continue;
 			pv = CoF_PartyPlayer( cl );
 			if( !pv || !pv[COF_PARTY_DOOR_FLAG] ) continue;
-			exit = CoF_PartyDoorExit( door );
-			if( !exit ) continue; // Menu/ending/camera targets are not party doors.
+			exit = CoF_PartyDoorExit( door, &ending );
+			if( !exit ) continue; // Menu/camera targets are not party doors.
+			CoF_PartyEndingRelease( event ); // a finished event may still hold someone
 			memset( event, 0, sizeof( *event ));
 			event->active = true;
 			event->owner = CoF_PartyIdentity( cl );
@@ -427,20 +596,52 @@ static void CoF_PartyWatchDoors( void )
 			event->deadline = sv.time + 8.0;
 			event->door = door;
 			event->door_serial = door->serialnumber;
+			event->ending = ending;
 			for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
 			{
 				if( j == slot || !CoF_PartyAvailable( &svs.clients[j] )) continue;
-				// Only a partner right beside the opener goes through with them.
-				if( CoF_PartyDistanceSquared( svs.clients[j].edict->v.origin, cl->edict->v.origin ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
+				// Only a partner right beside the opener goes through with them;
+				// through the ending door, everyone does: one ending for the party.
+				if( !ending && CoF_PartyDistanceSquared( svs.clients[j].edict->v.origin, cl->edict->v.origin ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
 				event->companions[j] = CoF_PartyIdentity( &svs.clients[j] );
 				event->pending[j] = true;
+				if( ending ) CoF_PartyEndingHold( event, j, true );
 			}
-			Con_Printf( "cofstory phase=door-begin userid=%d target=%s\n", cl->userid, SV_GetString( door->v.target ));
+			Con_Printf( "cofstory phase=door-begin userid=%d target=%s%s\n", cl->userid, SV_GetString( door->v.target ), ending ? " ending=1" : "" );
 		}
 	}
 }
 
+static qboolean CoF_PartyLandingWithin( sv_client_t *cl, edict_t *owner, const vec3_t exit, vec3_t result, float limit );
+
 static qboolean CoF_PartyLanding( sv_client_t *cl, edict_t *owner, const vec3_t exit, vec3_t result )
+{
+	return CoF_PartyLandingWithin( cl, owner, exit, result, 1000.0f );
+}
+
+// One candidate spot beside center (feet height already applied): reachable
+// from center without crossing a wall, free for the hull, over a floor.
+static qboolean CoF_PartyLandingPoint( sv_client_t *cl, edict_t *owner, const vec3_t center, vec3_t point, vec3_t result )
+{
+	vec3_t down, zero = { 0, 0, 0 };
+	edict_t *ent = cl->edict;
+	trace_t tr;
+	// Do not place a companion through the next wall into a different room.
+	tr = SV_Move( center, zero, zero, point, MOVE_NOMONSTERS, owner, false );
+	if( tr.startsolid || tr.allsolid || tr.fraction < 1.0f ) return false;
+	tr = SV_Move( point, ent->v.mins, ent->v.maxs, point, MOVE_NORMAL, ent, false );
+	if( tr.startsolid || tr.allsolid ) return false;
+	VectorCopy( point, down ); down[2] -= 64.0f;
+	tr = SV_Move( point, ent->v.mins, ent->v.maxs, down, MOVE_NORMAL, ent, false );
+	if( tr.startsolid || tr.allsolid || tr.fraction == 1.0f || tr.plane.normal[2] < 0.7f ) return false;
+	VectorCopy( tr.endpos, point ); point[2] += 1.0f;
+	tr = SV_Move( point, ent->v.mins, ent->v.maxs, point, MOVE_NORMAL, ent, false );
+	if( tr.startsolid || tr.allsolid || !CoF_PartyVectorValid( point )) return false;
+	VectorCopy( point, result );
+	return true;
+}
+
+static qboolean CoF_PartyLandingWithin( sv_client_t *cl, edict_t *owner, const vec3_t exit, vec3_t result, float limit )
 {
 	static const float offsets[][2] = {
 		// 35 leaves a 1-unit gap between the padded absboxes, so retail PreThink
@@ -453,9 +654,8 @@ static qboolean CoF_PartyLanding( sv_client_t *cl, edict_t *owner, const vec3_t 
 		{ 72, 0 }, { -72, 0 }, { 0, 72 }, { 0, -72 },
 		{ 34, 0 }, { -34, 0 }, { 0, 34 }, { 0, -34 }
 	};
-	vec3_t center, point, down, zero = { 0, 0, 0 };
+	vec3_t center, point;
 	edict_t *ent = cl->edict;
-	trace_t tr;
 	int i;
 	if( !CoF_PartyVectorValid( ent->v.mins ) || !CoF_PartyVectorValid( ent->v.maxs )) return false;
 	VectorCopy( exit, center );
@@ -463,22 +663,43 @@ static qboolean CoF_PartyLanding( sv_client_t *cl, edict_t *owner, const vec3_t 
 	center[2] += 1.0f;
 	for( i = 0; i < (int)ARRAYSIZE( offsets ); i++ )
 	{
+		if( fabs( offsets[i][0] ) > limit || fabs( offsets[i][1] ) > limit ) continue;
 		VectorCopy( center, point );
 		point[0] += offsets[i][0]; point[1] += offsets[i][1];
-		// Do not place a companion through the next wall into a different room.
-		tr = SV_Move( center, zero, zero, point, MOVE_NOMONSTERS, owner, false );
-		if( tr.startsolid || tr.allsolid || tr.fraction < 1.0f ) continue;
-		tr = SV_Move( point, ent->v.mins, ent->v.maxs, point, MOVE_NORMAL, ent, false );
-		if( tr.startsolid || tr.allsolid ) continue;
-		VectorCopy( point, down ); down[2] -= 64.0f;
-		tr = SV_Move( point, ent->v.mins, ent->v.maxs, down, MOVE_NORMAL, ent, false );
-		if( tr.startsolid || tr.allsolid || tr.fraction == 1.0f || tr.plane.normal[2] < 0.7f ) continue;
-		VectorCopy( tr.endpos, point ); point[2] += 1.0f;
-		tr = SV_Move( point, ent->v.mins, ent->v.maxs, point, MOVE_NORMAL, ent, false );
-		if( tr.startsolid || tr.allsolid || !CoF_PartyVectorValid( point )) continue;
-		VectorCopy( point, result );
-		return true;
+		if( CoF_PartyLandingPoint( cl, owner, center, point, result )) return true;
 	}
+	return false;
+}
+
+// The AI companion catching up: a spot behind the leader (out of their view
+// where possible), else anywhere beside them; facing the way they face.
+qboolean SV_CoF_PartyPlaceBehind( sv_client_t *mover, edict_t *leader )
+{
+	static const float behind[][2] = { { -64, 0 }, { -64, 40 }, { -64, -40 }, { -96, 0 }, { -40, 48 }, { -40, -48 } };
+	vec3_t feet, center, point, landing, angles = { 0, 0, 0 };
+	float yaw, c, s;
+	byte *pv = CoF_PartyPlayer( mover );
+	int i;
+	if( !pv || !SV_IsValidEdict( leader ) || !CoF_PartyVectorValid( leader->v.origin ) ||
+		!CoF_PartyVectorValid( mover->edict->v.mins ) || !CoF_PartyVectorValid( mover->edict->v.maxs )) return false;
+	yaw = leader->v.angles[1] / 57.2957795f;
+	c = cosf( yaw ); s = sinf( yaw );
+	VectorCopy( leader->v.origin, feet );
+	feet[2] += mover->edict->v.mins[2] - 1.0f;
+	VectorCopy( feet, center );
+	center[2] -= mover->edict->v.mins[2];
+	center[2] += 1.0f;
+	angles[1] = leader->v.angles[1];
+	for( i = 0; i < (int)ARRAYSIZE( behind ); i++ )
+	{
+		VectorCopy( center, point );
+		point[0] += behind[i][0] * c - behind[i][1] * s;
+		point[1] += behind[i][0] * s + behind[i][1] * c;
+		if( CoF_PartyLandingPoint( mover, leader, center, point, landing ))
+			return CoF_PartyMoveEdict( mover->edict, pv, landing, angles );
+	}
+	if( CoF_PartyLanding( mover, leader, feet, landing ))
+		return CoF_PartyMoveEdict( mover->edict, pv, landing, angles );
 	return false;
 }
 
@@ -541,12 +762,14 @@ static void CoF_PartyFinishDoors( void )
 		if( !event->active ) continue;
 		if( !CoF_PartySamePlayer( &event->owner, owner ) || !( pv = CoF_PartyPlayer( owner )))
 		{
+			CoF_PartyEndingRelease( event );
 			event->active = false;
 			continue;
 		}
 		if( sv.time > event->deadline )
 		{
 			Con_Printf( "cofstory phase=%s-expired userid=%d reason=%s\n", kind, owner->userid, event->completed ? "party-not-ready" : "sequence-incomplete" );
+			CoF_PartyEndingRelease( event );
 			event->active = false;
 			continue;
 		}
@@ -561,6 +784,7 @@ static void CoF_PartyFinishDoors( void )
 			if( CoF_PartyDistanceSquared( owner->edict->v.origin, expected ) > 32.0f * 32.0f )
 			{
 				Con_Printf( "cofstory phase=door-cancelled userid=%d reason=exit-not-confirmed\n", owner->userid );
+				CoF_PartyEndingRelease( event );
 				event->active = false;
 				continue;
 			}
@@ -580,25 +804,49 @@ static void CoF_PartyFinishDoors( void )
 			{
 				Con_Printf( "cofstory phase=%s-party-skipped userid=%d reason=player-state-changed\n", kind, event->companions[i].userid );
 				event->pending[i] = false;
+				if( event->froze[i] ) CoF_PartyEndingHold( event, i, false );
 				continue;
 			}
 			// EndSequence may start a camera/freeze before this post-frame hook.
 			// Keep the captured follower until the scene releases them, subject to
 			// the original bounded completion deadline; do not clear scene state.
-			if( !CoF_PartyAvailable( cl ))
+			// A partner watching the owner's own scene moves now, still watching;
+			// one the ending door holds (frozen by us) moves now too.
+			if( !CoF_PartyAvailable( cl ) && !SV_CoF_SceneWatching( owner->userid, cl->userid ) && !event->froze[i] )
 			{
 				pending = true;
 				continue;
 			}
-			if( !CoF_PartyLanding( cl, owner->edict, event->destination, landing ))
+			// The ending rooms sit side by side: stay inside the opener's. Only two
+			// partners fit beside the opener; more share the opener's spot (retail
+			// PreThink lets overlapping players pass through each other). A scripted
+			// teleport's room may fit only one (c_intro's last, `kunitei`, 86 units
+			// wide, holds the exit to c_nightmare): share the spot there too.
+			if( !CoF_PartyLandingWithin( cl, owner->edict, event->destination, landing, event->ending ? COF_PARTY_ENDING_ROOM : 1000.0f ))
 			{
-				pending = true;
-				continue;
+				if( !event->ending && !event->teleport )
+				{
+					pending = true;
+					continue;
+				}
+				if( event->teleport )
+				{
+					// where the owner landed, standing, not where they walked since
+					VectorCopy( event->destination, landing );
+					landing[2] += 1.0f - cl->edict->v.mins[2];
+				}
+				else VectorCopy( owner->edict->v.origin, landing );
 			}
 			// The regular movement pass touches triggers; do not invoke game callbacks
 			// in this loop, which could remove entities or change the map underneath it.
-			if( !CoF_PartyMove( cl, landing, event->angles )) { event->pending[i] = false; continue; }
+			if( !CoF_PartyMove( cl, landing, event->angles ))
+			{
+				event->pending[i] = false;
+				if( event->froze[i] ) CoF_PartyEndingHold( event, i, false );
+				continue;
+			}
 			event->pending[i] = false;
+			if( event->froze[i] ) CoF_PartyEndingHold( event, i, false );
 			Con_Printf( "cofstory phase=%s-party-moved userid=%d owner=%d origin=%.3f,%.3f,%.3f\n", kind, cl->userid, owner->userid, landing[0], landing[1], landing[2] );
 		}
 		if( !pending ) event->active = false;
@@ -650,6 +898,7 @@ static void CoF_PartyTeleports( void )
 		if( CoF_PartyDistanceSquared( p->teleport_from, p->teleport_to ) < COF_PARTY_TELEPORT_MIN * COF_PARTY_TELEPORT_MIN ) continue;
 		// The player may already have moved on this frame; match the landing spot.
 		if( !( dest = CoF_PartyScriptedDestination( p->teleport_to ))) continue;
+		CoF_PartyEndingRelease( event );
 		memset( event, 0, sizeof( *event ));
 		event->active = event->completed = event->teleport = true;
 		event->owner = p->identity;
@@ -664,8 +913,10 @@ static void CoF_PartyTeleports( void )
 				!CoF_PartySamePlayer( &cof_party_players[j].identity, other )) continue;
 			// A partner already beside the destination was part of the scene.
 			if( CoF_PartyDistanceSquared( other->edict->v.origin, cl->edict->v.origin ) <= COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
-			// Only a partner who stood beside the activator is taken along.
-			if( CoF_PartyDistanceSquared( other->edict->v.origin, p->teleport_from ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
+			// Only a partner who stood beside the activator, or watched the
+			// activator's cutscene with them, is taken along.
+			if( CoF_PartyDistanceSquared( other->edict->v.origin, p->teleport_from ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR &&
+				!SV_CoF_SceneWatching( cl->userid, other->userid )) continue;
 			event->companions[j] = cof_party_players[j].identity;
 			event->pending[j] = true;
 			count++;
@@ -842,6 +1093,8 @@ void SV_CoF_PartyTransitionCapture( unsigned int epoch, const vec3_t landmark, c
 	float best = 0.0f;
 	memset( &cof_party_arrival, 0, sizeof( cof_party_arrival ));
 	if( !SV_CoF_StoryCoopEnabled() ) return;
+	// The transition save carries every player's flags: no ending hold may travel.
+	for( i = 0; i < MAX_CLIENTS; i++ ) CoF_PartyEndingRelease( &cof_party_doors[i] );
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
@@ -988,6 +1241,13 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	if( pv[COF_PARTY_DOOR_FLAG] )
 	{
 		CoF_PartyWarpRefused( cl, i, "door", NULL ); // the door sequence moves them itself
+		return;
+	}
+	// A cutscene, ladder climb or puzzle view holds them; a warp would move the
+	// body and leave that camera and freeze behind.
+	if( cl->edict->v.flags & FL_FROZEN )
+	{
+		CoF_PartyWarpRefused( cl, i, "frozen", NULL );
 		return;
 	}
 	for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )

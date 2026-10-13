@@ -23,6 +23,11 @@ GNU General Public License for more details.
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_share.h"
+#include "sv_cof_state.h"
+#include "sv_cof_recovery.h"
+#include "sv_cof_session.h"
+#include "sv_cof_scene.h"
+#include "sv_cof_archive.h"
 #include "sv_story_transition_state.h"
 
 // Reserved outside the SDK's low 16 landmark bits and high four entity bits.
@@ -40,6 +45,11 @@ static struct
 } cof_transition;
 static char cof_story_maps[COF_STORY_MAP_HISTORY][MAX_QPATH];
 static int cof_story_map_count;
+static qboolean cof_session_saving, cof_session_loading;
+static void CoF_SessionSavedEntity( ENTITYTABLE *entry, int index );
+static void CoF_SessionCreatePlayers( SAVERESTOREDATA *saved );
+static void CoF_SessionPlayersRestored( SAVERESTOREDATA *saved );
+static qboolean CoF_SessionRunLoad( void );
 
 static qboolean CoF_StoryMapSaved( const char *map )
 {
@@ -64,6 +74,9 @@ void SV_CoF_TransitionReset( qboolean clear_history )
 		// nobody should be handed the previous party's items.
 		cof_story_map_count = 0;
 		SV_CoF_ShareReset();
+		SV_CoF_StateReset();
+		SV_CoF_RecoveryReset();
+		SV_CoF_SessionReset();
 	}
 }
 
@@ -174,9 +187,12 @@ static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark 
 			SV_IsValidEdict( ent->v.aiment ) ? NUM_FOR_EDICT( ent->v.aiment ) : 0 );
 	}
 	{
-		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, map, landmark, exits, ARRAYSIZE( exits ), NULL );
+		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, map, landmark, exits, ARRAYSIZE( exits ), NULL, NULL );
 		SV_CoF_PartyTransitionCapture( cof_transition.tickets.epoch, cof_transition.source_origin, exits, exit_count );
 	}
+	// The transition save carries every player's flags: no camera survives the
+	// map change, so its freeze and invulnerability must not travel with them.
+	SV_CoF_SceneSettle( "transition" );
 	return true;
 }
 
@@ -1939,6 +1955,7 @@ static SAVERESTOREDATA *SaveGameState( int changelevel )
 			continue;
 
 		svgame.dllFuncs.pfnSave( pTable->pent, pSaveData );
+		CoF_SessionSavedEntity( pTable, i );
 
 		if( FBitSet( pTable->pent->v.flags, FL_CLIENT ))
 			SetBits( pTable->flags, FENTTABLE_PLAYER );
@@ -2073,6 +2090,7 @@ static int LoadGameState( char const *level, qboolean changelevel )
 
 	// create entity list
 	CreateEntitiesInRestoreList( pSaveData, 0, true );
+	if( cof_session_loading ) CoF_SessionCreatePlayers( pSaveData );
 
 	// now spawn entities
 	for( int i = 0; i < pSaveData->tableCount; i++ )
@@ -2100,6 +2118,7 @@ static int LoadGameState( char const *level, qboolean changelevel )
 		}
 	}
 
+	if( cof_session_loading ) CoF_SessionPlayersRestored( pSaveData );
 	LoadClientState( pSaveData, level, changelevel, false );
 
 	SaveFinish( pSaveData );
@@ -2506,6 +2525,7 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	char		*startspot = NULL;
 	SAVERESTOREDATA	*pSaveData = NULL;
 	qboolean story = loadfromsavedgame && SV_CoF_StoryCoopEnabled();
+	if( CoF_SessionRunLoad() ) return;
 
 	if( sv.state != ss_active )
 	{
@@ -2663,6 +2683,17 @@ qboolean SV_LoadGame( const char *pPath )
 	}
 
 	// initialize game if needs
+	pFile = FS_Open( pPath, "rb", true );
+	if( pFile )
+	{
+		uint32_t magic = 0;
+		FS_Read( pFile, &magic, sizeof( magic )); FS_Close( pFile );
+		if( magic == COF_ARCHIVE_MAGIC )
+		{
+			Con_Printf( "Story co-op checkpoints require cof_load in a story co-op session.\n" );
+			return false;
+		}
+	}
 	if( !SV_InitGame( false ))
 	{
 		if( cofsave && Cvar_VariableInteger( "cof_trace_menu_load" )) Con_Reportf( "[cof-trace] load rejected: SV_InitGame failed\n" );
@@ -3162,3 +3193,6 @@ void SV_InitSaveRestore( void )
 {
 	pfnSaveGameComment = COM_GetProcAddress( svgame.hInstance, "SV_SaveGameComment" );
 }
+
+#include "sv_cof_snapshot_io.inc"
+#include "sv_cof_session.inc"

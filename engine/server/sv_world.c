@@ -18,6 +18,8 @@ GNU General Public License for more details.
 #include "const.h"
 #include "pm_local.h"
 #include "studio.h"
+#include "sv_cof_moments.h"
+#include "sv_cof_companion.h"
 
 typedef struct moveclip_s
 {
@@ -559,6 +561,10 @@ static void SV_TouchLinks( edict_t *ent, areanode_t *node )
 		if( !sv.playersonly )
 		{
 			svgame.globals->time = sv.time;
+			// Cry of Fear story co-op: a fall-death floor kills only who fell,
+			// and the AI companion sets off no story trigger
+			if( SV_CoF_CompanionTriggerTouch( touch, ent ) || SV_CoF_MomentsTriggerTouch( touch, ent ))
+				continue;
 			svgame.dllFuncs.pfnTouch( touch, ent );
 		}
 	}

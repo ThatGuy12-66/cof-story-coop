@@ -18,6 +18,8 @@ GNU General Public License for more details.
 #include "const.h"
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
+#include "sv_cof_moments.h"
+#include "sv_cof_companion.h"
 #include "pm_local.h"
 #include "event_flags.h"
 #include "studio.h"
@@ -1005,6 +1007,7 @@ SV_RunCmd
 */
 void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 {
+	qboolean cof_scoped;
 	edict_t	*clent;
 	double	frametime;
 	usercmd_t cmd;
@@ -1050,6 +1053,17 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 
 	if( !FBitSet( cl->flags, FCL_FAKECLIENT ))
 		SV_SetupMoveInterpolant( cl );
+
+	// Cry of Fear story co-op: while this player's command runs (+use, touches,
+	// their own think) they are "the first player" the game looks up; a ladder
+	// someone else climbs cannot be taken over.
+	cof_scoped = SV_CoF_StoryCoopEnabled() && cl->state == cs_spawned && !FBitSet( cl->flags, FCL_FAKECLIENT );
+	if( cof_scoped )
+	{
+		SV_CoF_CompanionUsercmd( cl, ucmd );
+		SV_CoF_MomentsCommand( cl, ucmd );
+		SV_CoF_UsercmdSender( cl->edict );
+	}
 
 	svgame.dllFuncs.pfnCmdStart( cl->edict, ucmd, random_seed );
 
@@ -1143,6 +1157,7 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	svgame.dllFuncs.pfnPlayerPostThink( clent );
 	SV_CoF_CheatsPostThink( cl ); // Cry of Fear: re-assert what PostThink reset
 	svgame.dllFuncs.pfnCmdEnd( clent );
+	if( cof_scoped ) SV_CoF_UsercmdSender( NULL );
 
 	if( !FBitSet( cl->flags, FCL_FAKECLIENT ))
 	{
