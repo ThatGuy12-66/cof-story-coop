@@ -99,5 +99,12 @@ int main(void)
     CHECK(!strcmp(Info_ValueForKey(g.info,"name"),"Little Rascal 2"));
     CHECK(!strcmp(Info_ValueForKey(g.info,"model"),"police1"));
     CHECK(!strcmp(Info_ValueForKey(g.info,"cl_updaterate"),"60"));
+    /* The 12-slot inventory's capability key must survive the same full retail
+       userinfo, or a 12-slot host turns the player away. */
+    CHECK(Info_SetValueForKey(g.info,"_cofinv","12",sizeof(g.info)));
+    CHECK(!strcmp(Info_ValueForKey(g.info,"_cofinv"),"12"));
+    CHECK(!strcmp(Info_ValueForKey(g.info,"password"),"0123456789abcdef"));
+    CHECK(!strcmp(Info_ValueForKey(g.info,"name"),"Little Rascal 2"));
+    CHECK(strlen(g.info)<sizeof(g.info));CHECK(guarded(&g));
     puts("userinfo capacity and atomic replacement passed");return 0;
 }
