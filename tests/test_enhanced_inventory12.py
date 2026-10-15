@@ -7,9 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.native import ENGINE_SERVER, ROOT, VCVARS, run_native, strip_includes
+from tests.native import ENGINE_SERVER, ROOT, VCVARS, run_native, run_native_cpp, strip_includes
 
 ENGINE = ENGINE_SERVER.parent
+FREEVGUI = ENGINE.parent / '3rdparty/freevgui/platform/xash3d-fwgs'
 ENGINE_CLIENT = ENGINE / 'client'
 HL_DLL = ROOT / 'runtimes/enhanced/cryoffear/cl_dlls/hl.dll'
 CLIENT_DLL = ROOT / 'runtimes/enhanced/cryoffear/cl_dlls/client.dll'
@@ -76,6 +77,13 @@ class ClientStoreTests(unittest.TestCase):
             'patch_under_test.h': (ENGINE_CLIENT / 'cof_inventory12_patch.h').read_text(),
         }, [CLIENT_DLL])
         self.assertIn('inventory12 client.dll accessor passed', out)
+
+
+class GridLogicTests(unittest.TestCase):
+    def test_layout_and_clicks(self):
+        out = run_native_cpp(self, 'cof_inventory_logic_test.cpp',
+                             {'logic_under_test.h': (FREEVGUI / 'cofinventory_logic.h').read_text()})
+        self.assertIn('inventory grid logic passed', out)
 
 
 if __name__ == '__main__':

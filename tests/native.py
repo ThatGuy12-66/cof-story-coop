@@ -41,3 +41,26 @@ def run_native(case: unittest.TestCase, harness: str, files: dict, timeout: int 
         result = subprocess.run(command, cwd=work, capture_output=True, text=True, timeout=timeout)
         case.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout
+
+
+def run_native_cpp(case: unittest.TestCase, harness: str, files: dict, timeout: int = 120) -> str:
+    """The same for a C++ harness (MSVC /TP, C++14, no exceptions: as FreeVGUI builds)."""
+    if not VCVARS.exists() and not shutil.which('c++'):
+        case.skipTest('a C++ compiler is required for the offline UI harness')
+    with tempfile.TemporaryDirectory(prefix='cof-native-cpp-') as tmp:
+        work = Path(tmp)
+        for name, text in files.items():
+            (work / name).write_text(text)
+        shutil.copyfile(ROOT / 'tests/engine' / harness, work / 'harness.cpp')
+        if os.name == 'nt':
+            (work / 'build.cmd').write_text(
+                f'@call "{VCVARS}" amd64_x86 >nul\n'
+                '@cl /nologo /W4 /WX /wd4100 /D_CRT_SECURE_NO_WARNINGS /TP harness.cpp /Fe:native-test.exe\n'
+                '@if errorlevel 1 exit /b %errorlevel%\n'
+                '@.\\native-test.exe\n')
+            command = ['cmd.exe', '/d', '/c', str(work / 'build.cmd')]
+        else:
+            command = ['sh', '-c', 'c++ -std=c++14 -Wall -Wextra -Werror -Wno-unused-parameter harness.cpp -o native-test && ./native-test']
+        result = subprocess.run(command, cwd=work, capture_output=True, text=True, timeout=timeout)
+        case.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout
