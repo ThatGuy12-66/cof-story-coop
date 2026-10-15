@@ -14,6 +14,7 @@ public:
 	ImagePanel() : image( NULL ) { }
 	ImagePanel( Image *image );
 	virtual void setImage( Image *newImage );
+	Image *getImage() const { return image; } // not virtual: the vtable the client knows stays as it is
 protected:
 	virtual void paintBackground() override;
 	Image* image;

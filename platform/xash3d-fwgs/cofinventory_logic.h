@@ -13,10 +13,14 @@
 namespace cofinv
 {
 const int kSlots = 12;
-const int kBox = 72, kStride = 78, kLeft = 36;
-const int kRowTop[3] = { 68, 146, 262 };	// BAG: slots 1..8; POCKETS: 9..12
+// 5 px between boxes: four columns end on the description box's right frame (x 338)
+const int kBox = 72, kStride = 77, kLeft = 36;
+const int kRowTop[3] = { 68, 145, 259 };	// BAG: slots 1..8; POCKETS: 9..12
 const int kGridWide = 373, kGridTall = 480;	// the generated left-half art (tools/make_inventory12_art.py)
-const int kCheckX = 31, kCheckY = 352, kCheckWide = 303, kCheckTall = 99; // the examine picture
+// the examine picture (its text drawn in) on the moved description box: 303 px is the
+// frame's width, and at 36,356 its text is centred in the box (live 2026-10-15; the
+// retail offset 31,352 left it 5 px left of centre and, with the box moved, 3 px high)
+const int kCheckX = 36, kCheckY = 356, kCheckWide = 303, kCheckTall = 99;
 const int kMenuX = 350;				// the item menu opens right of the grid: it never covers a box
 const int kMenuButton = 42, kMenuWide = 126;
 const int kArtItems = 126, kArtWeapons = 210;	// inventory_items.tga / inventory_weapons.tga, drawn 5 px up and left

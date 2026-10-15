@@ -285,6 +285,9 @@ private:
 	// paints a background of its own and a second strip over it reads as a
 	// black box around the hint.
 	bool runIsTopBand( void ) const;
+	// story co-op: the run was drawn inside one of the client's own menus, which
+	// keep their placement and get no strip (see runInMenu() in surface.cpp)
+	bool runInMenu( void ) const;
 };
 }
 

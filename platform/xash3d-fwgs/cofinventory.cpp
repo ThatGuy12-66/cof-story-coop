@@ -18,6 +18,7 @@
 #include "panel.h"
 #include "signals.h"
 #include "surface.h"
+#include "controls/image.h"
 #include <string.h>
 
 using namespace vgui;
@@ -57,6 +58,7 @@ struct Model
 	cofinv::State state;
 	int hover = 0;				// the box under the cursor
 	int blink = 0;				// painted frames, for the combine / dual wield source
+	bool fullArt = false;			// the background shows the whole generated art this frame
 };
 Model g_model;
 
@@ -76,6 +78,9 @@ class Base : public Panel
 {
 public:
 	Base() : Panel( 0, 0, 1, 1 ) { setPaintBackgroundEnabled( false ); }
+
+	// the texture of a picture, made the first time (0: none)
+	int load( const char *path ) { return texture( path ); }
 
 	// the cursor in this panel's coordinates; false when it is outside
 	bool cursor( int &x, int &y )
@@ -138,8 +143,9 @@ class Grid : public Base
 public:
 	void paint() override
 	{
+		// the background already shows the whole art (FullArt); else the left half over the retail picture
 		const char *art = g_model.visible == 3 ? "gfx/vgui/inventory12_left_three.tga" : "gfx/vgui/inventory12_left.tga";
-		if( !image( art, 0, 0, cofinv::kGridWide, cofinv::kGridTall ))
+		if( !g_model.fullArt && !image( art, 0, 0, cofinv::kGridWide, cofinv::kGridTall ))
 		{
 			// the art was not generated (tools/make_inventory12_art.py): a plain panel and plain boxes
 			drawSetColor( 8, 8, 8, 30 );
@@ -231,9 +237,44 @@ const Child kHide[] =
 };
 const int kHideCount = (int)( sizeof( kHide ) / sizeof( kHide[0] ));
 
+// The background's picture while the grid shows: the whole generated art
+// (inventory12_full*.tga, our left half on the retail right half). The client draws
+// the inventory see-through, so with the grid's art painted over the retail picture
+// the retail left half (its POCKETS label) showed through (live 2026-10-14); one
+// picture leaves nothing under the grid. Without the generated file it paints the
+// retail picture, and the grid paints its left half over it as before.
+class FullArt : public Image
+{
+public:
+	Image *retail = nullptr;	// the client's picture, put back on a six-slot map
+	Base *loader = nullptr;		// makes the texture (a panel of ours)
+	void paint( Panel *panel ) override
+	{
+		int id = loader ? loader->load( g_model.visible == 3 ? "gfx/vgui/inventory12_full_three.tga" : "gfx/vgui/inventory12_full.tga" ) : 0;
+		g_model.fullArt = id != 0;
+		if( !id )
+		{
+			if( retail ) retail->doPaint( panel );
+			return;
+		}
+		int x = 0, y = 0, w, h, r, g, b, a;
+		Color c;
+		if( retail ) { retail->getPos( x, y ); retail->getColor( c ); } // as the retail Bitmap paints
+		else c = Color( 255, 255, 255, 0 );
+		c.getColor( r, g, b, a );
+		getSize( w, h );
+		drawSetTexture( id );
+		drawSetColor( r, g, b, a );
+		drawTexturedRect( x, y, x + w, y + h );
+	}
+	void fit( int w, int h ) { setSize( w, h ); }
+};
+FullArt g_fullArt;
+
 struct Ours
 {
 	Panel *inventory = nullptr;	// the CRECBInventory this was built for
+	ImagePanel *background = nullptr;
 	Panel *hide[kHideCount] = {};
 	bool was[kHideCount] = {};	// their visibility before the grid hid them
 	bool hidden = false;
@@ -278,6 +319,7 @@ bool Bind( Panel *inventory )
 	for( int i = 0; i < kHideCount; i++ )
 		if( !( hide[i] = ChildAt( inventory, kHide[i] ))) return false;
 	memcpy( g_ours.hide, hide, sizeof( hide ));
+	g_ours.background = static_cast<ImagePanel *>( background ); // its class checked above
 	g_ours.grid = new Grid();
 	g_ours.grid->setParent( background );	// added last: above every client child
 	g_ours.grid->setBounds( 0, 0, cofinv::kGridWide, cofinv::kGridTall );
@@ -312,8 +354,34 @@ void HideRetail()
 	g_ours.hidden = true;
 }
 
+// The whole art in place of the background's picture (on), or the client's picture
+// back (off). Checked every frame: the client may set another picture (the three-slot
+// one), which is then the one to put back.
+void ShowFullArt( bool on )
+{
+	ImagePanel *background = g_ours.background;
+	Image *now = background ? background->getImage() : nullptr;
+	if( !background ) return;
+	if( on && now != &g_fullArt )
+	{
+		int w, h;
+		if( now ) now->getSize( w, h );
+		else background->getSize( w, h );
+		g_fullArt.retail = now;
+		g_fullArt.loader = g_ours.grid;
+		g_fullArt.fit( w, h );
+		background->setImage( &g_fullArt );
+	}
+	else if( !on && now == &g_fullArt )
+	{
+		background->setImage( g_fullArt.retail );
+		g_model.fullArt = false;
+	}
+}
+
 void RestoreRetail()
 {
+	ShowFullArt( false );
 	if( !g_ours.hidden ) return;
 	for( int i = 0; i < kHideCount; i++ ) g_ours.hide[i]->setVisible( g_ours.was[i] );
 	g_ours.hidden = false;
@@ -364,6 +432,7 @@ void vgui::CofInventory_Frame( Panel *root )
 		return;
 	}
 	HideRetail();
+	ShowFullArt( true );
 
 	g_model.visible = Engine( COF_INV_OP_THREE, 0, nullptr, 0 ) ? 3 : cofinv::kSlots;
 	for( int s = 1; s <= cofinv::kSlots; s++ )

@@ -676,6 +676,24 @@ bool XashSurface::runIsShortEnough( void ) const
 	return backingLineCount > 0 && backingLineCount <= MAX_MESSAGE_LINES;
 }
 
+// Story co-op: the render height the message band is measured against. The
+// transform's while it is on; while it is off (no UI scaling, e.g. 1280x720)
+// layout pixels are device pixels and the root panel is the screen. Without
+// this fallback the band was skipped at such sizes and every short "credits"
+// run was moved onto the message row: the wardrobe's labels and the
+// objectives text at the top of the screen (live 2026-10-15, 1280x720).
+static int CofTextScreenTall( void )
+{
+	int	wide, tall = 0;
+
+	CofUI_ScreenSize( nullptr, &tall );
+
+	if( tall <= 0 && g_rootPanel )
+		g_rootPanel->getSize( wide, tall );
+
+	return tall;
+}
+
 bool XashSurface::runIsMessage( void ) const
 {
 	int	screenTall = 0, deviceY;
@@ -691,10 +709,10 @@ bool XashSurface::runIsMessage( void ) const
 	// The test is on the run's own position BEFORE the move. Once the move has
 	// happened the run sits on textYTarget, which is inside the band by
 	// construction, so the answer does not change between the two calls.
-	CofUI_ScreenSize( nullptr, &screenTall );
+	screenTall = CofTextScreenTall();
 
 	if( screenTall <= 0 )
-		return true; // no transform to ask: behave as before
+		return true; // no size to ask: behave as before
 
 	deviceY = CofUI_ToDeviceY( backingLines[0].y );
 
@@ -725,14 +743,42 @@ bool XashSurface::runIsTopBand( void ) const
 	if( textYTarget < 0 || !runIsShortEnough( ))
 		return false;
 
-	CofUI_ScreenSize( nullptr, &screenTall );
+	screenTall = CofTextScreenTall();
 
 	if( screenTall <= 0 )
-		return false; // no transform to ask: behave as before
+		return false; // no size to ask: behave as before
 
 	deviceY = CofUI_ToDeviceY( backingLines[0].y );
 
 	return deviceY < screenTall * MSG_BAND_LOW_PCT / 100;
+}
+
+/*
+====================
+XashSurface::runInMenu
+
+Story co-op: the panel drawing this run, or one above it, is one of the
+client's recognised panels other than CHUDControl (cofpanels.cpp). The
+wardrobe (CClothesMenu) labels its costume list and its Close and Reset
+buttons in the "credits" font, the message strip's role. Each label is a
+short run, so they were moved onto the message row, where they printed over
+each other (live 2026-10-14, 1280x720: every label at y 562; there the band
+was skipped too, see CofTextScreenTall). Even with the band, the labels
+inside it would still be moved. A menu's text keeps the menu's placement and
+gets no strip; the HUD's message text is moved as before.
+====================
+*/
+bool XashSurface::runInMenu( void ) const
+{
+	Panel *p = paintStackPos > 0 ? paintStack[paintStackPos - 1].panel : nullptr;
+
+	for( int depth = 0; p && depth < 64; depth++, p = p->getParent( ))
+	{
+		if( CofPanels_Class( p ) & ~( COF_CLASS_PLAIN_PANEL | COF_PANEL_HUD ))
+			return true;
+	}
+
+	return false;
 }
 
 int XashSurface::applyTextYTarget( void )
@@ -803,7 +849,9 @@ void XashSurface::flushBackingText( void )
 	// width and to a band of its panel's height, just at its new row.
 	// milestone 5b: asked before the move, see runIsTopBand()
 	const bool	topBand = runIsTopBand();
-	int	yDelta = applyTextYTarget();
+	// story co-op: a menu's own labels stay where the menu put them, see runInMenu()
+	const bool	menuRun = textYTarget >= 0 && runInMenu();
+	int	yDelta = menuRun ? 0 : applyTextYTarget();
 	int	savedClip[4];
 	bool	clipMoved = false;
 
@@ -826,7 +874,7 @@ void XashSurface::flushBackingText( void )
 		{
 			char	text[128];
 			int	n = line.count < (int)sizeof( text ) - 1 ? line.count : (int)sizeof( text ) - 1;
-			int	screenTall = 0;
+			int	screenTall = CofTextScreenTall();
 
 			for( int j = 0; j < n; j++ )
 			{
@@ -835,8 +883,6 @@ void XashSurface::flushBackingText( void )
 				text[j] = ( ch >= 32 && ch < 127 ) ? (char)ch : '.';
 			}
 			text[n] = '\0';
-
-			CofUI_ScreenSize( nullptr, &screenTall );
 
 			// vgui_dprintf goes to stderr, which the game log never sees, so
 			// the one line the trace wants goes out through the engine
@@ -850,11 +896,11 @@ void XashSurface::flushBackingText( void )
 
 			snprintf( msg, sizeof( msg ),
 				"[cof-vguitext] role \"%s\" line y=%i tall=%i x=%i..%i"
-				" device_y=%i (%.2f%% of %i) moved=%i clip=%i,%i,%i,%i \"%s\"\n",
+				" device_y=%i (%.2f%% of %i) moved=%i menu=%i clip=%i,%i,%i,%i \"%s\"\n",
 				textRole ? textRole : "", line.y, line.tall, line.minx, line.maxx,
 				deviceY,
 				screenTall > 0 ? deviceY * 100.0f / screenTall : 0.0f,
-				screenTall, yDelta,
+				screenTall, yDelta, menuRun ? 1 : 0,
 				panelClip[0], panelClip[1], panelClip[2], panelClip[3], text );
 
 			if( g_engine && g_engine->CofPrint )
@@ -911,6 +957,8 @@ void XashSurface::flushBackingText( void )
 		//                                     It keeps the SemiBold face.
 		//   longer than MAX_MESSAGE_LINES  NO - the intro text card and the
 		//                                     credits roll, as before.
+		//   a client menu's own label   NO  - the wardrobe's buttons, see
+		//                                     runInMenu() (story co-op).
 		// Cry of Fear (cof_panel_transparent): the strip is only as opaque as
 		// the most opaque glyph on its line. The client fades captions by
 		// their text alpha (VGUI1: 255 is invisible), and a strip drawn at
@@ -930,7 +978,7 @@ void XashSurface::flushBackingText( void )
 		if( lineOpacity > 255 )
 			lineOpacity = 255;
 
-		if( backingAlpha > 0 && lineOpacity > 0 && !topBand && ( textYTarget < 0 || runIsShortEnough( )))
+		if( backingAlpha > 0 && lineOpacity > 0 && !topBand && !menuRun && ( textYTarget < 0 || runIsShortEnough( )))
 		{
 			// padding from the glyph height, so it follows the display the
 			// same way the rest of milestone 4 does, and the same shape the
