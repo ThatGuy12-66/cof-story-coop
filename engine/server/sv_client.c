@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #include "sv_cof_state.h"
 #include "sv_cof_recovery.h"
 #include "sv_cof_session.h"
+#include "sv_cof_retail.h"
 #include "sv_cof_scene.h"
 #include "sv_cof_inventory12.h"
 
@@ -3221,6 +3222,9 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 		SV_CoF_ShareCommandBegin( cl );
 		SV_CoF_CommandSender( cl->state == cs_spawned && SV_CoF_StoryCoopEnabled() ? cl->edict : NULL );
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
+		// Cry of Fear story co-op: deploy the dual weapon the game just built
+		if( SV_CoF_StoryCoopEnabled() && !Q_strcmp( Cmd_Argv( 0 ), "inventorydualwield" ))
+			SV_CoF_RetailDualDeploy( cl );
 		SV_CoF_CommandSender( NULL );
 		SV_CoF_ShareCommandEnd( cl );
 		SV_CoF_StateCommandEnd( cl );

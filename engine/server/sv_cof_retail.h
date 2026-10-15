@@ -53,6 +53,9 @@ typedef struct
 qboolean SV_CoF_RetailArms( sv_client_t *cl, cof_retail_arms_t *arms );
 // Take a carried weapon in hand through the game's own SelectItem (refused mid-shot, on a ladder...).
 qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname );
+// After `inventorydualwield`: switch to the weapon_dualweapon the game just built
+// for this player (multiplayer rules never do). True when a switch was started.
+qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl );
 // A companion bot never runs dry: the game's own infinite-ammo switch, and a
 // magazine in reserve for every gun it carries (a syringe for the syringe).
 void SV_CoF_RetailSupply( sv_client_t *cl );

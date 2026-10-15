@@ -58,10 +58,11 @@ static const cof_inv12_site_t cof_inv12_keep[] =
 	{ 0xDDC25, 11, { 0xc7, 0x84, 0xb3, 0x50, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, COF_INV12_NOPS },
 };
 
-/* wide: the slot loops and the combine range, 6 -> 12. Only on maps at 12.
- * Not here: SavePlayer 1002A866 (its coop record has six fixed weapon entries;
- * story co-op carries inventories through the engine's own save paths) and
- * DualWield (refused in multiplayer before its range check). */
+/* wide: the slot loops and the combine and dual-wield ranges, 6 -> 12. Only on
+ * maps at 12. Not here: SavePlayer 1002A866 (its coop record has six fixed weapon
+ * entries; story co-op carries inventories through the engine's own save paths).
+ * DualWield's range checks count since story co-op opens its multiplayer
+ * refusal (sv_cof_story.c, COF_DUAL_GATE). */
 static const cof_inv12_site_t cof_inv12_wide[] =
 {
 	{ 0xDADB1, 3, { 0x83, 0xfe, 0x06 }, { 0x83, 0xfe, 0x0c } }, /* AddInventoryItem: the first free slot */
@@ -75,6 +76,8 @@ static const cof_inv12_site_t cof_inv12_wide[] =
 	{ 0xC6D70, 3, { 0x83, 0xfe, 0x06 }, { 0x83, 0xfe, 0x0c } }, /* map .cfg item loader resend */
 	{ 0xE30C2, 3, { 0x83, 0xf8, 0x05 }, { 0x83, 0xf8, 0x0b } }, /* CombineInventoryItems: first slot in 1..N */
 	{ 0xE30CE, 3, { 0x83, 0xf8, 0x05 }, { 0x83, 0xf8, 0x0b } }, /* second slot in 1..N */
+	{ 0xDEA0C, 3, { 0x83, 0xf8, 0x05 }, { 0x83, 0xf8, 0x0b } }, /* DualWield: first slot in 1..N */
+	{ 0xDEA18, 3, { 0x83, 0xf8, 0x05 }, { 0x83, 0xf8, 0x0b } }, /* second slot in 1..N */
 };
 
 /* 1 when every site holds its patched bytes, 0 when every site holds the stock

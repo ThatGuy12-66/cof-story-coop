@@ -29,6 +29,13 @@ static const byte cof_gate_original[6] = { 0x0f, 0x85, 0xb5, 0x01, 0x00, 0x00 };
 static const byte cof_gate_open[6] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
 static byte *cof_gate;
 static void *cof_gate_instance;
+// The multiplayer refusal of `inventorydualwield` (ClientCommand: the jnz after
+// IsMultiplayer at 1001B6DB), opened with the exit gate. The dual weapon the game
+// then builds is deployed by the engine (SV_CoF_RetailDualDeploy): the multiplayer
+// rules never switch to it. Research: evidence/tester-package-20261015/research/dualwield-mp-re.md
+#define COF_DUAL_GATE 0x1B6E0
+static const byte cof_dual_gate_original[6] = { 0x0f, 0x85, 0x5a, 0x15, 0x00, 0x00 };
+static byte *cof_dual_gate;
 
 static qboolean CoF_StoryWriteGate( byte *p, const byte *expect, const byte *value )
 {
@@ -91,9 +98,11 @@ static void CoF_StoryCloseGate( void )
 	if( cof_gate && cof_gate_instance == svgame.hInstance )
 	{
 		CoF_StoryWriteGate( cof_gate, cof_gate_open, cof_gate_original );
+		if( cof_dual_gate ) CoF_StoryWriteGate( cof_dual_gate, cof_gate_open, cof_dual_gate_original );
 		CoF_StoryRestoreRules();
 	}
 	cof_rules_new = NULL;
+	cof_dual_gate = NULL;
 	cof_gate = NULL;
 	cof_gate_instance = NULL;
 }
@@ -128,7 +137,9 @@ qboolean SV_CoF_StoryCoopEnabled( void )
 		}
 		cof_gate = base + 0x109D60;
 		cof_gate_instance = svgame.hInstance;
-		Con_Printf( "cofstory phase=gate-enabled landmark=preserved rules=zeroed\n" );
+		// dual wield is a nicety: story co-op runs without it if the bytes differ
+		cof_dual_gate = CoF_StoryWriteGate( base + COF_DUAL_GATE, cof_dual_gate_original, cof_gate_open ) ? base + COF_DUAL_GATE : NULL;
+		Con_Printf( "cofstory phase=gate-enabled landmark=preserved rules=zeroed dualwield=%s\n", cof_dual_gate ? "open" : "closed" );
 		return true;
 	}
 #else

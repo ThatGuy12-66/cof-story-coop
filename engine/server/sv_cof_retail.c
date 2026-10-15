@@ -42,6 +42,13 @@
 #define COF_RETAIL_CPR_TARGET     0x2698 // EHANDLE: the body I am reviving
 #define COF_RETAIL_REVIVER        0x26A0 // EHANDLE: who is reviving me
 #define COF_RETAIL_SELECT_ITEM    0xF1A50 // CBasePlayer::SelectItem( const char * ), thiscall, ret 4
+#define COF_RETAIL_NEXT_ITEM      0x2538 // CBasePlayerItem *m_pNextItem: a switch under way
+#define COF_RETAIL_DUAL_LEFT      0x1E70 // int m_iDualWeaponLeftID, set by StartDualWield
+#define COF_RETAIL_DUAL_RIGHT     0x1E74 // int m_iDualWeaponRightID
+#define COF_RETAIL_SWITCH_WEAPON  0xF5E50 // CBasePlayer::SwitchWeapon( CBasePlayerItem * ), thiscall, ret 4
+#define COF_RETAIL_DUAL_ITEM_LEFT  0x204 // weapon_dualweapon: m_iLeftWeaponID
+#define COF_RETAIL_DUAL_ITEM_RIGHT 0x200 // m_iRightWeaponID
+#define COF_RETAIL_DUAL_ITEM_NEED  0x208
 #define COF_RETAIL_CARRIED        24
 #define COF_RETAIL_WEAPON_SCOPE   0x106 // rifle: bool m_bRaised
 #define COF_RETAIL_WEAPON_SUICIDE 0x140 // int m_iSuicideState: 2 = the struggle
@@ -517,6 +524,38 @@ qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname )
 	if( !player || !classname || Q_strncmp( classname, "weapon_", 7 )) return false;
 	// What inventoryequip ends in, without its menu sound: the swap happens a moment later in PostThink.
 	return SV_CoF_StoryCallMember( COF_RETAIL_SELECT_ITEM, player, (void *)classname );
+}
+
+// Dual wield in co-op (sv_cof_story.c opens the command's multiplayer refusal):
+// the game builds weapon_dualweapon, but its multiplayer rules switch only to a
+// heavier weapon (dual 1, a pistol 5), so it is never deployed. Switch to it here,
+// as single player's AddPlayerItem does. Only the pair this player just asked for.
+qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl ), *active, *next;
+	int i, left, right;
+	if( !player ) return false;
+	memcpy( &left, player + COF_RETAIL_DUAL_LEFT, sizeof( left ));
+	memcpy( &right, player + COF_RETAIL_DUAL_RIGHT, sizeof( right ));
+	memcpy( &active, player + COF_RETAIL_ACTIVE_ITEM, sizeof( active ));
+	memcpy( &next, player + COF_RETAIL_NEXT_ITEM, sizeof( next ));
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *e = SV_EdictNum( i );
+		byte *pv, *owner;
+		int l, r;
+		if( !SV_IsValidEdict( e ) || FBitSet( e->v.flags, FL_KILLME ) || Q_strcmp( SV_GetString( e->v.classname ), "weapon_dualweapon" )) continue;
+		if( !( pv = CoF_RetailPrivate( e, COF_RETAIL_DUAL_ITEM_NEED ))) continue;
+		memcpy( &owner, pv + COF_RETAIL_WEAPON_PLAYER, sizeof( owner ));
+		memcpy( &l, pv + COF_RETAIL_DUAL_ITEM_LEFT, sizeof( l ));
+		memcpy( &r, pv + COF_RETAIL_DUAL_ITEM_RIGHT, sizeof( r ));
+		if( owner != player || l != left || r != right ) continue;
+		if( pv == active || pv == next ) return false;
+		if( !SV_CoF_StoryCallMember( COF_RETAIL_SWITCH_WEAPON, player, pv )) return false;
+		Con_Printf( "cofstory phase=dualwield-switch userid=%d left=%d right=%d\n", cl->userid, left, right );
+		return true;
+	}
+	return false;
 }
 
 void SV_CoF_RetailSupply( sv_client_t *cl )
