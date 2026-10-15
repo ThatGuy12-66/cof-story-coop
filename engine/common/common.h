@@ -799,6 +799,7 @@ static inline void CL_CoF_StopMP3( const char *reason ) { }
 static inline qboolean CL_CoF_Inventory12Ready( void ) { return false; } // no local client
 #endif
 
+qboolean COM_CoF_ModuleSha256Is( const void *module, const char *hex ); // sv_cof_cheats.c: the SHA-256 of the file a dll_user_t was loaded from
 char *CL_Userinfo( void );
 void CL_CharEvent( int key );
 byte *COM_LoadFile( const char *filename, int usehunk, int *pLength ) MALLOC_LIKE( free, 1 );

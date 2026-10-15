@@ -276,7 +276,8 @@ game DLL identity
 =============================================================================
 */
 #if COF_CHEATS_SUPPORTED
-static cof_hash_state_t CoF_HashModuleFile( const dll_user_t *hInst, char hex[65] )
+// SHA-256 of the file a loaded module came from; false when it cannot be read.
+static qboolean CoF_HashModuleHex( const dll_user_t *hInst, char hex[65] )
 {
 	wchar_t path[2048];
 	cof_sha256_t ctx;
@@ -297,11 +298,11 @@ static cof_hash_state_t CoF_HashModuleFile( const dll_user_t *hInst, char hex[65
 	}
 
 	if( !path[0] && !MultiByteToWideChar( CP_UTF8, 0, hInst->fullPath, -1, path, ARRAYSIZE( path )))
-		return COF_HASH_UNREADABLE;
+		return false;
 
 	f = _wfopen( path, L"rb" );
 	if( !f )
-		return COF_HASH_UNREADABLE;
+		return false;
 
 	CoF_Sha256Init( &ctx );
 	while(( n = fread( buf, 1, sizeof( buf ), f )) > 0 )
@@ -310,15 +311,32 @@ static cof_hash_state_t CoF_HashModuleFile( const dll_user_t *hInst, char hex[65
 	if( ferror( f ))
 	{
 		fclose( f );
-		return COF_HASH_UNREADABLE;
+		return false;
 	}
 
 	fclose( f );
 	CoF_Sha256Final( &ctx, hex );
+	return true;
+}
 
+static cof_hash_state_t CoF_HashModuleFile( const dll_user_t *hInst, char hex[65] )
+{
+	if( !CoF_HashModuleHex( hInst, hex ))
+		return COF_HASH_UNREADABLE;
 	return !Q_strcmp( hex, cof_retail_hl_sha256 ) ? COF_HASH_MATCH : COF_HASH_MISMATCH;
 }
 #endif // COF_CHEATS_SUPPORTED
+
+// The client checks client.dll with the same code (cof_inventory12.c).
+qboolean COM_CoF_ModuleSha256Is( const void *module, const char *hex )
+{
+#if COF_CHEATS_SUPPORTED
+	char got[65];
+	return module && hex && CoF_HashModuleHex( (const dll_user_t *)module, got ) && !Q_stricmp( got, hex );
+#else
+	return false;
+#endif
+}
 
 static cof_hash_state_t CoF_GameDllState( void )
 {

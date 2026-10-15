@@ -354,6 +354,10 @@ static qboolean Info_IsKeyImportant( const char *key )
 	// cosmetic keys rather than be silently dropped ("invalid password").
 	if( !Q_strcmp( key, "password" ))
 		return true;
+	// The story co-op 12-slot inventory's capability (cof_inventory12.c): without
+	// it a host running 12 slots turns the player away.
+	if( !Q_strcmp( key, "_cofinv" ))
+		return true;
 	return false;
 }
 
