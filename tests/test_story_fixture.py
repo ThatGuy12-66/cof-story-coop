@@ -45,6 +45,12 @@ cofstory phase=inventory-slot slot=1 userid=101 index=3 descriptor=""
 cofstory phase=inventory-slot slot=1 userid=101 index=4 descriptor=""
 cofstory phase=inventory-slot slot=1 userid=101 index=5 descriptor=""
 cofstory phase=inventory-slot slot=1 userid=101 index=6 descriptor=""
+cofstory phase=inventory-slot slot=1 userid=101 index=7 descriptor=""
+cofstory phase=inventory-slot slot=1 userid=101 index=8 descriptor=""
+cofstory phase=inventory-slot slot=1 userid=101 index=9 descriptor=""
+cofstory phase=inventory-slot slot=1 userid=101 index=10 descriptor=""
+cofstory phase=inventory-slot slot=1 userid=101 index=11 descriptor=""
+cofstory phase=inventory-slot slot=1 userid=101 index=12 descriptor=""
 cofstory phase=fixture name=cof_probe_once class=trigger_once health=0
 cofstory phase=fixture name=cof_probe_marker class=info_target health=17
 cofstory phase=landmark name=hahaland origin=2424,-908,-694
@@ -71,7 +77,17 @@ class StoryEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_status(text.replace("index=6", "index=5"), "initial")
         with self.assertRaises(ValueError):
+            parse_status("\n".join(line for line in text.splitlines() if "index=12" not in line), "initial")
+        with self.assertRaises(ValueError):
+            parse_status(text.replace('index=7 descriptor=""', 'index=13 descriptor=""'), "initial")
+        with self.assertRaises(ValueError):
             parse_status(text + "cofstory phase=status enabled=1 map=c_start generation=8\n", "initial")
+
+    def test_seven_slot_capture_still_parses(self):
+        text = "\n".join(line for line in status_capture().splitlines()
+                         if not any(f"index={i} " in line for i in range(7, 13)))
+        self.assertEqual(parse_status(text, "initial")["players"][0]["inventory"],
+                         parse_status(status_capture(), "initial")["players"][0]["inventory"])
 
     def test_unused_slot_zero_cannot_supply_inventory(self):
         text = status_capture().replace('index=0 descriptor=""',

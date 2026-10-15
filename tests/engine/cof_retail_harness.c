@@ -174,6 +174,8 @@ static void Cmd_AddCommand( const char *name, xcommand_t f, const char *desc ) {
 
 #include "sv_cof_descriptor.h"
 #include "sv_cof_retail.h"
+static int inventory_slots = 6;
+static int SV_CoF_InventorySlots( void ) { return inventory_slots; }
 #include "retail_under_test.c"
 
 int main( void )
@@ -209,6 +211,17 @@ int main( void )
 	private_data[0][0x1E9C] = 1; /* three-slot mode: only slots 1..3 count */
 	assert( SV_CoF_RetailFreeSlots( &clients[0] ) == 2 );
 	private_data[0][0x1E9C] = 0;
+	/* twelve slots: the engine reads all of them; free slots count to the map's size */
+	inventory_slots = 12;
+	id = 3; memcpy( private_data[0] + 0x21FC + 12 * sizeof( id ), &id, sizeof( id ));
+	assert( SV_CoF_RetailReadSlots( &clients[0], slots ) && !strcmp( slots[11], "inventoryitems/fuse.txt" ) && !slots[6][0] );
+	assert( SV_CoF_RetailFreeSlots( &clients[0] ) == 9 );
+	private_data[0][0x1E9C] = 1;
+	assert( SV_CoF_RetailFreeSlots( &clients[0] ) == 2 && SV_CoF_RetailInThreeSlots( &clients[0] ));
+	private_data[0][0x1E9C] = 0;
+	inventory_slots = 6; /* a map at six: slot 12 is kept but not counted */
+	assert( SV_CoF_RetailFreeSlots( &clients[0] ) == 4 && !SV_CoF_RetailInThreeSlots( &clients[0] ));
+	id = 0; memcpy( private_data[0] + 0x21FC + 12 * sizeof( id ), &id, sizeof( id ));
 	clients[1].state = 2; /* not spawned: nothing is read */
 	assert( !SV_CoF_RetailReadSlots( &clients[1], slots ) && SV_CoF_RetailFreeSlots( &clients[1] ) == -1 );
 	clients[1].state = cs_spawned;

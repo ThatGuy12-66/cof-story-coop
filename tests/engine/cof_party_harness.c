@@ -226,6 +226,7 @@ int main(void) {
     assert(strstr(status_log,"index=0 descriptor=\"\""));
     assert(strstr(status_log,"index=1 descriptor=\"inventoryitems/weapons/weapon_mobile.txt\""));
     assert(strstr(status_log,"index=3 descriptor=\"inventoryitems/weapons/weapon_glock.txt\""));
+	assert(strstr(status_log,"index=12 descriptor=\"\"") && !strstr(status_log,"index=13 "));
     puts(status_log); /* The Python verifier consumes actual native status output. */
     /* A stale legacy mirror, unused slot0, and lookalike paths prove nothing. */
     setup(); {string_t legacy=2,unused=9;

@@ -21,7 +21,7 @@ typedef float vec3_t[3];
 #define FL_KILLME (1<<30)
 #define FCL_FAKECLIENT (1<<7)
 #define IN_USE (1<<5)
-#define COF_RETAIL_SLOTS 6
+#define COF_RETAIL_SLOTS 12
 #define COF_RETAIL_ITEM 64
 #define Q_strcmp strcmp
 #define Q_stricmp _stricmp
@@ -72,7 +72,7 @@ static void SV_CoF_PreferFirst( edict_t *e ) { preferred = e; }
 static qboolean SV_CoF_RetailReadSlots( sv_client_t *cl, char slots[COF_RETAIL_SLOTS][COF_RETAIL_ITEM] )
 {
 	memset( slots, 0, COF_RETAIL_SLOTS * COF_RETAIL_ITEM );
-	if( has_phone[cl - clients] ) strcpy( slots[2], "inventoryitems/weapons/weapon_mobile.txt" );
+	if( has_phone[cl - clients] ) strcpy( slots[has_phone[cl - clients] == 2 ? 9 : 2], "inventoryitems/weapons/weapon_mobile.txt" );
 	return true;
 }
 static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable )
@@ -321,6 +321,10 @@ int main( void )
 		setup(); gate = 0; SV_CoF_MomentsMessage( clients[0].edict, "CoFLogo", &logo, 1 ); gate = 1; SV_CoF_MomentsFrame();
 		assert( !logos_to[1] );
 	}
+
+	/* a phone in slot 10 rings like one in slot 3 */
+	has_phone[0] = 2; assert( CoF_MomentHasPhone( &clients[0] ));
+	has_phone[0] = 0; assert( !CoF_MomentHasPhone( &clients[0] ));
 
 	puts( "moments scenarios passed" );
 	return 0;

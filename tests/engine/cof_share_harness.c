@@ -12,7 +12,7 @@ typedef int qboolean;
 #define FCL_FAKECLIENT ( 1 << 7 )
 #define DEAD_NO 0
 #define FBitSet( a, b ) (( a ) & ( b ))
-#define COF_RETAIL_SLOTS 6
+#define COF_RETAIL_SLOTS 12
 #define COF_RETAIL_ITEM 64
 #define Q_snprintf snprintf
 #define Q_strcmp strcmp
@@ -27,6 +27,7 @@ static sv_client_t clients[2];
 static edict_t edicts[2];
 static char inv[2][COF_RETAIL_SLOTS][COF_RETAIL_ITEM], last_line[2][192], console[32768], command_name[32];
 static int three[2], gives, takes, refuse_give;
+static int active = 6; /* the map's slot count (SV_CoF_InventorySlots) */
 static const char *refuse_item; /* this descriptor is never taken */
 static size_t console_length;
 static xcommand_t ledger;
@@ -50,7 +51,7 @@ static qboolean SV_CoF_RetailReadSlots( sv_client_t *cl, char slots[COF_RETAIL_S
 }
 static int SV_CoF_RetailFreeSlots( sv_client_t *cl )
 {
-	int i, n = 0, usable = three[who( cl )] ? 3 : 6;
+	int i, n = 0, usable = three[who( cl )] ? 3 : active;
 	for( i = 0; i < usable; i++ ) if( !inv[who( cl )][i][0] ) n++;
 	return n;
 }
@@ -60,15 +61,15 @@ static qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *d )
 	int i, p = who( cl );
 	gives++;
 	if( refuse_give || ( refuse_item && !strcmp( d, refuse_item ))) return false;
-	for( i = 0; i < 6; i++ ) if( !strcmp( inv[p][i], d )) return true;
-	for( i = 0; i < ( three[p] ? 3 : 6 ); i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return true; }
+	for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) return true;
+	for( i = 0; i < ( three[p] ? 3 : active ); i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return true; }
 	return false;
 }
 static qboolean SV_CoF_RetailRemoveItem( sv_client_t *cl, const char *d )
 {
 	int i, p = who( cl );
 	takes++;
-	for( i = 0; i < 6; i++ ) if( !strcmp( inv[p][i], d )) { inv[p][i][0] = 0; break; }
+	for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) { inv[p][i][0] = 0; break; }
 	return true;
 }
 static qboolean SV_CoF_RetailItemName( const char *d, char *out, size_t size )
@@ -121,9 +122,9 @@ static void setup( void )
 static void frame( double dt ) { sv.time += dt; SV_CoF_ShareFrame(); }
 static void begin( int p, const char *name ) { strcpy( command_name, name ); SV_CoF_ShareCommandBegin( &clients[p] ); }
 static void end( int p ) { SV_CoF_ShareCommandEnd( &clients[p] ); }
-static int holds( int p, const char *d ) { int i; for( i = 0; i < 6; i++ ) if( !strcmp( inv[p][i], d )) return 1; return 0; }
-static void lose( int p, const char *d ) { int i; for( i = 0; i < 6; i++ ) if( !strcmp( inv[p][i], d )) inv[p][i][0] = 0; }
-static void gain( int p, const char *d ) { int i; for( i = 0; i < 6; i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return; } }
+static int holds( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) return 1; return 0; }
+static void lose( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) inv[p][i][0] = 0; }
+static void gain( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return; } }
 
 int main( void )
 {
@@ -276,6 +277,12 @@ int main( void )
 		SV_CoF_ShareRecovered( &clients[0] );
 		assert( holds( 0, GLOCK ) && holds( 0, "inventoryitems/weapons/weapon_mobile.txt" ) );
 	}
+	/* twelve slots: a partner whose slots 1..6 are full still gets the shared key, in slot 7 */
+	setup(); active = 12;
+	for( i = 0; i < 6; i++ ) strcpy( inv[1][i], GLOCK );
+	gain( 0, KEY ); frame( 0.1 ); frame( 1.0 );
+	assert( !strcmp( inv[1][6], KEY ));
+	active = 6;
 	puts( "share scenarios passed" );
 	return 0;
 }

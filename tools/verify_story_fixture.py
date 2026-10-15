@@ -86,7 +86,7 @@ def parse_status(text: str, phase: str) -> dict:
             userid = int(record["userid"])
             slot, index = int(record["slot"]), int(record["index"])
             observed = inventory_slots.setdefault(userid, {})
-            if index not in range(7) or index in observed:
+            if index not in range(13) or index in observed:
                 raise ValueError("Invalid or duplicate private inventory index")
             observed[index] = slot
             inventory = inventories.setdefault(userid, Counter())
@@ -109,7 +109,8 @@ def parse_status(text: str, phase: str) -> dict:
         raise ValueError("Actual hahaland coordinates were not observed")
     for userid, player in players.items():
         observed = inventory_slots.get(userid, {})
-        if set(observed) != set(range(7)) or any(slot != player["slot"] for slot in observed.values()):
+        # 13 since the 12-slot inventory (2026-10-14); 7 in older captures
+        if set(observed) not in (set(range(7)), set(range(13))) or any(slot != player["slot"] for slot in observed.values()):
             raise ValueError(f"Incomplete or mismatched private inventory-slot observations for userid {userid}")
         player["inventory"] = dict(inventories[userid])
     if set(inventories) != set(players):
