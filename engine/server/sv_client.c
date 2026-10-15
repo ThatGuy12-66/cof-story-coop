@@ -1095,9 +1095,6 @@ void SV_RemoteCommand( netadr_t from, sizebuf_t *msg )
 		char remaining[1024];
 		char *p = remaining;
 
-		Con_Printf( "Rcon from %s:\n%s\n", adr, MSG_GetData( msg ) + 4 );
-		Log_Printf( "Rcon: \"%s\" from \"%s\"\n", MSG_GetData( msg ) + 4, adr );
-
 		remaining[0] = 0;
 		for( int i = 2; i < Cmd_Argc(); i++ )
 		{
@@ -1105,6 +1102,12 @@ void SV_RemoteCommand( netadr_t from, sizebuf_t *msg )
 			p += Q_strncpy( p, Cmd_Argv( i ), sizeof( remaining ) - ( p - remaining ));
 			p += Q_strncpy( p, "\" ", sizeof( remaining ) - ( p - remaining ));
 		}
+
+		// Cry of Fear story co-op: the command without the password. The raw
+		// packet ("rcon <password> <command>") was echoed into the game's notify
+		// lines on screen and into every log (live 2026-10-15)
+		Con_Printf( "Rcon from %s: %s\n", adr, remaining );
+		Log_Printf( "Rcon: %s from \"%s\"\n", remaining, adr );
 
 		SV_BeginRedirect( &host.rd, from, RD_PACKET, outputbuf, sizeof( outputbuf ) - 16, SV_FlushRedirect );
 		Cmd_ExecuteString( remaining );

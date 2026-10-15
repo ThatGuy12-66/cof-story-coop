@@ -5,7 +5,9 @@
  * fights, revives and heals through the retail rules. The same mind can drive
  * an idle second human client (solo testing with two windows): the moment
  * that client's own controls are touched, the person has it back.
- * Decisions are pure state in sv_cof_brain.h; this file perceives and acts.
+ * Decisions are pure state in sv_cof_brain.h; this file perceives and acts,
+ * and finds ways round what blocks its path on the map's own route graph
+ * (sv_cof_nav.h).
  *
  * The story layer already keeps fake clients out of everything that could
  * change the story for the humans: the exit hold, shared items and state,
@@ -25,6 +27,7 @@
 #include "sv_cof_party.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_brain.h"
+#include "sv_cof_nav.h"
 
 #define COF_COMPANION_THREAT_RANGE 900.0f // the companion engages threats this close to it...
 #define COF_COMPANION_GUARD_RANGE 1000.0f // ...and this close to the leader
@@ -32,6 +35,20 @@
 #define COF_COMPANION_ENGAGED_BONUS 300.0f // a monster already after a player counts as this much nearer
 #define COF_COMPANION_PARTICIPANTS 4 // the game refuses a fifth player
 #define COF_COMPANION_ECHO 32 // views the AI handed a driven client lately: its usercmds echo them some frames late
+#define COF_COMPANION_AHEAD 24.0f // how far ahead of the feet it looks for a door or a low obstacle
+#define COF_COMPANION_STEP 18.0f // the player code steps up this much by itself (sv_stepsize)
+#define COF_COMPANION_JUMP 36.0f // a jump lifts the feet about 45 units: this much leaves a margin
+#define COF_COMPANION_ROUTE 128 // route nodes kept
+#define COF_COMPANION_NAV_RETRY 10.0 // no graph for the map yet (the game builds it after the map starts): look again this often
+#define COF_COMPANION_NAV_REACH 640.0f // the graph points near a body that it tries to walk to or from
+#define COF_COMPANION_NAV_TRIES 6 // ...nearest first, at most this many
+#define COF_COMPANION_REPLAN 1.0 // a route is planned again this often while it is used
+#define COF_COMPANION_REACHED 32.0f // this close to a route point (flat): on to the next
+#define COF_COMPANION_GOAL_MOVED 96.0f // the goal moved this far from where the route was planned to: plan again
+#define COF_COMPANION_DOOR_COST 128.0f // a shut door it may open costs this much extra on a route
+#define COF_COMPANION_AVOID 4 // links it got stuck on, left out of routes...
+#define COF_COMPANION_AVOID_TIME 30.0 // ...for this long
+#define COF_COMPANION_MODELS 1024 // brush models ("*N") mapped to their entities
 
 static convar_t *cof_companion; // how many companion bots to keep (0: none)
 static convar_t *cof_companion_name;
@@ -62,19 +79,43 @@ typedef struct
 	double calm_since; // no threat in sight since
 	qboolean stay; // told to wait here
 	vec3_t stay_pos;
+	int door; // the entity of the door found ahead this frame (0: none)
+	int route[COF_COMPANION_ROUTE], route_length, route_at; // graph nodes round what blocks the way, and the next one
+	vec3_t route_goal; // where the route was planned to
+	double route_after; // plan again from then
+	int routed; // the last plan: 1 found a way, -1 none, 0 not yet (for the log)
+	int avoid[COF_COMPANION_AVOID]; // links (+1) it got stuck on
+	double avoid_until[COF_COMPANION_AVOID];
+	int avoid_next;
 } cof_companion_t;
 
 static cof_companion_t cof_companions[MAX_CLIENTS];
 static int cof_companion_generation = -1;
 static double cof_companion_add_after;
 
+// The map's route graph (sv_cof_nav.h), read once a companion needs it.
+static cof_nav_t cof_nav;
+static int cof_nav_state; // 0 not read yet, 1 read, -1 none (looked for again from cof_nav_after)
+static double cof_nav_after;
+static qboolean cof_nav_told; // "no graph" logged for this map
+static int cof_nav_model[COF_COMPANION_MODELS]; // the entity of brush model "*N" (doors across links)
+
 static const char *cof_companion_modes[] = { "idle", "follow", "fight", "revive", "heal", "held", "dead", "medic", "struggle" };
+
+static void CoF_CompanionNavReset( void )
+{
+	cof_nav.nodes = cof_nav.links = 0;
+	cof_nav_state = 0;
+	cof_nav_after = 0.0;
+	cof_nav_told = false;
+}
 
 void SV_CoF_CompanionReset( void )
 {
 	memset( cof_companions, 0, sizeof( cof_companions ));
 	cof_companion_generation = -1;
 	cof_companion_add_after = 0.0;
+	CoF_CompanionNavReset();
 }
 
 static int CoF_CompanionSlot( const sv_client_t *cl )
@@ -227,6 +268,221 @@ qboolean SV_CoF_CompanionTriggerTouch( edict_t *trigger, edict_t *ent )
 	return Q_strcmp( name, "trigger_push" ) && Q_strcmp( name, "trigger_gravity" );
 }
 
+// A door the AI may open: an ordinary func_door or func_door_rotating that fires
+// nothing and that no trigger opens. The others belong to the story.
+static qboolean CoF_CompanionDoor( edict_t *e )
+{
+	const char *name;
+	if( !SV_IsValidEdict( e ) || NUM_FOR_EDICT( e ) <= 0 ) return false;
+	name = SV_GetString( e->v.classname );
+	if( Q_strcmp( name, "func_door" ) && Q_strcmp( name, "func_door_rotating" )) return false;
+	return !( e->v.target && SV_GetString( e->v.target )[0] ) && !( e->v.netname && SV_GetString( e->v.netname )[0] ) &&
+		!( e->v.targetname && SV_GetString( e->v.targetname )[0] );
+}
+
+// Just ahead of the feet, the way the AI walked last frame (its moves are
+// relative to the view yaw it sent): a door it may open; else something low that
+// a jump clears (blocked at the feet and at step height, clear at jump height).
+// A stair step is not one: the player code climbs it.
+static void CoF_CompanionAhead( edict_t *ent, cof_companion_t *c, cof_brain_input_t *in )
+{
+	float yaw = c->out.angles[1] / 57.2957795f, x, y, length;
+	vec3_t end, from, to;
+	trace_t tr;
+	c->door = 0;
+	if( !in->alive || in->held || !in->onground ) return;
+	x = c->out.forward * cosf( yaw ) + c->out.side * sinf( yaw );
+	y = c->out.forward * sinf( yaw ) - c->out.side * cosf( yaw );
+	length = sqrtf( x * x + y * y );
+	if( length < 1.0f ) return;
+	VectorCopy( ent->v.origin, end );
+	end[0] += x / length * COF_COMPANION_AHEAD;
+	end[1] += y / length * COF_COMPANION_AHEAD;
+	tr = SV_Move( ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NOMONSTERS, ent, false );
+	if( tr.startsolid || tr.fraction >= 1.0f ) return;
+	if( CoF_CompanionDoor( tr.ent ))
+	{
+		in->door_ahead = 1;
+		c->door = NUM_FOR_EDICT( tr.ent );
+		return;
+	}
+	VectorCopy( ent->v.origin, from ); from[2] += COF_COMPANION_STEP;
+	VectorCopy( end, to ); to[2] += COF_COMPANION_STEP;
+	tr = SV_Move( from, ent->v.mins, ent->v.maxs, to, MOVE_NOMONSTERS, ent, false );
+	if( !tr.startsolid && tr.fraction >= 1.0f ) return; // a step
+	VectorCopy( ent->v.origin, from ); from[2] += COF_COMPANION_JUMP;
+	VectorCopy( end, to ); to[2] += COF_COMPANION_JUMP;
+	tr = SV_Move( from, ent->v.mins, ent->v.maxs, to, MOVE_NOMONSTERS, ent, false );
+	in->ledge_ahead = !tr.startsolid && tr.fraction >= 1.0f;
+}
+
+// The entity of brush model "*N" (a door across a link), or NULL.
+static edict_t *CoF_CompanionModel( int model )
+{
+	const char *name;
+	edict_t *e;
+	if( model <= 0 || model >= COF_COMPANION_MODELS || cof_nav_model[model] <= 0 || cof_nav_model[model] >= svgame.numEntities ) return NULL;
+	e = SV_EdictNum( cof_nav_model[model] );
+	if( !SV_IsValidEdict( e ) || !e->v.model ) return NULL;
+	name = SV_GetString( e->v.model );
+	return name[0] == '*' && Q_atoi( name + 1 ) == model ? e : NULL;
+}
+
+// The map's route graph, read the first time a companion needs it; a map with
+// none (yet: the game builds a missing one after the map starts) is looked at
+// again now and then.
+static qboolean CoF_CompanionNavLoad( void )
+{
+	char path[MAX_QPATH + 32];
+	fs_offset_t size = 0;
+	byte *data;
+	int i;
+	if( cof_nav_state > 0 ) return true;
+	if( cof_nav_state < 0 && sv.time < cof_nav_after ) return false;
+	cof_nav_after = sv.time + COF_COMPANION_NAV_RETRY;
+	Q_snprintf( path, sizeof( path ), "maps/graphs/%s.nod", sv.name );
+	data = FS_LoadFile( path, &size, false );
+	if( !data || !CoF_NavLoad( &cof_nav, data, (size_t)size ))
+	{
+		if( data ) Mem_Free( data );
+		cof_nav_state = -1;
+		if( !cof_nav_told ) Con_Printf( "cofstory phase=companion-nav map=%s graph=none\n", sv.name );
+		cof_nav_told = true;
+		return false;
+	}
+	Mem_Free( data );
+	memset( cof_nav_model, 0, sizeof( cof_nav_model ));
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *e = SV_EdictNum( i );
+		const char *name;
+		int model;
+		if( !SV_IsValidEdict( e ) || !e->v.model ) continue;
+		name = SV_GetString( e->v.model );
+		if( name[0] == '*' && ( model = Q_atoi( name + 1 )) > 0 && model < COF_COMPANION_MODELS ) cof_nav_model[model] = i;
+	}
+	cof_nav_state = 1;
+	Con_Printf( "cofstory phase=companion-nav map=%s nodes=%d links=%d\n", sv.name, cof_nav.nodes, cof_nav.links );
+	return true;
+}
+
+// A walk straight from a body at from to a body at to: the crouching box from
+// step height up, so a stair step does not count (a wall or a shut door does).
+static qboolean CoF_CompanionStraight( const vec3_t from, const vec3_t to, edict_t *ignore )
+{
+	vec3_t mins = { -16.0f, -16.0f, -18.0f }, maxs = { 16.0f, 16.0f, 18.0f };
+	trace_t tr = SV_Move( from, mins, maxs, to, MOVE_NOMONSTERS, ignore, false );
+	return !tr.startsolid && tr.fraction >= 1.0f;
+}
+
+// The nearest graph node a body at pos walks to straight, or -1.
+static int CoF_CompanionNode( const vec3_t pos, edict_t *ignore )
+{
+	int nearest[COF_COMPANION_NAV_TRIES], count, i;
+	count = CoF_NavNearest( &cof_nav, pos, COF_COMPANION_NAV_REACH, nearest, COF_COMPANION_NAV_TRIES );
+	for( i = 0; i < count; i++ )
+	{
+		vec3_t point;
+		CoF_NavPoint( &cof_nav, nearest[i], point );
+		if( CoF_CompanionStraight( pos, point, ignore )) return nearest[i];
+	}
+	return -1;
+}
+
+// What a link costs on top of its length now: nothing; more for a shut door it
+// may open; or it is left out (a link it got stuck on lately, a shut door that
+// belongs to the story).
+static float CoF_CompanionLinkCost( void *context, int link )
+{
+	const cof_companion_t *c = context;
+	const cof_nav_link_t *l = &cof_nav.link[link];
+	vec3_t from, to, zero = { 0.0f, 0.0f, 0.0f };
+	edict_t *door;
+	trace_t tr;
+	int i;
+	for( i = 0; i < COF_COMPANION_AVOID; i++ )
+		if( c->avoid[i] == link + 1 && sv.time < c->avoid_until[i] ) return -1.0f;
+	if( !l->door || !( door = CoF_CompanionModel( l->door ))) return 0.0f;
+	// shut when the line through the doorway stops on it
+	CoF_NavPoint( &cof_nav, l->src, from );
+	CoF_NavPoint( &cof_nav, l->dest, to );
+	tr = SV_Move( from, zero, zero, to, MOVE_NOMONSTERS, NULL, false );
+	if( tr.ent != door ) return 0.0f;
+	return CoF_CompanionDoor( door ) ? COF_COMPANION_DOOR_COST : -1.0f;
+}
+
+// A route from where it stands to goal: from the nearest node it walks to
+// straight, to the nearest node from which goal is straight ahead.
+static void CoF_CompanionPlan( sv_client_t *cl, cof_companion_t *c, const vec3_t goal )
+{
+	edict_t *ent = cl->edict;
+	int start, end, length = 0;
+	c->route_after = sv.time + COF_COMPANION_REPLAN;
+	VectorCopy( goal, c->route_goal );
+	c->route_length = c->route_at = 0;
+	start = CoF_CompanionNode( ent->v.origin, ent );
+	end = start >= 0 ? CoF_CompanionNode( goal, ent ) : -1;
+	if( end >= 0 ) length = CoF_NavRoute( &cof_nav, start, end, CoF_CompanionLinkCost, c, c->route, COF_COMPANION_ROUTE );
+	c->route_length = length;
+	if(( length > 0 ? 1 : -1 ) == c->routed ) return;
+	c->routed = length > 0 ? 1 : -1;
+	if( length > 0 ) Con_Printf( "cofstory phase=companion-route userid=%d nodes=%d\n", cl->userid, length );
+	else Con_Printf( "cofstory phase=companion-route userid=%d none\n", cl->userid );
+}
+
+// Where the AI was going last frame (out.goal) lies behind something: the next
+// point of a route round it (in->nav). Planned again every second while used and
+// at once when the goal moves on; none as soon as the way there is clear.
+static void CoF_CompanionNavigate( sv_client_t *cl, cof_companion_t *c, cof_brain_input_t *in )
+{
+	const cof_brain_output_t *last = &c->out;
+	edict_t *ent = cl->edict;
+	vec3_t point;
+	int i;
+	if( !last->going || !in->alive || in->held || !CoF_CompanionNavLoad())
+	{
+		c->route_length = 0;
+		return;
+	}
+	if( last->replan )
+	{
+		// stuck on the leg to the next point: leave that link out for a while
+		int link = c->route_at > 0 && c->route_at < c->route_length ? CoF_NavLink( &cof_nav, c->route[c->route_at - 1], c->route[c->route_at] ) : -1;
+		if( link >= 0 )
+		{
+			c->avoid[c->avoid_next] = link + 1;
+			c->avoid_until[c->avoid_next] = sv.time + COF_COMPANION_AVOID_TIME;
+			c->avoid_next = ( c->avoid_next + 1 ) % COF_COMPANION_AVOID;
+		}
+		Con_Printf( "cofstory phase=companion-replan userid=%d link=%d\n", cl->userid, link );
+		c->route_length = 0;
+		c->route_after = 0.0;
+	}
+	if( CoF_BrainDist2D( in->self, last->goal ) < COF_COMPANION_REACHED * 2.0f || CoF_CompanionStraight( ent->v.origin, last->goal, ent ))
+	{
+		c->route_length = 0;
+		return;
+	}
+	if( sv.time >= c->route_after || VectorDistance( c->route_goal, last->goal ) > COF_COMPANION_GOAL_MOVED )
+		CoF_CompanionPlan( cl, c, last->goal );
+	// on along it: past the points reached, and past the next one when the one after it is straight ahead
+	while( c->route_at < c->route_length )
+	{
+		CoF_NavPoint( &cof_nav, c->route[c->route_at], point );
+		if( CoF_BrainDist2D( in->self, point ) >= COF_COMPANION_REACHED || fabs( point[2] - in->self[2] ) > 48.0f ) break;
+		c->route_at++;
+	}
+	for( i = 0; i < 2 && c->route_at + 1 < c->route_length; i++ ) // a fresh plan starts at the nearest node, maybe one behind
+	{
+		CoF_NavPoint( &cof_nav, c->route[c->route_at + 1], point );
+		if( !CoF_CompanionStraight( ent->v.origin, point, ent )) break;
+		c->route_at++;
+	}
+	if( c->route_at >= c->route_length ) return; // at the last node: the goal is straight ahead from there
+	in->nav = 1;
+	CoF_NavPoint( &cof_nav, c->route[c->route_at], in->nav_point );
+}
+
 // A clear line between two points (world and brushes only; monsters do not block sight).
 static qboolean CoF_CompanionSees( const vec3_t from, const vec3_t to, edict_t *ignore, edict_t *target )
 {
@@ -355,6 +611,8 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 	}
 	in->stay = c->stay;
 	VectorCopy( c->stay_pos, in->stay_pos );
+	CoF_CompanionAhead( ent, c, in );
+	CoF_CompanionNavigate( cl, c, in );
 	if(( threat = CoF_CompanionThreat( ent, in->eye, c->stay ? c->stay_pos : in->leader ? leader->edict->v.origin : NULL, in->threat_pos )) != NULL )
 	{
 		in->threat = NUM_FOR_EDICT( threat );
@@ -370,8 +628,18 @@ static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companio
 	switch( c->out.action )
 	{
 	case COF_BRAIN_ACT_TELEPORT:
+		c->route_length = 0; // planned from where it stood
 		if( leader && SV_CoF_PartyPlaceBehind( cl, leader->edict ))
-			Con_Printf( "cofstory phase=companion-teleport userid=%d leader=%d\n", cl->userid, leader->userid );
+			Con_Printf( "cofstory phase=companion-teleport userid=%d leader=%d reason=%s\n", cl->userid, leader->userid, c->out.why ? c->out.why : "?" );
+		break;
+	case COF_BRAIN_ACT_OPEN_DOOR:
+		// The game's own Use with the AI as the user, as a person's +use would, but
+		// only on the door: the use key takes whatever the game finds first.
+		if( c->door > 0 && c->door < svgame.numEntities && CoF_CompanionDoor( SV_EdictNum( c->door )))
+		{
+			svgame.dllFuncs.pfnUse( SV_EdictNum( c->door ), cl->edict );
+			Con_Printf( "cofstory phase=companion-door userid=%d entity=%d\n", cl->userid, c->door );
+		}
 		break;
 	case COF_BRAIN_ACT_EQUIP_GUN: weapon = arms->gun; break;
 	case COF_BRAIN_ACT_EQUIP_MELEE: weapon = arms->melee; break;
@@ -383,6 +651,8 @@ static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companio
 			Con_Printf( "cofstory phase=companion-cpr userid=%d leader=%d\n", cl->userid, leader->userid );
 		break;
 	}
+	if(( c->out.buttons & COF_IN_JUMP ) && c->out.mode != COF_BRAIN_DEAD )
+		Con_Printf( "cofstory phase=companion-jump userid=%d reason=%s\n", cl->userid, c->out.why ? c->out.why : "?" );
 	// A switch takes the game a second or more; asking again sooner is refused
 	// anyway, and the game refuses some silently (mid-shot): this logs the asking.
 	if( !weapon ) c->asked[0] = 0;
@@ -560,6 +830,7 @@ void SV_CoF_CompanionFrame( void )
 		memset( cof_companions, 0, sizeof( cof_companions ));
 		cof_companion_generation = svs.spawncount;
 		cof_companion_add_after = sv.time + 2.0;
+		CoF_CompanionNavReset(); // another map, another graph
 	}
 	SV_CoF_RetailCprRepair(); // for any pair of players, not only companions
 	leader = CoF_CompanionLeader();
