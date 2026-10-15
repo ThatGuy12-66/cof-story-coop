@@ -62,5 +62,21 @@ class ServerRuleTests(unittest.TestCase):
         self.assertIn('inventory12 server rules passed', out)
 
 
+class ClientStoreTests(unittest.TestCase):
+    def test_store(self):
+        out = run_native(self, 'cof_inv12_client_harness.c',
+                         {'state_under_test.h': (ENGINE_CLIENT / 'cof_inventory12_state.h').read_text()})
+        self.assertIn('inventory12 client store passed', out)
+
+    def test_accessor_against_retail_client(self):
+        if not retail(CLIENT_DLL, CLIENT_SHA):
+            self.skipTest('the retail Cry of Fear 1.6 client.dll is not installed locally')
+        out = run_x86(self, 'cof_inv12_accessor_harness.c', {
+            'state_under_test.h': (ENGINE_CLIENT / 'cof_inventory12_state.h').read_text(),
+            'patch_under_test.h': (ENGINE_CLIENT / 'cof_inventory12_patch.h').read_text(),
+        }, [CLIENT_DLL])
+        self.assertIn('inventory12 client.dll accessor passed', out)
+
+
 if __name__ == '__main__':
     unittest.main()
