@@ -275,6 +275,34 @@ def query_server(endpoint: Endpoint, timeout: float = 2) -> dict:
     raise NetworkError(f'No server reply from {endpoint}. Check the game, firewall, and UDP {endpoint.port}; for Internet play use forwarding or a shared VPN.')
 
 
+def parse_info_reply(payload: bytes) -> dict:
+    """A Xash `info` reply: 'info\\n' and an infostring \\key\\value..., or '<host>: wrong version'."""
+    text = payload.decode('latin-1')
+    if not text.startswith('info\n'):
+        raise NetworkError('The server did not answer like a Cry of Fear co-op game.')
+    body = text[5:].rstrip('\n')
+    if not body.startswith('\\'):
+        raise NetworkError('The host runs a different version of the game engine.')
+    parts = body[1:].split('\\')
+    if len(parts) % 2:
+        raise NetworkError('The server sent a damaged reply.')
+    return dict(zip(parts[::2], parts[1::2]))
+
+
+def query_info(endpoint: Endpoint, timeout: float = 2) -> dict:
+    """Ask a Xash server for its info string (the engine's `info <protocol>` query)."""
+    deadline = _deadline(timeout)
+    address = _resolve(endpoint, deadline)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(address)
+            sock.send(_HEADER + b'info 49')
+            return parse_info_reply(_recv_message(sock, deadline))
+    except (OSError, TimeoutError) as exc:
+        raise NetworkError(f'No answer from {endpoint}. Check the address, that the host’s game is running, '
+                           f'and that UDP {endpoint.port} reaches the host (router port or a shared VPN).') from exc
+
+
 def rcon(endpoint: Endpoint, password: str, command: str, timeout: float = 2) -> str:
     """GoldSrc UDP challenge RCON for validated host/session controls.
 

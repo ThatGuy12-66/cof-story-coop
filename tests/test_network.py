@@ -384,5 +384,42 @@ class UpnpTests(unittest.TestCase):
         self.assertEqual(Gateway.actions, [])
 
 
+class InfoQueryTests(unittest.TestCase):
+    """The Xash `info` query the tester app uses to check a host before joining."""
+
+    def test_parse_info_reply(self):
+        info = network.parse_info_reply(b'info\n\\p\\49\\map\\c_start\\numcl\\1\\maxcl\\2\\password\\0'
+                                        b'\\cofbuild\\test1\\host\\Bob\'s game')
+        self.assertEqual((info['map'], info['cofbuild'], info['host']), ('c_start', 'test1', "Bob's game"))
+        with self.assertRaisesRegex(network.NetworkError, 'different version'):
+            network.parse_info_reply(b"info\nBob's game: wrong version\n")
+        for bad in (b'xyz', b'info\n\\odd'):
+            with self.subTest(bad=bad), self.assertRaises(network.NetworkError):
+                network.parse_info_reply(bad)
+
+    def test_query_info_against_a_loopback_server(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server:
+            server.bind(('127.0.0.1', 0))
+            received = []
+
+            def answer():
+                data, peer = server.recvfrom(256)
+                received.append(data)
+                server.sendto(HEADER + b'info\n\\p\\49\\numcl\\0\\maxcl\\4\\cofbuild\\test1', peer)
+            thread = threading.Thread(target=answer)
+            thread.start()
+            info = network.query_info(network.Endpoint('127.0.0.1', server.getsockname()[1]), timeout=2)
+            thread.join()
+        self.assertEqual(received, [HEADER + b'info 49'])
+        self.assertEqual((info['maxcl'], info['cofbuild']), ('4', 'test1'))
+
+    def test_query_info_without_a_server(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as idle:
+            idle.bind(('127.0.0.1', 0))
+            port = idle.getsockname()[1]
+        with self.assertRaises(network.NetworkError):
+            network.query_info(network.Endpoint('127.0.0.1', port), timeout=0.5)
+
+
 if __name__ == '__main__':
     unittest.main()
