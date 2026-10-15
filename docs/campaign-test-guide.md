@@ -100,7 +100,7 @@ Story co-op only; `cof_inventory_slots 6` on the host gives the retail six. Host
 2. Fill all 12 boxes (the test gun plus story items). The inventory shows a 4x3 grid: BAG over two rows, POCKETS over the third. Each pickup into slots 7..12 shows "You got the ...".
 3. Equip a weapon in slot 7..12; use a key from slot 7..12 on its door; drop an item from slot 9; combine the Glock with the tactical light across slots 6 and 7; assign quick select 2 from slot 9 (its picture appears under QUICK SELECT).
 4. Open an item's menu, then click the box next to it: that box's menu opens (the old slot-6 bug).
-5. Level change, death and respawn, `cof_save test12` / `cof_load test12`, and an autosave from before this build: slots 7..12 are kept, the old save loads with them empty.
+5. Level change, death and respawn, a checkpoint save and load (`cof_save test12` / `cof_load test12`), and an autosave from before this build: slots 7..12 are kept, the old save loads with them empty.
 6. After a full clear (`c_start`), `cof_story_status` shows the morphine/syringe state unchanged (the bytes after the slot array).
 7. A copy still on the previous engine joins a map at 12: refused with "This game uses the 12-slot inventory." Connected before a map loads: that map runs at six (`reason=client:<userid>`), slots 7..12 come back on the next map at 12.
 8. `c_nightmare`: the inventory still does not open (the game's own rule).
