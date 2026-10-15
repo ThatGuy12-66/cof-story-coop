@@ -28,6 +28,8 @@ Everyone must use the same test package.
 
 Start a new game (the intro), any chapter, or Continue from the last co-op checkpoint.
 The game makes a co-op checkpoint by itself after every level change.
+Tick "Bonus room unlocked" to open the bonus room (FAMAS, axe and more) for everyone.
+Dual wield (two pistols, or a pistol and a light) works from the inventory menu.
 
 CO-OP KEYS
 J      join your partner (when the screen says "Press J to join")

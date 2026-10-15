@@ -42,6 +42,15 @@ class StartTests(unittest.TestCase):
         for line in ('sv_lan 1', 'sv_password ""', 'cof_companion 1', 'cof_continue 1'):
             self.assertIn(line + '\n', cfg)
 
+    def test_bonus_room_is_the_hosts_choice_and_shut_by_default(self):
+        _, cfg = play.host_launch(Path('copy'), solo=True, name='Bob', map_name='c_start', players=2, password='',
+                                  companion=False, port=27015, cont=False, video=[])
+        self.assertIn('cof_bonus_room 0\n', cfg)                       # shut, whatever the tester's own game says
+        _, cfg = play.host_launch(Path('copy'), solo=False, name='Bob', map_name='c_start', players=2, password='',
+                                  companion=False, port=27015, cont=False, video=[], bonus_room=True)
+        self.assertIn('cof_bonus_room 1\n', cfg)
+        self.assertIs(play.DEFAULT_SETTINGS['bonus_room'], False)
+
     def test_story_config_removes_the_test_tools(self):
         cfg = play.story_config()
         for line in ('cof_story_coop 1', 'cof_story_trace 1', 'sv_cheats 0', 'sv_enttools_enable 0', 'cof_test_gun 0',

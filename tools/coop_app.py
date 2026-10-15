@@ -299,6 +299,9 @@ class App:
         password = tk.StringVar(value=self.settings["password"])
         companion = tk.BooleanVar(value=self.settings["companion"])
         port = tk.StringVar(value=str(self.settings["port"]))
+        bonus = tk.BooleanVar(value=self.settings["bonus_room"])
+        ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; in Chapter 1 and the bridge)",
+                        variable=bonus).pack(anchor="w", pady=(8, 0))
         if not solo:
             ttk.Frame(body, height=8).pack()
             ttk.Spinbox(self.row(body, "Players", 12), from_=2, to=4, textvariable=players, width=5).pack(side="left")
@@ -319,8 +322,9 @@ class App:
             number = play.DEFAULT_PORT if solo else play.clean_port(port.get())
             args, config = play.host_launch(self.root, solo=solo, name=name, map_name=map_name, players=count,
                                             password=password.get(), companion=companion.get(), port=number,
-                                            cont=checkpoint is not None, video=self.video())
+                                            cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get())
             self.launch(args, config)
+            self.remember(bonus_room=bonus.get())
             if not solo:
                 self.remember(players=self.settings["players"] if checkpoint else count, password=password.get(),
                               companion=companion.get(), port=number)

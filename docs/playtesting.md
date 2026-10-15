@@ -60,6 +60,10 @@ Solo and Host both start with **New game** (the intro), a **chapter**, or **Cont
 last co-op checkpoint (experimental). The game makes a checkpoint by itself after every level
 change. Continue gives your items back only under the name you saved with.
 
+**Bonus room unlocked** (Solo and Host) opens the bonus room of Chapter 1 and the bridge, with the
+FAMAS, the axe and the other bonus items, for everyone in that game. Unticked, it stays shut, even
+if your own Cry of Fear has it unlocked.
+
 The first game opens full screen at your desktop's size; change it in the game's Options.
 
 ## Controls
@@ -90,7 +94,9 @@ times faster to its end, and every scripted event still happens. You'll see
 - **Death:** after about 10 seconds, press jump to respawn next to your partner with your items.
   A partner can also revive you.
 - **Story items:** keys, notes and codes count for everyone. Weapons the story hands out go to everyone.
-- **Inventory:** 12 slots instead of 6.
+- **Inventory:** 12 slots instead of 6. **Dual wield** works (two pistols, or a pistol and a
+  light); others see you with empty hands while you dual wield, and two people dual-wielding at
+  the same moment may mix up the left-hand animations.
 - **Ladders:** one person at a time. **Yes/no questions:** only the person asked can answer.
 - **AI companion:** it follows you, opens doors, fights, heals you with syringes and revives you.
   It never takes exits, items or story triggers.

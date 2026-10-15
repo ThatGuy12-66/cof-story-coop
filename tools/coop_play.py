@@ -36,7 +36,7 @@ STORY_SETTINGS = (
     "cl_sidespeed 200", "+mlook",
 )
 DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion": False, "password": "",
-                    "first_launch_done": False}
+                    "bonus_room": False, "first_launch_done": False}
 _MAP = re.compile(r"[a-z0-9_]{1,32}\Z")
 _SLOT = re.compile(r"[a-z0-9_-]{1,24}\Z")
 _ARCHIVE = struct.Struct("<5I")      # cof_archive_header_t: magic, version, count, size, checksum
@@ -91,8 +91,12 @@ def video_flags(first_launch: bool, desktop) -> list[str]:
 
 
 def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
-                companion: bool, port: int, cont: bool, video: list[str]) -> tuple[list[str], str]:
-    """Play solo (LAN only, with the AI companion) or host: the command line and the session cfg."""
+                companion: bool, port: int, cont: bool, video: list[str],
+                bonus_room: bool = False) -> tuple[list[str], str]:
+    """Play solo (LAN only, with the AI companion) or host: the command line and the session cfg.
+
+    bonus_room opens the bonus room of c_start and c_bridge (the FAMAS, the axe and the
+    rest) for everyone in this game; shut otherwise, whatever the host's own game says."""
     name = clean_name(name)
     password = "" if solo else clean_password(password)
     map_name = map_name.lower()
@@ -103,7 +107,7 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {1 if solo or companion else 0}", "cof_companion_drive 0",
-             f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}"]
+             f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}"]
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
     return args, "\n".join(lines) + "\n"
