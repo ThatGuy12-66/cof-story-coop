@@ -127,6 +127,10 @@ class App:
         return run
 
     def close(self):
+        from tkinter import messagebox
+        warning = play.close_warning(self.watch)
+        if warning and not messagebox.askokcancel("Cry of Fear Co-op", warning, parent=self.window):
+            return
         if self.watch:
             self.watch.close()
         self.window.destroy()

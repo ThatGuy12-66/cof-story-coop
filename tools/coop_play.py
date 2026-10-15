@@ -213,6 +213,14 @@ def save_settings(root: Path, settings: dict) -> None:
     os.replace(temp, path)
 
 
+def close_warning(watch) -> str | None:
+    """The question to ask before the app closes while it still holds a hosted game's router port."""
+    if watch is None or watch.lan_only or watch.closed:
+        return None
+    return ("Your game may still be running. Closing this window closes the router port, and friends "
+            "who joined over the Internet can drop. Close anyway?")
+
+
 class HostWatch:
     """While a hosted (or solo) game runs: the router mapping, the join code and the player count.
 

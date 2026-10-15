@@ -190,6 +190,16 @@ class HostWatchTests(unittest.TestCase):
         now[0] = 91
         self.assertIn('another program', watch.poll(True))
 
+    def test_closing_the_app_while_hosting_asks_first(self):
+        # closing removes the router port, which can drop friends who are still playing
+        self.assertIsNone(play.close_warning(None))
+        self.assertIsNone(play.close_warning(play.HostWatch(27015, lan_only=True, net=FakeNet())))
+        watch = play.HostWatch(27015, lan_only=False, net=FakeNet())
+        watch.open_router()
+        self.assertIn('drop', play.close_warning(watch))
+        watch.close()
+        self.assertIsNone(play.close_warning(watch))
+
     def test_solo_never_touches_the_router(self):
         net = FakeNet()
         watch = play.HostWatch(27015, lan_only=True, net=net)
