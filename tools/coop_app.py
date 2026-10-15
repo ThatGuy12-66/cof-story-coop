@@ -50,6 +50,13 @@ def desktop_size():
     return ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
 
 
+def start_game(root: Path, args: list[str]) -> subprocess.Popen:
+    """CoFLaunchApp.exe is a console program: without CREATE_NO_WINDOW, Windows opens a
+    console window beside the game (and closing that window would close the game)."""
+    return subprocess.Popen(args, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, creationflags=0x08000000)   # CREATE_NO_WINDOW
+
+
 def where_to_start(exe_dir: Path, default_copy: Path, build: int):
     """'main' (a copy to play from), 'update' (an older copy), 'newer' (a copy newer than this app) or 'setup'."""
     if setup_lib.installed_state(exe_dir):
@@ -252,7 +259,7 @@ class App:
         (self.root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
         (self.root / "cryoffear" / play.SESSION_CFG).write_text(config, encoding="ascii")
         setup_lib.keep_previous_log(self.root, play.LOG)
-        subprocess.Popen(args, cwd=self.root)
+        start_game(self.root, args)
         self.remember(name=self.name.get().strip(), first_launch_done=True)
 
     def video(self):

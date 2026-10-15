@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools import coop_app as app
 from tools import friend_setup as friend
@@ -26,6 +27,16 @@ class StartTests(unittest.TestCase):
             self.assertEqual(app.where_to_start(downloads, copy, 0), ("newer", copy))
             # the app started from inside a copy plays from that copy
             self.assertEqual(app.where_to_start(copy, Path(temp) / "elsewhere", 1), ("main", copy))
+
+    def test_the_game_starts_without_a_console_window(self):
+        # CoFLaunchApp.exe is a console program: started from the windowed app, Windows
+        # would open a console beside the game (live 2026-10-15: irrKlang warnings on screen)
+        with mock.patch.object(app.subprocess, "Popen") as popen:
+            app.start_game(Path("copy"), ["copy/CoFLaunchApp.exe", "+map", "c_intro"])
+        kwargs = popen.call_args.kwargs
+        self.assertEqual(kwargs["cwd"], Path("copy"))
+        self.assertTrue(kwargs["creationflags"] & 0x08000000)   # CREATE_NO_WINDOW
+        self.assertEqual(kwargs["stdin"], app.subprocess.DEVNULL)
 
     def test_cli_install_needs_a_payload_outside_the_exe(self):
         self.assertEqual(app.main(["--install", "src", "dst"]), 2)
