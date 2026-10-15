@@ -13,6 +13,16 @@ class CoopEngineTests(unittest.TestCase):
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         self.assertRegex(story, r'Cvar_Get\( "cof_build", "", 0,')
 
+    def test_a_stacked_player_still_touches_triggers(self):
+        # SV_LinkEdict returns early for SOLID_NOT bodies; the stacked-player rule
+        # (cof_moments_harness) must run in that branch, before the return
+        world = (ENGINE_SERVER / 'sv_world.c').read_text()
+        branch = world[world.index('// ignore non-solid bodies'):]
+        branch = branch[:branch.index('return;')]
+        self.assertIn('SV_CoF_MomentsStackedTouch( ent )', branch)
+        self.assertIn('SV_TouchLinks( ent, sv_areanodes )', branch)
+        self.assertIn('iTouchLinkSemaphore', branch)
+
     def test_continue_is_registered(self):
         session = (ENGINE_SERVER / 'sv_cof_session.inc').read_text()
         self.assertRegex(session, r'cof_continue = Cvar_Get\( "cof_continue", "0", 0,')

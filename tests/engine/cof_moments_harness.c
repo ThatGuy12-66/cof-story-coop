@@ -16,6 +16,8 @@ typedef float vec3_t[3];
 #define cs_spawned 4
 #define ss_active 2
 #define DEAD_NO 0
+#define SOLID_NOT 0
+#define SOLID_SLIDEBOX 3
 #define FL_GODMODE (1<<6)
 #define FL_FROZEN (1<<12)
 #define FL_KILLME (1<<30)
@@ -37,7 +39,7 @@ typedef struct {
 	string_t classname, target, targetname;
 	vec3_t origin, absmin, absmax;
 	float health, nextthink, fuser3;
-	int deadflag, flags, spawnflags, iuser1;
+	int deadflag, flags, spawnflags, iuser1, solid;
 	edict_t *owner;
 } entvars_t;
 struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; };
@@ -326,6 +328,28 @@ int main( void )
 	has_phone[0] = 2; assert( CoF_MomentHasPhone( &clients[0] ));
 	has_phone[0] = 0; assert( !CoF_MomentHasPhone( &clients[0] ));
 
+	/* Two players stacked on one spot (c_intro's last room, kunitei, fits one: the party
+	 * shares the owner's spot). Retail MP PreThink makes a player SOLID_NOT while it
+	 * overlaps another, and the engine skips trigger touches for SOLID_NOT bodies: the
+	 * exit there never fired while an idle companion stood on the player (live 2026-10-15).
+	 * A living stacked player still stands in its triggers. */
+	setup();
+	{
+		vec3_t lo = { -16, -16, -36 }, hi = { 16, 16, 36 };
+		VectorCopy( lo, host->v.absmin ); VectorCopy( hi, host->v.absmax );
+		VectorCopy( lo, guest->v.absmin ); VectorCopy( hi, guest->v.absmax );
+	}
+	host->v.solid = guest->v.solid = SOLID_NOT;
+	assert( SV_CoF_MomentsStackedTouch( host ) && SV_CoF_MomentsStackedTouch( guest ));
+	host->v.solid = SOLID_SLIDEBOX; assert( !SV_CoF_MomentsStackedTouch( host )); host->v.solid = SOLID_NOT;
+	guest->v.absmin[0] += 40; guest->v.absmax[0] += 40;           /* apart: SOLID_NOT for another reason */
+	assert( !SV_CoF_MomentsStackedTouch( host ));
+	guest->v.absmin[0] -= 40; guest->v.absmax[0] -= 40;
+	guest->v.health = 0; assert( !SV_CoF_MomentsStackedTouch( host )); /* a body is no partner */
+	guest->v.health = 100; host->v.deadflag = 1; assert( !SV_CoF_MomentsStackedTouch( host )); /* the dead touch nothing */
+	host->v.deadflag = DEAD_NO;
+	gate = 0; assert( !SV_CoF_MomentsStackedTouch( host )); gate = 1;
+	assert( !SV_CoF_MomentsStackedTouch( &entities[5] ) && !SV_CoF_MomentsStackedTouch( NULL ));
 	puts( "moments scenarios passed" );
 	return 0;
 }
