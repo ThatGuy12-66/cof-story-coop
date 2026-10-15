@@ -1,7 +1,7 @@
 /* Opt-in Cry of Fear story party coordination. GPL-3.0-or-later.
- * Retail 1.6 player save table: inventorySlot[7] at +21FC contains item
- * descriptor paths; slot0 is unused. The legacy classname array at +2234
- * stays empty. Confirmed by item assignment at VA100DAE08 and live state.
+ * Retail 1.6 player: inventorySlot[] at +21FC holds item descriptor paths,
+ * slots 1..12 in story co-op (sv_cof_inventory12_patch.h); slot 0 is unused.
+ * The legacy classname array at +2234 stays empty. Confirmed by item assignment at VA100DAE08 and live state.
  * b_GoingThroughADoor is +1EA4, m_vPreviousOrigin is +618.
  * inter_door EndSequence (10048070) resolves pev.target, moves its owner
  * to exit.origin - player.mins.z + 1, then fires targets which may remove
@@ -21,7 +21,7 @@
 #define COF_PARTY_DOOR_FLAG 0x1EA4
 #define COF_PARTY_PREVIOUS_ORIGIN 0x618
 #define COF_PARTY_INVENTORY 0x21FC
-#define COF_PARTY_SLOTS 7
+#define COF_PARTY_SLOTS 13 // indices 0..12; 0 is never used
 #define COF_PARTY_PLAYER_SIZE (COF_PARTY_INVENTORY + COF_PARTY_SLOTS * sizeof( string_t ))
 // Retail PreThink (100EF2D0) makes a player SOLID_NOT while its absbox touches
 // another player's; boxes are padded 1 unit, so centers 34 apart still touch.

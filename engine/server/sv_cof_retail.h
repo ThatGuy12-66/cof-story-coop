@@ -3,11 +3,11 @@
 #ifndef SV_COF_RETAIL_H
 #define SV_COF_RETAIL_H
 #include "sv_cof_state_data.h"
-#define COF_RETAIL_SLOTS 6 // usable inventory slots 1..6 (the game never uses index 0)
+#define COF_RETAIL_SLOTS 12 // inventory slots 1..12 the engine reads and carries (index 0 is never used); SV_CoF_InventorySlots() says how many this map uses
 #define COF_RETAIL_ITEM 64 // descriptor path buffer
 
 void SV_CoF_RetailInit( void );
-// The descriptors in usable slots 1..6 ("" when empty); false without a verified, spawned player.
+// The descriptors in usable slots 1..12 ("" when empty); false without a verified, spawned player.
 qboolean SV_CoF_RetailReadSlots( sv_client_t *cl, char slots[COF_RETAIL_SLOTS][COF_RETAIL_ITEM] );
 // Empty usable slots (only 1..3 count in the game's three-slot mode), or -1 without a verified player.
 int SV_CoF_RetailFreeSlots( sv_client_t *cl );

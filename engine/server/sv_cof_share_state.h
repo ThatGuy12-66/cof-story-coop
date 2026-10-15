@@ -11,7 +11,7 @@
 #include "sv_cof_descriptor.h"
 
 #define COF_SHARE_PLAYERS 32
-#define COF_SHARE_SLOTS 6
+#define COF_SHARE_SLOTS 12 // = COF_RETAIL_SLOTS (sv_cof_share.c checks)
 #define COF_SHARE_ITEMS 64
 #define COF_SHARE_NAME 64
 #define COF_SHARE_EVENTS 16

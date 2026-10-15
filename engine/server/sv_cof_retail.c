@@ -8,10 +8,11 @@
 #include "sv_cof_story.h"
 #include "sv_cof_descriptor.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_inventory12.h"
 
-#define COF_RETAIL_INVENTORY   0x21FC // string_t inventorySlot[7], slots 1..6 used (AddInventoryItem 100DAD40)
+#define COF_RETAIL_INVENTORY   0x21FC // string_t inventorySlot[], slots 1..12 in place (AddInventoryItem 100DAD40; sv_cof_inventory12_patch.h)
 #define COF_RETAIL_THREE_SLOTS 0x1E9C // bool m_bThreeSlots: only slots 1..3 usable
-#define COF_RETAIL_PLAYER_NEED ( COF_RETAIL_INVENTORY + 7 * sizeof( string_t ))
+#define COF_RETAIL_PLAYER_NEED ( COF_RETAIL_INVENTORY + ( COF_RETAIL_SLOTS + 1 ) * sizeof( string_t ))
 #define COF_RETAIL_CACHE       128
 
 // Documents (docs/research/2026-09-30-hl-documents-story-state-re.md, project repo)
@@ -195,7 +196,7 @@ int SV_CoF_RetailFreeSlots( sv_client_t *cl )
 	byte *pv = CoF_RetailPlayer( cl );
 	int i, usable, count = 0;
 	if( !pv ) return -1;
-	usable = pv[COF_RETAIL_THREE_SLOTS] ? 3 : COF_RETAIL_SLOTS;
+	usable = pv[COF_RETAIL_THREE_SLOTS] ? 3 : SV_CoF_InventorySlots();
 	for( i = 1; i <= usable; i++ )
 	{
 		string_t id;

@@ -218,7 +218,7 @@ static void CoF_StoryStatus_f( void )
 		Con_Printf( "cofstory phase=player slot=%d userid=%d ready=1 origin=%.3f,%.3f,%.3f door=%d hidden=%d flags=%d health=%.3f fakeclient=%d frozen=%d\n", i, cl->userid, p->v.origin[0], p->v.origin[1], p->v.origin[2], pv ? pv[0x1EA4] : -1, !!( p->v.effects & EF_NODRAW ), p->v.flags, p->v.health, !!( p->v.flags & FL_FAKECLIENT ), !!( p->v.flags & FL_FROZEN ));
 		if( pv )
 		{
-			for( j = 0; j < 7; j++ )
+			for( j = 0; j <= 12; j++ ) // inventorySlot[0..12]; 1..12 hold items in story co-op (sv_cof_inventory12_patch.h)
 			{
 				string_t id;
 				// Actual descriptor slots; index0 is unused by retail item assignment.
