@@ -188,7 +188,7 @@ repository:
 - `baseline/Cry of Fear`: a copy of the Steam game (the retail launcher and some tests use it).
 - `runtimes/enhanced`: the Enhanced runtime the host plays with.
 - `evidence/story-live-20261012/host` and `guest`: the disposable pair that
-  `tools/Prepare-CampaignTest.ps1` (installs a build, checks its SHA-256) and
+  `tools/Prepare-CampaignTest.ps1` (installs a build's `xash.dll` and `vgui.dll` together, checks both SHA-256s) and
   `tools/Start-CampaignTest.ps1` use. The script that made them lives in that ignored folder.
 
 Ask the host before you set these up. The details are in the [README](../README.md),

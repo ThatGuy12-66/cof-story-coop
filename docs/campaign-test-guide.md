@@ -9,14 +9,14 @@ normal `runtimes/enhanced` copy and its saves).
 With both test games closed, in PowerShell from the project folder:
 
 ```powershell
-# Already done on 2026-10-12 for build 3D860BC7…; repeat only after a new build:
-# .\tools\Prepare-CampaignTest.ps1 -ExpectedSha256 3D860BC7354464B200EA5A84FD187E2293D5C627D1AC79CFBAD665D38626A12D
+# Only after a new build; both hashes from that build (xash.dll and vgui.dll are installed together):
+# .\tools\Prepare-CampaignTest.ps1 -ExpectedSha256 <xash.dll SHA-256> -ExpectedVguiSha256 <vgui.dll SHA-256>
 .\tools\Start-CampaignTest.ps1                   # solo mode, starts at c_intro; -Map c_start skips the intro
 .\tools\Start-CampaignTest.ps1 -Mode companion   # one window, an AI companion bot beside you
 .\tools\Start-CampaignTest.ps1 -Gun shotgun      # any mode: the test gun (default m16; -Gun none: off)
 ```
 
-`Prepare` installs the newest engine (only if its hash matches), retires the `c_start`/`c_start2`
+`Prepare` installs the newest engine and its `vgui.dll` (only if both hashes match), retires the `c_start`/`c_start2`
 test-fixture overrides (moved aside, not deleted) and writes `cof_campaign.cfg` with cheats off.
 `Start` has three modes:
 
@@ -95,15 +95,24 @@ inventory brought back after a death or a checkpoint load.
 ## 12-slot inventory (engine with the 2026-10-14 inventory build)
 
 Story co-op only; `cof_inventory_slots 6` on the host gives the retail six. Host console: `cof_inventory12_status`, `cof_story_status` (13 `inventory-slot` lines per player).
+The copies are prepared with `.\tools\Prepare-CampaignTest.ps1 -ExpectedSha256 <xash.dll hash> -ExpectedVguiSha256 <vgui.dll hash>`,
+both hashes from the same build: `xash.dll` and `vgui.dll` share an interface that every engine build changes, so they are
+always installed together.
 
 1. `cof_inventory12_status` reads `slots=12 cvar=12 keep=1 wide=1 reason=none`; the host log has `cofstory phase=inventory12 slots=12` for each map.
 2. Fill all 12 boxes (the test gun plus story items). The inventory shows a 4x3 grid: BAG over two rows, POCKETS over the third. Each pickup into slots 7..12 shows "You got the ...".
-3. Equip a weapon in slot 7..12; use a key from slot 7..12 on its door; drop an item from slot 9; combine the Glock with the tactical light across slots 6 and 7; assign quick select 2 from slot 9 (its picture appears under QUICK SELECT).
+3. Equip a weapon in slot 7..12; use a key from slot 7..12 on its door; drop an item from slot 9; combine the Glock with the tactical light across slots 6 and 7; assign quick select 2 from slot 9: the picture appears under QUICK SELECT right after choosing 1/2/3.
 4. Open an item's menu, then click the box next to it: that box's menu opens (the old slot-6 bug).
 5. Level change, death and respawn, a checkpoint save and load (`cof_save test12` / `cof_load test12`), and an autosave from before this build: slots 7..12 are kept, the old save loads with them empty.
-6. After a full clear (`c_start`), `cof_story_status` shows the morphine/syringe state unchanged (the bytes after the slot array).
+6. Run `cof_inventory12_status` before and after a full clear (`c_start`): every `inventory12-fields` value is the same, and `dead=0` (the bytes after the slot array).
 7. A copy still on the previous engine joins a map at 12: refused with "This game uses the 12-slot inventory." Connected before a map loads: that map runs at six (`reason=client:<userid>`), slots 7..12 come back on the next map at 12.
+   To get the older client, with both games closed, in ONE copy only (e.g. `guest`): rename the two backups from
+   before this build over the installed files, `xash.dll.<hash8>.bak` over `xash.dll` and `vgui.dll.<hash8>.bak` over
+   `vgui.dll` (`<hash8>`: the first 8 characters of that file's SHA-256; until this build the copies held `xash.dll`
+   `3D860BC7…` and `vgui.dll` `F77963A0…`). Both files, never one: they belong together. Afterwards run
+   `Prepare-CampaignTest.ps1` again with the same arguments to put this build back into that copy.
 8. `c_nightmare`: the inventory still does not open (the game's own rule).
+9. A weapon in slot 9 survives a level change and a death/respawn, and can still be equipped afterwards.
 
 ## If something goes wrong
 

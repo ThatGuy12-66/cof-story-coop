@@ -8,8 +8,10 @@ runtimes\enhanced and runtimes\enhanced-local-client copies, saves and configs a
 Nothing is deleted: fixture map overrides and the previous engine are moved/copied aside.
 
 - Refuses while either copy's game is running.
-- Installs the engine only if its SHA-256 matches -ExpectedSha256.
-- With -ExpectedVguiSha256, installs the matching vgui.dll (FreeVGUI; it shares vguiapi_t with xash.dll, so both come from one build).
+- Installs the engine only if its SHA-256 matches -ExpectedSha256, and always together with its
+  vgui.dll (FreeVGUI, -Vgui), only if that matches -ExpectedVguiSha256. Both are required: the two
+  share vguiapi_t, which every engine build changes, so xash.dll is never installed without the
+  vgui.dll from the same build.
 - Generates the 12-slot inventory's grid art from each copy's own retail images (tools\make_inventory12_art.py).
 - Retires the c_start/c_start2 fixture .ent overrides (they replace campaign entities).
 - Writes cryoffear\cof_campaign.cfg for each copy: story co-op on, cheats off, J = cof_warp,
@@ -21,7 +23,7 @@ param(
     [Parameter(Mandatory = $true)][string]$ExpectedSha256,
     [string]$Engine,
     [string]$Vgui,
-    [string]$ExpectedVguiSha256,
+    [Parameter(Mandatory = $true)][string]$ExpectedVguiSha256,
     [string]$Root
 )
 $ErrorActionPreference = 'Stop'
@@ -34,11 +36,8 @@ if ($Root -notlike (Join-Path $project 'evidence\*')) { throw 'Only disposable c
 
 $hash = (Get-FileHash -LiteralPath $Engine).Hash
 if ($hash -ne $ExpectedSha256.ToUpperInvariant()) { throw "Engine hash $hash does not match the expected build." }
-$vguiHash = $null
-if ($ExpectedVguiSha256) {
-    $vguiHash = (Get-FileHash -LiteralPath $Vgui).Hash
-    if ($vguiHash -ne $ExpectedVguiSha256.ToUpperInvariant()) { throw "vgui.dll hash $vguiHash does not match the expected build." }
-}
+$vguiHash = (Get-FileHash -LiteralPath $Vgui).Hash
+if ($vguiHash -ne $ExpectedVguiSha256.ToUpperInvariant()) { throw "vgui.dll hash $vguiHash does not match the expected build." }
 
 $roles = @('host', 'guest')
 foreach ($role in $roles) {
@@ -73,16 +72,15 @@ foreach ($role in $roles) {
         Copy-Item -LiteralPath $Engine -Destination $installed -Force
     }
     if ((Get-FileHash -LiteralPath $installed).Hash -ne $hash) { throw "Engine copy failed: $role" }
-    if ($vguiHash) {
-        $installedVgui = Join-Path $copy 'vgui.dll'
-        $oldVgui = (Get-FileHash -LiteralPath $installedVgui).Hash
-        if ($oldVgui -ne $vguiHash) {
-            $backup = Join-Path $copy ("vgui.dll.{0}.bak" -f $oldVgui.Substring(0, 8))
-            if (-not (Test-Path -LiteralPath $backup)) { Copy-Item -LiteralPath $installedVgui -Destination $backup }
-            Copy-Item -LiteralPath $Vgui -Destination $installedVgui -Force
-        }
-        if ((Get-FileHash -LiteralPath $installedVgui).Hash -ne $vguiHash) { throw "vgui.dll copy failed: $role" }
+    # The vgui.dll of the same build, the previous one kept beside it the same way.
+    $installedVgui = Join-Path $copy 'vgui.dll'
+    $oldVgui = (Get-FileHash -LiteralPath $installedVgui).Hash
+    if ($oldVgui -ne $vguiHash) {
+        $backup = Join-Path $copy ("vgui.dll.{0}.bak" -f $oldVgui.Substring(0, 8))
+        if (-not (Test-Path -LiteralPath $backup)) { Copy-Item -LiteralPath $installedVgui -Destination $backup }
+        Copy-Item -LiteralPath $Vgui -Destination $installedVgui -Force
     }
+    if ((Get-FileHash -LiteralPath $installedVgui).Hash -ne $vguiHash) { throw "vgui.dll copy failed: $role" }
     # The 12-slot inventory's grid art, from this copy's own retail images
     Push-Location $project
     try { & python -m tools.make_inventory12_art $copy | Out-Null } finally { Pop-Location }
@@ -104,6 +102,5 @@ foreach ($role in $roles) {
     }
     [IO.File]::WriteAllText((Join-Path $copy 'cryoffear\cof_campaign.cfg'), ($settings -join "`n") + "`n")
 }
-"Prepared host and guest campaign copies with engine $hash."
-if ($vguiHash) { "vgui.dll $vguiHash installed beside it." }
+"Prepared host and guest campaign copies with engine $hash and vgui.dll $vguiHash."
 if (Test-Path -LiteralPath $retired) { "Fixture overrides moved to $retired." }
