@@ -16,6 +16,7 @@ key _cofinv 12; the server says each map's slot count with cof_inv_slots.
 #include "vgui_api.h"
 #include "sv_cof_descriptor.h"
 #include "cof_inventory12_state.h"
+#include "cof_language.h"
 // Code patching only where the rest of the story co-op does it (sv_cof_story.c)
 #if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
 #define COF_INV12_PATCH 1
@@ -38,7 +39,7 @@ static struct
 	qboolean patched;	// client.dll's accessor reads the store
 	qboolean grid;		// the UI library has the grid
 	int slots;		// the server's cof_inv_slots for this map: 12, 6, or 0 before it said
-	struct { char descriptor[COF_INV12_TEXT]; cof_vgui_inv_item_t item; } cache[COF_INV12_SLOTS + 1];
+	struct { char path[MAX_SYSPATH]; /* the resolved descriptor file */ cof_vgui_inv_item_t item; } cache[COF_INV12_SLOTS + 1];
 } cof_inv12;
 
 qboolean CL_CoF_Inventory12Ready( void )
@@ -98,13 +99,34 @@ void CL_CoF_Inventory12ClearState( void )
 	cof_inv12.slots = 0; // the server says it again for the next map
 }
 
+// A descriptor's text through the language pack, as the engine's own
+// COM_LoadFile does for client.dll's reads. `path` gets the file read (the pack's
+// when it has one). False for an empty or unsafe descriptor.
+static qboolean CL_CoF_Inv12Resolve( const char *descriptor, char *path, size_t size )
+{
+	char name[MAX_SYSPATH], pack[MAX_SYSPATH];
+	Q_strncpy( path, descriptor, size );
+	if( !descriptor[0] || !CoF_DescriptorSafe( descriptor )) return false;
+	Q_strncpy( name, descriptor, sizeof( name ));
+	COM_FixSlashes( name );
+	if( CoF_Lang_GameFile( name, pack, sizeof( pack )))
+		Q_strncpy( path, pack, size );
+	return true;
+}
+
+static byte *CL_CoF_Inv12LoadDescriptor( const char *descriptor, char *path, size_t size )
+{
+	return CL_CoF_Inv12Resolve( descriptor, path, size ) ? FS_LoadFile( path, NULL, false ) : NULL;
+}
+
 static void CL_CoF_Inv12Pickup( const char *descriptor )
 {
 	char nice[64];
 	byte line[192];
+	char path[MAX_SYSPATH];
 	byte *text;
 	int length;
-	if( !descriptor[0] || !CoF_DescriptorSafe( descriptor ) || !( text = FS_LoadFile( descriptor, NULL, false ))) return;
+	if( !( text = CL_CoF_Inv12LoadDescriptor( descriptor, path, sizeof( path )))) return;
 	CoF_DescriptorValue( (const char *)text, "nice_name", nice, sizeof( nice ));
 	Mem_Free( text );
 	length = CoF_Inv12PickupLine( nice, line, sizeof( line ));
@@ -149,17 +171,20 @@ static void CL_CoF_Inv12Slots_f( void )
 static int CL_CoF_Inv12Item( int slot, cof_vgui_inv_item_t *out )
 {
 	const char *d;
+	char path[MAX_SYSPATH];
+	qboolean safe;
 	if( slot < 1 || slot > COF_INV12_SLOTS ) return -1;
 	d = cof_inv12_store.slot[slot];
-	if( Q_strcmp( cof_inv12.cache[slot].descriptor, d )) // read each descriptor file once
+	safe = CL_CoF_Inv12Resolve( d, path, sizeof( path ));
+	if( Q_strcmp( cof_inv12.cache[slot].path, path )) // read each descriptor file once (a language pack change re-reads)
 	{
 		cof_vgui_inv_item_t *it = &cof_inv12.cache[slot].item;
 		byte *text;
 		memset( it, 0, sizeof( *it ));
-		Q_strncpy( cof_inv12.cache[slot].descriptor, d, sizeof( cof_inv12.cache[slot].descriptor ));
+		Q_strncpy( cof_inv12.cache[slot].path, path, sizeof( cof_inv12.cache[slot].path ));
 		Q_strncpy( it->descriptor, d, sizeof( it->descriptor ));
 		it->weapon = Q_strstr( d, "weapon_" ) != NULL;
-		if( CoF_DescriptorSafe( d ) && ( text = FS_LoadFile( d, NULL, false )))
+		if( safe && ( text = FS_LoadFile( path, NULL, false )))
 		{
 			CoF_DescriptorValue( (const char *)text, "inventory_picture", it->picture, sizeof( it->picture ));
 			CoF_DescriptorValue( (const char *)text, "check_picture", it->check, sizeof( it->check ));
