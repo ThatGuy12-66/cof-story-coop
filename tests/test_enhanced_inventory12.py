@@ -1,0 +1,55 @@
+"""12-slot story co-op inventory: the hl.dll sites, the server rules, the client store and accessor."""
+import hashlib
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from tests.native import ENGINE_SERVER, ROOT, VCVARS, run_native, strip_includes
+
+ENGINE = ENGINE_SERVER.parent
+ENGINE_CLIENT = ENGINE / 'client'
+HL_DLL = ROOT / 'runtimes/enhanced/cryoffear/cl_dlls/hl.dll'
+CLIENT_DLL = ROOT / 'runtimes/enhanced/cryoffear/cl_dlls/client.dll'
+HL_SHA = '0036b91c01e92ed205513f52563053a55a66a32d257efb5f476b8f1f3dde0e63'
+CLIENT_SHA = 'd2a04641b301804f6f449aa68265042b13adc360925b80033d417ec9f38c9c00'
+
+
+def retail(path, sha):
+    return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == sha
+
+
+def run_x86(case, harness, files, args=()):
+    """MSVC x86 build of a harness that maps a real retail DLL (Windows only)."""
+    if os.name != 'nt' or not VCVARS.exists():
+        case.skipTest('x86 Windows compiler required: the sites are x86 code in a retail DLL')
+    with tempfile.TemporaryDirectory(prefix='cof-inv12-') as tmp:
+        work = Path(tmp)
+        for name, text in files.items():
+            (work / name).write_text(text)
+        shutil.copyfile(ROOT / 'tests/engine' / harness, work / 'harness.c')
+        quoted = ' '.join(f'"{a}"' for a in args)
+        (work / 'build.cmd').write_text(
+            f'@call "{VCVARS}" amd64_x86 >nul\n'
+            '@cl /nologo /W4 /WX /wd4054 /wd4055 /wd4152 /wd4505 /D_CRT_SECURE_NO_WARNINGS /TC harness.c /Fe:inv12-test.exe\n'
+            '@if errorlevel 1 exit /b %errorlevel%\n'
+            f'@.\\inv12-test.exe {quoted}\n')
+        result = subprocess.run(['cmd.exe', '/d', '/c', str(work / 'build.cmd')], cwd=work,
+                                capture_output=True, text=True, timeout=120)
+        case.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout
+
+
+class HlSiteTests(unittest.TestCase):
+    def test_sites_against_retail_hl(self):
+        if not retail(HL_DLL, HL_SHA):
+            self.skipTest('the retail Cry of Fear 1.6 hl.dll is not installed locally')
+        out = run_x86(self, 'cof_inv12_patch_harness.c',
+                      {'patch_under_test.h': (ENGINE_SERVER / 'sv_cof_inventory12_patch.h').read_text()}, [HL_DLL])
+        self.assertIn('inventory12 hl.dll sites passed', out)
+
+
+if __name__ == '__main__':
+    unittest.main()
