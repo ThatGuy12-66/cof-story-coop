@@ -28,11 +28,14 @@ typedef int qboolean;
 typedef struct { float value; const char *string; } convar_t;
 typedef struct { char text[512]; } sizebuf_t;
 typedef struct { sizebuf_t message; } netchan_t;
-typedef struct { int state, userid; unsigned int flags; char userinfo[256]; netchan_t netchan; } sv_client_t;
+typedef struct { byte *pv; } edict_t; /* only its private data */
+typedef struct { int state, userid; unsigned int flags; char userinfo[256]; netchan_t netchan; edict_t *edict; } sv_client_t;
 static struct { int state; } sv;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
 static struct { void *hInstance; } svgame;
 static sv_client_t clients[MAX_CLIENTS];
+static edict_t edicts[MAX_CLIENTS];
+static byte player_pv[MAX_CLIENTS][0x2288]; /* CBasePlayer up to +0x2288 */
 static convar_t slots_cvar = { 12, "12" };
 static int story = 1, dedicated, host_ready = 1, three, wrote;
 static unsigned char image[0x100000];
@@ -90,6 +93,11 @@ static qboolean SV_CoF_StoryCoopEnabled( void ) { return story; }
 static uintptr_t SV_CoF_StoryBase( void ) { return story ? (uintptr_t)image : 0; }
 static qboolean CL_CoF_Inventory12Ready( void ) { return host_ready; }
 static qboolean SV_CoF_RetailInThreeSlots( sv_client_t *cl ) { return three; }
+static byte *SV_CoF_StoryEntityPrivate( edict_t *ent, size_t need )
+{
+	assert( need >= 0x2288 ); /* every byte read is inside the checked allocation */
+	return ent && need <= sizeof( player_pv[0] ) ? ent->pv : NULL;
+}
 static void MSG_BeginServerCmd( sizebuf_t *msg, int cmd ) { assert( cmd == svc_stufftext ); }
 static void MSG_WriteString( sizebuf_t *msg, const char *s ) { strcat( msg->text, s ); }
 static int Fake( unsigned char *p, const unsigned char *expect, const unsigned char *value, int len )
@@ -134,7 +142,9 @@ static qboolean command( const char *a0, const char *a1, const char *a2 )
 
 int main( void )
 {
+	int i;
 	svs.maxclients = 2; svs.clients = clients; svgame.hInstance = (void *)1;
+	for( i = 0; i < MAX_CLIENTS; i++ ) { edicts[i].pv = player_pv[i]; clients[i].edict = &edicts[i]; }
 	stock_image();
 	SV_CoF_Inventory12Init();
 	assert( SV_CoF_InventorySlots() == 6 ); /* nothing before the first map */
@@ -154,9 +164,31 @@ int main( void )
 	assert( !clients[1].netchan.message.text[0] );
 	clients[1].state = cs_free; clients[1].flags = 0;
 
+	/* told only once spawned: the listen host's own client clears its count at
+	 * svc_serverdata, after a stufftext sent while it was connecting */
+	person( 1, 7, "\\name\\guest\\_cofinv\\12" ); clients[1].state = cs_connected;
+	SV_CoF_Inventory12Frame();
+	assert( !clients[1].netchan.message.text[0] );
+	clients[1].state = cs_spawned;
+	SV_CoF_Inventory12Frame();
+	SV_CoF_Inventory12Frame();
+	assert( !strcmp( clients[1].netchan.message.text, "cof_inv_slots 12\n" ));
+	/* a reconnect into the same slot on the same map: told again */
+	clients[1].netchan.message.text[0] = 0;
+	clients[1].state = cs_connected; SV_CoF_Inventory12Frame();
+	assert( !clients[1].netchan.message.text[0] );
+	clients[1].state = cs_spawned; SV_CoF_Inventory12Frame();
+	assert( !strcmp( clients[1].netchan.message.text, "cof_inv_slots 12\n" ));
+	/* someone else in the slot, never seen below spawned: told */
+	clients[1].netchan.message.text[0] = 0;
+	clients[1].userid = 8; SV_CoF_Inventory12Frame();
+	assert( !strcmp( clients[1].netchan.message.text, "cof_inv_slots 12\n" ));
+	clients[1].state = cs_free;
+	assert( !strcmp( clients[0].netchan.message.text, "cof_inv_slots 12\n" )); /* the host still once */
+
 	/* joining a map at 12 needs the 12-slot screen; the host's own client is never refused */
 	assert( SV_CoF_Inventory12Refuse( "\\name\\old", false ));
-	assert( logged( "cofstory phase=inventory12-join-refused\n" ) == 1 );
+	assert( logged( "cofstory phase=inventory12-join-refused name=old\n" ) == 1 );
 	assert( !SV_CoF_Inventory12Refuse( "\\name\\new\\_cofinv\\12", false ));
 	assert( !SV_CoF_Inventory12Refuse( "\\name\\old", true ));
 
@@ -165,6 +197,8 @@ int main( void )
 	assert( command( "inventoryequip", "13", NULL ));
 	assert( command( "inventorydrop", "0", NULL ));
 	assert( command( "inventoryuse", "7x", NULL ));
+	assert( command( "inventoryequip", "0012", NULL )); /* longer than two digits: refused, */
+	assert( command( "inventoryequip", "012", NULL ));  /* whatever atoi makes of it */
 	assert( command( "inventoryequip", NULL, NULL ));
 	assert( !command( "inventorycombine", "6", "7" ));
 	assert( command( "inventorycombine", "6", "13" ));
@@ -201,15 +235,53 @@ int main( void )
 	assert( SV_CoF_InventorySlots() == 12 );
 	dedicated = 0; host_ready = 1;
 
+	/* per spawned person, the fields after the slot array (bools as one byte, floats, raw
+	 * dwords) and the nonzero dwords in +0x2230..+0x226B, which nothing may write */
+	{
+		byte *pv = player_pv[0];
+		float f;
+		unsigned int d;
+		pv[0x226C] = 1; pv[0x226D] = 0x7f; /* m_bUsedFirstSyringe */
+		f = 1.5f; memcpy( pv + 0x2270, &f, sizeof( f ));
+		f = 2.25f; memcpy( pv + 0x2274, &f, sizeof( f )); /* m_fMorphineTripTime */
+		pv[0x2278] = 1; pv[0x2279] = 0x7f; /* m_bIsTripping */
+		f = 0.5f; memcpy( pv + 0x227C, &f, sizeof( f )); /* m_fTrippingTime */
+		d = 0x11223344; memcpy( pv + 0x2280, &d, sizeof( d ));
+		d = 0xdeadbeef; memcpy( pv + 0x2284, &d, sizeof( d ));
+		pv[0x2230] = 1; pv[0x226B] = 0x80; /* two dead dwords */
+		pv[0x222F] = 1; /* slot 12's last byte: not dead */
+	}
+	person( 1, 5, "\\name\\guest\\_cofinv\\12" ); clients[1].state = cs_connected; /* not spawned: no line */
 	status_f();
 	assert( logged( "cofstory phase=inventory12-status slots=12 cvar=12 keep=1 wide=1 reason=none\n" ) == 1 );
+	assert( logged( "cofstory phase=inventory12-fields userid=1 first_syringe=1 f2270=1.5 trip_time=2.25 tripping=1 tripping_time=0.5 f2280=11223344 f2284=deadbeef dead=2\n" ) == 1 );
+	assert( logged( "phase=inventory12-fields" ) == 1 );
+	clients[1].state = cs_free;
 
-	/* story co-op off: the gate's close puts every byte back; nothing is filtered */
+	/* story co-op off mid-map: everyone still connected leaves the grid, then the
+	 * gate's close puts every byte back; nothing is filtered */
+	clients[0].netchan.message.text[0] = 0;
+	person( 1, 6, "\\name\\guest\\_cofinv\\12" ); clients[1].state = cs_connected;
 	SV_CoF_Inventory12Close();
 	assert( SV_CoF_InventorySlots() == 6 && KEEP_STATE == 0 && WIDE_STATE == 0 );
+	assert( !strcmp( clients[0].netchan.message.text, "cof_inv_slots 6\n" ) && !strcmp( clients[1].netchan.message.text, "cof_inv_slots 6\n" ));
+	SV_CoF_Inventory12Close(); /* at six already: said once */
+	assert( !strcmp( clients[0].netchan.message.text, "cof_inv_slots 6\n" ) && !strcmp( clients[1].netchan.message.text, "cof_inv_slots 6\n" ));
+	clients[1].state = cs_free;
+	/* not while the server is not active, nor without clients */
+	map(); assert( SV_CoF_InventorySlots() == 12 );
+	clients[0].netchan.message.text[0] = 0;
+	sv.state = ss_loading; SV_CoF_Inventory12Close(); sv.state = ss_active;
+	assert( SV_CoF_InventorySlots() == 6 && !clients[0].netchan.message.text[0] );
+	map(); assert( SV_CoF_InventorySlots() == 12 );
+	svs.clients = NULL; SV_CoF_Inventory12Close(); svs.clients = clients;
+	assert( SV_CoF_InventorySlots() == 6 && KEEP_STATE == 0 && WIDE_STATE == 0 && !clients[0].netchan.message.text[0] );
 	story = 0; map();
 	assert( SV_CoF_InventorySlots() == 6 && KEEP_STATE == 0 );
 	assert( !command( "inventoryequip", "13", NULL ));
+	person( 0, 9, "\\name\\host\\_cofinv\\12" ); /* a new map and a new person: still nothing said */
+	SV_CoF_Inventory12Frame();
+	assert( !clients[0].netchan.message.text[0] );
 	story = 1;
 
 	/* unknown bytes: six, nothing written */

@@ -25,16 +25,18 @@ int main( int argc, char **argv )
 {
 	static char hud[0x3200]; /* stands in for gHUD: the stock accessor returns hud + 0x2C64 + ( n - 1 ) * 0x80 */
 	cof_inv12_hook_t hook;
-	unsigned char *base;
+	unsigned char *base, *site;
 	accessor_t call;
 	void *taken;
+	int i;
 	assert( argc == 2 );
 	memset( &hook, 0, sizeof( hook ));
 	taken = VirtualAlloc( (void *)0x10000000, 0x1000, MEM_RESERVE, PAGE_NOACCESS ); /* push the DLL off its preferred base */
 	base = (unsigned char *)LoadLibraryExA( argv[1], NULL, DONT_RESOLVE_DLL_REFERENCES );
 	assert( base );
 	assert( !taken || base != (unsigned char *)0x10000000 );
-	call = (accessor_t)( base + COF_INV12_ACCESSOR );
+	site = base + COF_INV12_ACCESSOR;
+	call = (accessor_t)site;
 
 	/* stock */
 	assert( call( hud, NULL, 1 ) == hud + 0x2C64 && call( hud, NULL, 6 ) == hud + 0x2C64 + 5 * 0x80 );
@@ -51,10 +53,19 @@ int main( int argc, char **argv )
 	assert( !hook.site && !memcmp( base + COF_INV12_ACCESSOR, cof_inv12_accessor_stock, sizeof( cof_inv12_accessor_stock )));
 	assert( call( hud, NULL, 2 ) == hud + 0x2C64 + 0x80 );
 
-	/* unexpected bytes: refuse, write nothing */
-	Poke( base + COF_INV12_ACCESSOR + 9, 0x0b );
-	assert( !CoF_Inv12HookAccessor( &hook, base, (const void *)Accessor ) && base[COF_INV12_ACCESSOR] == 0x55 );
-	Poke( base + COF_INV12_ACCESSOR + 9, 0x05 );
+	/* unexpected bytes, each of the 15 compared in turn: refuse, write nothing */
+	for( i = 0; i < (int)sizeof( cof_inv12_accessor_stock ); i++ )
+	{
+		unsigned char before[sizeof( cof_inv12_accessor_stock )];
+		Poke( site + i, (unsigned char)( cof_inv12_accessor_stock[i] ^ 0x5a ));
+		memcpy( before, site, sizeof( before ));
+		assert( !CoF_Inv12HookAccessor( &hook, base, (const void *)Accessor ) && !hook.site );
+		assert( !memcmp( site, before, sizeof( before )));
+		Poke( site + i, cof_inv12_accessor_stock[i] );
+	}
+	assert( !memcmp( site, cof_inv12_accessor_stock, sizeof( cof_inv12_accessor_stock )));
+	assert( CoF_Inv12HookAccessor( &hook, base, (const void *)Accessor )); /* the stock bytes back: hooked again */
+	CoF_Inv12UnhookAccessor( &hook );
 	FreeLibrary( (HMODULE)base );
 	puts( "inventory12 client.dll accessor passed" );
 	return 0;

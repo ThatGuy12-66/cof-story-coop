@@ -33,6 +33,11 @@ int main( void )
 	assert( CoF_Inv12Route( &s, &m ) == COF_INV12_KEPT && !strcmp( s.slot[9], "inventoryitems/weapons/weapon_glock.txt" ));
 	n = Message( b, 12, "", 0, 0, 0 );
 	assert( CoF_Inv12Parse( b, n, &m ) && CoF_Inv12Route( &s, &m ) == COF_INV12_KEPT && !s.slot[12][0] );
+	/* the boundary: 6 is client.dll's last slot, 7 the engine's first */
+	n = Message( b, 6, "inventoryitems/six.txt", 0, 1, 0 );
+	assert( CoF_Inv12Parse( b, n, &m ) && CoF_Inv12Route( &s, &m ) == COF_INV12_FORWARD && !strcmp( s.slot[6], "inventoryitems/six.txt" ));
+	n = Message( b, 7, "inventoryitems/seven.txt", 0, 1, 0 );
+	assert( CoF_Inv12Parse( b, n, &m ) && CoF_Inv12Route( &s, &m ) == COF_INV12_KEPT && !strcmp( s.slot[7], "inventoryitems/seven.txt" ));
 
 	/* slot 0 and 13+: dropped, nothing stored */
 	n = Message( b, 0, "inventoryitems/x.txt", 0, 0, 0 );
@@ -79,6 +84,27 @@ int main( void )
 	assert( n > 0 && !strcmp( (char *)line + 1, "You got Simon's Book" ));
 	assert( !CoF_Inv12PickupLine( "", line, sizeof( line )));
 	assert( !CoF_Inv12PickupLine( "Glock", line, 10 ));
+
+	/* the grid's commands: only what client.dll's own menu sends, nothing chained */
+	assert( CoF_Inv12CommandAllowed( "inventoryequip 9" ) && CoF_Inv12CommandAllowed( "inventorydrop 12" ));
+	assert( CoF_Inv12CommandAllowed( "inventorycombine 6 7" ) && CoF_Inv12CommandAllowed( "inventorydualwield 2 8" ));
+	assert( CoF_Inv12CommandAllowed( "quickselset1 7" ) && CoF_Inv12CommandAllowed( "quickselset2 9" ) && CoF_Inv12CommandAllowed( "quickselset3 12" ));
+	assert( !CoF_Inv12CommandAllowed( "inventoryequip 9;kill" ) && !CoF_Inv12CommandAllowed( "inventoryequip \"9\"" ));
+	assert( !CoF_Inv12CommandAllowed( "inventoryequip 9\nkill" ) && !CoF_Inv12CommandAllowed( "inventoryequip 9\rkill" ));
+	assert( !CoF_Inv12CommandAllowed( "kill" ) && !CoF_Inv12CommandAllowed( "inventoryuse 3" ) && !CoF_Inv12CommandAllowed( "" ));
+	assert( !CoF_Inv12CommandAllowed( "quickselset4 1" ) && !CoF_Inv12CommandAllowed( "inventoryequip" ));
+
+	/* a quick-select assignment: quick slot 1..3, inventory slot 1..12 */
+	{
+		int q = 0, slot = 0;
+		assert( CoF_Inv12QuickSelect( "quickselset2 9", &q, &slot ) && q == 2 && slot == 9 );
+		assert( CoF_Inv12QuickSelect( "quickselset1 1", &q, &slot ) && q == 1 && slot == 1 );
+		assert( CoF_Inv12QuickSelect( "quickselset3 12", &q, &slot ) && q == 3 && slot == 12 );
+		assert( !CoF_Inv12QuickSelect( "quickselset3 13", &q, &slot ) && !CoF_Inv12QuickSelect( "quickselset1 0", &q, &slot ));
+		assert( !CoF_Inv12QuickSelect( "quickselset4 1", &q, &slot ) && !CoF_Inv12QuickSelect( "quickselset0 1", &q, &slot ));
+		assert( !CoF_Inv12QuickSelect( "quickselset1 012", &q, &slot ) && !CoF_Inv12QuickSelect( "quickselset1 9x", &q, &slot ));
+		assert( !CoF_Inv12QuickSelect( "quickselset1 ", &q, &slot ) && !CoF_Inv12QuickSelect( "inventoryequip 9", &q, &slot ));
+	}
 	puts( "inventory12 client store passed" );
 	return 0;
 }
