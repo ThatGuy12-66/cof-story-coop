@@ -11,9 +11,11 @@ void SV_CoF_Inventory12Init( void );
 // sv_init.c SV_ActivateServer, before the game's ServerActivate: this map's
 // slot count, and the hl.dll bytes that go with it.
 void SV_CoF_Inventory12Activate( void );
-// The story gate closes (story co-op off, the game DLL going away): stock bytes.
+// The story gate closes (story co-op off, the game DLL going away): stock bytes;
+// on an active map at 12, every person still connected is told six first.
 void SV_CoF_Inventory12Close( void );
-// Story frame: tells every person connected the map's slot count, once per map.
+// Story frame: tells every person in the game the map's slot count, once they
+// have spawned, again after any reconnect into their client slot.
 void SV_CoF_Inventory12Frame( void );
 // 12 while this map runs the 12-slot inventory, else 6 (the retail inventory).
 int SV_CoF_InventorySlots( void );

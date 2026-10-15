@@ -13,6 +13,7 @@ needs it as well, or is turned away: a retail client.dll crashes on slot 7.
 #include "server.h"
 #include "sv_cof_story.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_cheats.h"
 #include "sv_cof_inventory12.h"
 #include "sv_cof_inventory12_patch.h"
 #if XASH_WIN32
@@ -26,7 +27,7 @@ static struct
 	void *instance;            // the svgame.hInstance of that image
 	int slots;                 // this map: 12 or 6
 	char reason[48];           // why this map runs at six, "" at 12
-	struct { int map, slots; } told[MAX_CLIENTS]; // what each client slot was last told
+	struct { int map, userid, slots; } told[MAX_CLIENTS]; // what each client slot was last told, on which map, as whom
 } cof_inv12;
 
 #ifndef COF_INV12_WRITE
@@ -54,8 +55,30 @@ int SV_CoF_InventorySlots( void )
 	return cof_inv12.base && cof_inv12.slots == 12 ? 12 : 6;
 }
 
+static qboolean CoF_Inv12Person( const sv_client_t *cl )
+{
+	return cl->state >= cs_connected && !FBitSet( cl->flags, FCL_FAKECLIENT );
+}
+
+static void CoF_Inv12Tell( int i, int slots )
+{
+	sv_client_t *cl = &svs.clients[i];
+	MSG_BeginServerCmd( &cl->netchan.message, svc_stufftext );
+	MSG_WriteString( &cl->netchan.message, va( "cof_inv_slots %d\n", slots ));
+	cof_inv12.told[i].map = svs.spawncount;
+	cof_inv12.told[i].userid = cl->userid;
+	cof_inv12.told[i].slots = slots;
+}
+
 void SV_CoF_Inventory12Close( void )
 {
+	int i;
+	// story co-op switched off mid-map: nobody may stay on the grid
+	if( SV_CoF_InventorySlots( ) == 12 && svs.clients && sv.state == ss_active )
+	{
+		for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+			if( CoF_Inv12Person( &svs.clients[i] )) CoF_Inv12Tell( i, 6 );
+	}
 	if( cof_inv12.base && cof_inv12.instance == svgame.hInstance )
 	{
 		CoF_Inv12GroupSet( cof_inv12.base, COF_INV12_WIDE, 0, COF_INV12_WRITE );
@@ -64,11 +87,6 @@ void SV_CoF_Inventory12Close( void )
 	cof_inv12.base = NULL;
 	cof_inv12.instance = NULL;
 	cof_inv12.slots = 6;
-}
-
-static qboolean CoF_Inv12Person( const sv_client_t *cl )
-{
-	return cl->state >= cs_connected && !FBitSet( cl->flags, FCL_FAKECLIENT );
 }
 
 static qboolean CoF_Inv12HasScreen( const char *userinfo )
@@ -130,39 +148,42 @@ void SV_CoF_Inventory12Activate( void )
 
 void SV_CoF_Inventory12Frame( void )
 {
-	int i;
+	int i, slots;
 	if( sv.state != ss_active || !SV_CoF_StoryCoopEnabled( )) return;
+	slots = SV_CoF_InventorySlots( );
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
-		if( !CoF_Inv12Person( cl ))
+		// Told once spawned, never while connecting: the listen host's own
+		// client gets the stufftext before svc_serverdata, whose CL_ClearState
+		// forgets it. Anyone below spawned (a reconnect into the same slot
+		// too) is told again once in the game.
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ))
 		{
 			cof_inv12.told[i].map = 0;
 			continue;
 		}
-		if( cof_inv12.told[i].map == svs.spawncount && cof_inv12.told[i].slots == SV_CoF_InventorySlots( )) continue;
-		MSG_BeginServerCmd( &cl->netchan.message, svc_stufftext );
-		MSG_WriteString( &cl->netchan.message, va( "cof_inv_slots %d\n", SV_CoF_InventorySlots( )));
-		cof_inv12.told[i].map = svs.spawncount;
-		cof_inv12.told[i].slots = SV_CoF_InventorySlots( );
+		if( cof_inv12.told[i].map == svs.spawncount && cof_inv12.told[i].userid == cl->userid && cof_inv12.told[i].slots == slots ) continue;
+		CoF_Inv12Tell( i, slots );
 	}
 }
 
 qboolean SV_CoF_Inventory12Refuse( const char *userinfo, qboolean local )
 {
 	if( local || sv.state != ss_active || SV_CoF_InventorySlots( ) != 12 || CoF_Inv12HasScreen( userinfo )) return false;
-	Con_Printf( "cofstory phase=inventory12-join-refused\n" );
+	Con_Printf( "cofstory phase=inventory12-join-refused name=%s\n", Info_ValueForKey( userinfo, "name" ));
 	return true;
 }
 
-// A slot number argument: digits only, 1..limit.
+// A slot number argument: one or two digits, 1..limit (longer ones are
+// refused, so the game's own atoi cannot read a different number than ours).
 static qboolean CoF_Inv12SlotArg( int index, int limit )
 {
 	const char *s = Cmd_Argv( index );
 	int i;
 	if( !s[0] ) return false;
 	for( i = 0; s[i]; i++ )
-		if( s[i] < '0' || s[i] > '9' ) return false;
+		if( i >= 2 || s[i] < '0' || s[i] > '9' ) return false;
 	i = Q_atoi( s );
 	return i >= 1 && i <= limit;
 }
@@ -184,11 +205,38 @@ qboolean SV_CoF_Inventory12ClientCommand( sv_client_t *cl )
 
 static void CoF_Inv12Status_f( void )
 {
+	int i;
 	Con_Printf( "cofstory phase=inventory12-status slots=%d cvar=%d keep=%d wide=%d reason=%s\n", SV_CoF_InventorySlots( ),
 		cof_inv12.cvar ? (int)cof_inv12.cvar->value : 0,
 		cof_inv12.base ? CoF_Inv12GroupState( cof_inv12.base, COF_INV12_KEEP ) : 0,
 		cof_inv12.base ? CoF_Inv12GroupState( cof_inv12.base, COF_INV12_WIDE ) : 0,
 		cof_inv12.reason[0] ? cof_inv12.reason : "none" );
+	if( !svs.clients || sv.state != ss_active ) return;
+	// The live check of the spec's residual risk: the player fields right after
+	// the slot array (server-inventory-re.md) must survive a full clear, and
+	// nothing may write +0x2230..+0x226B, the room after slot 12.
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		const byte *pv;
+		float f2270, trip_time, tripping_time;
+		uint32_t f2280, f2284, dword;
+		int at, dead = 0;
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !( pv = SV_CoF_StoryEntityPrivate( cl->edict, 0x2288 ))) continue;
+		for( at = 0x2230; at < 0x226C; at += 4 )
+		{
+			memcpy( &dword, pv + at, sizeof( dword ));
+			if( dword ) dead++;
+		}
+		memcpy( &f2270, pv + 0x2270, sizeof( f2270 ));
+		memcpy( &trip_time, pv + 0x2274, sizeof( trip_time ));         // m_fMorphineTripTime
+		memcpy( &tripping_time, pv + 0x227C, sizeof( tripping_time )); // m_fTrippingTime
+		memcpy( &f2280, pv + 0x2280, sizeof( f2280 ));
+		memcpy( &f2284, pv + 0x2284, sizeof( f2284 ));
+		Con_Printf( "cofstory phase=inventory12-fields userid=%d first_syringe=%d f2270=%g trip_time=%g tripping=%d tripping_time=%g f2280=%08x f2284=%08x dead=%d\n",
+			cl->userid, pv[0x226C] /* m_bUsedFirstSyringe */, (double)f2270, (double)trip_time, pv[0x2278] /* m_bIsTripping */, (double)tripping_time,
+			(unsigned int)f2280, (unsigned int)f2284, dead );
+	}
 }
 
 void SV_CoF_Inventory12Init( void )
