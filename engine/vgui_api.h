@@ -240,6 +240,37 @@ typedef struct
 	int	trace;		// cof_panel_trace level
 } cof_vgui_panel_cfg_t;
 
+// Cry of Fear story co-op 12-slot inventory (engine/client/cof_inventory12.c,
+// 3rdparty/freevgui/platform/xash3d-fwgs/cofinventory.cpp). vguiapi_t::CofInventory ops:
+enum
+{
+	COF_INV_OP_GRID = 0,	// returns 12 when the 12-slot grid replaces the retail slots now, else 0
+	COF_INV_OP_THREE,	// returns 1 in the story's three-slot sections (only slots 1..3)
+	COF_INV_OP_SLOT,	// arg 1..12, buf cof_vgui_inv_item_t: returns 1 for an item, 0 empty, -1 bad slot
+	COF_INV_OP_COMMAND,	// buf: one inventory command for the server ("inventoryequip 7"); returns 1 when sent
+	COF_INV_OP_SOUND,	// buf: a sound path, played locally
+	COF_INV_OP_IMAGE,	// buf cof_vgui_image_t: a TGA from the game filesystem; rgba NULL asks only the size
+	COF_INV_OP_READY,	// the library has the grid (arg 1)
+};
+
+typedef struct cof_vgui_inv_item_s
+{
+	char	descriptor[128];	// inventoryitems/....txt, "" for an empty slot
+	char	picture[128];		// inventory_picture (99x99)
+	char	check[128];		// check_picture (303x99, the examine picture)
+	char	combined[64];		// combined_result
+	char	classname[64];		// classname
+	int	weapon;			// the descriptor path names a weapon_ (the retail rule)
+} cof_vgui_inv_item_t;
+
+typedef struct cof_vgui_image_s
+{
+	const char	*path;
+	int		wide, tall;	// filled in
+	unsigned char	*rgba;		// wide * tall * 4 bytes, top row first; NULL: size only
+	int		size;		// bytes at rgba
+} cof_vgui_image_t;
+
 typedef struct  vguiapi_s
 {
 	int	initialized;
@@ -371,6 +402,11 @@ typedef struct  vguiapi_s
 	//                           on the way in and the centre "x y" of that
 	//                           visible button (VGUI coordinates) on the way out
 	int	(*CofPanelAction)( int action, char *info, int infoSize );
+
+	// Cry of Fear story co-op 12-slot inventory, filled in by the engine
+	// (cof_inventory12.c): the COF_INV_OP_* calls above. xash.dll and vgui.dll
+	// must come from the same build.
+	int	(*CofInventory)( int op, int arg, void *buf, int size );
 } vguiapi_t;
 
 enum

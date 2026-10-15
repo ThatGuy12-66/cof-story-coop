@@ -4571,6 +4571,7 @@ void CL_UnloadProgs( void )
 	Cvar_Unlink( FCVAR_CLIENTDLL );
 	Cmd_Unlink( CMD_CLIENTDLL );
 
+	CL_CoF_Inventory12Unload();
 	COM_FreeLibrary( clgame.hInstance );
 	Mem_FreePool( &cls.mempool );
 	Mem_FreePool( &clgame.mempool );
@@ -4731,6 +4732,7 @@ qboolean CL_LoadProgs( const char *name )
 	// Windows for Enter directly; answer them for a gamepad
 	// (engine/client/cof_enter_hook.c)
 	CL_CoF_EnterHookModule( clgame.hInstance, name );
+	CL_CoF_Inventory12Load( clgame.hInstance );
 
 	// delayed vgui initialization for internal support
 	if( try_internal_vgui_support && VGui_LoadProgs( clgame.hInstance ))

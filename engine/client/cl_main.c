@@ -3932,6 +3932,7 @@ CL_ClearState
 */
 void CL_ClearState( void )
 {
+	CL_CoF_Inventory12ClearState();
 	CL_CoF_HudRemakeReset();
 	CL_ClearResourceLists();
 
@@ -6213,6 +6214,7 @@ static void CL_InitLocal( void )
 	Cvar_RegisterVariable( &cl_fixmodelinterpolationartifacts );
 	{ void V_CoF_RegisterFovCvars( void ); V_CoF_RegisterFovCvars(); } // cof_fov, cof_fov_zoom_knee; both live in engine\client\cl_view.c
 	{ void CL_CoF_QuickSaveInit( void ); CL_CoF_QuickSaveInit(); } // cof_quick_saves, cof_quicksave, cof_quickload; engine\client\cof_quicksave.c
+	{ void CL_CoF_Inventory12Init( void ); CL_CoF_Inventory12Init(); } // _cofinv, cof_inv_slots; engine\client\cof_inventory12.c
 
 	// server commands
 	Cmd_AddCommand ("noclip", NULL, "enable or disable no clipping mode" );

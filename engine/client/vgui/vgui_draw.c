@@ -438,6 +438,7 @@ void VGui_RegisterCvars( void )
 int CL_CoF_PanelReport( unsigned int visible ); // cof_panel_pause.c
 int CL_CoF_PanelConfig( cof_vgui_panel_cfg_t *out ); // cof_panel_transparency.c
 int CL_CoF_PanelImageLatch( char *buf, int size ); // cof_panel_transparency.c
+int CL_CoF_Inventory12Api( int op, int arg, void *buf, int size ); // cof_inventory12.c
 
 static const vguiapi_t gEngfuncs =
 {
@@ -486,6 +487,8 @@ static const vguiapi_t gEngfuncs =
 	CL_CoF_PanelReport,
 	CL_CoF_PanelConfig,
 	CL_CoF_PanelImageLatch,
+	NULL, // CofPanelAction, filled in by the support library
+	CL_CoF_Inventory12Api, // CofInventory (cof_inventory12.c)
 };
 
 qboolean VGui_LoadProgs( HINSTANCE hInstance )

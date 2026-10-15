@@ -1376,6 +1376,10 @@ qboolean CL_CoF_HudRemakeVguiQuad( int kind, qboolean textured, float x, float y
 qboolean CL_CoF_HudRemakeSprite( const char *name, const wrect_t *rc, int mode, int texture,
     float x,float y,float w,float h,float s1,float t1,float s2,float t2,const byte *color );
 void CL_CoF_EnterHookModule( void *hInstance, const char *name );
+void CL_CoF_Inventory12Load( void *module ); // cof_inventory12.c
+void CL_CoF_Inventory12Unload( void );
+void CL_CoF_Inventory12ClearState( void );
+qboolean CL_CoF_Inventory12Message( const char *name, int size, const byte *buf );
 qboolean CL_CoF_EnterKeyEvent( int key, int down );
 extern net_api_t gNetApi;
 

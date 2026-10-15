@@ -2294,6 +2294,9 @@ void CL_ParseUserMessage( sizebuf_t *msg, int svc_num, connprotocol_t proto )
 	// cof_ui_input_gate, not by hiding the message from the client.
 	CL_CoF_DeathUserMessage( clgame.msg[i].name, iSize, pbuf );
 	CL_CoF_HudRemakeMessage( clgame.msg[i].name, iSize, pbuf );
+	// Cry of Fear story co-op: Inventory slots 7..12 never reach client.dll
+	if( CL_CoF_Inventory12Message( clgame.msg[i].name, iSize, pbuf ))
+		return;
 
 	if( clgame.msg[i].func )
 	{
