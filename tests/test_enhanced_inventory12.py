@@ -51,5 +51,16 @@ class HlSiteTests(unittest.TestCase):
         self.assertIn('inventory12 hl.dll sites passed', out)
 
 
+class ServerRuleTests(unittest.TestCase):
+    def test_rules(self):
+        header = (ENGINE_SERVER / 'sv_cof_inventory12.h').read_text()
+        self.assertIn('#define COF_INV12_USERINFO "_cofinv"', header)  # the harness repeats it
+        out = run_native(self, 'cof_inv12_server_harness.c', {
+            'patch_under_test.h': (ENGINE_SERVER / 'sv_cof_inventory12_patch.h').read_text(),
+            'inventory12_under_test.c': strip_includes((ENGINE_SERVER / 'sv_cof_inventory12.c').read_text()),
+        })
+        self.assertIn('inventory12 server rules passed', out)
+
+
 if __name__ == '__main__':
     unittest.main()
