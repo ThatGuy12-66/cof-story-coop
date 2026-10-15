@@ -36,7 +36,7 @@ int main( int argc, char **argv )
 	assert( argc == 2 );
 	base = (unsigned char *)LoadLibraryExA( argv[1], NULL, DONT_RESOLVE_DLL_REFERENCES );
 	assert( base );
-	assert( COF_INV12_COUNT( cof_inv12_keep ) == 18 && COF_INV12_COUNT( cof_inv12_wide ) == 11 );
+	assert( COF_INV12_COUNT( cof_inv12_keep ) == 18 && COF_INV12_COUNT( cof_inv12_wide ) == 13 );
 	assert( CoF_Inv12GroupState( base, KEEP ) == 0 && CoF_Inv12GroupState( base, WIDE ) == 0 );
 
 	assert( CoF_Inv12GroupSet( base, KEEP, 1, Write ));
@@ -44,6 +44,7 @@ int main( int argc, char **argv )
 	assert( CoF_Inv12GroupState( base, KEEP ) == 1 && CoF_Inv12GroupState( base, WIDE ) == 1 );
 	assert( base[0xDADB1 + 2] == 0x0c ); /* AddInventoryItem: cmp esi,12 */
 	assert( base[0xE30C2 + 2] == 0x0b ); /* CombineInventoryItems: slot - 1 <= 11 */
+	assert( base[0xDEA0C + 2] == 0x0b && base[0xDEA18 + 2] == 0x0b ); /* DualWield: both slots in 1..12 */
 	assert( base[0xDDA3A] == 0x90 && base[0xDDA3A + 10] == 0x90 ); /* models[slot] = 0 is gone */
 
 	writes = 0; /* already there: nothing is written */

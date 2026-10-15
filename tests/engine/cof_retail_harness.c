@@ -46,9 +46,10 @@ static struct { double time; } sv;
 static struct { struct { void ( *pfnClientCommand )( edict_t *ent ); int ( *pfnSpawn )( edict_t *ent ); void ( *pfnUse )( edict_t *ent, edict_t *player ); } dllFuncs; int numEntities; edict_t *edicts; } svgame;
 static edict_t edicts[12];
 static sv_client_t clients[2];
-static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x200], monster_private[3][0x360];
+static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x210], monster_private[3][0x360];
 static const char *strings[] = { "", "inventoryitems/hallkey.txt", "inventoryitems/weapons/weapon_mobile.txt", "inventoryitems/fuse.txt", "cof_document",
-	"weapon_glock", "weapon_switchblade", "weapon_syringe", "weapon_shotgun", "monster_slower", "monster_generic", "monster_sawrunner", "monster_nerd" };
+	"weapon_glock", "weapon_switchblade", "weapon_syringe", "weapon_shotgun", "monster_slower", "monster_generic", "monster_sawrunner", "monster_nerd",
+	"weapon_dualweapon" };
 #define STRINGS ( (int)ARRAYSIZE( strings ))
 static byte dll_image[0x217118 + 19 * 19 * 4]; /* the relationship table sits at +0x217118 */
 static int private_lookups, uses;
@@ -373,6 +374,24 @@ int main( void )
 		calls = 0;
 		assert( SV_CoF_RetailEquip( &clients[0], "weapon_shotgun" ) && calls == 1 && call_rva == 0xF1A50 && call_self == private_data[0] && !strcmp( call_arg, "weapon_shotgun" ));
 		assert( !SV_CoF_RetailEquip( &clients[0], "item_key" ) && !SV_CoF_RetailEquip( &clients[0], NULL ) && calls == 1 );
+		/* Dual wield (live 2026-10-15: nothing happened in co-op): the game builds weapon_dualweapon
+		 * but its multiplayer rules never switch to it (weight 1); the engine switches, like single player */
+		weapon( 8, 3, 13, private_data[0], 15, -1, 0 );
+		put_int( weapon_private[3] + 0x204, 3 ); put_int( weapon_private[3] + 0x200, 1 ); /* glock left, flashlight right */
+		put_int( private_data[0] + 0x1E70, 3 ); put_int( private_data[0] + 0x1E74, 1 );
+		calls = 0;
+		assert( SV_CoF_RetailDualDeploy( &clients[0] ) && calls == 1 && call_rva == 0xF5E50 && call_self == private_data[0] && call_arg == weapon_private[3] );
+		/* already in hand, or already on its way: nothing */
+		put_pointer( private_data[0] + 0x252C, weapon_private[3] ); calls = 0;
+		assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
+		put_pointer( private_data[0] + 0x252C, weapon_private[0] ); put_pointer( private_data[0] + 0x2538, weapon_private[3] );
+		assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
+		put_pointer( private_data[0] + 0x2538, NULL );
+		/* a dual weapon of another pair (the command failed), or of the other player: not ours to deploy */
+		put_int( private_data[0] + 0x1E70, 6 ); assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
+		put_int( private_data[0] + 0x1E70, 3 ); put_pointer( weapon_private[3] + 0x160, private_data[1] );
+		assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
+		edicts[8].free = 1;
 		/* the allocation check runs once per entity per map, not every frame */
 		private_lookups = 0; SV_CoF_RetailArms( &clients[0], &arms ); SV_CoF_RetailArms( &clients[0], &arms );
 		assert( private_lookups == 0 );
