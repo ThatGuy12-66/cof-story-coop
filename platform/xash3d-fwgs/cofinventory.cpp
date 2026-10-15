@@ -290,6 +290,18 @@ bool Bind( Panel *inventory )
 	return true;
 }
 
+// The grid still hangs under this inventory's background: it is the grid's parent,
+// and the grid is among its children (a background built again at the same address
+// starts with a list of its own).
+bool StillBound( Panel *inventory )
+{
+	Panel *background = ChildAt( inventory, kBackground );
+	if( !background || background != CofPanelAccess::parent( g_ours.grid )) return false;
+	for( int i = 0; i < background->getChildCount(); i++ )
+		if( background->getChild( i ) == g_ours.grid ) return true;
+	return false;
+}
+
 void HideRetail()
 {
 	for( int i = 0; i < kHideCount; i++ )
@@ -322,9 +334,17 @@ void Close()
 void vgui::CofInventory_Frame( Panel *root )
 {
 	Panel *inventory = FindInventory( root );
-	if( inventory != g_ours.inventory )
+	// a new viewport (VidInit) builds a new inventory panel; ours went with the old one.
+	// A new panel can also come back at the old address (freed and allocated again), and
+	// then the grid no longer hangs under its background: build ours again then too.
+	if( inventory != g_ours.inventory || ( inventory && g_ours.grid && !StillBound( inventory )))
 	{
-		// a new viewport (VidInit) builds a new inventory panel; ours went with the old one
+		if( g_ours.grid )
+		{
+			// ours, never freed by the client: off the screen wherever they still hang
+			g_ours.grid->setVisible( false );
+			g_ours.menu->setVisible( false );
+		}
 		g_ours = Ours();
 		g_ours.inventory = inventory;
 		if( inventory && !Bind( inventory ) && g_engine && g_engine->CofPrint )
