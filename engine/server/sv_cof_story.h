@@ -13,4 +13,8 @@ qboolean SV_CoF_StoryDeployWeapon( void *self );
 uintptr_t SV_CoF_StoryBase( void );
 // Fire a target name through the game's own FireTargets (USE_TOGGLE).
 qboolean SV_CoF_StoryFireTargets( const char *name, void *activator, void *caller );
+// The bonus room switch (sv_cof_bonus.c): cof_bonus_room, and the server's
+// LoadFileForMe, which shows the game scriptsettings.dat in the session's state.
+void SV_CoF_BonusInit( void );
+byte *SV_CoF_BonusLoadFile( const char *filename, int *pLength );
 #endif

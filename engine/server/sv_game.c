@@ -5057,7 +5057,7 @@ static enginefuncs_t gEngfuncs =
 	pfnSetView,
 	Sys_FloatTime,
 	pfnCrosshairAngle,
-	COM_LoadFileForMe,
+	SV_CoF_BonusLoadFile, // story co-op: scriptsettings.dat in the session's bonus room state
 	COM_FreeFile,
 	pfnEndSection,
 	pfnCompareFileTime,

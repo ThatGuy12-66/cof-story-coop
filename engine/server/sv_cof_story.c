@@ -276,6 +276,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_RecoveryInit();
 	SV_CoF_Inventory12Init();
 	SV_CoF_SessionInit();
+	SV_CoF_BonusInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
