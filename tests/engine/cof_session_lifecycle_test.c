@@ -26,6 +26,10 @@ static struct { int spawncount, maxclients; sv_client_t *clients; } svs;
 static struct { int state; double time; char name[64]; } sv;
 static int gate = 1, transition, saves, loads, result = 1, argc, usable = 1;
 static const char *argv[3];
+typedef struct { float value; } convar_t;
+static convar_t continue_var, *cof_continue = &continue_var;
+static int profont;
+static void Cvar_DirectSet( convar_t *var, const char *value ) { var->value = (float)atof( value ); }
 static int cof_session_generation = -1, cof_session_auto_needed;
 static double cof_session_save_after, cof_session_wipe_after;
 static void *cof_session_pending;
@@ -44,7 +48,7 @@ static int Cmd_Argc( void ) { return argc; }
 static const char *Cmd_Argv( int index ) { return index < argc ? argv[index] : ""; }
 static void Con_Printf( const char *format, ... ) {}
 static void SV_ClientPrintf( sv_client_t *client, const char *format, ... ) {}
-static int SV_CoF_RetailProFont( sv_client_t *client, int colour, const char *text, int reliable ) { return 1; }
+static int SV_CoF_RetailProFont( sv_client_t *client, int colour, const char *text, int reliable ) { profont++; return 1; }
 qboolean SV_CoF_SessionWipe( const char *map, const char *landmark );
 #include "session_lifecycle_under_test.c"
 
@@ -90,5 +94,18 @@ int main( void )
 	usable = 0; cof_session_generation = -1;
 	sv.time = 30; SV_CoF_SessionFrame(); sv.time = 40; SV_CoF_SessionFrame();
 	assert( saves == 4 && !strcmp( last_slot, "autosave" ));
+	/* Continue (the tester app): the latest checkpoint once the host has joined, once */
+	loads = 0; cof_session_pending = NULL; usable = 1; result = 1; profont = 0;
+	strcpy( cof_session_latest, "autosave" ); cof_session_generation = -1;
+	continue_var.value = 1; clients[0].state = cs_connected; sv.time = 100;
+	SV_CoF_SessionFrame(); assert( !loads );                 /* the first two seconds */
+	sv.time = 103; SV_CoF_SessionFrame(); assert( !loads );  /* the host is still joining (the wipe check moves the settle to 104) */
+	clients[0].state = cs_spawned; sv.time = 105; SV_CoF_SessionFrame();
+	assert( loads == 1 && !strcmp( last_slot, "latest" ) && continue_var.value == 0 && !profont );
+	sv.time = 110; SV_CoF_SessionFrame(); assert( loads == 1 );   /* once */
+	/* refused: the host is told, and it is not retried */
+	continue_var.value = 1; result = 0; sv.time = 120; SV_CoF_SessionFrame();
+	assert( loads == 2 && profont == 1 && continue_var.value == 0 );
+	sv.time = 130; SV_CoF_SessionFrame(); assert( loads == 2 ); result = 1;
 	puts( "session lifecycle scenarios passed" ); return 0;
 }
