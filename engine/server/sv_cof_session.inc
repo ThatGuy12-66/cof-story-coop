@@ -13,6 +13,7 @@ static char cof_session_latest[25];
 static char cof_session_pending_slot[25];
 static double cof_session_wipe_after;
 static int cof_session_deferred; // the reason last logged (1 cutscene, 2 ending door): once per deferral
+static convar_t *cof_continue; // the tester app's Continue: load the latest checkpoint once the host has joined
 static qboolean CoF_SessionCurrentNames( char names[32][32] );
 static qboolean CoF_SessionPreflight( const byte *archive, size_t size, cof_session_data_t *metadata );
 
@@ -597,6 +598,18 @@ void SV_CoF_SessionFrame( void )
 				Con_Printf( "cofstory phase=session-checkpoint-unusable slot=%s\n", cof_session_latest );
 		}
 	}
+	// Continue (the tester app's start option): the latest checkpoint, once,
+	// when the listen host has joined; after the same two-second settle.
+	if( cof_continue && cof_continue->value && sv.time >= cof_session_wipe_after && !cof_session_pending &&
+		!SV_CoF_TransitionActive() && svs.clients[0].state == cs_spawned )
+	{
+		qboolean queued;
+		Cvar_DirectSet( cof_continue, "0" );
+		queued = SV_CoF_SessionLoad( NULL );
+		Con_Printf( "cofstory phase=session-continue result=%s\n", queued ? "queued" : "refused" );
+		if( !queued ) SV_CoF_RetailProFont( &svs.clients[0], 5, "The checkpoint could not be loaded: this map starts from its beginning.", true );
+		return;
+	}
 	if( sv.time >= cof_session_wipe_after && !SV_CoF_TransitionActive() && !cof_session_pending )
 	{
 		cof_session_wipe_after = sv.time + 1;
@@ -700,4 +713,5 @@ void SV_CoF_SessionInit( void )
 {
 	Cmd_AddCommand( "cof_save", CoF_SessionSave_f, "story co-op: save the living party to a separate checkpoint slot" );
 	Cmd_AddCommand( "cof_load", CoF_SessionLoad_f, "story co-op: restore a checkpoint without disconnecting the party" );
+	cof_continue = Cvar_Get( "cof_continue", "0", 0, "story co-op: load the latest checkpoint once the host has joined (the tester app's Continue)" );
 }

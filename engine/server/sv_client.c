@@ -1011,6 +1011,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		int bots;
 		int remaining;
 		char temp[sizeof( s )];
+		const char *build = Cvar_VariableString( "cof_build" );
 
 		SV_GetPlayerCount( &count, &bots );
 
@@ -1024,6 +1025,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		Info_SetValueForKeyf( s, "maxcl", sizeof( s ), "%i", svs.maxclients );
 		Info_SetValueForKey( s, "gamedir", GI->gamefolder, sizeof( s ));
 		Info_SetValueForKey( s, "password", SV_HavePassword() ? "1" : "0", sizeof( s ));
+		if( build[0] ) Info_SetValueForKey( s, "cofbuild", build, sizeof( s )); // story co-op: the tester app checks it before a join
 
 		// write host last so we can try to cut off too long hostnames
 		// TODO: value size limit for infostrings

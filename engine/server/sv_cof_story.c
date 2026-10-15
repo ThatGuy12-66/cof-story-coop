@@ -253,6 +253,7 @@ static void CoF_StoryStatus_f( void )
 void SV_CoF_StoryInit( void )
 {
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
+	Cvar_Get( "cof_build", "", 0, "story co-op: the tester build this server runs, sent as cofbuild in its info reply" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
 	SV_CoF_RetailInit();
 	SV_CoF_PartyInit();
