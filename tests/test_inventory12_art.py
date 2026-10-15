@@ -1,6 +1,10 @@
 """The 12-slot inventory's left-half art (tools/make_inventory12_art.py)."""
 import re
+import struct
+import sys
 import tempfile
+import io
+from contextlib import redirect_stderr
 import unittest
 from pathlib import Path
 
@@ -46,6 +50,39 @@ def synthetic(three=False):
             box(left, top, 99, 99)
     box(36, 353, 303, 99)                 # the description box
     return image
+
+
+POLISH = ROOT / 'runtimes/enhanced/cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/640_inventory.tga'
+
+
+def rle_tga(image, bpp, top_first=False):
+    """image as an RLE (type 10) TGA: mixed raw and run packets, packets crossing row boundaries."""
+    step = bpp // 8
+    flat = [bytes(image.pixels[i:i + 4])[:step] for i in range(0, len(image.pixels), 4)]
+    header = struct.pack('<BBBHHBHHHHBB', 0, 0, 10, 0, 0, 0, 0, 0, image.wide, image.tall, bpp,
+                         0x20 if top_first else 0)
+    if not top_first:   # rows are stored bottom first
+        rows = [flat[y * image.wide:(y + 1) * image.wide] for y in range(image.tall)][::-1]
+        flat = [p for row in rows for p in row]
+    return rle_tga_flat(header, flat)
+
+
+def rle_tga_flat(header, flat):
+    packets, i, n = bytearray(), 0, len(flat)
+    while i < n:
+        run = 1
+        while i + run < n and run < 128 and flat[i + run] == flat[i]:
+            run += 1
+        if run >= 2:
+            packets += bytes((0x80 | (run - 1),)) + flat[i]
+            i += run
+            continue
+        j = i + 1
+        while j < n and j - i < 128 and not (j + 1 < n and flat[j] == flat[j + 1]):
+            j += 1
+        packets += bytes((j - i - 1,)) + b''.join(flat[i:j])
+        i = j
+    return header + bytes(packets)
 
 
 class ArtTests(unittest.TestCase):
@@ -119,6 +156,52 @@ class ArtTests(unittest.TestCase):
         self.assertLess(lum(out.get(134, 120)), 25)
         x, y = art.slot_origin(12)
         self.assertGreater(lum(out.get(x, y + 30)), 60)
+
+    def test_read_rle_tga(self):
+        src = synthetic()
+        for bpp in (32, 24):
+            expect = bytearray(src.pixels)
+            if bpp == 24:
+                expect[3::4] = bytes([255]) * (len(expect) // 4)
+            for top_first in (False, True):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / 'rle.tga'
+                    path.write_bytes(rle_tga(src, bpp, top_first))
+                    self.assertEqual(art.read_tga(path).pixels, expect, (bpp, top_first))
+
+    def test_truncated_rle_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'rle.tga'
+            data = rle_tga(synthetic(), 32)
+            path.write_bytes(data[:len(data) // 2])
+            with self.assertRaises(ValueError):
+                art.read_tga(path)
+
+    def test_unreadable_polish_overlay_is_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp)
+            vgui = game / 'cryoffear/gfx/vgui'
+            polish = game / 'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui'
+            art.write_tga(vgui / '640_inventory.tga', synthetic())
+            polish.mkdir(parents=True)
+            (polish / '640_inventory.tga').write_bytes(b'\x00' * 40)
+            err = io.StringIO()
+            with redirect_stderr(err):
+                written = art.generate(game)
+            self.assertEqual([p.relative_to(game).as_posix() for p in written], ['cryoffear/gfx/vgui/inventory12_left.tga'])
+            self.assertIn('640_inventory.tga', err.getvalue())
+            self.assertEqual(len(err.getvalue().strip().splitlines()), 1)
+            (vgui / '640_inventory.tga').write_bytes(b'\x00' * 40)   # the main folder still fails hard
+            with self.assertRaises(Exception):
+                art.generate(game)
+
+    @unittest.skipUnless(POLISH.is_file(), 'the Polish overlay inventory art is not installed locally')
+    def test_polish_overlay_art(self):
+        src = art.read_tga(POLISH)
+        out = art.compose(src, three=False)
+        self.assertEqual((out.wide, out.tall), (373, 480))
+        art.bright_box(src, art.POCKETS_SEARCH)
+        art.bright_box(src, art.ITEMDESC_SEARCH)
 
 
 if __name__ == '__main__':

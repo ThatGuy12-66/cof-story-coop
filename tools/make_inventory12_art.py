@@ -43,13 +43,41 @@ class Image:
         self.pixels[o:o + 4] = bgra
 
 
+def rle_decode(data, pos, count, step, path):
+    """count pixels of RLE packets as BGRA bytes (24-bit gets alpha 255); packets may cross rows."""
+    out = bytearray()
+    done = 0
+    while done < count:
+        if pos >= len(data):
+            raise ValueError(f'{path}: truncated')
+        head = data[pos]
+        pos += 1
+        n = (head & 0x7f) + 1
+        take = pos + (step if head & 0x80 else n * step)
+        if take > len(data):
+            raise ValueError(f'{path}: truncated')
+        chunk = data[pos:take]
+        pos = take
+        if head & 0x80:
+            chunk = chunk * n
+        if step == 3:
+            chunk = b''.join(chunk[i:i + 3] + b'\xff' for i in range(0, len(chunk), 3))
+        out += chunk
+        done += n
+    return bytes(out[:count * 4])
+
+
 def read_tga(path):
     data = Path(path).read_bytes()
     idlen, cmtype, itype = data[0], data[1], data[2]
     wide, tall, bpp, desc = struct.unpack_from('<HHBB', data, 12)
-    if cmtype or itype != 2 or bpp != 32:
-        raise ValueError(f'{path}: expected an uncompressed 32-bit TGA')
-    rows = data[18 + idlen:18 + idlen + wide * tall * 4]
+    if cmtype or itype not in (2, 10) or bpp not in ((32,) if itype == 2 else (24, 32)):
+        raise ValueError(f'{path}: expected an uncompressed 32-bit or run-length-encoded 24/32-bit TGA')
+    start = 18 + idlen
+    if itype == 2:
+        rows = data[start:start + wide * tall * 4]
+    else:
+        rows = rle_decode(data, start, wide * tall, bpp // 8, path)
     if len(rows) != wide * tall * 4:
         raise ValueError(f'{path}: truncated')
     image, stride = Image(wide, tall), wide * 4
@@ -161,7 +189,14 @@ def generate(game):
         for source, target, three in (('640_inventory.tga', 'inventory12_left.tga', False),
                                       ('640_inventory_three.tga', 'inventory12_left_three.tga', True)):
             if (folder / source).is_file():
-                write_tga(folder / target, compose(read_tga(folder / source), three))
+                try:
+                    image = compose(read_tga(folder / source), three)
+                except (ValueError, struct.error, IndexError) as error:
+                    if folder is folders[0]:
+                        raise
+                    print(f'skipped {folder / source}: {error}', file=sys.stderr)   # the Polish overlay is optional
+                    continue
+                write_tga(folder / target, image)
                 written.append(folder / target)
     return written
 
