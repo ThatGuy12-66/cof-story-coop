@@ -13,8 +13,10 @@ FWGS engine with Cry of Fear support).
 
 ## Playtesters
 
-Start with [docs/playtesting.md](docs/playtesting.md): installing the package the host sends you,
-joining, and what to report. Report bugs as GitHub issues with the **Bug report** template.
+Start with [docs/playtesting.md](docs/playtesting.md): the tester zip (`CoF-Story-Coop-Test<N>.zip`)
+holds one app, `CoF Story Co-op.exe`, that sets up a separate co-op copy of your own Steam game,
+then plays solo with the AI companion, hosts friends or joins them. Report bugs as GitHub issues
+with the **Bug report** template.
 
 ## Developers and helpers
 
@@ -53,10 +55,11 @@ All of it lives in the engine's `engine/server/sv_cof_*.c` modules, switched on 
 | Cry of Fear: Enhanced | public, `upstream/cof-enhanced` at `e4cdbfa` | Prerequisites (SDL2), packaging and the base the engine sits in |
 | Local only (gitignored) | `baseline/`, `runtimes/`, `state/`, `evidence/`, `upstream/` | Game copies, private session state, test evidence, the nested clones |
 
-Hosting a playtest: `HOST-STORY.cmd` starts the host from `runtimes/enhanced`
-(`tools/Start-StoryHost.ps1`); testers join with the package built by
-`tools/package_enhanced_story.py`, whose engine must match the host's. Testing alone with two
-windows on one PC: `tools/Start-CampaignTest.ps1` ([guide](docs/campaign-test-guide.md)).
+Playtests run from the tester app: anyone with the zip can host, join or play solo. Building the
+zip: `python -m tools.build_tester_package --out evidence\<new folder>` ([building](docs/building.md)).
+The older host script `HOST-STORY.cmd` (`tools/Start-StoryHost.ps1`, from `runtimes/enhanced`) is
+still there. Testing alone with two windows on one PC: `tools/Start-CampaignTest.ps1`
+([guide](docs/campaign-test-guide.md)).
 
 The older launcher for the retail engine (host/join UI, UPnP, RCON map controls, the reversible
 DLL patch) is described in [docs/launcher.md](docs/launcher.md).

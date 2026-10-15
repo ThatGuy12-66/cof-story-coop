@@ -1,57 +1,66 @@
 # Playtesting
 
 Thanks for testing. This build lets 2–4 people play the single-player Cry of Fear campaign
-together. It is early and experimental: you will find bugs, and finding them is the point.
+together, or one person with an AI companion. It is early and experimental: you will find bugs,
+and finding them is the point.
 
 ## What you need
 
-- A Windows PC with Cry of Fear installed from Steam (it is free). Keep Steam running and signed in.
+- A Windows 10 or 11 PC with Cry of Fear installed from Steam (it is free). Keep Steam running
+  and signed in.
 - About 6 GB of free disk space.
-- The package zip the host sends you, and the invite (host address and server password), which
-  the host sends you separately and privately.
-- A GitHub account that the host has invited to the repository, for bug reports.
+- The tester zip (`CoF-Story-Coop-Test1.zip`). Everyone who plays together needs the same one.
 
 You don't need Python or anything else.
 
 ## Install
 
-1. Extract the whole zip to a normal folder, such as your Downloads folder. Not into the Steam game folder.
-2. Double-click `CoF-Story-Setup.exe`. The app isn't signed, so Windows may warn you about it.
-   If the zip came from the host, choose **More info**, then **Run anyway**.
-3. In the setup window, **Original game** is usually filled in from Steam. If it's empty, use
-   **Browse…** and pick the Cry of Fear folder (the one with `CoFLaunchApp.exe`).
-   **Separate copy** is where the test copy goes. The default, `%LOCALAPPDATA%\CoF-Story`, is fine.
-4. Click **Set up separate copy** and wait. Setup copies the game files, installs the matching
-   engine, makes the two Simon models from your own game files, and checks everything.
+1. Extract the whole zip to a normal folder, such as your Downloads folder. Not into the Steam
+   game folder.
+2. Double-click `CoF Story Co-op.exe`. The app isn't signed, so Windows may warn you about it:
+   choose **More info**, then **Run anyway**.
+3. **Cry of Fear folder** is usually filled in from Steam. If it's empty, use **Browse…** and pick
+   the Cry of Fear folder (the one with `CoFLaunchApp.exe`). **Co-op copy** is where the separate
+   copy goes; the default, `%LOCALAPPDATA%\CoF-Story-Coop`, is fine.
+4. Click **Set up** and wait. Setup copies the game files, installs the co-op engine, makes the
+   two Simon models and the bigger inventory's art from your own game files, and checks
+   everything. It ends with a **Cry of Fear Co-op** shortcut on your desktop and in the Start menu.
 
 Your Steam game is not changed. Your saves and settings are not copied. To uninstall, delete the
-`CoF-Story` folder.
+`CoF-Story-Coop` folder and the two shortcuts.
 
 If setup refuses:
 
-- "differs from retail Cry of Fear 1.6": setup needs the unmodified Steam game DLL. In Steam, open
+- "differs from retail Cry of Fear 1.6": setup needs the unmodified Steam game. In Steam, open
   the game's Properties, then Installed Files, and verify the game files. Then try again.
-- "Choose a new destination folder": that folder already exists. Delete the old `CoF-Story`
+- "Choose a new destination folder": that folder already exists. Delete the old `CoF-Story-Coop`
   folder or choose another place.
-- Anything else: send the host the message, and `friend-setup-install.log` from the new folder if
-  there is one. It shows folder paths that include your Windows user name.
+- Anything else: send the message, and `friend-setup-install.log` from the new folder if there is
+  one. It shows folder paths that include your Windows user name.
 
-## Join
+**Updates:** when you get a newer zip, run its `CoF Story Co-op.exe` and click **Update**. Your
+saves and settings are kept.
 
-When setup is done, the window asks for **Host address**, **Server password** and **Your name**.
+## Play
 
-1. Wait until the host says the game is running.
-2. Enter the address and password from the invite, and the name the others will see (up to 24
-   plain letters, digits and punctuation; no accents, `"`, `\` or `;`).
-3. Click **Join host**. One game window opens (960×540).
+Start the app from the shortcut, type the name the others will see, and pick one:
 
-Next time, double-click `JOIN.cmd` in your `CoF-Story` folder to open the join window again.
-Close the game before you join again.
+- **Play solo**: you and the AI companion, on your PC only.
+- **Host a game**: friends join you. Choose 2–4 players, an optional password, and whether the AI
+  companion keeps you company until a friend takes its place. After the game starts, the app shows
+  a **join code**: send it (and the password) to your friends.
+  - The app asks your router to open UDP 27015 (UPnP) and closes it again when the game ends.
+    If the router doesn't, the app says so: forward UDP 27015 to your PC in the router, or all
+    use a VPN such as Tailscale, ZeroTier or Radmin and share that address instead.
+  - If Windows Firewall asks about Cry of Fear, allow it.
+- **Join a game**: paste the host's join code (or address) and the password, if any. The app
+  checks first that the host answers, runs the same version and has room.
 
-Each join sets mouse sensitivity back to 4. Change it in Options after you join.
+Solo and Host both start with **New game** (the intro), a **chapter**, or **Continue** from the
+last co-op checkpoint (experimental). The game makes a checkpoint by itself after every level
+change. Continue gives your items back only under the name you saved with.
 
-When the host sends a new package, delete the old `CoF-Story` folder, extract the new zip and run
-setup again. Everyone must run the same build.
+The first game opens full screen at your desktop's size; change it in the game's Options.
 
 ## Controls
 
@@ -63,6 +72,7 @@ Options > Keybinds. The co-op keys:
 | --- | --- |
 | J | Join your partner: go to where they are. Use it when the screen says "Press J to join". It doesn't work while you're frozen in a cutscene, on a ladder or in a puzzle view. |
 | Enter | Skip the cutscene for the whole party; press it again to stop the skip and watch the rest |
+| H | Tell the AI companion to wait or to follow |
 | Y | Chat |
 | K | Voice chat, hold to talk |
 | Space, when dead | Respawn next to your partner, after about 10 seconds |
@@ -80,17 +90,21 @@ times faster to its end, and every scripted event still happens. You'll see
 - **Death:** after about 10 seconds, press jump to respawn next to your partner with your items.
   A partner can also revive you.
 - **Story items:** keys, notes and codes count for everyone. Weapons the story hands out go to everyone.
+- **Inventory:** 12 slots instead of 6.
 - **Ladders:** one person at a time. **Yes/no questions:** only the person asked can answer.
-- The host may turn on a **test gun**: everyone gets an M16 with infinite ammo. It's a testing
-  aid, not part of the game.
+- **AI companion:** it follows you, opens doors, fights, heals you with syringes and revives you.
+  It never takes exits, items or story triggers.
 
 ## What works so far
 
-Played live so far, with two game clients: the intro, `c_nightmare`, `c_start` and `c_start2`.
-The rest of the campaign has only passed offline tests and has not been played yet.
+Played live so far: the intro, `c_nightmare`, `c_start`, `c_start2` and the first apartment maps,
+with two players and with the AI companion. The rest of the campaign has only passed offline
+tests and has not been played yet.
 
 Known problems. Report them only if they stop you from playing:
 
+- The AI companion sometimes teleports behind you instead of walking, and can stand in your view
+  right after a cutscene.
 - Some effects reach only one player: the look-at in `c_village3`, the grey fade in `c_ending4`,
   camera zooms and blur.
 - `c_asylumb` puzzle: a guest who solves it may need to press the puzzle's close button.
@@ -99,35 +113,26 @@ Known problems. Report them only if they stop you from playing:
 - A skipped cutscene's music and voices overlap.
 - Not handled for each player yet: the story switching the phone off, the hoodie, the health cap,
   the boss health bar after a respawn, and two players using telephones at once.
-- One report, not confirmed yet: in `c_nightmare` the camera couldn't be added back to the inventory.
 
 ## Reporting a bug
 
-Open an issue at <https://github.com/charliee1w/cof-story-coop/issues/new/choose> and choose
-**Bug report**. One bug per issue. The template asks for:
+Click **Report a bug** in the app (it opens the issue page; the host invites you to the
+repository), or send the details to whoever gave you the zip. One bug per report:
 
-- the package zip name, and whether you were the host or a guest;
+- the zip name, and whether you played solo, hosted or joined;
 - the map name (if you don't know it, describe the place);
-- roughly when it happened (your local time, and your time zone if it differs from the host's),
-  so the host can find it in the server log;
+- roughly when it happened (your local time, and your time zone);
 - what happened, what you expected, and the steps that led to it;
 - screenshots or a video. If the game crashes with an error window, take a screenshot of it;
 - your game's log from that session (see below).
 
-**Keep the invite private.** Issues are visible to everyone with access to the repository.
-
-- Never post the host address or the server password, not even in a screenshot or log.
-- Never attach `cryoffear\cof_story_join.cfg`: it holds the password in plain text.
-- Typing `password` or `setinfo` in the console prints the password. Don't do it while recording
-  a log or a video.
+**Keep your game private.** Never post your password or join code publicly, not even in a
+screenshot or log.
 
 ### Your game's log
 
-Every game you start from the join window writes `story-tester.log` in your `CoF-Story` folder
-(`%LOCALAPPDATA%\CoF-Story` unless you chose another place). When you join again, the previous
-log is moved to the `story-logs` folder beside it, named after the time it was last written. Pick
-the one from the session where the bug happened.
-
-Before you attach it, open it in Notepad and delete every line that contains the host address
-(search for "Connecting to" and for the address itself). It may show folder paths with your
-Windows user name; replace that if you like.
+**Open logs folder** in the app shows `story-session.log`, the log of your latest game. Each new
+game first moves the previous log into `story-logs` beside it, named after the time it was last
+written. Pick the one from the session where the bug happened. Before you send it, open it in
+Notepad and delete every line with "Connecting to" or the host's address. It may show folder
+paths with your Windows user name; replace that if you like.

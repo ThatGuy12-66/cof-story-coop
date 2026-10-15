@@ -193,9 +193,12 @@ repository:
 
 Ask the host before you set these up. The details are in the [README](../README.md),
 [docs/campaign-test-guide.md](campaign-test-guide.md) and the appendix of
-[docs/enhanced-assessment.md](enhanced-assessment.md). Packaging a build for testers
-(`tools/package_enhanced_story.py`, with `tools/build_friend_setup.py`) is done on the host's
-machine. It needs files from those local copies and Enhanced's `scripts/build-release.ps1`.
+[docs/enhanced-assessment.md](enhanced-assessment.md). The tester package
+(`CoF-Story-Coop-Test<N>.zip`: the app `tools/coop_app.py` as one exe with the engine payload inside,
+the readme `tools/tester_readme.txt` and the corresponding source) is built on the host's machine,
+after `tools/build_enhanced.cmd` and with all three repositories committed:
+`python -m tools.build_tester_package --out evidence\<new folder>`. It needs files from those
+local copies, Enhanced's `scripts/build-release.ps1` and PyInstaller.
 
 ## Where to read next
 

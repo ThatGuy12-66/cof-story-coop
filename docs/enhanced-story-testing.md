@@ -82,6 +82,9 @@ Before departure, both players must actually hold phone and knife. Add a distinc
 
 ## Remote-friend setup and one host window
 
+> Historical (2026-09-27). Since 2026-10-15 testers use the tester app (`CoF-Story-Coop-Test<N>.zip`,
+> [playtesting.md](playtesting.md)): setup, Play solo, Host and Join in one exe.
+
 The distributable is `CoF-Story-Tester-v4.zip`. The remote friend extracts the complete ZIP and opens `CoF-Story-Setup.exe`; no Python installation is required. Steam metadata supplies the source folder when available, with Browse as fallback. Setup creates a fresh separate game copy, verifies the stock game DLL, retains campaign maps and `skill.cfg`, installs the matching Enhanced payload, generates both Simon models, and verifies their hashes. It excludes personal saves, logs, settings, and existing entity overrides.
 
 After setup, the window asks for the address and password from the separate private invitation, with the friend's player name. **Join host** opens one 960×540 window capped at 60 FPS. Subsequent joins use `JOIN.cmd` in the separate copy. The current host runs ordinary `c_start` campaign data, without fixture overrides. Both players need the same protocol-49 build. Host credentials and invitation files are not included in the bundle or corresponding source.

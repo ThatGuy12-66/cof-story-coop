@@ -7,13 +7,13 @@ assignees: ''
 ---
 
 <!--
-Never post the host address or the server password, not even in a screenshot or a log.
-Never attach cryoffear\cof_story_join.cfg: it holds the password.
+Never post the host address, the join code or the server password, not even in a screenshot or a log.
+Never attach cryoffear\cof_story_session.cfg: it holds the password.
 Guide: https://github.com/charliee1w/cof-story-coop/blob/main/docs/playtesting.md
 -->
 
-**Package:** <!-- the zip name, for example CoF-Story-Tester-v5 -->
-**I was:** <!-- host or guest -->
+**Package:** <!-- the zip name, for example CoF-Story-Coop-Test1 -->
+**I was:** <!-- playing solo, hosting, or joining -->
 **Map:** <!-- for example c_start; if you don't know, describe the place -->
 **When:** <!-- roughly, your local time and time zone, so the host can find it in the server log -->
 
@@ -35,7 +35,7 @@ Guide: https://github.com/charliee1w/cof-story-coop/blob/main/docs/playtesting.m
 
 <!--
 A crash error window: attach a screenshot of it.
-Your game's log: story-tester.log in your CoF-Story folder, or the one from that session in story-logs\ (see "Your game's log" in the guide).
+Your game's log: Open logs folder in the app (story-session.log, or the one from that session in story-logs\; see "Your game's log" in the guide).
 Delete every line with the host address from the log first.
 -->
 
