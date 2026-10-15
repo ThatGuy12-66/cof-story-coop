@@ -95,6 +95,9 @@ static void XashPaint( void )
 	// HUD pieces to hide while such a panel is open (cofbackdrop.cpp)
 	CofBackdrop_Frame( panel );
 
+	// Cry of Fear story co-op: the 12-slot inventory grid (cofinventory.cpp)
+	CofInventory_Frame( panel );
+
 	panel->setBounds( 0, 0, width, height );
 	panel->repaint();
 	panel->paintTraverse();
@@ -145,4 +148,9 @@ extern "C" void EXPORT VGUI_SUPPORT_INIT( vguiapi_t *api )
 	// Cry of Fear gamepad: B = the open panel's own back button, A on a tape
 	// recorder slot also confirms it (cofpanels.cpp)
 	api->CofPanelAction = CofPanels_Action;
+
+	// Cry of Fear story co-op: this library draws the 12-slot inventory grid
+	// (cofinventory.cpp); the engine advertises it to servers (cof_inventory12.c)
+	if( api->CofInventory )
+		api->CofInventory( COF_INV_OP_READY, 1, nullptr, 0 );
 }

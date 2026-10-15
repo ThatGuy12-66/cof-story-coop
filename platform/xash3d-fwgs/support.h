@@ -76,6 +76,10 @@ int CofPanels_Action( int action, char *info, int infoSize );
 void CofBackdrop_Install( void );
 void CofBackdrop_Frame( Panel *root );
 
+// Cry of Fear story co-op: the 12-slot inventory grid over the client's inventory
+// panel, every painted frame after CofBackdrop_Frame (cofinventory.cpp)
+void CofInventory_Frame( Panel *root );
+
 // input entry points the engine calls (input.cpp)
 void XashMouse( VGUI_MouseAction action, int code );
 void XashKey( VGUI_KeyAction action, VGUI_KeyCode code );
