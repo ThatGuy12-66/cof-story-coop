@@ -10,16 +10,37 @@ import zipfile
 from tools import friend_setup as friend
 
 
+def make_payload(folder: Path, engine=b"engine", build=1):
+    """The payload the app carries: the Enhanced player zip and its manifest."""
+    folder.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(folder / friend.PAYLOAD_ZIP, "w") as archive:
+        archive.writestr("cof-enhanced/files/xash.dll", engine)
+        archive.writestr("cof-enhanced/install.ps1", b"# installer")
+        archive.writestr("README.txt", b"readme")
+    (folder / friend.PAYLOAD_JSON).write_text(json.dumps({"schema": 2, "version": f"test{build}", "build": build,
+                                                          "xash_sha256": hashlib.sha256(engine).hexdigest()}))
+    return folder
+
+
+def fake_installer(args, cwd, **kwargs):
+    """Stands in for install.ps1: it puts files\\xash.dll in the game folder, as the real one does."""
+    (Path(cwd) / "xash.dll").write_bytes((Path(cwd) / "cof-enhanced/files/xash.dll").read_bytes())
+    return subprocess.CompletedProcess(args, 0)
+
+
 class FriendSetupTests(unittest.TestCase):
-    def test_existing_retail_or_enhanced_game_blocks_a_second_client(self):
-        for name in ("cof.exe", "CoFLaunchApp.exe"):
-            reply = subprocess.CompletedProcess([], 0, json.dumps({"ProcessId": 123, "Name": name}), "")
-            with self.subTest(name=name), mock.patch.object(friend.subprocess, "run", return_value=reply) as run:
-                self.assertTrue(friend.game_is_running(Path("separate")))
+    def test_only_a_game_from_this_copy_counts_as_running(self):
+        root = Path("C:/Games/CoF-Story-Coop")
+        for path, expected in ((root / "CoFLaunchApp.exe", True), (Path("C:/Games/CoF-Story-Coop2/cof.exe"), False),
+                               (None, False)):
+            rows = [{"ProcessId": 1, "Name": "CoFLaunchApp.exe", "ExecutablePath": str(path) if path else None}]
+            reply = subprocess.CompletedProcess([], 0, json.dumps(rows), "")
+            with self.subTest(path=path), mock.patch.object(friend.subprocess, "run", return_value=reply) as run:
+                self.assertEqual(friend.game_is_running(root), expected)
                 self.assertIn("Name='cof.exe' OR Name='CoFLaunchApp.exe'", run.call_args.args[0][-1])
         reply = subprocess.CompletedProcess([], 0, "", "")
         with mock.patch.object(friend.subprocess, "run", return_value=reply):
-            self.assertFalse(friend.game_is_running(Path("separate")))
+            self.assertFalse(friend.game_is_running(root))
 
     def test_copy_excludes_personal_state_and_overrides_but_keeps_campaign_cfg(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -60,52 +81,28 @@ class FriendSetupTests(unittest.TestCase):
                 self.assertEqual(friend.validate_source(root), root.resolve())
             self.assertEqual((root / "cryoffear/cl_dlls/hl.dll").read_bytes(), b"fixture")
 
-    def test_join_validation_blocks_console_injection_and_password_not_in_argv(self):
-        args = friend.join_arguments(Path("game"), "example.com:27015")
-        self.assertEqual(args[-1], "example.com:27015")
-        self.assertIn("-windowed", args)
-        config = friend.join_config("Tester", "private-value")
-        self.assertIn('name "Tester"', config)
-        self.assertIn('password "private-value"', config)
-        self.assertIn("fps_max 60", config)
-        self.assertNotIn("private-value", args)
-        for bad in ('a";quit', "a\nquit", "a\\b", "x" * 65):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                friend.join_config(password=bad)
-        for bad in ("1.2.3.999", "example.com;quit", "127.0.0.1:0", "host:70000", "host\nquit"):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                friend.join_arguments(Path("game"), bad)
-
-    def test_blank_player_name_is_refused_and_setup_default_is_generic(self):
-        # The join window starts with an empty name field; joining needs a typed name.
-        for blank in ("", "   "):
-            with self.subTest(blank=blank), self.assertRaisesRegex(ValueError, "Enter a player name"):
-                friend.join_config(blank, "private-value")
-        # Setup writes its first config before anyone has typed a name.
-        self.assertEqual(friend.DEFAULT_NAME, "Player")
-        self.assertIn('name "Player"\n', friend.join_config())
-
     def test_enter_skips_cutscenes_for_the_party(self):
         controls = friend.default_controls()
         self.assertIn('bind "ENTER" "cof_skip"', controls)
         self.assertIn('bind "KP_ENTER" "cof_skip"', controls)
 
-    def test_join_writes_a_timestamped_log_and_keeps_the_previous_one(self):
+    def test_controls_bind_the_coop_keys(self):
+        controls = friend.default_controls()
+        for line in ('bind "j" "cof_warp"', 'bind "h" "cof_companion_order"', 'bind "ENTER" "cof_skip"'):
+            self.assertIn(line, controls)
+
+    def test_each_game_keeps_the_previous_log(self):
         # The engine opens -log files with "w+": without moving the last one aside,
-        # rejoining after a crash would erase the log a bug report needs.
-        args = friend.join_arguments(Path("game"), "example.com:27015")
-        self.assertEqual(args[args.index("-log") + 1], friend.TESTER_LOG)
-        self.assertIn("-logtime", args)
-        self.assertLess(args.index("-log"), args.index("+exec"))
+        # starting again after a crash would erase the log a bug report needs.
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            self.assertIsNone(friend.keep_previous_log(root))
-            for text in ("first session", "second session"):
-                (root / friend.TESTER_LOG).write_text(text, encoding="ascii")
-                kept = friend.keep_previous_log(root)
-                self.assertFalse((root / friend.TESTER_LOG).exists())
-                self.assertEqual(kept.parent, root / "story-logs")
-                self.assertEqual(kept.read_text(encoding="ascii"), text)
+            self.assertIsNone(friend.keep_previous_log(root, "story-session.log"))
+            for text in ("first", "second"):
+                (root / "story-session.log").write_text(text)
+                kept = friend.keep_previous_log(root, "story-session.log")
+                self.assertFalse((root / "story-session.log").exists())
+                self.assertEqual((kept.parent, kept.read_text()), (root / "story-logs", text))
+                self.assertTrue(kept.name.startswith("story-session-"))
             self.assertEqual(len(list((root / "story-logs").iterdir())), 2)
 
     def test_archive_traversal_duplicate_and_link_entries_are_rejected(self):
@@ -130,19 +127,69 @@ class FriendSetupTests(unittest.TestCase):
             with zipfile.ZipFile(path) as archive, self.assertRaises(ValueError):
                 list(friend.safe_zip_members(archive))
 
-    def test_bundle_hashes_and_engine_identity_required(self):
+    def test_payload_identity_is_checked(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = make_payload(Path(temp) / "payload")
+            self.assertEqual(friend.inspect_payload(folder)["build"], 1)
+            manifest = json.loads((folder / friend.PAYLOAD_JSON).read_text())
+            manifest["xash_sha256"] = "0" * 64
+            (folder / friend.PAYLOAD_JSON).write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "damaged"):
+                friend.inspect_payload(folder)
+            (folder / friend.PAYLOAD_JSON).unlink()
+            with self.assertRaisesRegex(ValueError, "incomplete"):
+                friend.inspect_payload(folder)
+
+    def test_update_lays_the_new_engine_over_and_keeps_saves_settings_models(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = Path(temp) / "CoF-Story-Coop", Path(temp) / "new.exe"
+            exe.write_bytes(b"new app")
+            for rel, data in {"xash.dll": b"old engine", "SAVE/cofcoop/autosave.cof": b"save",
+                              "cryoffear/config.cfg": b"my binds", "cryoffear/models/player/cof_s1/cof_s1.mdl": b"model",
+                              "cof-story-coop-settings.json": b"{}"}.items():
+                path = root / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+            models = {"models/player/cof_s1/cof_s1.mdl": hashlib.sha256(b"model").hexdigest()}
+            (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test1", "build": 1,
+                "xash_sha256": hashlib.sha256(b"old engine").hexdigest(), "models": models, "source_game": "src"}))
+            payload = make_payload(Path(temp) / "payload", b"new engine", build=2)
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                 mock.patch.object(friend.subprocess, "run", side_effect=fake_installer), \
+                 mock.patch.object(friend.art, "generate", return_value=[]) as art:
+                friend.update(root, payload, exe=exe, shortcuts=False)
+            self.assertEqual((root / "xash.dll").read_bytes(), b"new engine")
+            art.assert_called_once_with(root.resolve())
+            for rel, data in {"SAVE/cofcoop/autosave.cof": b"save", "cryoffear/config.cfg": b"my binds",
+                              "cryoffear/models/player/cof_s1/cof_s1.mdl": b"model"}.items():
+                self.assertEqual((root / rel).read_bytes(), data, rel)
+            self.assertEqual((root / friend.APP_EXE).read_bytes(), b"new app")
+            state = friend.installed_state(root)
+            self.assertEqual((state["build"], state["models"]), (2, models))
+            self.assertIn("cof_test_gun 0", (root / "cryoffear/cof_story.cfg").read_text())
+
+    def test_update_refuses_while_the_game_runs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "copy"; root.mkdir()
+            (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test1", "build": 1,
+                "xash_sha256": "0" * 64, "models": {}, "source_game": "src"}))
+            (root / "xash.dll").write_bytes(b"old")
+            with mock.patch.object(friend, "game_is_running", return_value=True), self.assertRaisesRegex(ValueError, "Close"):
+                friend.update(root, make_payload(Path(temp) / "payload"), exe=root / "x.exe", shortcuts=False)
+            self.assertEqual((root / "xash.dll").read_bytes(), b"old")
+
+    def test_installed_state_needs_this_apps_schema(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            with zipfile.ZipFile(root / "engine-payload.zip", "w") as archive:
-                archive.writestr("cof-enhanced/files/xash.dll", b"engine")
-            (root / "corresponding-source.zip").write_bytes(b"source")
-            manifest = {"schema": 1, "protocol": 49, "xash_sha256": hashlib.sha256(b"engine").hexdigest(),
-                        "sha256": {name: friend.digest_file(root / name) for name in ("engine-payload.zip", "corresponding-source.zip")}}
-            (root / "bundle.json").write_text(json.dumps(manifest))
-            self.assertEqual(friend.inspect_bundle(root), manifest)
-            (root / "engine-payload.zip").write_bytes(b"changed")
-            with self.assertRaisesRegex(ValueError, "hash mismatch"):
-                friend.inspect_bundle(root)
+            self.assertIsNone(friend.installed_state(root))
+            (root / friend.INSTALLED).write_text(json.dumps({"schema": 1, "protocol": 49}))
+            self.assertIsNone(friend.installed_state(root))
+
+    def test_shortcuts_pass_paths_through_the_environment(self):
+        with mock.patch.object(friend.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertTrue(friend.write_shortcuts(Path("C:/Games/CoF-Story-Coop")))
+        args, kwargs = run.call_args
+        self.assertNotIn("CoF-Story-Coop", " ".join(args[0]))
+        self.assertEqual(kwargs["env"]["COF_APP_EXE"], str(Path("C:/Games/CoF-Story-Coop") / friend.APP_EXE))
+        self.assertIn("Cry of Fear Co-op.lnk", args[0][-1])
 
     def test_steam_discovery_reads_metadata_not_a_disk_inventory(self):
         with tempfile.TemporaryDirectory() as temp:
