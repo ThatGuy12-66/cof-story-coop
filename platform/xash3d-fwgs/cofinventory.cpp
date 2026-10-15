@@ -179,6 +179,8 @@ public:
 		if( slot ) Apply( cofinv::ClickSlot( g_model.state, slot, g_model.items ));
 		else cofinv::ClickOutside( g_model.state );
 	}
+	// SDL reports a quick second click as a double press only
+	void mouseDoublePressed( MouseCode code, Panel *panel ) override { mousePressed( code, panel ); }
 private:
 	Grid *m_grid;
 };
@@ -206,6 +208,7 @@ public:
 		cofinv::Rect art = cofinv::MenuArt( m_menu->menu );
 		Apply( cofinv::ClickMenu( g_model.state, cofinv::MenuHit( m_menu->menu, x + art.x, y + art.y )));
 	}
+	void mouseDoublePressed( MouseCode code, Panel *panel ) override { mousePressed( code, panel ); }
 private:
 	ItemMenu *m_menu;
 };
@@ -304,8 +307,11 @@ void RestoreRetail()
 	g_ours.hidden = false;
 }
 
+bool g_wasDown; // the left button as of the last frame, for the outside-press edge
+
 void Close()
 {
+	g_wasDown = false; // a press held across closing must not count later
 	cofinv::Reset( g_model.state );
 	g_model.hover = 0;
 	g_ours.grid->setVisible( false );
@@ -353,13 +359,17 @@ void vgui::CofInventory_Frame( Panel *root )
 	}
 	cofinv::Sync( g_model.state, g_model.items, g_model.visible );
 
-	// a press anywhere but the grid or the menu closes the menu, as the client's own does
-	if( App::getInstance()->wasMousePressed( vgui::MOUSE_LEFT, nullptr ))
+	// a press anywhere but the grid or the menu closes the menu, as the client's own does.
+	// Edge of the held state: the per-tick pressed flag is already cleared by the time
+	// this runs (App::externalTick comes first in XashPaint).
+	bool down = App::getInstance()->isMouseDown( vgui::MOUSE_LEFT, nullptr );
+	if( down && !g_wasDown )
 	{
 		int x, y;
 		if( !g_ours.grid->cursor( x, y ) && !( g_ours.menu->isVisible() && g_ours.menu->cursor( x, y )))
 			cofinv::ClickOutside( g_model.state );
 	}
+	g_wasDown = down;
 
 	g_ours.grid->setVisible( true );
 	if( g_model.state.menu )
