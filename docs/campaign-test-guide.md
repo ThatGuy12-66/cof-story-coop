@@ -104,13 +104,22 @@ always installed together.
 3. Equip a weapon in slot 7..12; use a key from slot 7..12 on its door; drop an item from slot 9; combine the Glock with the tactical light across slots 6 and 7; assign quick select 2 from slot 9: the picture appears under QUICK SELECT right after choosing 1/2/3.
 4. Open an item's menu, then click the box next to it: that box's menu opens (the old slot-6 bug).
 5. Level change, death and respawn, a checkpoint save and load (`cof_save test12` / `cof_load test12`), and an autosave from before this build: slots 7..12 are kept, the old save loads with them empty.
-6. Run `cof_inventory12_status` before and after a full clear (`c_start`): every `inventory12-fields` value is the same, and `dead=0` (the bytes after the slot array).
+6. Run `cof_inventory12_status` before and after a full clear (`c_start`): every `inventory12-fields` value is the same, and `dead=0` (the bytes after the slot array). If a value differs, repeat the same move with `cof_inventory_slots 6` on the host: a difference there too is the game's own reset, not the 12-slot patch.
 7. A copy still on the previous engine joins a map at 12: refused with "This game uses the 12-slot inventory." Connected before a map loads: that map runs at six (`reason=client:<userid>`), slots 7..12 come back on the next map at 12.
    To get the older client, with both games closed, in ONE copy only (e.g. `guest`): rename the two backups from
    before this build over the installed files, `xash.dll.<hash8>.bak` over `xash.dll` and `vgui.dll.<hash8>.bak` over
    `vgui.dll` (`<hash8>`: the first 8 characters of that file's SHA-256; until this build the copies held `xash.dll`
-   `3D860BC7…` and `vgui.dll` `F77963A0…`). Both files, never one: they belong together. Afterwards run
-   `Prepare-CampaignTest.ps1` again with the same arguments to put this build back into that copy.
+   `3D860BC7…` and `vgui.dll` `F77963A0…`). Both files, never one: they belong together.
+   `tools\Start-CampaignTest.ps1` refuses a host and a guest copy with different engines, so it cannot start this
+   pair. Start the two games by hand with the same command lines the script uses, host first (the PowerShell
+   window's current folder does not matter; each game runs from its own folder):
+   - Host, from `evidence\story-live-20261012\host`:
+     `.\CoFLaunchApp.exe -windowed -width 1280 -height 720 -console -port 27115 -clientport 27116 -log campaign-host.log -logtime +exec cof_campaign.cfg +cof_test_gun weapon_m16 +map c_intro`
+     (`weapon_m16` and `c_intro` are the script's defaults; change the map if you want to test another).
+   - Guest, from `evidence\story-live-20261012\guest`, after the host's map has loaded:
+     `.\CoFLaunchApp.exe -windowed -width 960 -height 540 -console -port 27119 -clientport 27120 -log campaign-guest.log -logtime +exec cof_campaign.cfg +connect 127.0.0.1:27115`
+   Afterwards close both games and run `Prepare-CampaignTest.ps1` again with the same arguments to put this build
+   back into that copy.
 8. `c_nightmare`: the inventory still does not open (the game's own rule).
 9. A weapon in slot 9 survives a level change and a death/respawn, and can still be equipped afterwards.
 
