@@ -777,6 +777,7 @@ qboolean CL_CoF_PanelPaused( void );
 // Defined in cof_panel_pause.c; the one "panel open" source for the gamepad
 // code (cof_gamepad.c).
 unsigned int CL_CoF_PanelsOnScreen( qboolean *reporting );
+qboolean CL_CoF_Inventory12Ready( void ); // cof_inventory12.c: client.dll's slot accessor is the engine's and the UI library has the 12-slot grid
 #else
 static inline qboolean CL_Initialized( void ) { return false; }
 static inline qboolean CL_IsInGame( void ) { return true; } // always true for dedicated

@@ -205,6 +205,12 @@ int SV_CoF_RetailFreeSlots( sv_client_t *cl )
 	return count;
 }
 
+qboolean SV_CoF_RetailInThreeSlots( sv_client_t *cl )
+{
+	byte *pv = CoF_RetailPlayer( cl );
+	return pv && pv[COF_RETAIL_THREE_SLOTS];
+}
+
 qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *descriptor )
 {
 	const cof_retail_item_t *item = CoF_RetailItem( descriptor );

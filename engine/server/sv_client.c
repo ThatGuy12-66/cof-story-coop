@@ -29,6 +29,7 @@ GNU General Public License for more details.
 #include "sv_cof_recovery.h"
 #include "sv_cof_session.h"
 #include "sv_cof_scene.h"
+#include "sv_cof_inventory12.h"
 
 // challenges are valid for two consecutive windows of this size (max lifetime ~10s).
 #define CHALLENGE_WINDOW_SECONDS 5
@@ -413,6 +414,13 @@ static void SV_ConnectClient( netadr_t from )
 			SV_RejectConnection( from, "invalid password\n" );
 			return;
 		}
+	}
+
+	// Cry of Fear story co-op: a map at 12 inventory slots needs the 12-slot screen
+	if( SV_CoF_Inventory12Refuse( userinfo, NET_IsLocalAddress( from )))
+	{
+		SV_RejectConnection( from, "This game uses the 12-slot inventory.\nUpdate Cry of Fear story co-op to join.\n" );
+		return;
 	}
 
 	// if there is already a slot for this ip, reuse it
@@ -3155,6 +3163,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 
 	// Cry of Fear story co-op: cof_skip (Enter) skips a cutscene for the party
 	if( SV_CoF_SceneClientCommand( cl ))
+		return;
+
+	// Cry of Fear story co-op: inventory commands only name slots this map has
+	if( SV_CoF_Inventory12ClientCommand( cl ))
 		return;
 
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )

@@ -11,6 +11,8 @@ void SV_CoF_RetailInit( void );
 qboolean SV_CoF_RetailReadSlots( sv_client_t *cl, char slots[COF_RETAIL_SLOTS][COF_RETAIL_ITEM] );
 // Empty usable slots (only 1..3 count in the game's three-slot mode), or -1 without a verified player.
 int SV_CoF_RetailFreeSlots( sv_client_t *cl );
+// The game's three-slot mode (cof_clearitems sf 4): only slots 1..3 usable. False without a verified player.
+qboolean SV_CoF_RetailInThreeSlots( sv_client_t *cl );
 // Hand a story item over through the game's own pickup (KeyitemUse -> AddInventoryItem).
 qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *descriptor );
 // Remove one story item through the game's own inventorydeletenamed command.

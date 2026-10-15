@@ -20,6 +20,7 @@
 #include "sv_cof_moments.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_testgun.h"
+#include "sv_cof_inventory12.h"
 #if XASH_WIN32
 #include <windows.h>
 #endif
@@ -86,6 +87,7 @@ static qboolean CoF_StoryZeroRules( byte *base )
 
 static void CoF_StoryCloseGate( void )
 {
+	SV_CoF_Inventory12Close();
 	if( cof_gate && cof_gate_instance == svgame.hInstance )
 	{
 		CoF_StoryWriteGate( cof_gate, cof_gate_open, cof_gate_original );
@@ -260,6 +262,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_ShareInit();
 	SV_CoF_TraceInit();
 	SV_CoF_RecoveryInit();
+	SV_CoF_Inventory12Init();
 	SV_CoF_SessionInit();
 }
 
@@ -327,6 +330,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_StateFrame();
 	SV_CoF_SessionFrame();
 	SV_CoF_TraceFrame();
+	SV_CoF_Inventory12Frame();
 }
 
 void SV_CoF_StoryShutdown( void )
