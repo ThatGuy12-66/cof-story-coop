@@ -8,6 +8,9 @@ void SV_CoF_MomentsReset( void );
 void SV_CoF_MomentsCommand( sv_client_t *cl, usercmd_t *cmd );
 // SV_TouchLinks: true when the story layer handled this trigger touch itself.
 qboolean SV_CoF_MomentsTriggerTouch( edict_t *trigger, edict_t *ent );
+// SV_LinkEdict: a living player non-solid only because it stands stacked on a
+// living partner still touches the triggers it stands in.
+qboolean SV_CoF_MomentsStackedTouch( const edict_t *ent );
 // SV_DropClient: nothing may keep a pointer to the player who leaves.
 void SV_CoF_MomentsDrop( sv_client_t *cl );
 // Client commands the story layer answers or refuses before the game: true when handled.

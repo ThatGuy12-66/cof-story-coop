@@ -171,6 +171,29 @@ static void CoF_MomentCheckGeneration( void )
 	}
 }
 
+// Retail MP PreThink makes a player SOLID_NOT while its box overlaps another
+// player's (docs/research/2026-09-30-hl-exits-coop-re.md), and the engine skips
+// trigger touches for SOLID_NOT bodies. A party sharing one spot (c_intro's last
+// room, kunitei, fits only one) then never touches the exit it stands in: with an
+// idle AI companion on the player, never at all (live 2026-10-15). A living player
+// that is non-solid only because it is stacked on a living partner still touches.
+qboolean SV_CoF_MomentsStackedTouch( const edict_t *ent )
+{
+	int i;
+	if( !ent || !svgame.edicts || ent->v.solid != SOLID_NOT || sv.state != ss_active || !SV_CoF_StoryCoopEnabled() ) return false;
+	if( !CoF_MomentClient( ent ) || !CoF_MomentAlive( ent )) return false;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		const edict_t *other = svs.clients[i].edict;
+		if( other == ent || !CoF_MomentClient( other ) || !CoF_MomentAlive( other )) continue;
+		if( ent->v.absmin[0] < other->v.absmax[0] && other->v.absmin[0] < ent->v.absmax[0] &&
+			ent->v.absmin[1] < other->v.absmax[1] && other->v.absmin[1] < ent->v.absmax[1] &&
+			ent->v.absmin[2] < other->v.absmax[2] && other->v.absmin[2] < ent->v.absmax[2] )
+			return true;
+	}
+	return false;
+}
+
 qboolean SV_CoF_MomentsTriggerTouch( edict_t *trigger, edict_t *ent )
 {
 	sv_client_t *cl;

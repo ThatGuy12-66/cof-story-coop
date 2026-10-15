@@ -668,7 +668,17 @@ void GAME_EXPORT SV_LinkEdict( edict_t *ent, qboolean touch_triggers )
 
 	// ignore non-solid bodies
 	if( ent->v.solid == SOLID_NOT && ent->v.skin >= CONTENTS_EMPTY )
+	{
+		// Cry of Fear story co-op: a player stacked on a partner (retail PreThink
+		// makes it SOLID_NOT) still stands in its triggers, such as an exit
+		if( touch_triggers && !iTouchLinkSemaphore && SV_CoF_MomentsStackedTouch( ent ))
+		{
+			iTouchLinkSemaphore = true;
+			SV_TouchLinks( ent, sv_areanodes );
+			iTouchLinkSemaphore = false;
+		}
 		return;
+	}
 
 	// find the first node that the ent's box crosses
 	node = sv_areanodes;
