@@ -104,4 +104,42 @@ static int CoF_Inv12PickupLine( const char *nice, unsigned char *out, int size )
 	return n + 2;
 }
 
+/* A command the grid may have the engine send: only what client.dll's own menu
+ * sends (one of seven prefixes), and nothing that could chain or break out of
+ * the line (; " CR LF). 1 when allowed. */
+static int CoF_Inv12CommandAllowed( const char *text )
+{
+	static const char *allowed[] = { "inventoryequip ", "inventorydrop ", "inventorycombine ", "inventorydualwield ", "quickselset1 ", "quickselset2 ", "quickselset3 " };
+	const char *c;
+	size_t i;
+	for( c = text; *c; c++ )
+		if( *c == ';' || *c == '"' || *c == '\n' || *c == '\r' ) return 0;
+	for( i = 0; i < sizeof( allowed ) / sizeof( allowed[0] ); i++ )
+		if( !strncmp( text, allowed[i], strlen( allowed[i] ))) return 1;
+	return 0;
+}
+
+/* "quickselsetK N", K 1..3, N 1..12 (one or two digits): 1 with *quick = K and
+ * *slot = N. The retail item menu also set the QUICK SELECT picture itself;
+ * client.dll's QSlotUpdate (100443C0) does that. */
+static int CoF_Inv12QuickSelect( const char *text, int *quick, int *slot )
+{
+	static const char prefix[] = "quickselset";
+	const char *n;
+	int i, value = 0;
+	if( strncmp( text, prefix, sizeof( prefix ) - 1 )) return 0;
+	text += sizeof( prefix ) - 1;
+	if( text[0] < '1' || text[0] > '3' || text[1] != ' ' ) return 0;
+	n = text + 2;
+	for( i = 0; n[i]; i++ )
+	{
+		if( i >= 2 || n[i] < '0' || n[i] > '9' ) return 0;
+		value = value * 10 + ( n[i] - '0' );
+	}
+	if( value < 1 || value > COF_INV12_SLOTS ) return 0;
+	*quick = text[0] - '0';
+	*slot = value;
+	return 1;
+}
+
 #endif /* COF_INVENTORY12_STATE_H */

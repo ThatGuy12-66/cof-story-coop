@@ -197,21 +197,25 @@ static int CL_CoF_Inv12Item( int slot, cof_vgui_inv_item_t *out )
 	return d[0] ? 1 : 0;
 }
 
-// Only what the grid's menu sends, the way client.dll's own menu sends it.
+// Only what the grid's menu sends, the way client.dll's own menu sends it
+// (CoF_Inv12CommandAllowed).
 static qboolean CL_CoF_Inv12Command( const char *text )
 {
-	static const char *allowed[] = { "inventoryequip ", "inventorydrop ", "inventorycombine ", "inventorydualwield ", "quickselset1 ", "quickselset2 ", "quickselset3 " };
-	const char *c;
-	size_t i;
-	for( c = text; *c; c++ )
-		if( *c == ';' || *c == '"' || *c == '\n' || *c == '\r' ) return false;
-	for( i = 0; i < ARRAYSIZE( allowed ); i++ )
-		if( !Q_strncmp( text, allowed[i], Q_strlen( allowed[i] )))
-		{
-			CL_ServerCommand( true, "%s", text );
-			return true;
-		}
-	return false;
+	int quick, slot;
+	if( !CoF_Inv12CommandAllowed( text )) return false;
+	// The retail menu set the QUICK SELECT picture itself before sending
+	// quickselsetK N; the server's QSlotUpdate comes only with the next
+	// InitHUD. client.dll's own handler sets it, reading the slot through the
+	// patched accessor (it also sends quickselsetK N: the second one is harmless).
+	if( cof_inv12.patched && CoF_Inv12QuickSelect( text, &quick, &slot ))
+	{
+		byte msg[2];
+		msg[0] = (byte)quick;
+		msg[1] = (byte)slot;
+		CL_DispatchUserMessage( "QSlotUpdate", sizeof( msg ), msg );
+	}
+	CL_ServerCommand( true, "%s", text );
+	return true;
 }
 
 static int CL_CoF_Inv12Image( cof_vgui_image_t *image )
