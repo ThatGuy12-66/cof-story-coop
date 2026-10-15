@@ -175,9 +175,4 @@ byte LightToTexGamma( byte b )
 	return b;
 }
 
-qboolean CL_CoF_Inventory12Ready( void )
-{
-	return false; // no local client
-}
-
 #endif // XASH_DEDICATED

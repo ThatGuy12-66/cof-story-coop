@@ -796,6 +796,7 @@ static inline qboolean CL_CoF_MenuMapLevelChange( const char *mapname, const cha
 static inline qboolean CL_CoF_MenuPanelSound( const char *sample, float volume ) { return false; }
 static inline void CL_CoF_RememberBackgroundMap( const char *mapname ) { }
 static inline void CL_CoF_StopMP3( const char *reason ) { }
+static inline qboolean CL_CoF_Inventory12Ready( void ) { return false; } // no local client
 #endif
 
 char *CL_Userinfo( void );
