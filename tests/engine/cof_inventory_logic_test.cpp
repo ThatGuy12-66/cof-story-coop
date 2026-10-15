@@ -19,7 +19,7 @@ static bool Overlap( const Rect &a, const Rect &b ) { return a.x < b.x + b.w && 
 int main()
 {
 	// layout: 4x3 in the left panel (x 6..366), clear of each other, of the description box and of the menu column
-	assert( SlotRect( 1 ).x == 36 && SlotRect( 4 ).x == 270 && SlotRect( 5 ).y == 146 && SlotRect( 9 ).y == 262 && SlotRect( 12 ).x == 270 );
+	assert( SlotRect( 1 ).x == 36 && SlotRect( 4 ).x == 267 && SlotRect( 5 ).y == 145 && SlotRect( 9 ).y == 259 && SlotRect( 12 ).x == 267 );
 	for( int s = 1; s <= kSlots; s++ )
 	{
 		Rect r = SlotRect( s );

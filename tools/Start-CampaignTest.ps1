@@ -15,8 +15,8 @@ tools\story_run_report.py can add them up. Closing this window leaves the games 
 -Mode companion  Only the host window, with an AI companion bot beside you (cof_companion 1):
                  no second window at all.
 
--Gun             The test gun every person keeps (cof_test_gun): m16 (default), shotgun, vp70,
-                 revolver, rifle or glock; none for the game as it is. With a gun on, every gun you
+-Gun             The test gun every person keeps (cof_test_gun): none (default: the game as it is), m16, shotgun, vp70,
+                 revolver, rifle or glock. With a gun on, every gun you
                  carry has infinite ammo (syringes and flares too). It stays with you through level
                  changes, deaths and checkpoints, and comes back after the story empties your
                  inventory, as long as a slot stays free for a key.
@@ -24,7 +24,7 @@ tools\story_run_report.py can add them up. Closing this window leaves the games 
 param(
     [string]$Map = 'c_intro',
     [ValidateSet('two', 'solo', 'companion')][string]$Mode = 'solo',
-    [ValidateSet('m16', 'shotgun', 'vp70', 'revolver', 'rifle', 'glock', 'none')][string]$Gun = 'm16',
+    [ValidateSet('m16', 'shotgun', 'vp70', 'revolver', 'rifle', 'glock', 'none')][string]$Gun = 'none',
     [string]$Root
 )
 $ErrorActionPreference = 'Stop'

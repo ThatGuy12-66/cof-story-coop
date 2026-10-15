@@ -16,8 +16,13 @@ The story co-op engine drives it. It is experimental and not yet tested in a liv
 ## What it does
 
 - **Follows you.** It walks the path you walked, so it gets round corners and through rooms the way
-  you did. If it falls behind, gets stuck or loses you (a door, a ladder, a scripted move), it
-  reappears behind you, out of your view where it can.
+  you did. It sets off once you are a few steps away and walks until it is beside you (no
+  stop-start). When something stands between it and where it is going (it was pushed off your path
+  in a fight, or you are out of sight with no path to follow), it finds a way round on the map's own
+  monster route graph. It opens ordinary doors in its way (never the story's: locked or scripted
+  doors stay shut) and jumps only over a low obstacle a jump clears. If it falls behind, gets stuck
+  or loses you (a teleporting door, a ladder, a scripted move), it reappears behind you, out of your
+  view where it can.
 - **Fights.** It takes on hostile monsters it can see near you, the ones already after one of you
   first. With a gun it raises the sights for a distant target, fires one shot per trigger pull and
   reloads when the gun is empty; it backs off from anything too close while shooting. Without a gun
@@ -71,8 +76,10 @@ The story co-op engine drives it. It is experimental and not yet tested in a liv
 
 ## Limits
 
-- No navigation map exists for the story maps, so it follows your path rather than planning its own;
-  it catches up by reappearing behind you when that fails.
+- The route graphs (`maps/graphs/<map>.nod`, built by the game from the mappers' monster nodes)
+  exist for about half the maps and cover each area separately: the teleporting doors split them
+  into islands. So it mostly follows your path and uses a route only to get round things; between
+  areas it catches up by reappearing behind you.
 - The game counts it as a player: monsters hit about 17% harder than when you play alone, exactly as
   they would with a friend in the game. In exchange it keeps the game going while you are down: you
   get "Game over" only when both of you are.

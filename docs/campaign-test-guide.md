@@ -13,7 +13,7 @@ With both test games closed, in PowerShell from the project folder:
 # .\tools\Prepare-CampaignTest.ps1 -ExpectedSha256 <xash.dll SHA-256> -ExpectedVguiSha256 <vgui.dll SHA-256>
 .\tools\Start-CampaignTest.ps1                   # solo mode, starts at c_intro; -Map c_start skips the intro
 .\tools\Start-CampaignTest.ps1 -Mode companion   # one window, an AI companion bot beside you
-.\tools\Start-CampaignTest.ps1 -Gun shotgun      # any mode: the test gun (default m16; -Gun none: off)
+.\tools\Start-CampaignTest.ps1 -Gun shotgun      # any mode: a test gun (default none: off)
 ```
 
 `Prepare` installs the newest engine and its `vgui.dll` (only if both hashes match), retires the `c_start`/`c_start2`
@@ -35,8 +35,8 @@ frozen in the scene: nobody ever plays at that speed. Press Enter again to watch
 3-minute intro then takes about 20 seconds. Sounds overlap while it runs. A new map's cutscene is
 not skipped until someone presses Enter again.
 
-**The test gun** (`-Gun`, every mode): each person gets an M16 by default (`-Gun shotgun`, `vp70`,
-`revolver`, `rifle` or `glock` for another; `-Gun none` for the game as it is). The gun arrives once you
+**The test gun** (`-Gun`, every mode): off by default; `-Gun m16` gives each person an M16 (`-Gun shotgun`, `vp70`,
+`revolver`, `rifle` or `glock` for another). The gun arrives once you
 have stood free for 2 seconds and goes straight into your hands. Every gun you carry then has
 infinite ammo and never needs a reload, and syringes and flares are never used up either. The gun
 stays with you through level changes, deaths and checkpoints. When the story empties your
@@ -84,7 +84,11 @@ inventory brought back after a death or a checkpoint load.
 |---|---|
 | Map loaded | Companion mode: the bot joins beside you (`companion-added`), with a flashlight beam on. |
 | Level change | It leaves with the old map and rejoins in the new one; never two bots, never a stuck slot. |
-| You walk off | It follows your path; lost or stuck, it reappears behind you (`companion-teleport`). |
+| You walk off | It follows your path; lost or stuck, it reappears behind you (`companion-teleport reason=far/lost/stuck/trail`). |
+| You walk slowly | It walks with you without stopping and starting (few `companion-mode` lines). |
+| An ordinary door shuts between you | It opens it (`companion-door`); a locked or scripted door stays shut and it reappears instead. |
+| It walks along | No hopping; a jump only over a low obstacle (`companion-jump reason=ledge`). |
+| A wall or furniture between it and you | It walks round it (`companion-nav map=… nodes=…` once per map, `companion-route … nodes=N`); a map without a graph says `graph=none`. Stuck on a route it tries another (`companion-replan`) before reappearing. |
 | A story weapon is handed out | It takes it in hand (`companion-equip`) and uses it: raised sights at range, single shots, reloads. |
 | A monster in sight near you | It fights (`mode=fight`); never with you in the line of fire; it leaves friendly/scripted actors alone. |
 | You are down | "Companion is coming to help you up."; it does CPR (`companion-cpr`); you stand with 30 health. |

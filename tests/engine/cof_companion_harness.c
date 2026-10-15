@@ -35,6 +35,8 @@ typedef float vec3_t[3];
 #define MOVE_NOMONSTERS 1
 #define kRenderNormal 0
 #define ARRAYSIZE(x) (sizeof(x)/sizeof((x)[0]))
+#define MAX_QPATH 64
+#define Q_atoi atoi
 #define Q_strcmp strcmp
 #define Q_stricmp _stricmp
 #define Q_snprintf snprintf
@@ -54,22 +56,26 @@ typedef struct {
 	vec3_t origin, view_ofs, v_angle, angles, mins, maxs, absmin, absmax;
 	float health, takedamage, fuser3, frags, renderamt;
 	int deadflag, flags, effects, movetype, fixangle, rendermode, colormap;
-	string_t netname, target;
+	string_t netname, target, targetname, model;
 } entvars_t;
 struct edict_s { int free, serialnumber; entvars_t v; };
 typedef struct { vec3_t viewangles; float forwardmove, sidemove, upmove; word buttons; byte msec; } usercmd_t;
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; double timebase; usercmd_t lastcmd; } sv_client_t;
 typedef struct { qboolean startsolid, allsolid; float fraction; edict_t *ent; } trace_t;
 typedef struct { float value; const char *string; } convar_t;
-static struct { int state; double time, frametime; sv_client_t *current_client; } sv;
+static struct { int state; double time, frametime; sv_client_t *current_client; char name[MAX_QPATH]; } sv;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
-static struct { int numEntities; struct { qboolean (*pfnClientConnect)( edict_t *, const char *, const char *, char * ); void (*pfnClientPutInServer)( edict_t * ); } dllFuncs; } svgame;
+static struct { int numEntities; struct { qboolean (*pfnClientConnect)( edict_t *, const char *, const char *, char * ); void (*pfnClientPutInServer)( edict_t * ); void (*pfnUse)( edict_t *, edict_t * ); } dllFuncs; } svgame;
 static edict_t entities[16];
 static sv_client_t clients[MAX_CLIENTS];
-static const char *strings[] = { "", "player", "monster_slower", "monster_friend", "monster_engaged", "trigger_once", "trigger_hurt", "killthemall" };
+static const char *strings[] = { "", "player", "monster_slower", "monster_friend", "monster_engaged", "trigger_once", "trigger_hurt", "killthemall", "func_door", "func_door_rotating", "*5" };
 static char log_text[32768];
 static size_t log_length;
 static int gate, connect_ok = 1, put_in, placed, ready, equips, runs, next_userid = 200, wall, inits;
+/* a door (entity 9) across x = door_x at the feet; a low box across x = ledge_x up to ledge_top */
+static int door_x, ledge_x, uses;
+static float ledge_top;
+static edict_t *used, *user;
 static int supplies, revives, revive_ok, reviving, repairs, fallen, gives, free_slots, command_count;
 static char last_equip[32], commands[16][32];
 static usercmd_t last_run;
@@ -132,6 +138,7 @@ static void SV_DropClient( sv_client_t *cl, qboolean crash )
 	cl->state = cs_zombie; cl->flags = 0;
 }
 static qboolean game_connect( edict_t *e, const char *name, const char *address, char *reject ) { if( !connect_ok ) strcpy( reject, "nope" ); return connect_ok; }
+static void game_use( edict_t *e, edict_t *other ) { uses++; used = e; user = other; }
 /* The game's Spawn: a fresh player, its flags wiped down to FL_CLIENT (FL_FAKECLIENT goes). */
 static void game_put_in( edict_t *e )
 {
@@ -147,11 +154,18 @@ static qboolean SV_CoF_PartyPlaceBehind( sv_client_t *mover, edict_t *leader )
 {
 	placed++; VectorCopy( leader->v.origin, mover->edict->v.origin ); mover->edict->v.origin[0] -= 64; return true;
 }
+/* A wall across x = gap_x everywhere below y = gap_y (when gap_x is set): a gap at its far end. */
+static float gap_x, gap_y;
 /* A wall at x = 1000 blocks sight (when on); everything else is open. */
 static trace_t SV_Move( const vec3_t start, vec3_t mins, vec3_t maxs, const vec3_t end, int type, edict_t *ignore, qboolean monsterclip )
 {
 	trace_t t; memset( &t, 0, sizeof( t )); t.fraction = 1.0f;
 	if( wall && (( start[0] < 1000 ) != ( end[0] < 1000 ))) t.fraction = 0.5f;
+	if( gap_x && (( start[0] < gap_x ) != ( end[0] < gap_x )) &&
+		start[1] + ( end[1] - start[1] ) * ( gap_x - start[0] ) / ( end[0] - start[0] ) < gap_y ) t.fraction = 0.5f;
+	/* the door blocks moves at the feet, not the line of sight from an eye */
+	if( door_x && !entities[9].free && start[2] <= 20.0f && (( start[0] < door_x ) != ( end[0] < door_x ))) { t.fraction = 0.5f; t.ent = &entities[9]; }
+	if( ledge_x && start[2] < ledge_top && (( start[0] < ledge_x ) != ( end[0] < ledge_x ))) t.fraction = 0.5f;
 	return t;
 }
 /* The player code: the view follows the usercmd. */
@@ -187,6 +201,55 @@ static qboolean SV_CoF_StoryGiveItem( sv_client_t *cl, const char *classname ) {
 static int SV_CoF_RetailHostile( edict_t *monster ) { return monster->v.classname == 2 ? 1 : monster->v.classname == 4 ? 2 : 0; }
 
 #include "sv_cof_brain.h"
+#include "sv_cof_nav.h"
+
+/* The map's route graph as the game saves it (maps/graphs/c_test.nod), when have_graph:
+ * N0 (200,100), N1 (500,400) in the gap, N2 (800,100), linked N0-N1-N2 both ways
+ * (the N1-N2 links through door "*5" when graph_door). */
+typedef long long fs_offset_t;
+static int have_graph, graph_door, loads;
+static unsigned char graph_file[16384];
+static void put_int( size_t at, int v ) { memcpy( graph_file + at, &v, 4 ); }
+static void put_float( size_t at, float v ) { memcpy( graph_file + at, &v, 4 ); }
+static size_t build_graph( void )
+{
+	static const float at[3][2] = { { 200, 100 }, { 500, 400 }, { 800, 100 } };
+	static const int links[4][2] = { { 0, 1 }, { 1, 0 }, { 1, 2 }, { 2, 1 } };
+	size_t nodes = 4 + COF_NAV_GRAPH, link_at = nodes + 3 * COF_NAV_NODE, size = link_at + 4 * COF_NAV_LINK + 3 * COF_NAV_DIST;
+	int i, k, written = 0;
+	memset( graph_file, 0, size );
+	put_int( 0, COF_NAV_VERSION ); put_int( 4 + 24, 3 ); put_int( 4 + 28, 4 );
+	for( i = 0; i < 3; i++ )
+	{
+		size_t p = nodes + (size_t)i * COF_NAV_NODE;
+		int first = written;
+		put_float( p, at[i][0] ); put_float( p + 4, at[i][1] ); put_float( p + 8, -28 ); /* 8 over a floor 36 under the bodies */
+		put_int( p + 28, COF_NAV_LAND ); put_int( p + 36, first );
+		for( k = 0; k < 4; k++ )
+		{
+			size_t q = link_at + (size_t)written * COF_NAV_LINK;
+			if( links[k][0] != i ) continue;
+			put_int( q, links[k][0] ); put_int( q + 4, links[k][1] ); put_int( q + 16, COF_NAV_HUMAN | 1 );
+			if( graph_door && links[k][0] + links[k][1] == 3 ) memcpy( graph_file + q + 12, "*5", 2 );
+			written++;
+		}
+		put_int( p + 32, written - first );
+	}
+	return size;
+}
+static byte *FS_LoadFile( const char *path, fs_offset_t *size, qboolean gamedironly )
+{
+	byte *copy;
+	size_t length;
+	loads++;
+	if( !have_graph || strcmp( path, "maps/graphs/c_test.nod" )) return NULL;
+	length = build_graph();
+	copy = malloc( length ); memcpy( copy, graph_file, length );
+	*size = (fs_offset_t)length;
+	return copy;
+}
+static void Mem_Free( void *p ) { free( p ); }
+
 #include "companion_under_test.c"
 
 static void setup( void )
@@ -202,6 +265,8 @@ static void setup( void )
 	cvars[0].value = 0; cvars[2].value = 0; cvars[3].value = 8; cvars[5].value = 90; cvars[6].value = 1; cvars[7].value = 1;
 	sv.state = ss_active; sv.time = 100; sv.frametime = 0.05; svs.maxclients = 2; svs.clients = clients; svs.spawncount++;
 	svgame.numEntities = 16; svgame.dllFuncs.pfnClientConnect = game_connect; svgame.dllFuncs.pfnClientPutInServer = game_put_in;
+	svgame.dllFuncs.pfnUse = game_use; door_x = ledge_x = uses = 0; ledge_top = 0.0f; used = user = NULL;
+	strcpy( sv.name, "c_test" ); have_graph = graph_door = loads = 0; gap_x = gap_y = 0.0f;
 	for( i = 3; i < 16; i++ ) entities[i].free = 1;
 	SV_CoF_CompanionInit();
 	SV_CoF_CompanionReset();
@@ -279,7 +344,36 @@ int main( void )
 
 	/* Far from the leader: teleported behind them. */
 	setup(); cvars[0].value = 1; settle(); entities[2].v.origin[0] = 3000; frame( 0.05 );
-	assert( placed == 1 && entities[2].v.origin[0] == -64 && logged( "companion-teleport userid=200 leader=1" ) == 1 );
+	assert( placed == 1 && entities[2].v.origin[0] == -64 && logged( "companion-teleport userid=200 leader=1 reason=far" ) == 1 );
+
+	/* An ordinary door shut across its way: opened through the game's own use (never the
+	 * use key: that takes whatever the game finds first, a story key included). */
+	setup(); cvars[0].value = 1; settle(); bot = &entities[2];
+	entities[1].v.origin[0] = 600; bot->v.origin[0] = 0; bot->v.v_angle[1] = 0;
+	entities[9].free = 0; entities[9].v.classname = 8; door_x = 20;
+	frame( 0.05 ); frame( 0.05 );
+	assert( uses == 1 && used == &entities[9] && user == bot && logged( "companion-door userid=200 entity=9" ) == 1 );
+	frame( 0.3 ); assert( uses == 1 ); /* once a second */
+	frame( 0.8 ); assert( uses == 2 );
+	/* a rotating door too; never one that fires something or that a trigger opens (the story's) */
+	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600;
+	entities[9].free = 0; entities[9].v.classname = 9; door_x = 20;
+	frame( 0.05 ); frame( 0.05 ); assert( uses == 1 );
+	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600;
+	entities[9].free = 0; entities[9].v.classname = 8; entities[9].v.target = 7; door_x = 20;
+	frame( 0.05 ); frame( 0.05 ); frame( 1.0 ); assert( uses == 0 && !logged( "companion-door" ));
+	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600;
+	entities[9].free = 0; entities[9].v.classname = 8; entities[9].v.targetname = 7; door_x = 20;
+	frame( 0.05 ); frame( 0.05 ); frame( 1.0 ); assert( uses == 0 );
+
+	/* A low box a jump clears (blocked at the feet and at step height, clear at jump height):
+	 * one hop, logged. A stair step (clear at step height): the walk climbs it, no hop. */
+	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600; ledge_x = 20; ledge_top = 26;
+	frame( 0.05 ); frame( 0.05 );
+	assert(( last_run.buttons & COF_IN_JUMP ) && logged( "companion-jump userid=200 reason=ledge" ) == 1 );
+	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600; ledge_x = 20; ledge_top = 12;
+	for( i = 0; i < 10; i++ ) { frame( 0.05 ); assert( !( last_run.buttons & COF_IN_JUMP )); }
+	assert( !logged( "companion-jump" ));
 
 	/* An idle second person (solo testing): the AI takes over after the idle time and
 	 * gives it back the moment their controls move. */
@@ -484,6 +578,51 @@ int main( void )
 		frame( 0.05 ); memset( &cmd, 0, sizeof( cmd )); SV_CoF_CompanionUsercmd( &clients[1], &cmd ); assert( !( cmd.buttons & COF_IN_ATTACK ));
 		frame( 0.05 ); memset( &cmd, 0, sizeof( cmd )); SV_CoF_CompanionUsercmd( &clients[1], &cmd ); assert( cmd.buttons & COF_IN_ATTACK );
 	}
+
+	/* The map's route graph: the host stands behind a wall with a gap at its far end. The
+	 * straight way is blocked, so it heads for the gap along the graph (N0, N1, N2; N1 is
+	 * already straight ahead, so straight at N1), not into the wall. */
+	setup(); cvars[0].value = 1; have_graph = 1; gap_x = 500; gap_y = 300;
+	entities[1].v.origin[0] = 800; settle(); bot = &entities[2]; bot->v.origin[0] = 200;
+	for( i = 0; i < 6; i++ ) frame( 0.05 );
+	assert( logged( "companion-nav map=c_test nodes=3 links=4" ) == 1 && logged( "companion-route userid=200 nodes=3" ) == 1 );
+	assert( last_run.forwardmove > 0 && last_run.viewangles[1] > 50 && last_run.viewangles[1] < 56 ); /* to (500,400): 53 degrees */
+	assert( loads == 1 && !logged( "companion-teleport" ));
+	/* through the gap the host is in sight and the way straight: no route, straight at them */
+	bot->v.origin[0] = 480; bot->v.origin[1] = 390;
+	for( i = 0; i < 6; i++ ) frame( 0.05 );
+	assert( last_run.forwardmove > 0 && last_run.viewangles[1] < -45 && last_run.viewangles[1] > -56 ); /* to (800,0) */
+	/* Stuck on the way: first another route without that leg (there is none here), then
+	 * the usual teleport. */
+	setup(); cvars[0].value = 1; have_graph = 1; gap_x = 500; gap_y = 300;
+	entities[1].v.origin[0] = 800; settle(); bot = &entities[2]; bot->v.origin[0] = 200;
+	for( i = 0; i < 100 && !logged( "companion-teleport" ); i++ ) frame( 0.1 );
+	assert( logged( "companion-replan userid=200 link=" ) == 1 && logged( "companion-route userid=200 none" ) == 1 );
+	assert( logged( "companion-teleport userid=200 leader=1 reason=lost" ) == 1 );
+	/* A shut door across N1-N2: one of the story's (a trigger opens it) leaves no way; an
+	 * ordinary one (it may open it) does. */
+	setup(); cvars[0].value = 1; have_graph = 1; graph_door = 1; gap_x = 500; gap_y = 300; door_x = 650;
+	entities[9].free = 0; entities[9].v.classname = 8; entities[9].v.model = 10; entities[9].v.targetname = 7;
+	entities[1].v.origin[0] = 800; settle(); entities[2].v.origin[0] = 200;
+	frame( 0.05 ); frame( 0.05 );
+	assert( logged( "companion-route userid=200 none" ) == 1 && !logged( "companion-route userid=200 nodes" ));
+	setup(); cvars[0].value = 1; have_graph = 1; graph_door = 1; gap_x = 500; gap_y = 300; door_x = 650;
+	entities[9].free = 0; entities[9].v.classname = 8; entities[9].v.model = 10;
+	entities[1].v.origin[0] = 800; settle(); entities[2].v.origin[0] = 200;
+	frame( 0.05 ); frame( 0.05 );
+	assert( logged( "companion-route userid=200 nodes=3" ) == 1 );
+	/* No graph for the map: said once, looked for again every ten seconds (the game builds a
+	 * missing one after the map starts), read once it is there; read again on a new map. */
+	setup(); cvars[0].value = 1; gap_x = 500; gap_y = 300;
+	entities[1].v.origin[0] = 800; settle();
+	for( i = 0; i < 25; i++ ) { entities[2].v.origin[0] = 200; entities[2].v.origin[1] = 0; frame( 0.2 ); }
+	assert( logged( "companion-nav map=c_test graph=none" ) == 1 && loads == 1 );
+	have_graph = 1;
+	for( i = 0; i < 30; i++ ) { entities[2].v.origin[0] = 200; entities[2].v.origin[1] = 0; frame( 0.2 ); }
+	assert( logged( "companion-nav map=c_test graph=none" ) == 1 && logged( "companion-nav map=c_test nodes=3" ) == 1 && loads == 2 );
+	clients[1].state = cs_free; svs.spawncount++; frame( 0.1 ); frame( 2.5 ); assert( clients[1].state == cs_spawned );
+	for( i = 0; i < 4; i++ ) { entities[2].v.origin[0] = 200; entities[2].v.origin[1] = 0; frame( 0.05 ); }
+	assert( logged( "companion-nav map=c_test nodes=3" ) == 2 && loads == 3 );
 
 	/* The story layer off: nothing at all. */
 	setup(); cvars[0].value = 1; gate = 0; settle(); assert( clients[1].state == cs_free );

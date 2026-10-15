@@ -96,15 +96,19 @@ class ArtTests(unittest.TestCase):
                          (const('kBox'), const('kStride'), const('kLeft'), const('kGridWide'), const('kGridTall')))
         rows = re.search(r'kRowTop\[3\]\s*=\s*\{\s*(\d+),\s*(\d+),\s*(\d+)', text).groups()
         self.assertEqual(art.ROW_TOP, tuple(int(v) for v in rows))
-        # the examine picture sits 5 px up-left of the moved description box frame (old top 353)
-        self.assertEqual(353 + art.DESC_SHIFT - 5, const('kCheckY'))
+        # the four columns end where the description box (36, 303 px wide) ends: 5 px gaps
+        self.assertEqual(art.LEFT + 3 * art.STRIDE + art.BOX, 36 + 303)
+        # the examine picture covers the moved description box (old top frame 353), 1 px
+        # above its top frame line: there its drawn-in text is centred (measured live)
+        self.assertEqual((36, 353 + art.DESC_SHIFT - 1), (const('kCheckX'), const('kCheckY')))
 
     def test_compose(self):
         out = art.compose(synthetic(), three=False)
         self.assertEqual((out.wide, out.tall), (373, 480))
         self.assertEqual(lum(out.get(40, 40)), 230)          # BAG stays
         self.assertLess(lum(out.get(134, 120)), 25)          # old box 1's right border is gone (inside new box 2)
-        self.assertEqual(lum(out.get(40, 232)), 230)         # POCKETS moved: text top 227
+        self.assertEqual(lum(out.get(40, 227)), 230)         # POCKETS moved: text top 227
+        self.assertLess(lum(out.get(40, 226)), 25)
         self.assertEqual(lum(out.get(40, 342)), 230)         # ITEM DESCRIPTION moved: text top 339
         self.assertEqual(lum(out.get(100, 357)), 100)        # the description box frame, 4 px lower
         self.assertLess(lum(out.get(100, 353)), 25)          # its old top border is gone
@@ -136,10 +140,25 @@ class ArtTests(unittest.TestCase):
             written = art.generate(game)
             self.assertEqual(sorted(p.relative_to(game).as_posix() for p in written), sorted([
                 'cryoffear/gfx/vgui/inventory12_left.tga',
+                'cryoffear/gfx/vgui/inventory12_full.tga',
                 'cryoffear/gfx/vgui/inventory12_left_three.tga',
-                'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/inventory12_left.tga']))
+                'cryoffear/gfx/vgui/inventory12_full_three.tga',
+                'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/inventory12_left.tga',
+                'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/inventory12_full.tga']))
             back = art.read_tga(vgui / 'inventory12_left.tga')
-            self.assertEqual(back.pixels, art.compose(synthetic(), three=False).pixels)
+            left = art.compose(synthetic(), three=False)
+            self.assertEqual(back.pixels, left.pixels)
+            # the whole background for the grid to show instead of the retail one: our left half
+            # (no retail POCKETS under the grid any more), the retail right half untouched
+            whole = art.read_tga(vgui / 'inventory12_full.tga')
+            src = synthetic()
+            self.assertEqual((whole.wide, whole.tall), (src.wide, src.tall))
+            for y in (0, 100, 232, 479):
+                for x in (0, 40, 372):
+                    self.assertEqual(whole.get(x, y), left.get(x, y), (x, y))
+                for x in (373, 500, src.wide - 1):
+                    self.assertEqual(whole.get(x, y), src.get(x, y), (x, y))
+            self.assertLess(lum(whole.get(40, 200)), lum(src.get(40, 200)))   # the old POCKETS label is gone
             raw = (vgui / 'inventory12_left.tga').read_bytes()
             self.assertEqual((raw[2], raw[16], raw[17]), (2, 32, 8))  # uncompressed, 32-bit, bottom row first
             self.assertEqual(art.read_tga(vgui / '640_inventory.tga').pixels, synthetic().pixels)  # retail untouched
@@ -188,7 +207,8 @@ class ArtTests(unittest.TestCase):
             err = io.StringIO()
             with redirect_stderr(err):
                 written = art.generate(game)
-            self.assertEqual([p.relative_to(game).as_posix() for p in written], ['cryoffear/gfx/vgui/inventory12_left.tga'])
+            self.assertEqual([p.relative_to(game).as_posix() for p in written],
+                             ['cryoffear/gfx/vgui/inventory12_left.tga', 'cryoffear/gfx/vgui/inventory12_full.tga'])
             self.assertIn('640_inventory.tga', err.getvalue())
             self.assertEqual(len(err.getvalue().strip().splitlines()), 1)
             (vgui / '640_inventory.tga').write_bytes(b'\x00' * 40)   # the main folder still fails hard

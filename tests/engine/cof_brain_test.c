@@ -77,8 +77,31 @@ int main( void )
 	scene( 60, 0 ); set3( in.leader_view, 0, 90, 0 ); think( 0 );
 	assert( out.mode == COF_BRAIN_IDLE && !out.forward && !out.side && out.angles[1] > 0 && out.angles[1] < 90 );
 
+	/* Follow with slack: set off beyond 128, stop inside 80 (one threshold made a slowly
+	 * walking leader start and stop it every frame: 540 mode changes in 30 live minutes). */
+	scene( 100, 0 ); think( 0.1 ); assert( out.mode == COF_BRAIN_IDLE && !out.forward );
+	set3( in.leader_pos, 140, 0, 0 ); think( 0.1 ); assert( out.mode == COF_BRAIN_FOLLOW && out.forward > 0 );
+	set3( in.leader_pos, 100, 0, 0 ); think( 0.1 ); assert( out.mode == COF_BRAIN_FOLLOW && out.forward > 0 );
+	set3( in.leader_pos, 70, 0, 0 ); think( 0.1 ); assert( out.mode == COF_BRAIN_IDLE && !out.forward );
+	/* walking behind a leader who sneaks at 60 units a second for 20 seconds */
+	{
+		int flips = 0, last = -1;
+		float x = -150.0f;
+		scene( 0, 0 );
+		for( i = 0; i < 1250; i++ )
+		{
+			set3( in.leader_pos, (float)i * 0.016f * 60.0f, 0, 0 ); set3( in.leader_eye, in.leader_pos[0], 0, 28 );
+			set3( in.self, x, 0, 0 ); set3( in.eye, x, 0, 28 );
+			think( 0.016 ); memcpy( in.view, out.angles, sizeof( in.view ));
+			x += out.forward * 0.016f;
+			if( last >= 0 && out.mode != last ) flips++;
+			last = out.mode;
+		}
+		assert( flips <= 40 );
+	}
+
 	/* Far away: teleport (the engine places me out of sight behind them), once per cooldown. */
-	scene( 2000, 0 ); think( 0 ); assert( out.action == COF_BRAIN_ACT_TELEPORT );
+	scene( 2000, 0 ); think( 0 ); assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "far" ));
 	think( 1.0 ); assert( out.action != COF_BRAIN_ACT_TELEPORT );
 	think( 2.5 ); assert( out.action == COF_BRAIN_ACT_TELEPORT );
 
@@ -97,9 +120,11 @@ int main( void )
 	scene( 500, 0 ); in.leader_visible = in.leader_walkable = 0; think( 0.1 );
 	for( i = 0; i < 55; i++ ) { think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT ); }
 	for( i = 0; i < 10 && out.action != COF_BRAIN_ACT_TELEPORT; i++ ) think( 0.1 );
-	assert( out.action == COF_BRAIN_ACT_TELEPORT );
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "lost" ));
 
-	/* Stuck: trying to walk, not moving: hop once, then teleport. */
+	/* Stuck: trying to walk, not moving: no blind hop (bumping a wall, a door frame or a
+	 * person is no reason to jump; live 2026-10-13 it hopped all the time), a teleport
+	 * after the stuck time, and the log says why. */
 	scene( 400, 0 ); think( 0.1 );
 	{
 		int jumped = 0, teleported = 0;
@@ -109,13 +134,75 @@ int main( void )
 			jumped |= ( out.buttons & COF_IN_JUMP ) != 0;
 			teleported = out.action == COF_BRAIN_ACT_TELEPORT;
 		}
-		assert( jumped && teleported );
+		assert( !jumped && teleported && !strcmp( out.why, "stuck" ));
 	}
+	/* The engine sees a low obstacle right ahead that a jump clears: hop, then not again
+	 * for a second; never in the air. */
+	scene( 400, 0 ); in.ledge_ahead = 1; think( 0.1 );
+	assert( out.mode == COF_BRAIN_FOLLOW && ( out.buttons & COF_IN_JUMP ) && !strcmp( out.why, "ledge" ));
+	think( 0.5 ); assert( !( out.buttons & COF_IN_JUMP ));
+	think( 0.6 ); assert( out.buttons & COF_IN_JUMP );
+	in.onground = 0; think( 1.5 ); assert( !( out.buttons & COF_IN_JUMP ));
+	/* A door it may open right ahead: ask the engine to open it, once a second, still
+	 * walking at it. */
+	scene( 400, 0 ); in.door_ahead = 1; think( 0.1 );
+	assert( out.action == COF_BRAIN_ACT_OPEN_DOOR && !strcmp( out.why, "door" ) && out.forward > 0 );
+	think( 0.5 ); assert( out.action != COF_BRAIN_ACT_OPEN_DOOR );
+	think( 0.6 ); assert( out.action == COF_BRAIN_ACT_OPEN_DOOR );
+	/* a locked door never opens: the first try restarts the stuck time (a door needs time
+	 * to swing), later tries do not, so it still ends in a teleport */
+	scene( 400, 0 ); in.door_ahead = 1; think( 0.1 );
+	{
+		int teleported = 0;
+		for( i = 0; i < 80 && !teleported; i++ ) { think( 0.1 ); teleported = out.action == COF_BRAIN_ACT_TELEPORT; }
+		assert( teleported && i > 20 );
+	}
+	/* standing beside the leader: no door, no hop */
+	scene( 60, 0 ); in.door_ahead = in.ledge_ahead = 1; think( 0.1 );
+	assert( out.mode == COF_BRAIN_IDLE && out.action == COF_BRAIN_ACT_NONE && !out.buttons );
+
+	/* Routes: wherever it goes it says so (the engine looks for a way round when the straight
+	 * way is blocked); with a route point it walks at that instead, still naming its goal. */
+	scene( 400, 0 ); think( 0.1 );
+	assert( out.going && out.goal[0] == 400 && out.goal[1] == 0 && !out.replan );
+	scene( 400, 0 ); in.leader_walkable = 0; in.nav = 1; set3( in.nav_point, 0, 200, 0 ); think( 0.1 );
+	assert( out.mode == COF_BRAIN_FOLLOW && out.going && out.goal[0] == 400 && out.angles[1] > 0 && out.side < 0 );
+	/* the leader out of sight, no trail: it waits, naming them as its goal; a route there and it goes */
+	scene( 500, 0 ); in.leader_visible = in.leader_walkable = 0; think( 0.1 );
+	assert( out.mode == COF_BRAIN_IDLE && !out.forward && !out.side && out.going && out.goal[0] == 500 );
+	in.nav = 1; set3( in.nav_point, 0, 200, 0 ); think( 0.1 );
+	assert( out.mode == COF_BRAIN_FOLLOW && out.side < 0 && out.goal[0] == 500 );
+	/* beside the leader it goes nowhere */
+	scene( 60, 0 ); think( 0.1 ); assert( !out.going );
+	/* while a route leads on (and it moves), a leader out of sight is not lost for 15 seconds */
+	scene( 500, 0 ); in.leader_visible = in.leader_walkable = 0; in.nav = 1; set3( in.nav_point, 0, 200, 0 );
+	for( i = 0; i < 140; i++ ) { set3( in.self, 0, ( i & 1 ) ? 30.0f : 0.0f, 0 ); think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT ); }
+	for( i = 0; i < 20 && out.action != COF_BRAIN_ACT_TELEPORT; i++ ) { set3( in.self, 0, ( i & 1 ) ? 30.0f : 0.0f, 0 ); think( 0.1 ); }
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "lost" ));
+	/* stuck on a route: ask for another route once (no teleport yet), then teleport */
+	scene( 400, 0 ); in.leader_walkable = 0; in.nav = 1; set3( in.nav_point, 0, 200, 0 ); think( 0.1 );
+	{
+		int replans = 0, teleported = 0;
+		for( i = 0; i < 80 && !teleported; i++ )
+		{
+			think( 0.1 );
+			replans += out.replan;
+			teleported = out.action == COF_BRAIN_ACT_TELEPORT;
+			assert( !( out.replan && teleported ));
+		}
+		assert( replans == 1 && teleported && !strcmp( out.why, "stuck" ) && i > 45 );
+	}
+	/* a downed leader and its post are goals too, walked to along a route */
+	scene( 200, 0 ); in.leader_alive = 0; in.leader_down = 1; in.nav = 1; set3( in.nav_point, 0, 200, 0 ); think( 0.1 );
+	assert( out.mode == COF_BRAIN_REVIVE && out.going && out.goal[0] == 200 && out.side < 0 );
+	scene( 3000, 0 ); in.stay = 1; set3( in.stay_pos, 0, 0, 0 ); set3( in.self, -200, 0, 0 ); set3( in.eye, -200, 0, 28 );
+	in.nav = 1; set3( in.nav_point, -200, 200, 0 ); think( 0.1 );
+	assert( out.going && out.goal[0] == 0 && out.side < 0 );
 
 	/* The leader went through a door (a 600-unit jump) and is out of sight: teleport after them. */
 	scene( 100, 0 ); in.leader_visible = in.leader_walkable = 0; think( 0.1 );
 	set3( in.leader_pos, 100, 600, 0 ); think( 0.1 );
-	assert( out.action == COF_BRAIN_ACT_TELEPORT );
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "trail" ));
 
 	/* Revive: the leader is down 200 units away: go there (no +use on the way: a press
 	 * would use whatever the game finds first); beside the body, ask the engine to start the

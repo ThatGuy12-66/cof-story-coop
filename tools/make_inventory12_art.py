@@ -4,9 +4,11 @@ Reads cryoffear/gfx/vgui/640_inventory.tga and 640_inventory_three.tga (uncompre
 Cry of Fear 1.6 ships them) and writes inventory12_left.tga / inventory12_left_three.tga next to
 them: the left 373x480 of the background with the six old boxes erased, the POCKETS and ITEM
 DESCRIPTION labels and the description box moved, and 12 (or 3) boxes of 72 px drawn for the grid
-in 3rdparty/freevgui/platform/xash3d-fwgs/cofinventory_logic.h. The Polish overlay gets the same
-when its originals are present. The retail files are only read; nothing copied from the game is
-stored in the repository.
+in 3rdparty/freevgui/platform/xash3d-fwgs/cofinventory_logic.h. Also inventory12_full.tga /
+inventory12_full_three.tga: the whole 748x480 background with that left half, which the grid puts
+in place of the retail picture (the inventory is drawn see-through, so retail art left under the
+grid showed through it). The Polish overlay gets the same when its originals are present. The
+retail files are only read; nothing copied from the game is stored in the repository.
 
     python -m tools.make_inventory12_art <game folder>     (the folder that holds cryoffear/)
 """
@@ -16,13 +18,13 @@ import sys
 from pathlib import Path
 
 WIDE, TALL = 373, 480                 # the grid panel: the left panel and the gap after it
-BOX, STRIDE, LEFT = 72, 78, 36        # cofinventory_logic.h kBox, kStride, kLeft
-ROW_TOP = (68, 146, 262)              # kRowTop: BAG rows (slots 1..8), POCKETS row (9..12)
+BOX, STRIDE, LEFT = 72, 77, 36        # cofinventory_logic.h kBox, kStride, kLeft
+ROW_TOP = (68, 145, 259)              # kRowTop: BAG rows (slots 1..8), POCKETS row (9..12)
 DONOR_X, DONOR_W = 342, 22            # clean panel texture on every row, right of the old boxes
 ERASE = (14, 64, 366, 466)            # x0, y0, x1, y1 (end exclusive): everything below the top label
 OLD_FRAME, OLD_BOX = (36, 73), 99     # the first old box, 1 px border included
 LABEL_THRESHOLD = 150                 # label text is bright; the panel texture stays below 25
-POCKETS_SEARCH, POCKETS_TOP = (16, 176, 360, 229), 227
+POCKETS_SEARCH, POCKETS_TOP = (16, 176, 360, 229), 227   # 10 px clear above and below (live 2026-10-15)
 ITEMDESC_SEARCH, ITEMDESC_TOP = (30, 331, 360, 351), 339
 DESC_BOX, DESC_SHIFT = (33, 350, 342, 455), 4   # the description box with its frame
 
@@ -178,6 +180,13 @@ def compose(src, three):
     return out
 
 
+def full(src, left):
+    """The whole background with the grid's left half in place of the retail one."""
+    out = Image(src.wide, src.tall, bytearray(src.pixels))
+    copy(left, out, (0, 0, left.wide, left.tall), 0, 0)
+    return out
+
+
 def generate(game):
     """The art for one game folder (the folder that holds cryoffear/); the files written."""
     game = Path(game)
@@ -186,18 +195,19 @@ def generate(game):
         raise SystemExit(f'{folders[0] / "640_inventory.tga"} is missing: is {game} a Cry of Fear folder?')
     written = []
     for folder in folders:
-        for source, target, three in (('640_inventory.tga', 'inventory12_left.tga', False),
-                                      ('640_inventory_three.tga', 'inventory12_left_three.tga', True)):
+        for source, suffix, three in (('640_inventory.tga', '', False), ('640_inventory_three.tga', '_three', True)):
             if (folder / source).is_file():
                 try:
-                    image = compose(read_tga(folder / source), three)
+                    src = read_tga(folder / source)
+                    image = compose(src, three)
                 except (ValueError, struct.error, IndexError) as error:
                     if folder is folders[0]:
                         raise
                     print(f'skipped {folder / source}: {error}', file=sys.stderr)   # the Polish overlay is optional
                     continue
-                write_tga(folder / target, image)
-                written.append(folder / target)
+                for target, picture in ((f'inventory12_left{suffix}.tga', image), (f'inventory12_full{suffix}.tga', full(src, image))):
+                    write_tga(folder / target, picture)
+                    written.append(folder / target)
     return written
 
 
