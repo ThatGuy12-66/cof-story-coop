@@ -680,6 +680,23 @@ int main( void )
 		assert( !first && second > 0 );
 	}
 
+	/* Two people and two bots: each bot looks after one of them (the far one is followed by
+	 * the second bot), and a downed person gets CPR from the nearest bot. */
+	setup(); svs.maxclients = 4; cvars[0].value = 2;
+	clients[1].state = cs_spawned; clients[1].userid = 2; clients[1].edict = &entities[2]; strcpy( clients[1].name, "Friend" );
+	memset( &entities[2].v, 0, sizeof( entities[2].v )); entities[2].v.classname = 1; entities[2].v.health = 100;
+	entities[2].v.movetype = MOVETYPE_WALK; entities[2].v.view_ofs[2] = 28; in_game[2] = 1;
+	settle(); frame( 1.0 );
+	assert( put_in == 2 && clients[2].state == cs_spawned && clients[3].state == cs_spawned );
+	entities[2].v.origin[0] = 2000; frame( 0.05 ); frame( 0.05 );
+	assert( logged( "companion-teleport userid=201 leader=2" ) == 1 && !logged( "companion-teleport userid=200" ));
+	assert( entities[4].v.origin[0] > 1500 && entities[3].v.origin[0] < 100 );
+	memset( told, 0, sizeof( told ));
+	entities[2].v.origin[0] = 1960; entities[2].v.health = 0; entities[2].v.deadflag = DEAD_DEAD;
+	entities[4].v.origin[0] = 1936; frame( 0.05 );
+	assert( logged( "companion-cpr userid=201 leader=2" ) == 1 && !logged( "companion-cpr userid=200" ));
+	assert( strstr( told[1], "coming to help you up" ) && !told[0][0] );
+
 	/* The story layer off: nothing at all. */
 	setup(); cvars[0].value = 1; gate = 0; settle(); assert( clients[1].state == cs_free );
 
