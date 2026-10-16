@@ -26,6 +26,7 @@ GNU General Public License for more details.
 #include "swaplib.h"
 #include "ref_common.h"
 #include "cof_language.h"
+#include "cof_merged.h"
 #if defined( HAVE_OPENMP )
 #include <omp.h>
 #endif // HAVE_OPENMP
@@ -2315,60 +2316,76 @@ static void Mod_LoadEntities( model_t *mod, const dbspmodel_t *bmod )
 		char        entfilename[MAX_QPATH];
 		fs_offset_t	entpatchsize;
 
-		// if world check for entfile too
-		Q_strncpy( entfilename, mod->name, sizeof( entfilename ));
-		COM_ReplaceExtension( entfilename, ".ent", sizeof( entfilename ));
+		char        mapname[MAX_QPATH];
+		size_t      mergedsize = 0;
 
-		// Cry of Fear language packs: the pack carries the translated entity
-		// strings as its own maps/<map>.ent, at a path of its own rather than
-		// beside the .bsp. It wins over a gamedir patch of the same name, and
-		// the "newer than the bsp" rule is skipped for it - the pack is data
-		// we install, not something a mapper left lying about, and a file copy
-		// that did not preserve timestamps would otherwise silently disable
-		// the whole translation.
-		char packent[MAX_QPATH];
-
-		if( CoF_Lang_EntPatch( entfilename, packent, sizeof( packent )))
+		// Cry of Fear merged story maps: a merged map's entities are put together from its members' own,
+		// each through its language pack and .ent rules (cof_sections.c); never from a .ent of its own
+		COM_FileBase( mod->name, mapname, sizeof( mapname ));
+		if( COM_CoF_IsMergedMap( mapname ))
 		{
-			if(( entpatch = FS_LoadFile( packent, &entpatchsize, true )) != NULL )
-			{
-				Con_Printf( "^2Read entity patch:^7 %s\n", packent );
-				entdatasize = entpatchsize;
-				entdata = entpatch;
-			}
+			if(( entpatch = (byte *)COM_CoF_MergedEntities( mapname, entdata, entdatasize, &mergedsize )) == NULL )
+				Host_Error( "Mod_LoadEntities: the merged map %s cannot be put together (see the console)\n", mapname );
+			entdata = (char *)entpatch;
+			entdatasize = mergedsize;
 		}
-
-		// make sure that entity patch is never than bsp
-		int ft1 = FS_FileTime( mod->name, false );
-		int ft2 = entpatch ? -1 : FS_FileTime( entfilename, true );
-
-		if( ft2 != -1 )
+		else
 		{
-			if( ft1 > ft2 )
-			{
-				Con_Printf( S_WARN "Entity patch is older than bsp. Ignored.\n" );
-			}
-			else if(( entpatch = FS_LoadFile( entfilename, &entpatchsize, true )) != NULL )
-			{
-				Con_Printf( "^2Read entity patch:^7 %s\n", entfilename );
-				entdatasize = entpatchsize;
-				entdata = entpatch;
-			}
-		}
+			// if world check for entfile too
+			Q_strncpy( entfilename, mod->name, sizeof( entfilename ));
+			COM_ReplaceExtension( entfilename, ".ent", sizeof( entfilename ));
 
-		// Cry of Fear language packs: a pack without its own maps/<map>.ent
-		// may carry maps/<map>.entpatch instead - only the translated
-		// key/value pairs - which is applied to whatever entity string the
-		// map loads now (the BSP lump or a gamedir .ent). See cof_entpatch.c.
-		size_t patchedsize;
-		byte *patched = (byte *)CoF_Lang_ApplyEntityPatch( entfilename, entdata, entdatasize, &patchedsize );
+			// Cry of Fear language packs: the pack carries the translated entity
+			// strings as its own maps/<map>.ent, at a path of its own rather than
+			// beside the .bsp. It wins over a gamedir patch of the same name, and
+			// the "newer than the bsp" rule is skipped for it - the pack is data
+			// we install, not something a mapper left lying about, and a file copy
+			// that did not preserve timestamps would otherwise silently disable
+			// the whole translation.
+			char packent[MAX_QPATH];
 
-		if( patched )
-		{
-			Mem_Free( entpatch );
-			entpatch = patched;
-			entdata = (char *)patched;
-			entdatasize = patchedsize;
+			if( CoF_Lang_EntPatch( entfilename, packent, sizeof( packent )))
+			{
+				if(( entpatch = FS_LoadFile( packent, &entpatchsize, true )) != NULL )
+				{
+					Con_Printf( "^2Read entity patch:^7 %s\n", packent );
+					entdatasize = entpatchsize;
+					entdata = entpatch;
+				}
+			}
+
+			// make sure that entity patch is never than bsp
+			int ft1 = FS_FileTime( mod->name, false );
+			int ft2 = entpatch ? -1 : FS_FileTime( entfilename, true );
+
+			if( ft2 != -1 )
+			{
+				if( ft1 > ft2 )
+				{
+					Con_Printf( S_WARN "Entity patch is older than bsp. Ignored.\n" );
+				}
+				else if(( entpatch = FS_LoadFile( entfilename, &entpatchsize, true )) != NULL )
+				{
+					Con_Printf( "^2Read entity patch:^7 %s\n", entfilename );
+					entdatasize = entpatchsize;
+					entdata = entpatch;
+				}
+			}
+
+			// Cry of Fear language packs: a pack without its own maps/<map>.ent
+			// may carry maps/<map>.entpatch instead - only the translated
+			// key/value pairs - which is applied to whatever entity string the
+			// map loads now (the BSP lump or a gamedir .ent). See cof_entpatch.c.
+			size_t patchedsize;
+			byte *patched = (byte *)CoF_Lang_ApplyEntityPatch( entfilename, entdata, entdatasize, &patchedsize );
+
+			if( patched )
+			{
+				Mem_Free( entpatch );
+				entpatch = patched;
+				entdata = (char *)patched;
+				entdatasize = patchedsize;
+			}
 		}
 	}
 

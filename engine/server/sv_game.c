@@ -24,6 +24,7 @@ GNU General Public License for more details.
 #include "render_api.h"	// modelstate_t
 #include "ref_common.h" // decals
 #include "cof_language.h"
+#include "cof_merged.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_sender.h"
@@ -868,6 +869,19 @@ static char *SV_ReadEntityScript( const char *filename, int *flags )
 	// after call Mod_TestBmodelLumps we gurantee what map is valid
 	lumpofs = entities.fileofs;
 	lumplen = entities.filelen;
+
+	// Cry of Fear merged story maps: the entities the map spawns, put together from its members' own
+	// (cof_sections.c), so map checks, exits and landmarks see what Mod_LoadEntities gives the world
+	if( COM_CoF_IsMergedMap( filename ))
+	{
+		char *lump = Z_Calloc( lumplen + 1 );
+		FS_Seek( f, lumpofs, SEEK_SET );
+		FS_Read( f, lump, lumplen );
+		FS_Close( f );
+		ents = COM_CoF_MergedEntities( filename, lump, lumplen, NULL );
+		Mem_Free( lump );
+		return ents;
+	}
 
 	// check for entfile too
 	Q_snprintf( entfilename, sizeof( entfilename ), "maps/%s.ent", filename );

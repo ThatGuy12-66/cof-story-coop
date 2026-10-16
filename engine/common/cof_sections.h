@@ -19,6 +19,12 @@ Header-only and plain C (standard library only): the server, the client and the 
 #include <stdlib.h>
 #include <string.h>
 
+#if defined( _MSC_VER )
+#define COF_SECT_FN static __inline
+#else
+#define COF_SECT_FN static inline
+#endif
+
 #define COF_SECT_MAX       4
 #define COF_SECT_NAME      64
 #define COF_SECT_RENAMES   512
@@ -53,7 +59,7 @@ typedef struct
 	cof_section_t sec[COF_SECT_MAX];
 } cof_sections_t;
 
-static int CoF_SectCaseEq( const char *a, const char *b )
+COF_SECT_FN int CoF_SectCaseEq( const char *a, const char *b )
 {
 	for( ; *a && *b; a++, b++ )
 		if( tolower( (unsigned char)*a ) != tolower( (unsigned char)*b )) return 0;
@@ -61,7 +67,7 @@ static int CoF_SectCaseEq( const char *a, const char *b )
 }
 
 // whitespace-separated words of one line; -1 when a word is too long or there are too many
-static int CoF_SectSplit( const char *p, const char *end, char words[][COF_SECT_NAME], int max )
+COF_SECT_FN int CoF_SectSplit( const char *p, const char *end, char words[][COF_SECT_NAME], int max )
 {
 	int n = 0;
 	for( ;; )
@@ -80,7 +86,7 @@ static int CoF_SectSplit( const char *p, const char *end, char words[][COF_SECT_
 	}
 }
 
-static int CoF_SectNumber( const char *s, double *out )
+COF_SECT_FN int CoF_SectNumber( const char *s, double *out )
 {
 	char *end;
 	double v = strtod( s, &end );
@@ -89,7 +95,7 @@ static int CoF_SectNumber( const char *s, double *out )
 	return 1;
 }
 
-static int CoF_SectInt( const char *s, int *out )
+COF_SECT_FN int CoF_SectInt( const char *s, int *out )
 {
 	char *end;
 	long v = strtol( s, &end, 10 );
@@ -99,7 +105,7 @@ static int CoF_SectInt( const char *s, int *out )
 }
 
 // 1 and the rules in out, or 0 for anything that is not a well-formed .sections file
-static int CoF_SectionsParse( const char *text, cof_sections_t *out )
+COF_SECT_FN int CoF_SectionsParse( const char *text, cof_sections_t *out )
 {
 	const char *p = text;
 	int first = 1;
@@ -165,7 +171,7 @@ static int CoF_SectionsParse( const char *text, cof_sections_t *out )
 }
 
 // the section that was this original map, or -1
-static int CoF_SectionsFind( const cof_sections_t *s, const char *map )
+COF_SECT_FN int CoF_SectionsFind( const cof_sections_t *s, const char *map )
 {
 	int i;
 	for( i = 0; i < s->count; i++ )
@@ -174,7 +180,7 @@ static int CoF_SectionsFind( const cof_sections_t *s, const char *map )
 }
 
 // a name as it is in this section of the merged map
-static const char *CoF_SectionsRename( const cof_section_t *x, const char *name )
+COF_SECT_FN const char *CoF_SectionsRename( const cof_section_t *x, const char *name )
 {
 	int i;
 	for( i = 0; i < x->num_renames; i++ )
@@ -182,7 +188,7 @@ static const char *CoF_SectionsRename( const cof_section_t *x, const char *name 
 	return name;
 }
 
-static int CoF_SectionsStyle( const cof_section_t *x, int style )
+COF_SECT_FN int CoF_SectionsStyle( const cof_section_t *x, int style )
 {
 	int i;
 	for( i = 0; i < x->num_styles; i++ )
@@ -191,7 +197,7 @@ static int CoF_SectionsStyle( const cof_section_t *x, int style )
 }
 
 // the section whose height band holds z (or is nearest to it)
-static int CoF_SectionsAt( const cof_sections_t *s, double z )
+COF_SECT_FN int CoF_SectionsAt( const cof_sections_t *s, double z )
 {
 	int i, best = 0;
 	double best_d = 1e30;
@@ -208,7 +214,7 @@ static int CoF_SectionsAt( const cof_sections_t *s, double z )
 	return best;
 }
 
-static int CoF_SectionsHasLandmark( const cof_section_t *x, const char *name )
+COF_SECT_FN int CoF_SectionsHasLandmark( const cof_section_t *x, const char *name )
 {
 	int i;
 	for( i = 0; i < x->num_landmarks; i++ )
@@ -217,7 +223,7 @@ static int CoF_SectionsHasLandmark( const cof_section_t *x, const char *name )
 }
 
 // the section whose landmarks include this (renamed) name, or -1
-static int CoF_SectionsLandmarkSection( const cof_sections_t *s, const char *name )
+COF_SECT_FN int CoF_SectionsLandmarkSection( const cof_sections_t *s, const char *name )
 {
 	int i;
 	for( i = 0; i < s->count; i++ )
@@ -226,7 +232,7 @@ static int CoF_SectionsLandmarkSection( const cof_sections_t *s, const char *nam
 }
 
 // a name as the original map had it (the reverse of CoF_SectionsRename)
-static const char *CoF_SectionsOriginalName( const cof_section_t *x, const char *name )
+COF_SECT_FN const char *CoF_SectionsOriginalName( const cof_section_t *x, const char *name )
 {
 	int i;
 	for( i = 0; i < x->num_renames; i++ )
@@ -249,7 +255,7 @@ loaded: the loaded file's sections, NULL when it is not merged. dest: the sectio
 level, NULL when level is in none or merging is off. Landmark names go back to the original name in the requesting
 section, then to the destination section's name for it.
 */
-static void CoF_SectionsRoute( const cof_sections_t *loaded, const char *level, const char *landmark,
+COF_SECT_FN void CoF_SectionsRoute( const cof_sections_t *loaded, const char *level, const char *landmark,
 	const cof_sections_t *dest, cof_sect_route_t *out )
 {
 	const char *original = landmark ? landmark : "";
@@ -290,7 +296,7 @@ typedef struct
 	size_t kl, vl;
 } cof_sect_pair_t;
 
-static void CoF_SectPut( cof_sect_buf_t *b, const char *s, size_t n )
+COF_SECT_FN void CoF_SectPut( cof_sect_buf_t *b, const char *s, size_t n )
 {
 	if( b->failed ) return;
 	if( b->len + n + 1 > b->cap )
@@ -312,13 +318,13 @@ static void CoF_SectPut( cof_sect_buf_t *b, const char *s, size_t n )
 	b->data[b->len] = 0;
 }
 
-static void CoF_SectPutStr( cof_sect_buf_t *b, const char *s )
+COF_SECT_FN void CoF_SectPutStr( cof_sect_buf_t *b, const char *s )
 {
 	CoF_SectPut( b, s, strlen( s ));
 }
 
 // the next entity: the text between a '{' and the next '}' with no '{' between them (as bsp.py parse_ents)
-static int CoF_SectNextBlock( const char **cursor, const char **start, const char **stop )
+COF_SECT_FN int CoF_SectNextBlock( const char **cursor, const char **start, const char **stop )
 {
 	const char *p = *cursor;
 	while( *p )
@@ -346,7 +352,7 @@ static int CoF_SectNextBlock( const char **cursor, const char **start, const cha
 }
 
 // the "key" "value" pairs of one entity; -1 when there are too many
-static int CoF_SectPairs( const char *p, const char *stop, cof_sect_pair_t *pairs, int max )
+COF_SECT_FN int CoF_SectPairs( const char *p, const char *stop, cof_sect_pair_t *pairs, int max )
 {
 	int n = 0;
 	while( p < stop )
@@ -384,12 +390,12 @@ static int CoF_SectPairs( const char *p, const char *stop, cof_sect_pair_t *pair
 	return n;
 }
 
-static int CoF_SectIs( const char *s, size_t n, const char *word )
+COF_SECT_FN int CoF_SectIs( const char *s, size_t n, const char *word )
 {
 	return strlen( word ) == n && !memcmp( s, word, n );
 }
 
-static int CoF_SectInList( const char *s, size_t n, const char *const *list, size_t count )
+COF_SECT_FN int CoF_SectInList( const char *s, size_t n, const char *const *list, size_t count )
 {
 	size_t i;
 	for( i = 0; i < count; i++ )
@@ -402,7 +408,7 @@ static const char *const cof_sect_ref_keys[] = { "target", "killtarget", "target
 static const char *const cof_sect_mm_reserved[] = { "classname", "targetname", "origin", "angles", "spawnflags", "wait",
 	"delay", "target", "killtarget", "master", "globalname", "rendermode", "renderamt", "rendercolor", "renderfx", "model" };
 
-static const char *CoF_SectRenameN( const cof_section_t *x, const char *s, size_t n )
+COF_SECT_FN const char *CoF_SectRenameN( const cof_section_t *x, const char *s, size_t n )
 {
 	int i;
 	for( i = 0; i < x->num_renames; i++ )
@@ -410,7 +416,7 @@ static const char *CoF_SectRenameN( const cof_section_t *x, const char *s, size_
 	return NULL;
 }
 
-static void CoF_SectQuoted( cof_sect_buf_t *b, const char *s, size_t n )
+COF_SECT_FN void CoF_SectQuoted( cof_sect_buf_t *b, const char *s, size_t n )
 {
 	CoF_SectPut( b, "\"", 1 );
 	CoF_SectPut( b, s, n );
@@ -418,7 +424,7 @@ static void CoF_SectQuoted( cof_sect_buf_t *b, const char *s, size_t n )
 }
 
 // a coordinate as the launcher's reference writes it: up to 6 decimals, trailing zeros dropped
-static void CoF_SectCoordinate( double v, char *out, size_t size )
+COF_SECT_FN void CoF_SectCoordinate( double v, char *out, size_t size )
 {
 	char *e;
 	snprintf( out, size, "%.6f", v );
@@ -429,7 +435,7 @@ static void CoF_SectCoordinate( double v, char *out, size_t size )
 }
 
 // "x y z" moved up by dz, or 0 when the value is not three words with a number last
-static int CoF_SectMovedOrigin( const char *v, size_t n, double dz, char *out, size_t size )
+COF_SECT_FN int CoF_SectMovedOrigin( const char *v, size_t n, double dz, char *out, size_t size )
 {
 	const char *w[4], *we[4], *p = v, *end = v + n;
 	char z[64], *zend, coord[64];
@@ -454,7 +460,7 @@ static int CoF_SectMovedOrigin( const char *v, size_t n, double dz, char *out, s
 	return 1;
 }
 
-static int CoF_SectDigits( const char *s, size_t n )
+COF_SECT_FN int CoF_SectDigits( const char *s, size_t n )
 {
 	size_t i;
 	if( !n ) return 0;
@@ -463,7 +469,7 @@ static int CoF_SectDigits( const char *s, size_t n )
 	return 1;
 }
 
-static void CoF_SectEntity( cof_sect_buf_t *b, const cof_sect_pair_t *pairs, int n, const cof_section_t *x )
+COF_SECT_FN void CoF_SectEntity( cof_sect_buf_t *b, const cof_sect_pair_t *pairs, int n, const cof_section_t *x )
 {
 	const char *cls = "";
 	size_t cls_len = 0;
@@ -547,7 +553,7 @@ The merged map's entity string: the merged file's own worldspawn (world_lump's f
 entities but its worldspawn, through that member's rules. members[i] is member i's entity string as the engine
 would load it for the original map. Returns a malloc'd string (its length in *outlen), or NULL.
 */
-static char *CoF_ComposeEntities( const char *world_lump, const char *const *members, int count, const cof_sections_t *s,
+COF_SECT_FN char *CoF_ComposeEntities( const char *world_lump, const char *const *members, int count, const cof_sections_t *s,
 	size_t *outlen )
 {
 	static cof_sect_pair_t pairs[COF_SECT_PAIRS];
