@@ -17,6 +17,9 @@ const char *SV_CoF_TransitionRequestedLevel( const char *map, const char *landma
 void SV_CoF_SectionsMapCommand( char *mapname, size_t size );
 // SV_ExecLoadLevel, after the entities spawned: the section a map command asked for is where players start.
 void SV_CoF_SectionsEntry( void );
+// merged.txt of a story save (the session's mode, the first player's original map), and restoring it at load.
+size_t SV_CoF_SectionsSessionRecord( char *out, size_t size );
+void SV_CoF_SectionsSessionRestore( const byte *record, size_t length );
 // The section a sound is for: a "play everywhere" one goes to its section's players only (-1: everyone).
 int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin );
 // The section of the loaded merged map at this player (-1: the map is not merged).

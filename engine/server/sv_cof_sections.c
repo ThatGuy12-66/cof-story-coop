@@ -88,6 +88,33 @@ int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin )
 	return s ? CoF_SectionsAt( s, origin[2] ) : -1;
 }
 
+// merged.txt of a story save: the session's mode and the original map its first player is in (the launcher's
+// Continue label). Its length, 0 when it does not fit.
+size_t SV_CoF_SectionsSessionRecord( char *out, size_t size )
+{
+	const cof_sections_t *s = CoF_SectLoaded();
+	const char *section = sv.name;
+	int i;
+	for( i = 0; s && i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict )) continue;
+		section = s->sec[CoF_SectionsAt( s, cl->edict->v.origin[2] )].map;
+		break;
+	}
+	return CoF_SectionsRecord( out, size, cof_merged_maps.value != 0.0f, section );
+}
+
+// A loaded session keeps the mode it was saved with; one saved before merged maps (no record) plays unmerged.
+void SV_CoF_SectionsSessionRestore( const byte *record, size_t length )
+{
+	char section[COF_SECT_NAME];
+	int merged = 0;
+	CoF_SectionsRecordParse( (const char *)record, record ? length : 0, &merged, section, sizeof( section ));
+	Cvar_DirectSet( &cof_merged_maps, merged ? "1" : "0" );
+	Con_Printf( "[cof-sections] session merged=%d\n", merged );
+}
+
 // The merged file (with merging on) that holds this original map; its rules in out.
 static qboolean CoF_SectFileOf( const char *level, cof_sections_t *out )
 {

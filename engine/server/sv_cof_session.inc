@@ -239,6 +239,12 @@ qboolean SV_CoF_SessionSave( const char *slot )
 	if( !CoF_SessionAppend( &archive, &size, "global.dat", content, length ) ||
 		!CoF_SessionAppend( &archive, &size, "session.dat", cof_session_data, sizeof( *cof_session_data ))) goto done;
 	Mem_Free( content ); content = NULL;
+	{
+		// merged story maps: the session's mode, kept by Continue (older builds ignore the entry)
+		char record[160];
+		size_t record_length = SV_CoF_SectionsSessionRecord( record, sizeof( record ));
+		if( record_length && !CoF_SessionAppend( &archive, &size, "merged.txt", record, record_length )) goto done;
+	}
 	memcpy( &header, archive, sizeof( header )); header.checksum = CoF_ArchiveChecksum( archive, size ); memcpy( archive, &header, sizeof( header ));
 	if( !CoF_SessionPreflight( archive, size, cof_session_data )) goto done;
 	Q_snprintf( path, sizeof( path ), "save/cofcoop/%s.cof", slot );
@@ -436,6 +442,9 @@ qboolean SV_CoF_SessionLoad( const char *slot )
 	valid = archive && CoF_SessionPreflight( archive, size, metadata );
 	if( valid )
 	{
+		size_t record_length = 0;
+		const byte *record = CoF_ArchiveFind( archive, "merged.txt", &record_length );
+		SV_CoF_SectionsSessionRestore( record, record_length ); // its own merged mode; none: a save from before them
 		cof_session_pending = archive; cof_session_pending_size = size;
 		Q_strncpy( cof_session_pending_slot, slot, sizeof( cof_session_pending_slot ));
 		COM_ChangeLevel( metadata->map, NULL, false );

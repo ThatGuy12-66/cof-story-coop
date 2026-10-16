@@ -327,6 +327,59 @@ COF_SECT_FN int CoF_SectionMovers( const cof_sect_player_t *p, int count, int *m
 	return moved;
 }
 
+// The session record (merged.txt in a story save): "merged 0|1" and "section <original map>". Its length, 0 when
+// it does not fit.
+COF_SECT_FN size_t CoF_SectionsRecord( char *out, size_t size, int merged, const char *section )
+{
+	int n = snprintf( out, size, "merged %d\nsection %s\n", merged ? 1 : 0, section && section[0] ? section : "-" );
+	return n > 0 && (size_t)n < size ? (size_t)n : 0;
+}
+
+// 1 and the values, or 0 for a missing or malformed record (a save from before merged maps: unmerged)
+COF_SECT_FN int CoF_SectionsRecordParse( const char *text, size_t length, int *merged, char *section, size_t size )
+{
+	char buf[256], w[6][COF_SECT_NAME];
+	const char *p, *end;
+	int have_merged = 0, have_section = 0, n;
+	*merged = 0;
+	if( !text || !length || length >= sizeof( buf )) return 0;
+	memcpy( buf, text, length );
+	buf[length] = 0;
+	for( p = buf; *p; )
+	{
+		for( end = p; *end && *end != '\n'; end++ ) ;
+		n = CoF_SectSplit( p, end, w, 6 );
+		p = *end ? end + 1 : end;
+		if( n < 0 )
+		{
+			*merged = 0;
+			return 0;
+		}
+		if( n == 0 ) continue;
+		if( n == 2 && !strcmp( w[0], "merged" ) && ( !strcmp( w[1], "0" ) || !strcmp( w[1], "1" )))
+		{
+			*merged = w[1][0] == '1';
+			have_merged = 1;
+		}
+		else if( n == 2 && !strcmp( w[0], "section" ))
+		{
+			snprintf( section, size, "%s", w[1] );
+			have_section = 1;
+		}
+		else
+		{
+			*merged = 0;
+			return 0;
+		}
+	}
+	if( !have_merged || !have_section )
+	{
+		*merged = 0;
+		return 0;
+	}
+	return 1;
+}
+
 // ---- entity composition ----
 
 typedef struct
