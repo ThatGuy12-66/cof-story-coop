@@ -89,6 +89,53 @@ class LoadWiringTests(unittest.TestCase):
         self.assertIn('COM_CoF_MergedEntities( filename,', body)
 
 
+SERVER = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/server'
+
+
+def body_of(path, signature):
+    text = path.read_text(encoding='latin-1')
+    start = text.index(signature)
+    return text[start:text.index('\n}\n', start)]
+
+
+class ServerWiringTests(unittest.TestCase):
+    """Where the engine turns level changes into section moves and resolves original map names."""
+
+    def test_a_door_between_sections_is_caught_before_the_exit_hold_and_the_one_change_guard(self):
+        body = body_of(SERVER / 'sv_game.c', 'static void GAME_EXPORT pfnChangeLevel(')
+        move = body.index('SV_CoF_SectionChangeLevel( level, landmark )')
+        self.assertLess(body.index('SV_CoF_SessionWipe( level, landmark )'), move)
+        self.assertLess(move, body.index('svs.spawncount == last_spawncount'))
+        self.assertLess(move, body.index('SV_CoF_ExitRequest('))
+
+    def test_a_level_change_loads_the_merged_file_with_the_landmark_named_there(self):
+        body = body_of(SERVER / 'sv_game.c', 'void SV_QueueChangeLevel(')
+        self.assertLess(body.index('SV_CoF_SectionsResolve( level, landname,'), body.index('Q_strncpy( mapname, level'))
+
+    def test_the_story_transition_finds_the_source_landmark_and_exit_by_their_own_names(self):
+        validate = body_of(SERVER / 'sv_save.c', 'qboolean SV_CoF_TransitionValidate(')
+        self.assertIn('SV_CoF_LiveLandmark( SV_CoF_TransitionSourceLandmark( map, landmark ), origin )', validate)
+        begin = body_of(SERVER / 'sv_save.c', 'static qboolean CoF_BeginStoryTransition(')
+        self.assertIn('SV_CoF_LiveLandmark( SV_CoF_TransitionSourceLandmark( map, landmark ), cof_transition.source_origin )', begin)
+        self.assertIn('SV_CoF_TransitionRequestedLevel( map, landmark )', begin)
+
+    def test_the_map_command_and_level_start_use_the_asked_for_section(self):
+        cmd = body_of(SERVER / 'sv_cmds.c', 'static void SV_Map_f(')
+        self.assertLess(cmd.index('SV_CoF_SectionsMapCommand( mapname, sizeof( mapname ))'), cmd.index('SV_ValidateMap( mapname )'))
+        load = body_of(SERVER / 'sv_init.c', 'void SV_ExecLoadLevel(')
+        self.assertLess(load.index('SV_SpawnEntities('), load.index('SV_CoF_SectionsEntry()'))
+        self.assertLess(load.index('SV_CoF_SectionsEntry()'), load.index('SV_ActivateServer('))
+
+    def test_the_story_layer_runs_the_sections(self):
+        init = body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryInit(')
+        self.assertIn('SV_CoF_SectionsInit();', init)
+        frame = body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame(')
+        self.assertLess(frame.index('SV_CoF_PartyFrame();'), frame.index('SV_CoF_SectionsFrame();'))
+        self.assertLess(frame.index('SV_CoF_SectionsFrame();'), frame.index('SV_CoF_CompanionFrame();'))
+        module = (SERVER / 'sv_cof_sections.c').read_text(encoding='latin-1')
+        self.assertIn('CVAR_DEFINE_AUTO( cof_merged_maps, "0",', module)
+
+
 ROUTE_FILES = {
     # c_apartment3 + 4 + 5 as the real group names them (land1-3 clash: renamed in c_apartment4)
     'cur.txt': 'cof-sections 1 cm_apartment3\n'
