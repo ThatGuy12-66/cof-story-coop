@@ -12,8 +12,10 @@ tools\story_run_report.py can add them up. Closing this window leaves the games 
 -Mode solo       The same two windows side by side, for ONE person: you play the host; the AI
                  plays the guest whenever you leave its window alone (cof_companion_drive). Click
                  into the guest window and move to take it over; 8 s after you stop, the AI has it back.
--Mode companion  Only the host window, with an AI companion bot beside you (cof_companion 1):
+-Mode companion  Only the host window, with AI companion bots beside you (cof_companion):
                  no second window at all.
+
+-Companions      How many AI bots in companion mode: 1 (default) to 3 (a party of four).
 
 -Gun             The test gun every person keeps (cof_test_gun): none (default: the game as it is), m16, shotgun, vp70,
                  revolver, rifle or glock. With a gun on, every gun you
@@ -25,6 +27,7 @@ param(
     [string]$Map = 'c_intro',
     [ValidateSet('two', 'solo', 'companion')][string]$Mode = 'solo',
     [ValidateSet('m16', 'shotgun', 'vp70', 'revolver', 'rifle', 'glock', 'none')][string]$Gun = 'none',
+    [ValidateRange(1, 3)][int]$Companions = 1,
     [string]$Root
 )
 $ErrorActionPreference = 'Stop'
@@ -90,7 +93,7 @@ if ($Mode -ne 'companion') { Save-Log $guestCopy 'campaign-guest.log' }
 
 $hostExtra = switch ($Mode) {
     'solo' { '+cof_companion_drive 1 +cof_companion 0' }
-    'companion' { '+cof_companion 1 +cof_companion_drive 0' }
+    'companion' { "+maxplayers $($Companions + 1) +cof_companion $Companions +cof_companion_drive 0" }
     default { '+cof_companion 0 +cof_companion_drive 0' }
 }
 $hostExtra += if ($Gun -eq 'none') { ' +cof_test_gun 0' } else { " +cof_test_gun weapon_$Gun" }
