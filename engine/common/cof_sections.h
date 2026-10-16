@@ -281,6 +281,52 @@ COF_SECT_FN void CoF_SectionsRoute( const cof_sections_t *loaded, const char *le
 	snprintf( out->dest_landmark, sizeof( out->dest_landmark ), "%s", CoF_SectionsRename( &dest->sec[to], original ));
 }
 
+typedef struct
+{
+	int   alive, human, in_exit, moved_recently;
+	float origin[3];
+} cof_sect_player_t;
+
+/*
+Who a section move takes (movers[i] = 1): every living person in the exit who did not just move, and every
+living person within near of one of them. Nobody in the exit (a scripted change, say a cutscene's end): every
+living person who did not just move. Bots follow their leader on their own; the dead respawn where they are.
+Returns how many move.
+*/
+COF_SECT_FN int CoF_SectionMovers( const cof_sect_player_t *p, int count, int *movers, float near )
+{
+	int i, j, activators = 0, moved = 0;
+	for( i = 0; i < count; i++ )
+	{
+		movers[i] = p[i].alive && p[i].human && !p[i].moved_recently && p[i].in_exit;
+		activators += movers[i];
+	}
+	for( i = 0; i < count; i++ )
+	{
+		if( movers[i] || !p[i].alive || !p[i].human || p[i].moved_recently ) continue;
+		if( !activators )
+		{
+			movers[i] = 1;
+			continue;
+		}
+		for( j = 0; j < count; j++ )
+		{
+			float dx, dy, dz;
+			if( !( p[j].alive && p[j].human && !p[j].moved_recently && p[j].in_exit )) continue;
+			dx = p[i].origin[0] - p[j].origin[0];
+			dy = p[i].origin[1] - p[j].origin[1];
+			dz = p[i].origin[2] - p[j].origin[2];
+			if( dx * dx + dy * dy + dz * dz <= near * near )
+			{
+				movers[i] = 1;
+				break;
+			}
+		}
+	}
+	for( i = 0; i < count; i++ ) moved += movers[i];
+	return moved;
+}
+
 // ---- entity composition ----
 
 typedef struct
