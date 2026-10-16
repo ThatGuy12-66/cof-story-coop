@@ -1,6 +1,6 @@
 Cry of Fear story co-op - Test 1
 
-Play the Cry of Fear campaign together (2 to 4 players), or alone with an AI companion.
+Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 This is an early test build: expect bugs, and please report them.
 
 YOU NEED
@@ -18,7 +18,7 @@ INSTALL
    Start menu.
 
 PLAY
-- Play solo: you and an AI companion.
+- Play solo: you and one to three AI companions.
 - Host a game: friends join you. Send them the join code the app shows.
   If they can't connect, your router didn't open the port by itself: forward UDP 27015
   to your PC in the router, or all use a VPN such as Tailscale, ZeroTier or Radmin and
@@ -34,7 +34,7 @@ Dual wield (two pistols, or a pistol and a light) works from the inventory menu.
 CO-OP KEYS
 J      join your partner (when the screen says "Press J to join")
 Enter  skip a cutscene for everyone (press again to watch the rest)
-H      tell the AI companion to wait or to follow
+H      tell the AI companions to wait or to follow
 Space  when dead: respawn next to your partner after about 10 seconds
 
 UPDATES

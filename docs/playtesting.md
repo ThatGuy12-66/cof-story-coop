@@ -1,7 +1,7 @@
 # Playtesting
 
 Thanks for testing. This build lets 2–4 people play the single-player Cry of Fear campaign
-together, or one person with an AI companion. It is early and experimental: you will find bugs,
+together, or one person with one to three AI companions. It is early and experimental: you will find bugs,
 and finding them is the point.
 
 ## What you need
@@ -23,8 +23,9 @@ You don't need Python or anything else.
    the Cry of Fear folder (the one with `CoFLaunchApp.exe`). **Co-op copy** is where the separate
    copy goes; the default, `%LOCALAPPDATA%\CoF-Story-Coop`, is fine.
 4. Click **Set up** and wait. Setup copies the game files, installs the co-op engine, makes the
-   two Simon models and the bigger inventory's art from your own game files, and checks
-   everything. It ends with a **Cry of Fear Co-op** shortcut on your desktop and in the Start menu.
+   Simon models, the third-person weapon models and the bigger inventory's art from your own game
+   files, and checks everything. It ends with a **Cry of Fear Co-op** shortcut on your desktop and
+   in the Start menu.
 
 Your Steam game is not changed. Your saves and settings are not copied. To uninstall, delete the
 `CoF-Story-Coop` folder and the two shortcuts.
@@ -45,10 +46,10 @@ saves and settings are kept.
 
 Start the app from the shortcut, type the name the others will see, and pick one:
 
-- **Play solo**: you and the AI companion, on your PC only.
-- **Host a game**: friends join you. Choose 2–4 players, an optional password, and whether the AI
-  companion keeps you company until a friend takes its place. After the game starts, the app shows
-  a **join code**: send it (and the password) to your friends.
+- **Play solo**: you and one to three AI companions (choose how many), on your PC only.
+- **Host a game**: friends join you. Choose 2–4 players, an optional password, and whether AI
+  companions fill the empty places (each one makes room when a friend joins). After the game
+  starts, the app shows a **join code**: send it (and the password) to your friends.
   - The app asks your router to open UDP 27015 (UPnP) and closes it again when the game ends.
     If the router doesn't, the app says so: forward UDP 27015 to your PC in the router, or all
     use a VPN such as Tailscale, ZeroTier or Radmin and share that address instead.
@@ -76,7 +77,7 @@ Options > Keybinds. The co-op keys:
 | --- | --- |
 | J | Join your partner: go to where they are. Use it when the screen says "Press J to join". It doesn't work while you're frozen in a cutscene, on a ladder or in a puzzle view. |
 | Enter | Skip the cutscene for the whole party; press it again to stop the skip and watch the rest |
-| H | Tell the AI companion to wait or to follow |
+| H | Tell the AI companions to wait or to follow |
 | Y | Chat |
 | K | Voice chat, hold to talk |
 | Space, when dead | Respawn next to your partner, after about 10 seconds |
@@ -95,11 +96,15 @@ times faster to its end, and every scripted event still happens. You'll see
   A partner can also revive you.
 - **Story items:** keys, notes and codes count for everyone. Weapons the story hands out go to everyone.
 - **Inventory:** 12 slots instead of 6. **Dual wield** works (two pistols, or a pistol and a
-  light); others see you with empty hands while you dual wield, and two people dual-wielding at
-  the same moment may mix up the left-hand animations.
+  light); two people dual-wielding at the same moment may mix up the left-hand animations.
+- **Weapons in hand:** the others see what you hold, the story's own items too (axe, FAMAS,
+  lantern, phone, camera and the rest) and both hands when you dual wield. Setup makes these models
+  from your own game files.
 - **Ladders:** one person at a time. **Yes/no questions:** only the person asked can answer.
-- **AI companion:** it follows you, opens doors, fights, heals you with syringes and revives you.
-  It never takes exits, items or story triggers.
+- **AI companions:** they follow you (through doors too), open ordinary doors, fight, heal you with
+  syringes and revive you; while one is up, going down does not send everyone back to the
+  checkpoint. They never take exits, items or story triggers. Each one makes monsters hit a little
+  harder, as a friend would.
 
 ## What works so far
 
@@ -109,8 +114,8 @@ tests and has not been played yet.
 
 Known problems. Report them only if they stop you from playing:
 
-- The AI companion sometimes teleports behind you instead of walking, and can stand in your view
-  right after a cutscene.
+- The AI companions sometimes reappear near you instead of walking (when you sprint far ahead, or
+  when they get stuck). Two or three of them at once are new: tell us how they behave.
 - Some effects reach only one player: the look-at in `c_village3`, the grey fade in `c_ending4`,
   camera zooms and blur.
 - `c_asylumb` puzzle: a guest who solves it may need to press the puzzle's close button.

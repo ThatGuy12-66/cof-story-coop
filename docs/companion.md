@@ -1,43 +1,56 @@
 # The AI companion
 
-For playing the story campaign with company but without a second person. The engine adds an AI
-player beside you: no second window, no second copy of the game. It is a full player in the game's
-own rules: it walks, shoots, reloads, revives and uses syringes through the same player code you use.
-The story co-op engine drives it. It is experimental and not yet tested in a live game.
+For playing the story campaign with company but without a second person. The engine adds up to
+three AI players beside you: no second window, no second copy of the game. Each is a full player in
+the game's own rules: it walks, shoots, reloads, revives and uses syringes through the same player
+code you use. The story co-op engine drives it. It is experimental; one companion has been played
+live, two or three only in offline tests so far.
 
 ## Turning it on
 
-- Test copies: `.\tools\Start-CampaignTest.ps1 -Mode companion` (one window, the companion joins
-  once the map has loaded).
+- The tester app: **Play solo** asks how many AI companions (1-3). **Host** has "AI companions in
+  the empty places": every place a friend has not taken gets one.
+- Test copies: `.\tools\Start-CampaignTest.ps1 -Mode companion [-Companions 1-3]` (one window, the
+  companions join one a second once the map has loaded).
 - Any story co-op host (engine with the companion, `maxplayers` 2 or more): in the console
-  `cof_companion 1` (or `cof_companion_cmd add`); `cof_companion 0` sends it away.
-- If a friend connects while the server is full, the companion leaves to make room for them.
+  `cof_companion 3` (or `cof_companion_cmd add`); `cof_companion 0` sends them away.
+- If a friend connects while the server is full, a companion leaves to make room for them (even
+  while you are down, as long as someone else stays up), and comes back once the friend leaves.
+- They are called Companion, Companion 2 and Companion 3. Players 3 and 4 wear a red and a light
+  hoodie, so you can tell everyone apart.
 
 ## What it does
 
 - **Follows you.** It walks the path you walked, so it gets round corners and through rooms the way
   you did. It sets off once you are a few steps away and walks until it is beside you (no
-  stop-start). When something stands between it and where it is going (it was pushed off your path
-  in a fight, or you are out of sight with no path to follow), it finds a way round on the map's own
-  monster route graph. It opens ordinary doors in its way (never the story's: locked or scripted
-  doors stay shut) and jumps only over a low obstacle a jump clears. If it falls behind, gets stuck
-  or loses you (a teleporting door, a ladder, a scripted move), it reappears behind you, out of your
-  view where it can.
+  stop-start); a second and third companion keep a little further back, and one that finds another
+  in its way waits instead of pushing. Blocked by a door jamb or a corner, it steps sideways to line
+  up with the opening. When something stands between it and where it is going (it was pushed off
+  your path in a fight, or you are out of sight with no path to follow), it finds a way round on the
+  map's own monster route graph. It opens ordinary doors in its way (never the story's: locked or
+  scripted doors stay shut), climbs stairs by walking and jumps only over a low obstacle with
+  somewhere to land. When you go through one of the story's teleporting doors, it walks to the door
+  and comes out after you. If it falls far behind, gets stuck or loses you, it reappears where you
+  cannot see it (behind you or round a corner), never in front of your eyes and never during a
+  cutscene. Standing by, it stays out of your body and out of your face.
 - **Fights.** It takes on hostile monsters it can see near you, the ones already after one of you
   first. With a gun it raises the sights for a distant target, fires one shot per trigger pull and
   reloads when the gun is empty; it backs off from anything too close while shooting. Without a gun
   it uses its best melee weapon (axe, nightstick, branch, then the switchblade). It holds fire while
-  you are in the line of fire. Your shots cannot hurt it, and its shots cannot hurt you.
+  anyone (you, a friend or another companion) is in the line of fire. Your shots cannot hurt it, and its shots cannot hurt you.
 - **Leaves friends alone.** Scripted actors and allies (the game's own "friendly" monsters, the
   ghosts, the boss's shared health in the last fight) and bosses waiting for their entrance are not
   targets.
 - **Fights back when grabbed.** When a monster turns its gun on it, it struggles, the way you mash
   the attack button.
 - **Revives you.** When you are down, it says so, comes to you and does the game's own CPR (5
-  seconds; you get up with 30 health). Anything attacking right beside it comes first.
+  seconds; you get up with 30 health). Anything attacking right beside it comes first. While a
+  companion is up, the game does not go back to the checkpoint: it revives you, or you respawn beside
+  it after about 10 seconds. With friends in the game, the companions look after everyone: the
+  nearest one revives whoever is down.
 - **Patches you up.** When you are at half health or less and nothing is around, it walks up and
-  gives you a syringe of its own (the game's own partner heal), at most once every 90 seconds.
-  Both of you are held still for a moment while it goes in.
+  gives you a syringe of its own (the game's own partner heal), at most once every 90 seconds for
+  the whole party. Both of you are held still for a moment while it goes in.
 - **Looks after itself.** It injects a syringe when badly hurt and safe, recovers slowly out of a
   fight, and never runs out of rounds. It gets up after a hard landing.
 - **Lights the way.** It keeps the co-op flashlight on, which you see as its torch beam.
@@ -66,7 +79,7 @@ The story co-op engine drives it. It is experimental and not yet tested in a liv
 | Cvar | Default | Meaning |
 |---|---|---|
 | `cof_companion` | 0 | How many companions to keep (each needs a free player slot; the game takes four players at most). |
-| `cof_companion_name` | Companion | Its name. |
+| `cof_companion_name` | Companion | Its name (the second and third get " 2" and " 3"). |
 | `cof_companion_medic` | 90 | Seconds between the syringes it gives you; 0: never (and it carries none). |
 | `cof_companion_ammo` | 1 | It never runs out of rounds; 0: it has only what the story gives it. |
 | `cof_companion_light` | 1 | It keeps its flashlight on. |
@@ -80,10 +93,12 @@ The story co-op engine drives it. It is experimental and not yet tested in a liv
   exist for about half the maps and cover each area separately: the teleporting doors split them
   into islands. So it mostly follows your path and uses a route only to get round things; between
   areas it catches up by reappearing behind you.
-- The game counts it as a player: monsters hit about 17% harder than when you play alone, exactly as
-  they would with a friend in the game. In exchange it keeps the game going while you are down: you
-  get "Game over" only when both of you are.
-- The game prints "Companion has joined the game" each time you enter a new map (it rejoins there).
+- The game counts each companion as a player: monsters hit harder than when you play alone (about
+  17% with one companion, 33% with two, 50% with three), exactly as they would with friends in the
+  game. In exchange they keep the game going while you are down.
+- The game prints "Companion has joined the game" for each companion when you enter a new map (they
+  rejoin there).
+- It does not sprint: a player sprinting far ahead still makes it reappear behind them.
 - Driving a person's client (`cof_companion_drive`), it uses that person's real ammo and syringes and
   never turns their flashlight on or off. With the test gun on (`cof_test_gun`, the campaign test
   default), that person's ammo is infinite and their best gun is the test gun.
