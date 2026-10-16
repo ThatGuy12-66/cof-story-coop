@@ -56,6 +56,21 @@ class LoadTests(unittest.TestCase):
         groups.load_groups()
 
 
+class CommittedGroupTests(unittest.TestCase):
+    """Every group in tools/map_groups.json, from the retail maps: as recorded, and passing the planner."""
+
+    def test_every_group_builds_as_recorded_and_passes_the_planner(self):
+        from tools.map_merge import plan
+        retail('c_apartment3')
+        for g in groups.load_groups():
+            with self.subTest(g.name):
+                data, text = groups.build_group(MAPS, g)
+                self.assertEqual(hashlib.sha256(data).hexdigest(), g.bsp_sha256)
+                self.assertEqual(hashlib.sha256(text.encode('ascii')).hexdigest(), g.sections_sha256)
+                report = plan.plan_group(MAPS, g.members, accepted=g.accepted)
+                self.assertTrue(report.ok, report.problems)
+
+
 class BuildTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

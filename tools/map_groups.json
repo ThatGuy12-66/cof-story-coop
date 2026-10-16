@@ -1,4 +1,45 @@
 {
   "schema": 1,
-  "groups": []
+  "groups": [
+    {
+      "name": "cm_apartment1",
+      "members": [
+        "c_apartment1",
+        "c_apartment2"
+      ],
+      "inputs": {
+        "c_apartment1": "8777047485e8adeaf6e8c473cedcd48470207a32831b5df5e3e111c3d0c99bbc",
+        "c_apartment2": "5ad2d55fe80f40311a77a0b13ed9b5adfb26b749425009198e11a544a1f8fc48"
+      },
+      "bsp_sha256": "a89c13f93c1e01a57b86ac0e009ae8786eb7431e5fbce17ca84ff81ed8d4f35e",
+      "sections_sha256": "6ec5c8e847061d5f31efee87186ba33166d24b9f3b213b14f58bee1bc0c6e46b",
+      "wave": 1,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_apartment3",
+      "members": [
+        "c_apartment3",
+        "c_apartment4",
+        "c_apartment5"
+      ],
+      "inputs": {
+        "c_apartment3": "39796e307f890b48b31ca60957afdaf3ae476565c302c10b4be99fbb66d8110e",
+        "c_apartment4": "11db34e23380d21d62d4554c7459ab6390ffd5121d06dd87f92bc03b8515cd25",
+        "c_apartment5": "24d50c0bfdefc326731a932de18890d99afb1ca21d4736e1f23a15780b8cc93a"
+      },
+      "bsp_sha256": "9a07bf9766e192c340f57a728f8aede79c1d71a7661c432bee7dace535dfe92b",
+      "sections_sha256": "f20164020496516846858f71b76b9fb7a70ce7e5e7b035d8c5b08d266b2d47a7",
+      "wave": 1,
+      "enabled": true,
+      "accepted": {
+        "player1": "story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); worldspawn models are not shown",
+        "player2": "story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); worldspawn models are not shown",
+        "player3": "story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); worldspawn models are not shown",
+        "player4": "story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); worldspawn models are not shown",
+        "materialstxt": "absent means the game default sound/materials.txt, the same file"
+      }
+    }
+  ]
 }
