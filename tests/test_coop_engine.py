@@ -34,6 +34,13 @@ class CoopEngineTests(unittest.TestCase):
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         self.assertRegex(story, r'Cvar_Get\( "cof_build", "", 0,')
 
+    def test_the_party_moves_before_the_companion_decides(self):
+        # live 2026-10-15: 11 of 72 companion teleports were overridden in the same frame by the
+        # party's own door move; with the party first, the AI sees the leader beside it again
+        story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
+        frame = story[story.index('void SV_CoF_StoryFrame('):]
+        self.assertLess(frame.index('SV_CoF_PartyFrame();'), frame.index('SV_CoF_CompanionFrame();'))
+
     def test_a_stacked_player_still_touches_triggers(self):
         # SV_LinkEdict returns early for SOLID_NOT bodies; the stacked-player rule
         # (cof_moments_harness) must run in that branch, before the return

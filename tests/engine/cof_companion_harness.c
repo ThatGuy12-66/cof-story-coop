@@ -32,6 +32,7 @@ typedef float vec3_t[3];
 #define FCL_FAKECLIENT (1<<7)
 #define EF_NODRAW 128
 #define MOVETYPE_WALK 3
+#define MOVE_NORMAL 0
 #define MOVE_NOMONSTERS 1
 #define kRenderNormal 0
 #define ARRAYSIZE(x) (sizeof(x)/sizeof((x)[0]))
@@ -44,6 +45,7 @@ typedef float vec3_t[3];
 #define FBitSet(f,b) ((f)&(b))
 #define bound(lo,v,hi) ((v)<(lo)?(lo):(v)>(hi)?(hi):(v))
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
+#define VectorSet(v,x,y,z) ((v)[0]=(x),(v)[1]=(y),(v)[2]=(z))
 #define VectorAdd(a,b,c) ((c)[0]=(a)[0]+(b)[0],(c)[1]=(a)[1]+(b)[1],(c)[2]=(a)[2]+(b)[2])
 #define VectorSubtract(a,b,c) ((c)[0]=(a)[0]-(b)[0],(c)[1]=(a)[1]-(b)[1],(c)[2]=(a)[2]-(b)[2])
 #define VectorMA(a,s,b,c) ((c)[0]=(a)[0]+(s)*(b)[0],(c)[1]=(a)[1]+(s)*(b)[1],(c)[2]=(a)[2]+(s)*(b)[2])
@@ -61,7 +63,7 @@ typedef struct {
 struct edict_s { int free, serialnumber; entvars_t v; };
 typedef struct { vec3_t viewangles; float forwardmove, sidemove, upmove; word buttons; byte msec; } usercmd_t;
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; double timebase; usercmd_t lastcmd; } sv_client_t;
-typedef struct { qboolean startsolid, allsolid; float fraction; edict_t *ent; } trace_t;
+typedef struct { qboolean startsolid, allsolid; float fraction; edict_t *ent; vec3_t endpos; struct { vec3_t normal; } plane; } trace_t;
 typedef struct { float value; const char *string; } convar_t;
 static struct { int state; double time, frametime; sv_client_t *current_client; char name[MAX_QPATH]; } sv;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
@@ -72,9 +74,50 @@ static const char *strings[] = { "", "player", "monster_slower", "monster_friend
 static char log_text[32768];
 static size_t log_length;
 static int gate, connect_ok = 1, put_in, placed, ready, equips, runs, next_userid = 200, wall, inits;
-/* a door (entity 9) across x = door_x at the feet; a low box across x = ledge_x up to ledge_top */
+/* a door (entity 9) across x = door_x at the feet; a low box from x = ledge_x on, ledge_top over the floor */
 static int door_x, ledge_x, uses;
 static float ledge_top;
+/* Solid boxes (stairs, a ledge, walls, pillars). Bodies stand with their origin 36 over the floor
+ * (z = -36 under a body at z = 0), as the game's players do. */
+#define FLOOR (-36.0f)
+typedef struct { float x0, y0, x1, y1, z0, z1; } box_t;
+static box_t boxes[24];
+static int box_count;
+static void add_box( float x0, float y0, float x1, float y1, float z0, float z1 )
+{
+	box_t *b = &boxes[box_count++];
+	b->x0 = x0; b->y0 = y0; b->x1 = x1; b->y1 = y1; b->z0 = z0; b->z1 = z1;
+}
+static int box_hit( const box_t *b, const float *p, const float *mins, const float *maxs )
+{
+	return p[0] + maxs[0] > b->x0 && p[0] + mins[0] < b->x1 && p[1] + maxs[1] > b->y0 && p[1] + mins[1] < b->y1 &&
+		p[2] + mins[2] < b->z1 && p[2] + maxs[2] > b->z0;
+}
+/* where a hull sweep first overlaps a box: 0 clear, 1 blocked (fraction, startsolid and the plane set) */
+static int boxes_block( const float *start, const float *mins, const float *maxs, const float *end, trace_t *t )
+{
+	box_t legacy;
+	float d[3], length, p[3];
+	int n, k, i;
+	VectorSubtract( end, start, d );
+	length = (float)sqrt( DotProduct( d, d ));
+	n = length < 1.0f ? 1 : (int)ceil( length );
+	if( ledge_x ) { legacy.x0 = (float)ledge_x; legacy.x1 = (float)ledge_x + 200.0f; legacy.y0 = -10000; legacy.y1 = 10000; legacy.z0 = -10000; legacy.z1 = FLOOR + ledge_top; }
+	for( k = 0; k <= n; k++ )
+	{
+		int hit = 0;
+		VectorMA( start, (float)k / (float)n, d, p );
+		for( i = 0; i < box_count && !hit; i++ ) hit = box_hit( &boxes[i], p, mins, maxs );
+		if( !hit && ledge_x ) hit = box_hit( &legacy, p, mins, maxs );
+		if( !hit ) continue;
+		t->startsolid = k == 0;
+		t->fraction = k == 0 ? 0.0f : (float)( k - 1 ) / (float)n;
+		VectorMA( start, t->fraction, d, t->endpos );
+		t->plane.normal[2] = d[2] < -0.5f * length ? 1.0f : 0.0f;
+		return 1;
+	}
+	return 0;
+}
 static edict_t *used, *user;
 static int supplies, revives, revive_ok, reviving, repairs, fallen, gives, free_slots, command_count;
 static char last_equip[32], commands[16][32];
@@ -147,14 +190,21 @@ static void game_put_in( edict_t *e )
 	in_game[e - entities] = 1;
 	assert( e->v.flags == ( FL_CLIENT | FL_FAKECLIENT ) && e->v.health == 0 ); /* the engine cleaned the edict first */
 	e->v.classname = 1; e->v.health = 100; e->v.movetype = MOVETYPE_WALK; e->v.view_ofs[2] = 28; e->v.flags = FL_CLIENT | FL_ONGROUND;
+	e->v.mins[0] = e->v.mins[1] = -16; e->v.mins[2] = -36; e->v.maxs[0] = e->v.maxs[1] = 16; e->v.maxs[2] = 36;
 }
 static void SV_InitEdict( edict_t *e ) { inits++; memset( &e->v, 0, sizeof( e->v )); in_game[e - entities] = 0; }
 static string_t SV_MakeString( const char *s ) { return 1; }
 static void SV_CoF_PartyPlayerReady( sv_client_t *cl, qboolean fresh ) { ready++; }
-static qboolean SV_CoF_PartyPlaceBehind( sv_client_t *mover, edict_t *leader )
+static int place_ok = 1, place_rank, place_anywhere, place_had_near, in_door;
+static vec3_t place_near;
+static qboolean SV_CoF_PartyPlaceUnseen( sv_client_t *mover, edict_t *leader, const float *exit_at, int rank, qboolean anywhere )
 {
-	placed++; VectorCopy( leader->v.origin, mover->edict->v.origin ); mover->edict->v.origin[0] -= 64; return true;
+	place_rank = rank; place_anywhere = anywhere; place_had_near = exit_at != NULL;
+	if( exit_at ) VectorCopy( exit_at, place_near );
+	if( !place_ok && !anywhere ) return false;
+	placed++; VectorCopy( exit_at ? exit_at : leader->v.origin, mover->edict->v.origin ); mover->edict->v.origin[0] -= 64; return true;
 }
+static qboolean SV_CoF_PartyInDoor( const sv_client_t *cl ) { return in_door && cl == &clients[0]; }
 /* A wall across x = gap_x everywhere below y = gap_y (when gap_x is set): a gap at its far end. */
 static float gap_x, gap_y;
 /* A wall at x = 1000 blocks sight (when on); everything else is open. */
@@ -166,7 +216,34 @@ static trace_t SV_Move( const vec3_t start, vec3_t mins, vec3_t maxs, const vec3
 		start[1] + ( end[1] - start[1] ) * ( gap_x - start[0] ) / ( end[0] - start[0] ) < gap_y ) t.fraction = 0.5f;
 	/* the door blocks moves at the feet, not the line of sight from an eye */
 	if( door_x && !entities[9].free && start[2] <= 20.0f && (( start[0] < door_x ) != ( end[0] < door_x ))) { t.fraction = 0.5f; t.ent = &entities[9]; }
-	if( ledge_x && start[2] < ledge_top && (( start[0] < ledge_x ) != ( end[0] < ledge_x ))) t.fraction = 0.5f;
+	{ vec3_t d; VectorSubtract( end, start, d ); VectorMA( start, t.fraction, d, t.endpos ); }
+	if( mins && maxs && t.fraction >= 1.0f && boxes_block( start, mins, maxs, end, &t ) && t.startsolid ) t.allsolid = 1;
+	if( type != MOVE_NOMONSTERS && mins && maxs && t.fraction >= 1.0f )
+	{
+		/* other players' bodies (a partner in a doorway) */
+		int i, k, n;
+		vec3_t d, q;
+		float length;
+		VectorSubtract( end, start, d );
+		length = (float)sqrt( DotProduct( d, d ));
+		n = length < 1.0f ? 1 : (int)ceil( length );
+		for( k = 1; k <= n && t.fraction >= 1.0f; k++ )
+		{
+			VectorMA( start, (float)k / (float)n, d, q );
+			for( i = 1; i <= svs.maxclients; i++ )
+			{
+				edict_t *e = &entities[i];
+				if( e == ignore || e->free || clients[i - 1].state != cs_spawned ) continue;
+				if( q[0] + maxs[0] > e->v.origin[0] - 16 && q[0] + mins[0] < e->v.origin[0] + 16 &&
+					q[1] + maxs[1] > e->v.origin[1] - 16 && q[1] + mins[1] < e->v.origin[1] + 16 &&
+					q[2] + mins[2] < e->v.origin[2] + 36 && q[2] + maxs[2] > e->v.origin[2] - 36 )
+				{
+					t.fraction = (float)( k - 1 ) / (float)n; t.ent = e; VectorMA( start, t.fraction, d, t.endpos );
+					break;
+				}
+			}
+		}
+	}
 	return t;
 }
 /* The player code: the view follows the usercmd. */
@@ -267,7 +344,8 @@ static void setup( void )
 	cvars[0].value = 0; cvars[2].value = 0; cvars[3].value = 8; cvars[5].value = 90; cvars[6].value = 1; cvars[7].value = 1;
 	sv.state = ss_active; sv.time = 100; sv.frametime = 0.05; svs.maxclients = 2; svs.clients = clients; svs.spawncount++;
 	svgame.numEntities = 16; svgame.dllFuncs.pfnClientConnect = game_connect; svgame.dllFuncs.pfnClientPutInServer = game_put_in;
-	svgame.dllFuncs.pfnUse = game_use; door_x = ledge_x = uses = 0; ledge_top = 0.0f; used = user = NULL;
+	svgame.dllFuncs.pfnUse = game_use; door_x = ledge_x = uses = 0; ledge_top = 0.0f; used = user = NULL; box_count = 0;
+	place_ok = 1; place_rank = place_anywhere = place_had_near = in_door = 0;
 	strcpy( sv.name, "c_test" ); have_graph = graph_door = loads = 0; gap_x = gap_y = 0.0f;
 	for( i = 3; i < 16; i++ ) entities[i].free = 1;
 	SV_CoF_CompanionInit();
@@ -354,32 +432,58 @@ int main( void )
 
 	/* An ordinary door shut across its way: opened through the game's own use (never the
 	 * use key: that takes whatever the game finds first, a story key included). */
-	setup(); cvars[0].value = 1; settle(); bot = &entities[2];
-	entities[1].v.origin[0] = 600; bot->v.origin[0] = 0; bot->v.v_angle[1] = 0;
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle(); bot = &entities[2];
+	bot->v.origin[0] = 0; bot->v.v_angle[1] = 0;
 	entities[9].free = 0; entities[9].v.classname = 8; door_x = 20;
 	frame( 0.05 ); frame( 0.05 );
 	assert( uses == 1 && used == &entities[9] && user == bot && logged( "companion-door userid=200 entity=9" ) == 1 );
 	frame( 0.3 ); assert( uses == 1 ); /* once a second */
 	frame( 0.8 ); assert( uses == 2 );
 	/* a rotating door too; never one that fires something or that a trigger opens (the story's) */
-	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600;
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle();
 	entities[9].free = 0; entities[9].v.classname = 9; door_x = 20;
 	frame( 0.05 ); frame( 0.05 ); assert( uses == 1 );
-	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600;
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle();
 	entities[9].free = 0; entities[9].v.classname = 8; entities[9].v.target = 7; door_x = 20;
 	frame( 0.05 ); frame( 0.05 ); frame( 1.0 ); assert( uses == 0 && !logged( "companion-door" ));
-	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600;
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle();
 	entities[9].free = 0; entities[9].v.classname = 8; entities[9].v.targetname = 7; door_x = 20;
 	frame( 0.05 ); frame( 0.05 ); frame( 1.0 ); assert( uses == 0 );
 
 	/* A low box a jump clears (blocked at the feet and at step height, clear at jump height):
 	 * one hop, logged. A stair step (clear at step height): the walk climbs it, no hop. */
-	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600; ledge_x = 20; ledge_top = 26;
-	frame( 0.05 ); frame( 0.05 );
-	assert(( last_run.buttons & COF_IN_JUMP ) && logged( "companion-jump userid=200 reason=ledge" ) == 1 );
-	setup(); cvars[0].value = 1; settle(); entities[1].v.origin[0] = 600; ledge_x = 20; ledge_top = 12;
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle(); ledge_x = 20; ledge_top = 26;
+	for( i = 0; i < 4; i++ ) { entities[2].v.origin[0] = 0; frame( 0.05 ); }
+	assert( logged( "companion-jump userid=200 reason=ledge" ) == 1 );
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle(); ledge_x = 20; ledge_top = 12;
 	for( i = 0; i < 10; i++ ) { frame( 0.05 ); assert( !( last_run.buttons & COF_IN_JUMP )); }
 	assert( !logged( "companion-jump" ));
+
+	/* Stairs (8-unit risers every 10) are climbed by the walk: never a jump, wherever on the
+	 * flight it stands (live 2026-10-14: 6 hops in 13 s at the foot of c_apartment2's stairwell).
+	 * A 30-unit box is jumped; a 60-unit wall and a single 16-unit step are not. */
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; entities[1].v.origin[2] = 64; settle();
+	for( i = 1; i <= 8; i++ ) add_box( 100.0f + 10.0f * ( i - 1 ), -500, 1000, 500, -1000, FLOOR + 8.0f * i );
+	for( i = 0; i < 40; i++ )
+	{
+		float x = 60.0f + 4.0f * i, top = FLOOR;
+		int k;
+		for( k = 0; k < box_count; k++ ) if( x + 16 > boxes[k].x0 && boxes[k].z1 > top ) top = boxes[k].z1;
+		entities[2].v.origin[0] = x; entities[2].v.origin[1] = 0; entities[2].v.origin[2] = top + 36; entities[2].v.flags |= FL_ONGROUND;
+		frame( 0.05 );
+	}
+	assert( !logged( "companion-jump" ) && logged( "mode=follow" ));
+	{
+		static const float heights[] = { 30, 60, 16 };
+		int k;
+		for( k = 0; k < 3; k++ )
+		{
+			setup(); cvars[0].value = 1; entities[1].v.origin[0] = 600; settle();
+			add_box( 30, -500, 400, 500, -1000, FLOOR + heights[k] );
+			for( i = 0; i < 4; i++ ) { entities[2].v.origin[0] = 0; entities[2].v.origin[2] = 0; frame( 0.05 ); }
+			assert( logged( "companion-jump userid=200 reason=ledge" ) == ( k == 0 ));
+		}
+	}
 
 	/* An idle second person (solo testing): the AI takes over after the idle time and
 	 * gives it back the moment their controls move. */
@@ -696,6 +800,65 @@ int main( void )
 	entities[4].v.origin[0] = 1936; frame( 0.05 );
 	assert( logged( "companion-cpr userid=201 leader=2" ) == 1 && !logged( "companion-cpr userid=200" ));
 	assert( strstr( told[1], "coming to help you up" ) && !told[0][0] );
+
+	/* Through a door after the host: the game takes them 600 units on in one frame, behind a wall;
+	 * the bot walks to where they left and comes out near where they arrived (not in front of them). */
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 900; settle(); wall = 1;
+	entities[2].v.origin[0] = 700; frame( 0.05 );
+	entities[1].v.origin[0] = 1500; frame( 0.05 );
+	assert( !placed && cof_companions[1].brain.door );
+	entities[2].v.origin[0] = 880; frame( 0.05 );
+	assert( placed == 1 && place_had_near && place_near[0] == 1500 && logged( "reason=door" ) == 1 );
+	/* the teleport line says where everyone was */
+	assert( logged( "companion-teleport userid=200 leader=1 reason=door at=880,0,0 leader_at=1500,0,0" ) == 1 );
+	/* no spot out of the player's sight: asked again each frame, then (after 3 s) the least seen */
+	setup(); cvars[0].value = 1; settle(); place_ok = 0; entities[2].v.origin[0] = 3000; frame( 0.05 );
+	assert( !placed && !logged( "companion-teleport" ));
+	for( i = 0; i < 20; i++ ) frame( 0.1 );
+	assert( !placed );
+	for( i = 0; i < 15 && !placed; i++ ) frame( 0.1 );
+	assert( placed == 1 && place_anywhere && logged( "reason=far" ) == 1 );
+	/* the host held by the game (a cutscene, a door): nobody teleports meanwhile */
+	setup(); cvars[0].value = 1; settle(); entities[1].v.flags |= FL_FROZEN; entities[2].v.origin[0] = 3000;
+	for( i = 0; i < 50; i++ ) frame( 0.1 );
+	assert( !placed );
+	entities[1].v.flags &= ~FL_FROZEN; in_door = 1;
+	for( i = 0; i < 10; i++ ) frame( 0.1 );
+	assert( !placed ); in_door = 0;
+	frame( 0.1 ); frame( 0.6 ); assert( placed == 1 );
+
+	/* Two bots behind one person keep their own distances; the second comes along behind
+	 * the first (in the way: arrived, not stuck), and two bots on one spot step apart. */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; settle(); frame( 1.0 );
+	assert( clients[1].state == cs_spawned && clients[2].state == cs_spawned );
+	entities[1].v.origin[0] = 0; entities[2].v.origin[0] = -150; entities[2].v.origin[1] = 20;
+	entities[3].v.origin[0] = -150; entities[3].v.origin[1] = -40;
+	frame( 0.05 ); frame( 0.05 );
+	assert( cof_companions[1].out.mode == COF_BRAIN_FOLLOW && cof_companions[2].out.mode == COF_BRAIN_IDLE );
+	assert( place_rank == 0 );
+	setup(); svs.maxclients = 3; cvars[0].value = 2; entities[1].v.origin[0] = 800; settle(); frame( 1.0 );
+	for( i = 0; i < 80; i++ )
+	{
+		/* the first walks on toward the host; the second is right behind it */
+		entities[2].v.origin[0] = 8.0f * i; entities[3].v.origin[0] = 8.0f * i - 40; entities[2].v.origin[1] = entities[3].v.origin[1] = 0;
+		frame( 0.05 );
+		assert( !logged( "companion-teleport" ));
+	}
+	assert( cof_companions[2].out.mode == COF_BRAIN_IDLE && !ran[2].forwardmove && logged( "userid=201 mode=follow" ) <= 1 );
+	entities[1].v.origin[0] = 0; entities[2].v.origin[0] = 60; entities[3].v.origin[0] = 60; entities[3].v.origin[1] = 10;
+	frame( 0.05 ); assert( ran[2].forwardmove != 0 || ran[2].sidemove != 0 );
+
+	/* Door jambs and corners: blocked straight ahead, the bot lines up with the opening the engine
+	 * probed beside it instead of pushing into the wall until it teleports. */
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = 400; settle();
+	add_box( 200, -1000, 216, -24, -1000, 1000 ); add_box( 200, 24, 216, 1000, -1000, 1000 );
+	for( i = 0; i < 3; i++ ) { entities[2].v.origin[0] = 180; entities[2].v.origin[1] = 20; frame( 0.05 ); }
+	assert( cof_companions[1].out.move_to[1] < 15 && cof_companions[1].out.move_to[0] > 180 );
+	/* a pillar's corner, the leader beyond it (seen over its top) */
+	setup(); cvars[0].value = 1; entities[1].v.origin[0] = -200; entities[1].v.origin[1] = 128; settle();
+	add_box( 100, 134, 140, 1000, -1000, 0 );
+	for( i = 0; i < 3; i++ ) { entities[2].v.origin[0] = 150; entities[2].v.origin[1] = 136; frame( 0.05 ); }
+	assert( cof_companions[1].out.move_to[1] < 134 && cof_companions[1].out.move_to[0] < 150 );
 
 	/* The story layer off: nothing at all. */
 	setup(); cvars[0].value = 1; gate = 0; settle(); assert( clients[1].state == cs_free );

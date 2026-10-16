@@ -36,11 +36,12 @@ typedef float vec3_t[3];
 #define Q_strlen strlen
 static void Q_strncpy(char *d,const char *s,size_t n) { size_t i; for(i=0;i+1<n && s[i];i++) d[i]=s[i]; d[i]=0; }
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
+#define VectorAdd(a,b,c) ((c)[0]=(a)[0]+(b)[0],(c)[1]=(a)[1]+(b)[1],(c)[2]=(a)[2]+(b)[2])
 #define VectorClear(a) memset((a),0,sizeof(vec3_t))
 typedef struct edict_s edict_t;
 typedef struct {
     string_t classname,target,targetname,model,message;
-    vec3_t origin,mins,maxs,angles,v_angle,velocity,basevelocity,absmin,absmax;
+    vec3_t origin,mins,maxs,angles,v_angle,view_ofs,velocity,basevelocity,absmin,absmax;
     float health,takedamage;
     int deadflag,movetype,flags,effects,fixangle,spawnflags;
     edict_t *owner,*aiment;
@@ -71,6 +72,7 @@ static size_t status_length;
 static int gate, give_ok, give_actual, give_calls, links, blocked, narrow_direction;
 static int solid_probe; static float solid_x; /* one point of solid world for hull tests */
 static int no_floor; static float no_floor_x; /* a shaft: nothing below this x */
+static float front_only_x; /* walls everywhere short of this x: only spots past it can be reached */
 static char prompts[MAX_CLIENTS][192]; /* the last ProFont line each player was sent */
 static const char *command_name=""; static int exit_key,exit_waiter,fades;
 typedef struct { float value; } convar_t;
@@ -142,6 +144,7 @@ static trace_t SV_Move(const vec3_t start,vec3_t mins,vec3_t maxs,
        (end[0]!=512 || end[1]!=(float)(34*narrow_direction))) {
         t.startsolid=true; return t;
     }
+    if(front_only_x && end[0]<front_only_x && end[2]>=start[2]) {t.fraction=0.5f; return t;}
     if(end[2]<start[2] && !(no_floor && start[0]==no_floor_x)) {t.fraction=0.1f; t.plane.normal[2]=1; t.endpos[2]=start[2]-1;}
     return t;
 }
@@ -154,7 +157,7 @@ static void setup(void) {
     memset(entities,0,sizeof(entities)); memset(clients,0,sizeof(clients));
     memset(private_data,0,sizeof(private_data)); memset(prompts,0,sizeof(prompts));
     exit_key=exit_waiter=fades=scene_watching=0; ending_fades_out=ending_fades_in=0; gift_log[0]=0;
-    gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=0;
+    gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=0; front_only_x=0;
     status_log[0]=0; status_length=0; sv.name="c_start";
     sv.state=ss_active; sv.time=10; svs.clients=clients; svs.maxclients=2;
     svs.spawncount++; svgame.edicts=entities; svgame.numEntities=12;
@@ -705,14 +708,35 @@ int main(void) {
     entities[2].v.health=0; entities[2].v.deadflag=2; tick(0.1);
     entities[2].v.health=100; entities[2].v.deadflag=DEAD_NO; tick(1.2); tick(1.2);
     assert(CoF_PartyInventory(&clients[1])&(1U<<2));
-    /* The AI companion catching up lands behind the leader, facing their way; with no
-     * room behind, beside them; a dead companion is not moved. */
+    /* The AI companion catching up lands out of the player's sight: behind them, facing their
+     * way (a second bot one row further back); a dead companion is not moved. */
     setup(); tick(0.1); entities[1].v.origin[0]=1000; entities[1].v.angles[1]=0; entities[2].v.origin[0]=-3000;
-    assert(SV_CoF_PartyPlaceBehind(&clients[1],&entities[1]) && entities[2].v.origin[0]==936 && entities[2].v.angles[1]==0);
+    assert(SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],NULL,0,false) && entities[2].v.origin[0]==936 && entities[2].v.angles[1]==0);
+    entities[2].v.origin[0]=-3000;
+    assert(SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],NULL,1,false) && entities[2].v.origin[0]==896);
     entities[1].v.angles[1]=90; entities[2].v.origin[0]=-3000;
-    assert(SV_CoF_PartyPlaceBehind(&clients[1],&entities[1]) && entities[2].v.origin[0]==1000 && entities[2].v.origin[1]==-64);
+    assert(SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],NULL,0,false) && entities[2].v.origin[0]==1000 && entities[2].v.origin[1]==-64);
     entities[2].v.health=0; entities[2].v.origin[0]=-3000;
-    assert(!SV_CoF_PartyPlaceBehind(&clients[1],&entities[1]) && entities[2].v.origin[0]==-3000);
+    assert(!SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],NULL,0,false) && entities[2].v.origin[0]==-3000);
+    /* Walls all round but in front (a door exit: live, 54 of 76 exits put the bot dead ahead of
+     * the player): no spot in sight, unless it has waited long enough; then never in the
+     * middle of the view. */
+    setup(); tick(0.1); entities[1].v.origin[0]=1000; entities[2].v.origin[0]=-3000; front_only_x=1030;
+    assert(!SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],NULL,0,false) && entities[2].v.origin[0]==-3000);
+    assert(SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],NULL,0,true) && entities[2].v.origin[0]>=1030);
+    {
+        float x=entities[2].v.origin[0]-1000, y=entities[2].v.origin[1];
+        assert(fabsf(atan2f(y,x))*57.3f>=30.0f && x*x+y*y>=48.0f*48.0f);
+    }
+    /* Through a door after the leader, who walked on: out of the door (behind them), not on them. */
+    setup(); tick(0.1); entities[1].v.origin[0]=2300; entities[2].v.origin[0]=-3000;
+    {
+        vec3_t exit={2000,0,0};
+        assert(SV_CoF_PartyPlaceUnseen(&clients[1],&entities[1],exit,0,false) && entities[2].v.origin[0]==1936);
+    }
+    /* going through a door is being held by the game */
+    setup(); tick(0.1); assert(!SV_CoF_PartyInDoor(&clients[0]));
+    private_data[0][COF_PARTY_DOOR_FLAG]=1; assert(SV_CoF_PartyInDoor(&clients[0])); private_data[0][COF_PARTY_DOOR_FLAG]=0;
     /* Frozen in a cutscene, on a ladder or in a puzzle view: J does not tear the
      * body away from that camera; the game releases them itself. */
     setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[2].v.flags|=FL_FROZEN; warp(1);

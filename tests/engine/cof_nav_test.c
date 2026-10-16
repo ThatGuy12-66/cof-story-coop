@@ -71,7 +71,8 @@ static int same( const int *path, int length, const int *want, int count )
 int main( void )
 {
 	/* A square room: A (0,0) B (100,0) C (100,100) D (0,100), and E, an air node, over it. */
-	static const tnode square[] = { { 0, 0, 8, 1 }, { 100, 0, 8, 1 }, { 100, 100, 8, 1 }, { 0, 100, 8, 1 }, { 50, 50, 200, 0 } };
+	/* land nodes lie on the floor, as in every saved graph (measured on six maps, 2026-10-15) */
+	static const tnode square[] = { { 0, 0, 0, 1 }, { 100, 0, 0, 1 }, { 100, 100, 0, 1 }, { 0, 100, 0, 1 }, { 50, 50, 200, 0 } };
 	tlink walls[] = {
 		{ 0, 1, WALK, NULL }, { 1, 0, WALK, NULL }, { 1, 2, WALK, NULL }, { 2, 1, WALK, NULL },
 		{ 2, 3, WALK, NULL }, { 3, 2, WALK, NULL }, { 3, 0, WALK, NULL }, { 0, 3, WALK, NULL },
@@ -161,7 +162,7 @@ int main( void )
 			for( x = 0; x < 30; x++ )
 			{
 				int me = y * 30 + x;
-				grid[me].x = x * 64.0f; grid[me].y = y * 64.0f; grid[me].z = 8; grid[me].land = 1;
+				grid[me].x = x * 64.0f; grid[me].y = y * 64.0f; grid[me].z = 0; grid[me].land = 1;
 				if( x < 29 ) { pair( lines, &l, me, me + 1 ); }
 				if( y < 29 ) { pair( lines, &l, me, me + 30 ); }
 			}

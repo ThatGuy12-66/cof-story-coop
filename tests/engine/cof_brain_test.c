@@ -199,10 +199,15 @@ int main( void )
 	in.nav = 1; set3( in.nav_point, -200, 200, 0 ); think( 0.1 );
 	assert( out.going && out.goal[0] == 0 && out.side < 0 );
 
-	/* The leader went through a door (a 600-unit jump) and is out of sight: teleport after them. */
+	/* The leader went through a door (a 600-unit jump) and is out of sight: walk to where they
+	 * stood, then come out of the door after them (live 2026-10-15: 40 of 72 teleports were doors,
+	 * most of them in front of the player). */
 	scene( 100, 0 ); in.leader_visible = in.leader_walkable = 0; think( 0.1 );
 	set3( in.leader_pos, 100, 600, 0 ); think( 0.1 );
-	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "trail" ));
+	assert( out.action != COF_BRAIN_ACT_TELEPORT && b.door > 0 && out.mode == COF_BRAIN_FOLLOW && out.forward > 0 );
+	set3( in.self, 90, 0, 0 ); set3( in.eye, 90, 0, 28 ); think( 0.1 );
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "door" ) && out.place );
+	assert( out.place_at[0] == 100 && out.place_at[1] == 600 && !b.door );
 
 	/* Revive: the leader is down 200 units away: go there (no +use on the way: a press
 	 * would use whatever the game finds first); beside the body, ask the engine to start the
@@ -296,6 +301,102 @@ int main( void )
 	set3( in.self, -200, 0, 0 ); think( 0.1 ); assert( out.forward > 0 || out.side != 0 );
 	threat( 300, 280 ); think( 0.1 ); assert( out.mode == COF_BRAIN_FIGHT );
 	in.threat = 0; in.leader_alive = 0; in.leader_down = 1; set3( in.leader_pos, 100, 0, 0 ); think( 0.1 ); assert( out.mode == COF_BRAIN_REVIVE );
+
+	/* Doors, step by step. A thin wall: the leader walks east to (300,0), stands, and the door
+	 * puts them at (300,80) in one frame. The trail stays: the bot walks it to the door crumb. */
+	scene( 0, 0 ); in.leader_visible = in.leader_walkable = 0; set3( in.leader_pos, 0, 0, 0 ); think( 0.05 );
+	for( i = 1; i <= 6; i++ ) { set3( in.leader_pos, (float)i * 50, 0, 0 ); think( 0.1 ); }
+	set3( in.leader_pos, 300, 80, 0 ); think( 0.05 );
+	assert( out.action != COF_BRAIN_ACT_TELEPORT && b.door > 0 && out.goal[1] == 0 && out.goal[0] <= 300 );
+	set3( in.self, 280, 0, 0 ); set3( in.eye, 280, 0, 28 ); think( 0.05 );
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "door" ) && out.place &&
+		out.place_at[0] == 300 && out.place_at[1] == 80 );
+	/* a hitch (30 units in a tenth of a second) is no door */
+	scene( 0, 0 ); set3( in.leader_pos, 200, 0, 0 ); think( 0.1 ); set3( in.leader_pos, 230, 0, 0 ); think( 0.1 ); assert( !b.door );
+	/* a far exit: walking to the door crumb is never "far" or "lost"; the door on arrival */
+	scene( 0, 0 ); in.leader_visible = in.leader_walkable = 0;
+	set3( in.leader_pos, 500, 0, 0 ); think( 0.05 ); set3( in.leader_pos, 2500, 0, 0 ); think( 0.05 );
+	for( i = 0; i < 90; i++ )
+	{
+		set3( in.self, (float)i * 5.5f, 0, 0 ); set3( in.eye, (float)i * 5.5f, 0, 28 ); think( 0.05 );
+		assert( out.action != COF_BRAIN_ACT_TELEPORT || !strcmp( out.why, "door" ));
+		if( out.action == COF_BRAIN_ACT_TELEPORT ) break;
+	}
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "door" ));
+	/* a door it cannot reach: stuck, at the latest the ordinary trail teleport after the wait */
+	scene( 0, 0 ); in.leader_visible = in.leader_walkable = 0;
+	set3( in.leader_pos, 300, 0, 0 ); think( 0.05 ); set3( in.leader_pos, 300, 900, 0 ); think( 0.05 );
+	for( i = 0; i < 220 && out.action != COF_BRAIN_ACT_TELEPORT; i++ ) think( 0.05 );
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && ( !strcmp( out.why, "stuck" ) || !strcmp( out.why, "trail" )) && !out.place );
+	/* moved inside the room, still in sight and walkable: no door, no teleport */
+	scene( 100, 0 ); think( 0.05 ); set3( in.leader_pos, 100, 150, 0 ); think( 0.05 );
+	assert( !b.door && out.action != COF_BRAIN_ACT_TELEPORT );
+
+	/* Cutscenes: while the leader is held (or just after) nothing teleports; "lost" counts from the release. */
+	scene( 500, 0 ); in.leader_visible = in.leader_walkable = 0; in.leader_held = 1;
+	for( i = 0; i < 100; i++ ) { think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT ); }
+	in.leader_held = 0;
+	for( i = 0; i < 55; i++ ) { think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT ); }
+	for( i = 0; i < 15 && out.action != COF_BRAIN_ACT_TELEPORT; i++ ) think( 0.1 );
+	assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "lost" ));
+	/* released 2000 away: half a second for the script's own moves to land, then "far" */
+	scene( 2000, 0 ); in.leader_held = 1; think( 0.1 ); in.leader_held = 0;
+	think( 0.2 ); assert( out.action != COF_BRAIN_ACT_TELEPORT );
+	think( 0.2 ); assert( out.action != COF_BRAIN_ACT_TELEPORT );
+	think( 0.2 ); assert( out.action == COF_BRAIN_ACT_TELEPORT && !strcmp( out.why, "far" ));
+	/* the bot itself held 8 s with the leader out of sight: not "lost" the moment it is free */
+	scene( 500, 0 ); in.leader_visible = in.leader_walkable = 0; in.held = 1;
+	for( i = 0; i < 80; i++ ) think( 0.1 );
+	in.held = 0; think( 0.1 ); think( 0.6 ); assert( out.action != COF_BRAIN_ACT_TELEPORT );
+
+	/* Stuck means no progress: jittering back and forth over 24 units is not getting anywhere
+	 * (the old rule never caught it); a steady walk, or a receding leader, is never stuck. */
+	scene( 400, 0 ); in.leader_walkable = 0;
+	{
+		int teleported = 0;
+		for( i = 0; i < 60 && !teleported; i++ )
+		{
+			set3( in.self, ( i & 1 ) ? 30.0f : 0.0f, 0, 0 ); think( 0.1 );
+			teleported = out.action == COF_BRAIN_ACT_TELEPORT;
+		}
+		assert( teleported && !strcmp( out.why, "stuck" ) && i < 40 );
+	}
+	scene( 900, 0 );
+	for( i = 0; i < 100; i++ ) { set3( in.self, (float)i * 5.0f, 0, 0 ); think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT ); }
+	scene( 400, 0 );
+	for( i = 0; i < 100; i++ ) { set3( in.self, (float)i * 15.0f, 0, 0 ); set3( in.leader_pos, 400 + (float)i * 15.0f, 0, 0 ); think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT ); }
+
+	/* Corners and door jambs: the engine found an opening to one side; step over to line up with it. */
+	scene( 400, 0 ); in.side_shift = 16; in.probe_yaw = 0; think( 0.05 );
+	assert( out.side < 0 && out.forward > 0 && out.forward < 0.5f * COF_BRAIN_RUN_SPEED );
+	assert( out.move_to[1] > 0 && out.move_to[0] > 0 && out.move_to[0] < 20 );
+	scene( 400, 0 ); in.side_shift = -16; in.probe_yaw = 0; think( 0.05 ); assert( out.side > 0 );
+	scene( 400, 0 ); in.side_shift = 0; think( 0.05 ); assert( near( out.side, 0, 1 ) && out.move_to[0] == 400 );
+	scene( 400, 0 ); in.side_shift = 16; in.probe_yaw = 20; think( 0.05 ); assert( near( out.side, 0, 1 ));
+
+	/* Personal space: inside the leader, step out; in their face, step aside after a second. */
+	scene( 10, 0 ); set3( in.leader_view, 0, 180, 0 ); think( 0.1 ); assert( out.forward < 0 && out.mode == COF_BRAIN_IDLE );
+	scene( 60, 0 ); set3( in.leader_view, 0, 180, 0 ); think( 0.1 ); assert( !out.forward && !out.side );
+	for( i = 0; i < 9; i++ ) think( 0.1 );
+	think( 0.2 ); assert( out.side != 0 );
+	scene( 60, 0 ); set3( in.leader_view, 0, 0, 0 ); for( i = 0; i < 20; i++ ) think( 0.1 ); assert( !out.forward && !out.side );
+	/* another bot (or person) right on top of it: step away from them */
+	scene( 60, 0 ); in.crowd = 1; set3( in.crowd_pos, 0, 10, 0 ); think( 0.1 ); assert( out.side > 0 );
+
+	/* Several bots behind one person: each keeps its own distance (rank), and a partner in the
+	 * way counts as arrived, not as stuck. */
+	scene( 170, 0 ); in.rank = 2; think( 0.1 ); assert( out.mode == COF_BRAIN_IDLE );
+	scene( 240, 0 ); in.rank = 2; think( 0.1 ); assert( out.mode == COF_BRAIN_FOLLOW );
+	scene( 400, 0 ); in.partner_block = 1;
+	for( i = 0; i < 100; i++ ) { think( 0.1 ); assert( out.action != COF_BRAIN_ACT_TELEPORT && !out.forward ); }
+
+	/* A trail point above or below (stairs, a switchback) is not reached by standing under it. */
+	scene( 0, 0 ); in.leader_visible = in.leader_walkable = 0;
+	set3( in.leader_pos, -40, 0, 0 ); think( 0.1 );
+	set3( in.leader_pos, 0, 0, 60 ); think( 0.1 ); /* a crumb right above the bot */
+	set3( in.leader_pos, 60, 0, 60 ); think( 0.1 );
+	set3( in.leader_pos, 120, 0, 60 ); think( 0.1 );
+	think( 0.1 ); assert( b.count >= 2 && b.cursor == 0 );
 
 	puts( "brain scenarios passed" );
 	return 0;
