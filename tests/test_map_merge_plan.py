@@ -35,6 +35,21 @@ class RetailPlanTests(unittest.TestCase):
         self.assertTrue(any('c_apartment3 -> c_apartment4' in note for note in self.report.notes), self.report.notes)
 
 
+class LandmarkTests(unittest.TestCase):
+    def test_door_without_a_landmark_on_either_side_is_a_note(self):
+        # c_apartment2's changelevel4 names land4, which neither map has: the original game spawns the
+        # player at the map start, and so does a section move without a landmark
+        retail('c_apartment1')
+        report = plan.plan_group(MAPS, ['c_apartment1', 'c_apartment2'])
+        self.assertFalse([p for p in report.problems if 'land4' in p], report.problems)
+        self.assertTrue(any('land4' in n and 'start' in n for n in report.notes), report.notes)
+
+    def test_landmark_on_one_side_only_is_a_problem(self):
+        problems, notes = plan.door_checks(['c_a', 'c_b'], [['l1'], []],
+                                           [[[['classname', 'trigger_changelevel'], ['map', 'c_b'], ['landmark', 'l1']]], []])
+        self.assertTrue(problems)
+
+
 class RefusalTests(unittest.TestCase):
     def test_map_named_by_the_game_dll_is_refused(self):
         retail('c_start')

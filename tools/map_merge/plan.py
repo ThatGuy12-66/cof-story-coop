@@ -113,6 +113,28 @@ def globalname_problems(members: list) -> list:
             for g, m in sorted(seen.items()) if len(m) > 1]
 
 
+def door_checks(members: list, landmarks: list, member_ents: list) -> tuple:
+    """Every level door between two members: its landmark once on both sides (a section move keeps the
+    position relative to it), or on neither (the original game spawns at the map start; so does the move)."""
+    problems, notes = [], []
+    for k, ents in enumerate(member_ents):
+        for e in ents:
+            if ent_get(e, 'classname') != 'trigger_changelevel' or ent_get(e, 'map') not in members:
+                continue
+            dest, landmark = ent_get(e, 'map'), ent_get(e, 'landmark')
+            here, there = landmarks[k].count(landmark), landmarks[members.index(dest)].count(landmark)
+            if here == there == 1:
+                notes.append(f'door {members[k]} -> {dest} via {landmark}')
+            elif here == there == 0:
+                notes.append(f'door {members[k]} -> {dest}: landmark {landmark} is in neither map, '
+                             f'players arrive at the {dest} start as in the original game')
+            else:
+                problems.append(f'door {members[k]} -> {dest}: landmark {landmark} is not exactly once on both sides')
+            if ent_get(e, 'changetarget'):
+                notes.append(f'door {members[k]} -> {dest} fires changetarget {ent_get(e, "changetarget")}')
+    return problems, notes
+
+
 def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> PlanReport:
     accepted = accepted or {}
     report = PlanReport(members=list(members))
@@ -156,18 +178,9 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     report.problems += reference_problems(named, sections)
 
     landmarks = [[ent_get(e, 'targetname') for e in x.ents if ent_get(e, 'classname') == 'info_landmark'] for x in maps]
-    for k, x in enumerate(maps):
-        for e in x.ents:
-            if ent_get(e, 'classname') != 'trigger_changelevel' or ent_get(e, 'map') not in members:
-                continue
-            dest, landmark = ent_get(e, 'map'), ent_get(e, 'landmark')
-            d = members.index(dest)
-            if landmarks[k].count(landmark) != 1 or landmarks[d].count(landmark) != 1:
-                report.problems.append(f'door {members[k]} -> {dest}: landmark {landmark} is not exactly once on both sides')
-            else:
-                report.notes.append(f'door {members[k]} -> {dest} via {landmark}')
-            if ent_get(e, 'changetarget'):
-                report.notes.append(f'door {members[k]} -> {dest} fires changetarget {ent_get(e, "changetarget")}')
+    problems, notes = door_checks(members, landmarks, [x.ents for x in maps])
+    report.problems += problems
+    report.notes += notes
     report.notes.append('dz ' + ', '.join(f'{s.map}={s.dz:g}' for s in sections))
     report.notes.append('renames ' + ', '.join(f'{s.map}={len(s.renames)}' for s in sections))
     report.notes.append('styles ' + ', '.join(f'{s.map}={s.styles}' for s in sections if s.styles))
