@@ -78,6 +78,16 @@ int SV_CoF_PlayerSection( const edict_t *ent )
 	return s && ent ? CoF_SectionsAt( s, ent->v.origin[2] ) : -1;
 }
 
+// A "play everywhere" sound (no attenuation) of a merged map is for its own section's players only: in the
+// original game nobody in another map heard it. -1: everyone as usual (attenuated, stops, sign-on, not merged).
+int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin )
+{
+	const cof_sections_t *s;
+	if( attn > 0.0f || FBitSet( flags, SND_STOP | SND_SPAWNING ) || !origin ) return -1;
+	s = CoF_SectLoaded();
+	return s ? CoF_SectionsAt( s, origin[2] ) : -1;
+}
+
 // The merged file (with merging on) that holds this original map; its rules in out.
 static qboolean CoF_SectFileOf( const char *level, cof_sections_t *out )
 {

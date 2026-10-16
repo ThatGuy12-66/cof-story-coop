@@ -17,6 +17,8 @@ const char *SV_CoF_TransitionRequestedLevel( const char *map, const char *landma
 void SV_CoF_SectionsMapCommand( char *mapname, size_t size );
 // SV_ExecLoadLevel, after the entities spawned: the section a map command asked for is where players start.
 void SV_CoF_SectionsEntry( void );
+// The section a sound is for: a "play everywhere" one goes to its section's players only (-1: everyone).
+int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin );
 // The section of the loaded merged map at this player (-1: the map is not merged).
 int SV_CoF_PlayerSection( const edict_t *ent );
 #endif

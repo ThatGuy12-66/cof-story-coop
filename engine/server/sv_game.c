@@ -359,6 +359,9 @@ MSG_PVS	send to clients potentially visible from org
 MSG_PHS	send to clients potentially audible from org
 =================
 */
+// Cry of Fear merged story maps: the section the message being sent is for (-1: all), set around a sound's send
+static int cof_multicast_section = -1;
+
 static int SV_Multicast( int dest, const vec3_t origin, const edict_t *ent, qboolean usermessage, qboolean filter )
 {
 	byte		*mask = NULL;
@@ -447,6 +450,10 @@ static int SV_Multicast( int dest, const vec3_t origin, const edict_t *ent, qboo
 			continue;
 
 		if( SV_IsValidEdict( ent ) && !SV_CheckGroupTrace( ent, cl->edict ))
+			continue;
+
+		// Cry of Fear merged story maps: a "play everywhere" sound is for its own section
+		if( cof_multicast_section >= 0 && SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section )
 			continue;
 
 		if( !SV_CheckClientVisiblity( cl, mask ))
@@ -2303,8 +2310,10 @@ void GAME_EXPORT SV_StartSound( edict_t *ent, int chan, const char *sample, floa
 	if( FBitSet( flags, SND_FILTER_CLIENT ))
 		filter = true;
 
+	cof_multicast_section = SV_CoF_SoundSection( attn, flags, origin );
 	if( SV_BuildSoundMsg( &sv.multicast, ent, chan, sample, vol * 255, attn, flags, pitch, origin ))
 		SV_Multicast( msg_dest, origin, NULL, false, filter );
+	cof_multicast_section = -1;
 }
 
 /*
@@ -2328,8 +2337,10 @@ static void GAME_EXPORT pfnEmitAmbientSound( edict_t *ent, float *pos, const cha
 	if( FBitSet( flags, SND_STOP ))
 		msg_dest = MSG_ALL;
 
+	cof_multicast_section = SV_CoF_SoundSection( attn, flags, pos );
 	if( SV_BuildSoundMsg( &sv.multicast, ent, CHAN_STATIC, sample, vol * 255, attn, flags, pitch, pos ))
 		SV_Multicast( msg_dest, pos, NULL, false, false );
+	cof_multicast_section = -1;
 }
 
 /*
