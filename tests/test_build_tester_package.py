@@ -34,6 +34,13 @@ class BuilderTests(unittest.TestCase):
                     "source-and-licences/notices/PYTHON-LICENSE.txt"])
         self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-Test1.zip")
 
+    def test_the_app_carries_the_merged_map_groups(self):
+        out, payload = Path("C:/out"), Path("C:/out/payload")
+        command = builder.pyinstaller_command(out, payload)
+        groups = builder.ROOT / "tools/map_groups.json"
+        self.assertIn(f"{groups}{builder.os.pathsep}tools", command)
+        self.assertIn(f"{payload}{builder.os.pathsep}payload", command)
+
     def test_readme_names_the_version_and_no_dev_tools(self):
         text = builder.README.read_text(encoding="utf-8")
         self.assertIn("Test 1", text)

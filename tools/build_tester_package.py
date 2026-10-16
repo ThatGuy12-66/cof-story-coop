@@ -59,6 +59,16 @@ def notices(target: Path) -> None:
         shutil.copyfile(path, target / name)
 
 
+def pyinstaller_command(out: Path, payload: Path) -> list:
+    """The one-file app: the window, the payload, and the merged-map group list (tools.map_merge.groups_path)."""
+    return [sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed",
+            "--name", Path(setup_lib.APP_EXE).stem, "--paths", str(ROOT),
+            "--add-data", f"{payload}{os.pathsep}payload",
+            "--add-data", f"{ROOT / 'tools/map_groups.json'}{os.pathsep}tools",
+            "--distpath", str(out / "dist"), "--workpath", str(out / "work"), "--specpath", str(out),
+            str(ROOT / "tools/coop_app.py")]
+
+
 def build(out: Path) -> dict:
     problems = {name: lines for name, path in REPOS.items() if (lines := dirty(path))}
     if problems:
@@ -73,11 +83,7 @@ def build(out: Path) -> dict:
                 "xash_sha256": stage["binaries"]["xash.dll"]["sha256"]}
     (payload / setup_lib.PAYLOAD_JSON).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     setup_lib.inspect_payload(payload)
-    command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed",
-               "--name", Path(setup_lib.APP_EXE).stem, "--paths", str(ROOT),
-               "--add-data", f"{payload}{os.pathsep}payload",
-               "--distpath", str(out / "dist"), "--workpath", str(out / "work"), "--specpath", str(out),
-               str(ROOT / "tools/coop_app.py")]
+    command = pyinstaller_command(out, payload)
     with (out / "pyinstaller.log").open("wb") as log:
         subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
     exe = out / "dist" / setup_lib.APP_EXE

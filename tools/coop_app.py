@@ -469,6 +469,7 @@ def self_test(payload) -> int:
     assert tkinter.Tcl().eval("info patchlevel")
     if getattr(sys, "frozen", False):
         assert setup_lib.inspect_payload(payload)["build"] == play.BUILD
+    assert setup_lib.merge_groups.load_groups(), "the merged-map groups are missing"
     args, config = play.host_launch(Path("copy"), solo=True, name="Test", map_name="c_intro", players=4, password="",
                                     companions=3, port=play.DEFAULT_PORT, cont=False, video=[])
     assert "cof_build " + play.VERSION in config and "-console" not in args
