@@ -219,8 +219,10 @@ static void CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r,
 		return;
 	}
 	cof_sect_moved_at[slot] = sv.time;
+	// original map and landmark names: the run report counts this exit as the original game's
 	Con_Printf( "[cof-story-transition] phase=section-move userid=%d from=%s to=%s landmark=%s origin=%.3f,%.3f,%.3f\n", cl->userid,
-		s->sec[from].map, s->sec[r->to_section].map, r->dest_landmark, cl->edict->v.origin[0], cl->edict->v.origin[1], cl->edict->v.origin[2] );
+		s->sec[from].map, s->sec[r->to_section].map, CoF_SectionsOriginalName( &s->sec[r->to_section], r->dest_landmark ),
+		cl->edict->v.origin[0], cl->edict->v.origin[1], cl->edict->v.origin[2] );
 	CoF_SectEnter( s, r->to_section, true );
 }
 
@@ -303,8 +305,13 @@ qboolean SV_CoF_SectionsResolve( const char *level, const char *landmark, char *
 	Q_strncpy( cof_sect_request.landmark, r.dest_landmark, sizeof( cof_sect_request.landmark ));
 	Q_strncpy( cof_sect_request.level, level, sizeof( cof_sect_request.level ));
 	Q_strncpy( cof_sect_request.source, r.source_landmark, sizeof( cof_sect_request.source ));
-	if( Q_stricmp( r.file, level ) || Q_strcmp( r.dest_landmark, landmark ? landmark : "" ))
-		Con_Printf( "[cof-sections] changelevel %s [%s] -> %s [%s]\n", level, landmark ? landmark : "", r.file, r.dest_landmark );
+	{
+		// original names too: the run report counts the exit as the original game's
+		int from = s && r.source_landmark[0] ? CoF_SectionsLandmarkSection( s, r.source_landmark ) : -1;
+		Con_Printf( "[cof-sections] changelevel from=%s to=%s landmark=%s file=%s dest=%s\n",
+			from >= 0 ? s->sec[from].map : sv.name, level,
+			from >= 0 ? CoF_SectionsOriginalName( &s->sec[from], r.source_landmark ) : r.source_landmark, r.file, r.dest_landmark );
+	}
 	return true;
 }
 
