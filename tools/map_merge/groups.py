@@ -1,0 +1,141 @@
+"""The merged-map groups (tools/map_groups.json), building a group from a player's own maps, installing it.
+
+A group is built only from the exact retail maps it lists (SHA-256 each) and must come out byte for byte as
+recorded, so every player's merged files are the same and a host and a joiner always match.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import sys
+
+from tools.map_merge import bsp, check, merge, rules
+
+HEX64 = re.compile(r'^[0-9a-f]{64}$')
+MAP_NAME = re.compile(r'^[a-z0-9_]{1,32}$')
+# Maps the game DLL treats specially by name, and the menu map: never merged.
+HL_NAMED = ('c_city', 'c_forest3', 'c_intro', 'c_nightmare', 'c_start', 'c_subwaysick1', 'c_game_menu1')
+HL_NAMED_PREFIXES = ('c_ending',)
+
+
+class GroupInputMismatch(Exception):
+    """A member map is not the retail file the group was made from: the group plays unmerged."""
+
+
+class MergeCheckFailed(Exception):
+    """A pair merge did not check clean."""
+
+
+@dataclass
+class Group:
+    name: str
+    members: list
+    inputs: dict
+    bsp_sha256: str
+    sections_sha256: str
+    wave: int
+    enabled: bool
+    accepted: dict = field(default_factory=dict)
+
+
+def groups_path() -> Path:
+    base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[2]))
+    return base / 'tools' / 'map_groups.json'
+
+
+def hl_named(name: str) -> bool:
+    return name in HL_NAMED or name.startswith(HL_NAMED_PREFIXES)
+
+
+def validate(g: Group) -> Group:
+    if not isinstance(g.members, list) or not 2 <= len(g.members) <= 4:
+        raise ValueError(f'{g.name}: a group has 2-4 members')
+    for m in g.members:
+        if not isinstance(m, str) or not MAP_NAME.match(m) or not m.startswith('c_') or hl_named(m):
+            raise ValueError(f'{g.name}: member {m!r} cannot be merged')
+    if len(set(g.members)) != len(g.members):
+        raise ValueError(f'{g.name}: a member is listed twice')
+    if not isinstance(g.name, str) or not MAP_NAME.match(g.name) or g.name != 'cm_' + g.members[0][2:]:
+        raise ValueError(f'bad group name {g.name!r}: cm_ + the first member without c_, [a-z0-9_]{{1,32}}')
+    if not isinstance(g.inputs, dict) or set(g.inputs) != set(g.members) or not all(
+            isinstance(v, str) and HEX64.match(v) for v in g.inputs.values()):
+        raise ValueError(f'{g.name}: inputs must give a SHA-256 for every member')
+    for value in (g.bsp_sha256, g.sections_sha256):
+        if not isinstance(value, str) or not HEX64.match(value):
+            raise ValueError(f'{g.name}: bad output hash')
+    if not isinstance(g.wave, int) or g.wave < 1 or not isinstance(g.enabled, bool) or not isinstance(g.accepted, dict):
+        raise ValueError(f'{g.name}: bad wave, enabled or accepted')
+    return g
+
+
+def load_groups(path: Path | None = None) -> list:
+    data = json.loads(Path(path or groups_path()).read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or data.get('schema') != 1 or not isinstance(data.get('groups'), list):
+        raise ValueError('map_groups.json: schema 1 with a list of groups expected')
+    out = [validate(Group(**item)) for item in data['groups']]
+    names = [g.name for g in out]
+    members = [m for g in out for m in g.members]
+    if len(set(names)) != len(names) or len(set(members)) != len(members):
+        raise ValueError('map_groups.json: a group or a member appears twice')
+    return out
+
+
+def read_member(maps_dir: Path, group: Group, member: str) -> bytes:
+    path = Path(maps_dir) / f'{member}.bsp'
+    try:
+        data = path.read_bytes()
+    except OSError as error:
+        raise GroupInputMismatch(f'{group.name}: {member}.bsp cannot be read ({error})') from None
+    if hashlib.sha256(data).hexdigest() != group.inputs[member]:
+        raise GroupInputMismatch(f'{group.name}: {member}.bsp is not the retail map this group is made from')
+    return data
+
+
+def build_group(maps_dir: Path, group: Group) -> tuple:
+    """(merged BSP bytes, .sections text) from the members in maps_dir."""
+    members = [bsp.Bsp.from_bytes(read_member(maps_dir, group, m)) for m in group.members]
+    dzs, bounds = [0.0], [(members[0].models[0][2], members[0].models[0][5])]
+    lo, hi = bounds[0]
+    for b in members[1:]:
+        dz = merge.choose_dz((lo, hi), (b.models[0][2], b.models[0][5]))
+        dzs.append(dz)
+        bounds.append((b.models[0][2] + dz, b.models[0][5] + dz))
+        lo, hi = min(lo, bounds[-1][0]), max(hi, bounds[-1][1])
+    face_styles = [{s for f in x.faces for s in f[5:9]} for x in members]
+    sections = rules.section_rules([(m, x.ents) for m, x in zip(group.members, members)], dzs,
+                                   [len(x.models) for x in members], bounds, face_styles)
+    current = members[0]
+    for k, b in enumerate(members[1:], 1):
+        lumps, info = merge.merge_pair(current, b, dzs[k], sections[k].styles)
+        merged = bsp.Bsp.from_bytes(bsp.write_bytes(lumps))
+        problems = check.check_pair(current, b, merged, info, sections[k].styles)
+        if problems:
+            raise MergeCheckFailed(f'{group.name}: adding {group.members[k]}: ' + '; '.join(problems[:5]))
+        current = merged
+    return bsp.write_bytes(bsp.to_lumps(current)), rules.to_text(group.name, sections)
+
+
+def write_checked(path: Path, data: bytes, expected: str) -> str:
+    partial = path.with_name(path.name + '.partial')
+    partial.write_bytes(data)
+    os.replace(partial, path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != expected:
+        path.unlink()
+        raise RuntimeError(f'{path.name} changed while it was written')
+    return digest
+
+
+def install_group(maps_dir: Path, group: Group) -> dict:
+    """Build the group into maps_dir as <name>.bsp and <name>.sections; both must match the recorded hashes."""
+    data, text = build_group(maps_dir, group)
+    raw = text.encode('ascii')
+    if hashlib.sha256(data).hexdigest() != group.bsp_sha256 or hashlib.sha256(raw).hexdigest() != group.sections_sha256:
+        raise RuntimeError(f'{group.name}: the merged map does not come out as recorded')
+    maps_dir = Path(maps_dir)
+    return {f'maps/{group.name}.bsp': write_checked(maps_dir / f'{group.name}.bsp', data, group.bsp_sha256),
+            f'maps/{group.name}.sections': write_checked(maps_dir / f'{group.name}.sections', raw, group.sections_sha256)}
