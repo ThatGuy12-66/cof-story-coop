@@ -259,17 +259,17 @@ class App:
         ttk = self.ttk
         self.root = Path(copy)
         self.settings = play.load_settings(self.root)
-        body = self.clear("Cry of Fear co-op", "Play the campaign together, or alone with an AI companion.")
+        body = self.clear("Cry of Fear co-op", "Play the campaign together, or alone with AI companions.")
         holder = self.row(body, "Your name", 12)
         self.name = self.tk.StringVar(value=self.settings["name"])
         ttk.Entry(holder, textvariable=self.name, width=28).pack(side="left")
         ttk.Frame(body, height=12).pack()
-        for text, action in (("Play solo (with the AI companion)", lambda: self.show_start(solo=True)),
+        for text, action in (("Play solo (with AI companions)", lambda: self.show_start(solo=True)),
                              ("Host a game", lambda: self.show_start(solo=False)),
                              ("Join a game", self.show_join)):
             ttk.Button(body, text=text, command=action).pack(fill="x", ipady=8, pady=4)
         ttk.Label(body, text="In the game: J joins your partner, Enter skips a cutscene for everyone, "
-                  "H tells the AI companion to wait or follow.", wraplength=700).pack(anchor="w", pady=(14, 0))
+                  "H tells the AI companions to wait or follow.", wraplength=700).pack(anchor="w", pady=(14, 0))
 
     def remember(self, **values):
         self.settings.update(values)
@@ -315,23 +315,29 @@ class App:
     def show_start(self, solo):
         ttk, tk = self.ttk, self.tk
         body = self.clear("Play solo" if solo else "Host a game",
-                          "You and the AI companion, on this PC only." if solo else
+                          "You and one to three AI companions, on this PC only." if solo else
                           "Friends join you with the join code shown after the game starts.")
         resolve = self.start_choice(body)
         players = tk.StringVar(value=str(self.settings["players"]))
         password = tk.StringVar(value=self.settings["password"])
         companion = tk.BooleanVar(value=self.settings["companion"])
+        companions = tk.StringVar(value=str(self.settings["companions"]))
         port = tk.StringVar(value=str(self.settings["port"]))
         bonus = tk.BooleanVar(value=self.settings["bonus_room"])
         ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; in Chapter 1 and the bridge)",
                         variable=bonus).pack(anchor="w", pady=(8, 0))
+        if solo:
+            ttk.Frame(body, height=8).pack()
+            ttk.Spinbox(self.row(body, "AI companions", 14), from_=1, to=play.MAX_COMPANIONS, textvariable=companions,
+                        width=5, state="readonly").pack(side="left")
         if not solo:
             ttk.Frame(body, height=8).pack()
             ttk.Spinbox(self.row(body, "Players", 12), from_=2, to=4, textvariable=players, width=5).pack(side="left")
             ttk.Entry(self.row(body, "Password", 12), textvariable=password, show="*", width=28).pack(side="left")
             ttk.Label(self.row(body, "", 12), text="(optional: friends need it to join)").pack(side="left")
             ttk.Entry(self.row(body, "Port (UDP)", 12), textvariable=port, width=8).pack(side="left")
-            ttk.Checkbutton(body, text="AI companion until a friend takes its place", variable=companion).pack(anchor="w", pady=4)
+            ttk.Checkbutton(body, text="AI companions in the empty places (each makes room when a friend joins)",
+                            variable=companion).pack(anchor="w", pady=4)
 
         def start():
             from tkinter import messagebox
@@ -341,13 +347,22 @@ class App:
                 warning = play.continue_warning(checkpoint, name)
                 if warning and not messagebox.askokcancel("Continue", warning, parent=self.window):
                     return
-            count = checkpoint.players if checkpoint else 2 if solo else play.clean_players(players.get())
+            ais = int(companions.get() or 1)
+            count, ais = play.party_size(solo=solo, players=2 if solo else play.clean_players(players.get()),
+                                         companions=ais, fill=companion.get(),
+                                         checkpoint_players=checkpoint.players if checkpoint else None)
+            if solo and checkpoint and ais < int(companions.get() or 1):
+                messagebox.showinfo("Continue", f"This checkpoint was saved with {count} places, so {ais} AI "
+                                    f"{'companion comes' if ais == 1 else 'companions come'} along this time.",
+                                    parent=self.window)
             number = play.DEFAULT_PORT if solo else play.clean_port(port.get())
             args, config = play.host_launch(self.root, solo=solo, name=name, map_name=map_name, players=count,
-                                            password=password.get(), companion=companion.get(), port=number,
+                                            password=password.get(), companions=ais, port=number,
                                             cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get())
             self.launch(args, config)
             self.remember(bonus_room=bonus.get())
+            if solo and not checkpoint:
+                self.remember(companions=ais)
             if not solo:
                 self.remember(players=self.settings["players"] if checkpoint else count, password=password.get(),
                               companion=companion.get(), port=number)
@@ -454,8 +469,8 @@ def self_test(payload) -> int:
     assert tkinter.Tcl().eval("info patchlevel")
     if getattr(sys, "frozen", False):
         assert setup_lib.inspect_payload(payload)["build"] == play.BUILD
-    args, config = play.host_launch(Path("copy"), solo=True, name="Test", map_name="c_intro", players=2, password="",
-                                    companion=False, port=play.DEFAULT_PORT, cont=False, video=[])
+    args, config = play.host_launch(Path("copy"), solo=True, name="Test", map_name="c_intro", players=4, password="",
+                                    companions=3, port=play.DEFAULT_PORT, cont=False, video=[])
     assert "cof_build " + play.VERSION in config and "-console" not in args
     return 0
 

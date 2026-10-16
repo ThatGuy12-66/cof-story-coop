@@ -27,27 +27,45 @@ class StartTests(unittest.TestCase):
     def test_host_and_solo_command_lines_hold_no_dev_tools_or_password(self):
         runtime = Path('copy')
         args, cfg = play.host_launch(runtime, solo=False, name='Bob', map_name='c_start', players=3,
-                                     password='s3cret', companion=True, port=27015, cont=False, video=[])
+                                     password='s3cret', companions=2, port=27015, cont=False, video=[])
         self.assertEqual(args[0], str(runtime / 'CoFLaunchApp.exe'))
         self.assertEqual(args[-2:], ['+map', 'c_start'])
         for absent in ('-console', 's3cret', '-windowed', 'rcon'):
             self.assertFalse(any(absent in a for a in args), absent)
         self.assertLess(args.index(play.STORY_CFG), args.index(play.SESSION_CFG))
-        for line in ('maxplayers 3', 'sv_lan 0', 'sv_password "s3cret"', 'cof_companion 1', 'cof_build test1',
+        for line in ('maxplayers 3', 'sv_lan 0', 'sv_password "s3cret"', 'cof_companion 2', 'cof_build test1',
                      'cof_continue 0', 'hostname "Bob\'s game"', 'name "Bob"'):
             self.assertIn(line + '\n', cfg)
         self.assertNotIn('rcon', cfg)
-        args, cfg = play.host_launch(runtime, solo=True, name='Bob', map_name='c_intro', players=2, password='x',
-                                     companion=False, port=27015, cont=True, video=[])
-        for line in ('sv_lan 1', 'sv_password ""', 'cof_companion 1', 'cof_continue 1'):
+        args, cfg = play.host_launch(runtime, solo=True, name='Bob', map_name='c_intro', players=4, password='x',
+                                     companions=3, port=27015, cont=True, video=[])
+        for line in ('maxplayers 4', 'sv_lan 1', 'sv_password ""', 'cof_companion 3', 'cof_continue 1'):
             self.assertIn(line + '\n', cfg)
+        # the AIs fit the places: solo has at least one, and nobody has more than the places left
+        for solo, players, companions in ((True, 2, 0), (True, 2, 2), (False, 3, 3), (False, 2, -1)):
+            with self.subTest(solo=solo, players=players, companions=companions), self.assertRaises(ValueError):
+                play.host_launch(runtime, solo=solo, name='Bob', map_name='c_start', players=players, password='',
+                                 companions=companions, port=27015, cont=False, video=[])
+
+    def test_party_size(self):
+        # (maxplayers, AI companions): solo is you plus 1-3 AIs; a host's AIs fill the empty places
+        self.assertEqual(play.party_size(solo=True, players=2, companions=3, fill=False, checkpoint_players=None), (4, 3))
+        self.assertEqual(play.party_size(solo=True, players=2, companions=1, fill=False, checkpoint_players=None), (2, 1))
+        self.assertEqual(play.party_size(solo=False, players=4, companions=1, fill=True, checkpoint_players=None), (4, 3))
+        self.assertEqual(play.party_size(solo=False, players=3, companions=1, fill=False, checkpoint_players=None), (3, 0))
+        # Continue keeps the checkpoint's places (the engine refuses another count)
+        self.assertEqual(play.party_size(solo=True, players=2, companions=3, fill=False, checkpoint_players=2), (2, 1))
+        self.assertEqual(play.party_size(solo=True, players=2, companions=1, fill=False, checkpoint_players=4), (4, 1))
+        self.assertEqual(play.party_size(solo=False, players=2, companions=1, fill=True, checkpoint_players=3), (3, 2))
+        self.assertEqual(play.party_size(solo=True, players=2, companions=9, fill=False, checkpoint_players=None), (4, 3))
+        self.assertEqual(play.DEFAULT_SETTINGS['companions'], 1)
 
     def test_bonus_room_is_the_hosts_choice_and_shut_by_default(self):
         _, cfg = play.host_launch(Path('copy'), solo=True, name='Bob', map_name='c_start', players=2, password='',
-                                  companion=False, port=27015, cont=False, video=[])
+                                  companions=1, port=27015, cont=False, video=[])
         self.assertIn('cof_bonus_room 0\n', cfg)                       # shut, whatever the tester's own game says
         _, cfg = play.host_launch(Path('copy'), solo=False, name='Bob', map_name='c_start', players=2, password='',
-                                  companion=False, port=27015, cont=False, video=[], bonus_room=True)
+                                  companions=0, port=27015, cont=False, video=[], bonus_room=True)
         self.assertIn('cof_bonus_room 1\n', cfg)
         self.assertIs(play.DEFAULT_SETTINGS['bonus_room'], False)
 
@@ -207,6 +225,13 @@ class HostWatchTests(unittest.TestCase):
         self.assertIn('1/4', up)
         net.up = False
         self.assertEqual(watch.poll(True), up)
+
+    def test_status_names_the_ai_companions(self):
+        class Bots(FakeNet):
+            def query_info(self, endpoint, timeout=2):
+                return {'numcl': '1', 'maxcl': '4', 'bots': '3', 'cofbuild': 'test1'}
+        status = play.HostWatch(27015, lan_only=True, net=Bots()).poll(True)
+        self.assertIn('1 player and 3 AI companions (4 places)', status)
 
     def test_closing_the_app_while_hosting_asks_first(self):
         # closing removes the router port, which can drop friends who are still playing

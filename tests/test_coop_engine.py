@@ -30,6 +30,7 @@ class CoopEngineTests(unittest.TestCase):
         body = source[source.index('static void SV_Info('):source.index('static void SV_ConnectNatClient')]
         self.assertIn('Cvar_VariableString( "cof_build" )', body)
         self.assertLess(body.index('"cofbuild"'), body.index('"host"'))   # before the hostname, which is cut to fit
+        self.assertLess(body.index('"bots"'), body.index('"host"'))       # the AI companions, for the host's status
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         self.assertRegex(story, r'Cvar_Get\( "cof_build", "", 0,')
 

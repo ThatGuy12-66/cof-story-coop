@@ -36,7 +36,8 @@ STORY_SETTINGS = (
     "cl_sidespeed 200", "+mlook",
 )
 DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion": False, "password": "",
-                    "bonus_room": False, "first_launch_done": False}
+                    "bonus_room": False, "first_launch_done": False, "companions": 1}
+MAX_COMPANIONS = 3   # the game takes four players at most
 _MAP = re.compile(r"[a-z0-9_]{1,32}\Z")
 _SLOT = re.compile(r"[a-z0-9_-]{1,24}\Z")
 _ARCHIVE = struct.Struct("<5I")      # cof_archive_header_t: magic, version, count, size, checksum
@@ -90,11 +91,24 @@ def video_flags(first_launch: bool, desktop) -> list[str]:
     return ["-borderless", "-width", str(desktop[0]), "-height", str(desktop[1])]
 
 
-def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
-                companion: bool, port: int, cont: bool, video: list[str],
-                bonus_room: bool = False) -> tuple[list[str], str]:
-    """Play solo (LAN only, with the AI companion) or host: the command line and the session cfg.
+def party_size(*, solo: bool, players: int, companions: int, fill: bool, checkpoint_players: int | None) -> tuple[int, int]:
+    """(places, AI companions) for a start. Solo: you and 1-3 AIs. Host: the chosen places,
+    and with fill an AI in every place a friend has not taken. Continue keeps the
+    checkpoint's places, which the engine requires."""
+    if solo:
+        ais = max(1, min(int(companions), MAX_COMPANIONS))
+        places = checkpoint_players or ais + 1
+        return places, max(1, min(ais, places - 1))
+    places = checkpoint_players or players
+    return places, places - 1 if fill else 0
 
+
+def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
+                companions: int, port: int, cont: bool, video: list[str],
+                bonus_room: bool = False) -> tuple[list[str], str]:
+    """Play solo (LAN only, with AI companions) or host: the command line and the session cfg.
+
+    companions: how many AI companion bots to keep (each gives its place to a friend who joins).
     bonus_room opens the bonus room of c_start and c_bridge (the FAMAS, the axe and the
     rest) for everyone in this game; shut otherwise, whatever the host's own game says."""
     name = clean_name(name)
@@ -104,9 +118,11 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
         raise ValueError("Unknown map.")
     if not 2 <= players <= 32:
         raise ValueError("Players: 2 to 4.")
+    if not (1 if solo else 0) <= companions <= players - 1:
+        raise ValueError("AI companions: one for each free place at most.")
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
-             f"cof_companion {1 if solo or companion else 0}", "cof_companion_drive 0",
+             f"cof_companion {companions}", "cof_companion_drive 0",
              f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}"]
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
@@ -271,7 +287,12 @@ class HostWatch:
                         "may be using that port: close it, or pick another port.")
             return "Starting the game..."
         self.up = True
-        self.last = f"Your game is up: {info.get('numcl', '?')}/{info.get('maxcl', '?')} players."
+        people, bots = info.get('numcl', '?'), info.get('bots', '0')
+        if bots not in ('', '0'):
+            self.last = (f"Your game is up: {people} {'player' if people == '1' else 'players'} and {bots} AI "
+                         f"{'companion' if bots == '1' else 'companions'} ({info.get('maxcl', '?')} places).")
+        else:
+            self.last = f"Your game is up: {people}/{info.get('maxcl', '?')} players."
         return self.last
 
     def close(self) -> None:
