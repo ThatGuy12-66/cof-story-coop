@@ -605,6 +605,18 @@ SV_WriteEntitiesToClient
 
 ==================
 */
+// Story co-op: the other hand of each dual-wielding player this client sees (sv_cof_weaponmodel.c).
+static void SV_CoF_WeaponModelFollowers( sv_client_t *cl, sv_ents_t *ents )
+{
+	for( int e = 1; e <= svs.maxclients; e++ )
+	{
+		if( !CHECKVISBIT( ents->sended, e ) || ents->num_entities >= ( MAX_VISIBLE_PACKET - 1 ))
+			continue;
+		if( SV_CoF_WeaponModelFollower( cl, e, &ents->entities[ents->num_entities] ))
+			ents->num_entities++;
+	}
+}
+
 static void SV_WriteEntitiesToClient( sv_client_t *cl, sizebuf_t *msg )
 {
 	client_frame_t	*frame;
@@ -623,6 +635,7 @@ static void SV_WriteEntitiesToClient( sv_client_t *cl, sizebuf_t *msg )
 	// add all the entities directly visible to the eye, which
 	// may include portal entities that merge other viewpoints
 	SV_AddEntitiesToPacket( cl->pViewEntity, cl->edict, frame, &frame_ents, true );
+	SV_CoF_WeaponModelFollowers( cl, &frame_ents );
 
 	if( c_notsend != cl->ignored_ents )
 	{

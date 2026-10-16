@@ -568,6 +568,11 @@ static void CL_ProcessPlayerState( int playerindex, entity_state_t *state )
 	ps->messagenum = cl.parsecount;
 	ps->msg_time = cl.mtime[0];
 
+	// Story co-op sends generated weapon models (models/coop) a client may lack: the
+	// retail client merges a player's weaponmodel without a NULL check, so empty hands.
+	if( state->weaponmodel && !CL_ModelHandle( state->weaponmodel ))
+		state->weaponmodel = 0;
+
 	clgame.dllFuncs.pfnProcessPlayerState( ps, state );
 }
 

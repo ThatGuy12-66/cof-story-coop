@@ -558,11 +558,11 @@ qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl )
 	return false;
 }
 
-qboolean SV_CoF_RetailHeld( sv_client_t *cl, char *classname, size_t size, int *right_hand, int *left_hand )
+qboolean SV_CoF_RetailHeld( sv_client_t *cl, int *id, int *right_hand, int *left_hand )
 {
-	byte *player = CoF_RetailStoryPlayer( cl ), *active;
+	byte *player = CoF_RetailStoryPlayer( cl ), *active, *pv;
 	int i, first, second;
-	if( !player || !classname || !size ) return false;
+	if( !player || !id ) return false;
 	memcpy( &active, player + COF_RETAIL_ACTIVE_ITEM, sizeof( active ));
 	memcpy( &first, player + COF_RETAIL_DUAL_LEFT, sizeof( first ));
 	memcpy( &second, player + COF_RETAIL_DUAL_RIGHT, sizeof( second ));
@@ -572,10 +572,12 @@ qboolean SV_CoF_RetailHeld( sv_client_t *cl, char *classname, size_t size, int *
 	{
 		edict_t *e = SV_EdictNum( i );
 		if( !SV_IsValidEdict( e ) || e->pvPrivateData != active ) continue;
-		Q_strncpy( classname, SV_GetString( e->v.classname ), size );
-		// StartDualWield puts the light second: Simon holds it in his left hand, the other item in his right
-		if( right_hand ) *right_hand = first;
-		if( left_hand ) *left_hand = second;
+		if( Q_strncmp( SV_GetString( e->v.classname ), "weapon_", 7 ) || !( pv = CoF_RetailPrivate( e, COF_RETAIL_WEAPON_NEED ))) return false;
+		memcpy( id, pv + COF_RETAIL_WEAPON_ID, sizeof( *id ));
+		// StartDualWield puts a light (or the second pistol) second: in first person
+		// Simon holds that one in his right hand, the other in his left (mirrored)
+		if( right_hand ) *right_hand = second;
+		if( left_hand ) *left_hand = first;
 		return true;
 	}
 	return false;
