@@ -69,6 +69,15 @@ class StartTests(unittest.TestCase):
         self.assertIn('cof_bonus_room 1\n', cfg)
         self.assertIs(play.DEFAULT_SETTINGS['bonus_room'], False)
 
+    def test_merged_maps_are_the_hosts_choice_and_on_by_default(self):
+        _, cfg = play.host_launch(Path('copy'), solo=True, name='Bob', map_name='c_start', players=2, password='',
+                                  companions=1, port=27015, cont=False, video=[])
+        self.assertIn('cof_merged_maps 1\n', cfg)
+        _, cfg = play.host_launch(Path('copy'), solo=True, name='Bob', map_name='c_start', players=2, password='',
+                                  companions=1, port=27015, cont=False, video=[], merged=False)
+        self.assertIn('cof_merged_maps 0\n', cfg)
+        self.assertIs(play.DEFAULT_SETTINGS['merged_maps'], True)
+
     def test_story_config_removes_the_test_tools(self):
         cfg = play.story_config()
         for line in ('cof_story_coop 1', 'cof_story_trace 1', 'sv_cheats 0', 'sv_enttools_enable 0', 'cof_test_gun 0',
@@ -130,6 +139,26 @@ class CheckpointTests(unittest.TestCase):
     def test_reads_map_players_and_names(self):
         cp = play.parse_checkpoint('autosave', archive([('global.dat', b'x' * 10), ('session.dat', session())]))
         self.assertEqual((cp.slot, cp.map, cp.players, cp.names), ('autosave', 'c_apartment1', 2, ('Bob', 'Companion')))
+
+    def test_reads_the_merged_mode_and_the_original_map_of_a_merged_save(self):
+        merged = archive([('session.dat', session('cm_apartment3')), ('merged.txt', b'merged 1\nsection c_apartment4\n')])
+        cp = play.parse_checkpoint('autosave', merged)
+        self.assertEqual((cp.map, cp.merged, cp.section, cp.label), ('cm_apartment3', True, 'c_apartment4', 'c_apartment4'))
+        # a save from before merged maps: unmerged, labelled by its map
+        cp = play.parse_checkpoint('autosave', archive([('session.dat', session('c_apartment4'))]))
+        self.assertEqual((cp.merged, cp.section, cp.label), (False, '', 'c_apartment4'))
+        for junk in (b'merged maybe\nsection x\n', b'merged 1\n', b'merged 1\nsection ../x\n', b'\xff' * 300):
+            with self.subTest(junk=junk[:20]):
+                cp = play.parse_checkpoint('autosave', archive([('session.dat', session('cm_apartment3')), ('merged.txt', junk)]))
+                self.assertEqual((cp.merged, cp.label), (False, 'cm_apartment3'))
+
+    def test_continue_keeps_the_saves_mode_and_a_new_game_takes_the_checkbox(self):
+        merged = play.Checkpoint('autosave', 'cm_apartment3', 2, (), merged=True, section='c_apartment4')
+        older = play.Checkpoint('autosave', 'c_apartment4', 2, ())
+        self.assertIs(play.merged_for_start(merged, checkbox=False), True)
+        self.assertIs(play.merged_for_start(older, checkbox=True), False)
+        self.assertIs(play.merged_for_start(None, checkbox=True), True)
+        self.assertIs(play.merged_for_start(None, checkbox=False), False)
 
     def test_refuses_other_versions_and_damage(self):
         good = archive([('session.dat', session())])

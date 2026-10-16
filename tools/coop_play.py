@@ -36,7 +36,7 @@ STORY_SETTINGS = (
     "cl_sidespeed 200", "+mlook",
 )
 DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion": False, "password": "",
-                    "bonus_room": False, "first_launch_done": False, "companions": 1}
+                    "bonus_room": False, "first_launch_done": False, "companions": 1, "merged_maps": True}
 MAX_COMPANIONS = 3   # the game takes four players at most
 _MAP = re.compile(r"[a-z0-9_]{1,32}\Z")
 _SLOT = re.compile(r"[a-z0-9_-]{1,24}\Z")
@@ -105,12 +105,14 @@ def party_size(*, solo: bool, players: int, companions: int, fill: bool, checkpo
 
 def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
                 companions: int, port: int, cont: bool, video: list[str],
-                bonus_room: bool = False) -> tuple[list[str], str]:
+                bonus_room: bool = False, merged: bool = True) -> tuple[list[str], str]:
     """Play solo (LAN only, with AI companions) or host: the command line and the session cfg.
 
     companions: how many AI companion bots to keep (each gives its place to a friend who joins).
     bonus_room opens the bonus room of c_start and c_bridge (the FAMAS, the axe and the
-    rest) for everyone in this game; shut otherwise, whatever the host's own game says."""
+    rest) for everyone in this game; shut otherwise, whatever the host's own game says.
+    merged: door-joined story maps load as one map (fewer loading screens); a continued
+    session keeps the mode it was saved with (Checkpoint.merged)."""
     name = clean_name(name)
     password = "" if solo else clean_password(password)
     map_name = map_name.lower()
@@ -123,7 +125,8 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {companions}", "cof_companion_drive 0",
-             f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}"]
+             f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
+             f"cof_merged_maps {1 if merged else 0}"]
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
     return args, "\n".join(lines) + "\n"
@@ -160,16 +163,44 @@ class Checkpoint:
     map: str
     players: int
     names: tuple[str, ...]
+    merged: bool = False   # saved with merged story maps (merged.txt); saves from before them: False
+    section: str = ""      # the original map the first player was in, in a merged map
+
+    @property
+    def label(self) -> str:
+        return self.section or self.map
+
+
+def merged_for_start(checkpoint: Checkpoint | None, *, checkbox: bool) -> bool:
+    """Whether a start uses merged story maps: Continue keeps the session's own mode, a new game or chapter
+    takes the host's checkbox."""
+    return checkpoint.merged if checkpoint else checkbox
+
+
+def parse_merged_record(data: bytes) -> tuple[bool, str]:
+    """merged.txt of a checkpoint (engine cof_sections.h CoF_SectionsRecord): (merged, original map), or
+    (False, "") when it is missing or malformed."""
+    try:
+        lines = [line.split() for line in data.decode("ascii").splitlines() if line.strip()]
+    except UnicodeDecodeError:
+        return False, ""
+    values = {line[0]: line[1] for line in lines if len(line) == 2}
+    if len(values) != len(lines) or set(values) != {"merged", "section"} or values["merged"] not in ("0", "1") \
+            or not _MAP.match(values["section"]):
+        return False, ""
+    return values["merged"] == "1", values["section"]
 
 
 def parse_checkpoint(slot: str, data: bytes) -> Checkpoint | None:
-    """The map, player limit and names of a co-op checkpoint archive (format 2), or None."""
+    """The map, player limit and names of a co-op checkpoint archive (format 2), with its merged-maps mode, or
+    None."""
     if len(data) < _ARCHIVE.size:
         return None
     magic, version, count, size, _ = _ARCHIVE.unpack_from(data)
     if magic != 0x53434643 or version != 1 or size != len(data) or not 0 < count <= 1024:
         return None
     position = _ARCHIVE.size
+    found, merged, section = None, False, ""
     for _ in range(count):
         if position + _ENTRY.size > len(data):
             return None
@@ -177,7 +208,8 @@ def parse_checkpoint(slot: str, data: bytes) -> Checkpoint | None:
         position += _ENTRY.size
         if position + length > len(data):
             return None
-        if raw.split(b"\0", 1)[0].lower() == b"session.dat":
+        entry = raw.split(b"\0", 1)[0].lower()
+        if entry == b"session.dat" and found is None:
             body = data[position:position + length]
             if len(body) < _NAMES_AT + 32 * 32:
                 return None
@@ -187,9 +219,11 @@ def parse_checkpoint(slot: str, data: bytes) -> Checkpoint | None:
                 return None
             names = tuple(name for name in (body[_NAMES_AT + i * 32:_NAMES_AT + (i + 1) * 32].split(b"\0", 1)[0]
                                             .decode("latin-1") for i in range(32)) if name)
-            return Checkpoint(slot, map_name, players, names)
+            found = (map_name, players, names)
+        elif entry == b"merged.txt":
+            merged, section = parse_merged_record(data[position:position + length])
         position += length
-    return None
+    return Checkpoint(slot, *found, merged=merged, section=section) if found else None
 
 
 def latest_checkpoint(runtime: Path) -> Checkpoint | None:

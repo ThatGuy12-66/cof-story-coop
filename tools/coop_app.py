@@ -300,7 +300,7 @@ class App:
         chapter.current(1)
         chapter.pack(side="left", padx=6)
         chapter.bind("<<ComboboxSelected>>", lambda _: kind.set("chapter"))
-        text = f"Continue: {checkpoint.map} (experimental)" if checkpoint else "Continue (no co-op checkpoint yet)"
+        text = f"Continue: {checkpoint.label} (experimental)" if checkpoint else "Continue (no co-op checkpoint yet)"
         ttk.Radiobutton(body, text=text, variable=kind, value="continue",
                         state="normal" if checkpoint else "disabled").pack(anchor="w")
 
@@ -326,6 +326,9 @@ class App:
         bonus = tk.BooleanVar(value=self.settings["bonus_room"])
         ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; in Chapter 1 and the bridge)",
                         variable=bonus).pack(anchor="w", pady=(8, 0))
+        merged = tk.BooleanVar(value=self.settings["merged_maps"])
+        ttk.Checkbutton(body, text="Merged maps (fewer loading screens; Continue keeps the checkpoint's own)",
+                        variable=merged).pack(anchor="w")
         if solo:
             ttk.Frame(body, height=8).pack()
             ttk.Spinbox(self.row(body, "AI companions", 14), from_=1, to=play.MAX_COMPANIONS, textvariable=companions,
@@ -358,9 +361,10 @@ class App:
             number = play.DEFAULT_PORT if solo else play.clean_port(port.get())
             args, config = play.host_launch(self.root, solo=solo, name=name, map_name=map_name, players=count,
                                             password=password.get(), companions=ais, port=number,
-                                            cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get())
+                                            cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get(),
+                                            merged=play.merged_for_start(checkpoint, checkbox=merged.get()))
             self.launch(args, config)
-            self.remember(bonus_room=bonus.get())
+            self.remember(bonus_room=bonus.get(), merged_maps=merged.get())
             if solo and not checkpoint:
                 self.remember(companions=ais)
             if not solo:
