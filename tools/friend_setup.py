@@ -22,6 +22,7 @@ if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools import coop_play as play
 from tools import make_inventory12_art as art
+from tools import prepare_coop_weapons as weapons
 from tools.prepare_simon_models import build_models, costume_files, validate_model
 
 STOCK_DLL_SHA = "0036b91c01e92ed205513f52563053a55a66a32d257efb5f476b8f1f3dde0e63"
@@ -238,9 +239,12 @@ def make_art(root: Path) -> None:
 
 
 def generated_models(models: Path) -> dict[str, bytes]:
-    """Everything the generators make from a copy's own stock models, keyed by path under cryoffear."""
-    return build_models((models / "cutscene/player.mdl").read_bytes(), (models / "player/police1/police1.mdl").read_bytes(),
-                        {rel: (models / "costumes" / rel).read_bytes() for rel in costume_files()})
+    """Everything the generators make from a copy's own stock models, keyed by path under cryoffear:
+    the Simon player models and the third-person weapon models (models/coop)."""
+    files = build_models((models / "cutscene/player.mdl").read_bytes(), (models / "player/police1/police1.mdl").read_bytes(),
+                         {rel: (models / "costumes" / rel).read_bytes() for rel in costume_files()})
+    files.update(weapons.build_models({rel: (models.parent / rel).read_bytes() for rel in weapons.SOURCES}))
+    return files
 
 
 def make_models(root: Path) -> dict[str, str]:

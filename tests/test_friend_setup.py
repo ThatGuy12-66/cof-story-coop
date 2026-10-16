@@ -159,6 +159,20 @@ class FriendSetupTests(unittest.TestCase):
             self.assertEqual(hashes, {rel: hashlib.sha256(made[rel]).hexdigest()
                                       for rel in ("models/player/cof_s1/cof_s1.mdl", "models/coop/p_axe.mdl")})
 
+    def test_the_weapon_models_are_made_with_the_simon_models(self):
+        with tempfile.TemporaryDirectory() as temp:
+            models = Path(temp) / "cryoffear/models"
+            for rel in friend.weapons.SOURCES:
+                path = models.parent / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(rel.encode())
+            with mock.patch.object(friend, "build_models", return_value={"models/player/cof_s1/cof_s1.mdl": b"s"}), \
+                 mock.patch.object(friend.weapons, "build_models", return_value={"models/coop/p_axe.mdl": b"a"}) as made, \
+                 mock.patch.object(friend, "costume_files", return_value=[]):
+                files = friend.generated_models(models)
+            self.assertEqual(set(files), {"models/player/cof_s1/cof_s1.mdl", "models/coop/p_axe.mdl"})
+            sources = made.call_args.args[0]
+            self.assertEqual(set(sources), set(friend.weapons.SOURCES))
+            self.assertEqual(sources["models/weapons/axe/w_axe.mdl"], b"models/weapons/axe/w_axe.mdl")
+
     def test_update_lays_the_new_engine_over_and_keeps_saves_settings_models(self):
         with tempfile.TemporaryDirectory() as temp:
             root, exe = Path(temp) / "CoF-Story-Coop", Path(temp) / "new.exe"
