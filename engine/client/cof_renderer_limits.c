@@ -37,6 +37,21 @@ static void CL_CoF_RendererFree( void )
 	if( cof_rp.entities ) VirtualFree( cof_rp.entities, 0, MEM_RELEASE );
 	cof_rp.pages = cof_rp.chains = cof_rp.entities = NULL;
 }
+
+// Straight to Sys_Print: client.dll loads while host.allow_console is still
+// false, and Con_Printf drops everything then (as in cof_language.c).
+static void CL_CoF_RendererNote( const char *fmt, ... ) FORMAT_CHECK( 1 );
+static void CL_CoF_RendererNote( const char *fmt, ... )
+{
+	char buf[256];
+	va_list args;
+
+	va_start( args, fmt );
+	Q_vsnprintf( buf, sizeof( buf ), fmt, args );
+	va_end( args );
+
+	Sys_Print( buf );
+}
 #endif
 
 // cl_game.c CL_LoadProgs: after the module is loaded, before its Initialize/Init
@@ -47,7 +62,7 @@ void CL_CoF_RendererLimitsLoad( void *module )
 	if( !lib || !lib->hInstance || lib->custom_loader || cof_rp.patch.base ) return;
 	if( !COM_CoF_ModuleSha256Is( lib, COF_RP_CLIENT_SHA256 ))
 	{
-		Con_Reportf( "[cof-renderer] client.dll is not the retail Cry of Fear 1.6 one: its renderer keeps 64 lightmap pages\n" );
+		CL_CoF_RendererNote( "[cof-renderer] client.dll is not the retail Cry of Fear 1.6 one: its renderer keeps 64 lightmap pages\n" );
 		return;
 	}
 	cof_rp.pages = VirtualAlloc( NULL, COF_RP_PAGE_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
@@ -55,17 +70,17 @@ void CL_CoF_RendererLimitsLoad( void *module )
 	cof_rp.entities = VirtualAlloc( NULL, COF_RP_ENTITY_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 	if( !cof_rp.pages || !cof_rp.chains || !cof_rp.entities )
 	{
-		Con_Printf( S_WARN "[cof-renderer] no memory for the renderer's lightmap pages: it keeps 64\n" );
+		CL_CoF_RendererNote( S_WARN "[cof-renderer] no memory for the renderer's lightmap pages: it keeps 64\n" );
 		CL_CoF_RendererFree( );
 		return;
 	}
 	if( !CoF_RenderPatchApply( &cof_rp.patch, (unsigned char *)lib->hInstance, cof_rp.pages, cof_rp.chains, cof_rp.entities ))
 	{
-		Con_Printf( S_WARN "[cof-renderer] client.dll's renderer has unexpected bytes: it keeps 64 lightmap pages\n" );
+		CL_CoF_RendererNote( S_WARN "[cof-renderer] client.dll's renderer has unexpected bytes: it keeps 64 lightmap pages\n" );
 		CL_CoF_RendererFree( );
 		return;
 	}
-	Con_Printf( "[cof-renderer] client.dll's renderer: %d lightmap pages, %d brush entities a frame, edicts up to 8191\n",
+	CL_CoF_RendererNote( "[cof-renderer] client.dll's renderer: %d lightmap pages, %d brush entities a frame, edicts up to 8191\n",
 		COF_RP_PAGES_MAX, COF_RP_ENTITIES );
 #else
 	(void)module;
