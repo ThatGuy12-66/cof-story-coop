@@ -62,6 +62,44 @@ class SectionsFileTests(unittest.TestCase):
         self.assertEqual(program_output(out), ['refused'] * len(cases))
 
 
+ROUTE_FILES = {
+    # c_apartment3 + 4 + 5 as the real group names them (land1-3 clash: renamed in c_apartment4)
+    'cur.txt': 'cof-sections 1 cm_apartment3\n'
+               'section c_apartment3 0 1 207\nbounds -401 698\nlandmark land1\nlandmark ap5la\n'
+               'section c_apartment4 1536 208 195\nbounds 1251 2234\nrename land1 land1_m1\nlandmark land1_m1\n'
+               'section c_apartment5 -1536 403 30\nbounds -2000 -900\nrename ap5la ap5la_m2\nlandmark ap5la_m2\nlandmark land5\n',
+    'other.txt': 'cof-sections 1 cm_apartment1\n'
+                 'section c_apartment1 0 1 300\nbounds -100 900\nlandmark land5\n'
+                 'section c_apartment2 1536 301 50\nbounds 1400 2500\nrename land1 land1_m1\nlandmark land1_m1\n',
+}
+
+
+class RouteTests(unittest.TestCase):
+    """Where a change-level request goes: a section move in this file, another merged file, or a plain map."""
+
+    def test_routes(self):
+        out = run_native(self, 'cof_sections_route_harness.c', dict(ROUTE_FILES, **{'sections_under_test.h': header()}))
+        self.assertEqual(program_output(out), [
+            # from c_apartment3 to c_apartment4 via land1: a move to section 1, landmark land1 there is land1_m1
+            'c_apartment4 land1 -> move 1 cm_apartment3 dest land1_m1 source land1',
+            # back: the live landmark in section 1 is land1_m1; c_apartment3 keeps land1
+            'c_apartment3 land1_m1 -> move 0 cm_apartment3 dest land1 source land1_m1',
+            # c_apartment3 to c_apartment5 via ap5la, and back
+            'c_apartment5 ap5la -> move 2 cm_apartment3 dest ap5la_m2 source ap5la',
+            'c_apartment3 ap5la_m2 -> move 0 cm_apartment3 dest ap5la source ap5la_m2',
+            # c_apartment5 to c_apartment1, a member of the other merged file
+            'c_apartment1 land5 -> load 0 cm_apartment1 dest land5 source land5',
+            # merging off (no other file known): the original map
+            'c_apartment1 land5 off -> load -1 c_apartment1 dest land5 source land5',
+            # a map in no merged file
+            'c_city land9 -> load -1 c_city dest land9 source land9',
+            # a door whose landmark is in no section (c_apartment2's land4): still a move, no landmark
+            'c_apartment4 land4 -> move 1 cm_apartment3 dest land4 source land4',
+            # unmerged current map, destination merged: section by name, landmark renamed for it
+            'unmerged c_apartment2 land1 -> load 1 cm_apartment1 dest land1_m1 source land1',
+        ])
+
+
 class ComposeTests(unittest.TestCase):
     def check_group(self, name):
         g, named, sections = wave1_group(name)
