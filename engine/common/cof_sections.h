@@ -216,6 +216,65 @@ static int CoF_SectionsHasLandmark( const cof_section_t *x, const char *name )
 	return 0;
 }
 
+// the section whose landmarks include this (renamed) name, or -1
+static int CoF_SectionsLandmarkSection( const cof_sections_t *s, const char *name )
+{
+	int i;
+	for( i = 0; i < s->count; i++ )
+		if( CoF_SectionsHasLandmark( &s->sec[i], name )) return i;
+	return -1;
+}
+
+// a name as the original map had it (the reverse of CoF_SectionsRename)
+static const char *CoF_SectionsOriginalName( const cof_section_t *x, const char *name )
+{
+	int i;
+	for( i = 0; i < x->num_renames; i++ )
+		if( !strcmp( x->renames[i].to, name )) return x->renames[i].from;
+	return name;
+}
+
+typedef struct
+{
+	int  section_move;                    // 1: the destination is another section of the loaded file
+	int  to_section;                      // the destination's section, -1 for a map that is not merged
+	char file[COF_SECT_NAME];             // the map file to load (the loaded one for a section move)
+	char dest_landmark[COF_SECT_NAME];    // the landmark's name in the destination
+	char source_landmark[COF_SECT_NAME];  // its name where the request came from (the live entity)
+} cof_sect_route_t;
+
+/*
+Where a change-level request (an original map name and the landmark as the requesting trigger names it) goes.
+loaded: the loaded file's sections, NULL when it is not merged. dest: the sections of the merged file that holds
+level, NULL when level is in none or merging is off. Landmark names go back to the original name in the requesting
+section, then to the destination section's name for it.
+*/
+static void CoF_SectionsRoute( const cof_sections_t *loaded, const char *level, const char *landmark,
+	const cof_sections_t *dest, cof_sect_route_t *out )
+{
+	const char *original = landmark ? landmark : "";
+	int from = -1, to;
+	memset( out, 0, sizeof( *out ));
+	out->to_section = -1;
+	snprintf( out->source_landmark, sizeof( out->source_landmark ), "%s", original );
+	if( loaded && original[0] && ( from = CoF_SectionsLandmarkSection( loaded, original )) >= 0 )
+		original = CoF_SectionsOriginalName( &loaded->sec[from], original );
+	if( loaded && ( to = CoF_SectionsFind( loaded, level )) >= 0 )
+	{
+		out->section_move = 1;
+		dest = loaded;
+	}
+	else if( !dest || ( to = CoF_SectionsFind( dest, level )) < 0 )
+	{
+		snprintf( out->file, sizeof( out->file ), "%s", level );
+		snprintf( out->dest_landmark, sizeof( out->dest_landmark ), "%s", original );
+		return;
+	}
+	out->to_section = to;
+	snprintf( out->file, sizeof( out->file ), "%s", dest->name );
+	snprintf( out->dest_landmark, sizeof( out->dest_landmark ), "%s", CoF_SectionsRename( &dest->sec[to], original ));
+}
+
 // ---- entity composition ----
 
 typedef struct
