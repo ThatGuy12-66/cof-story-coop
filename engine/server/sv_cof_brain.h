@@ -25,11 +25,18 @@
  *      a way round on the map's route graph (sv_cof_nav.h) and hands it the
  *      next point (in->nav). A leader out of sight with no trail is followed
  *      only along such a route. On the way it opens a door the engine finds
- *      right ahead and hops a low obstacle the engine says a jump clears
- *      (never a blind hop). Stuck on a route, it asks for another first
- *      (out->replan); it teleports out of sight behind the leader when lost
- *      or stuck, and says why (out->why, for the log);
- *  10. otherwise stand by them, looking where they look, gun in hand.
+ *      right ahead, hops a low obstacle the engine says a jump clears (never a
+ *      blind hop) and steps sideways to line up with an opening the engine
+ *      probed (in->side_shift: corners and door jambs). When the game moves the
+ *      leader (an inter_door, a script) the trail is kept: it walks to where
+ *      they left and comes out after them (out->place). Stuck (no progress, not
+ *      merely no motion) on a route, it asks for another first (out->replan); it
+ *      teleports out of the player's sight when lost or stuck, never during a
+ *      cutscene, and says why (out->why, for the log). Several bots behind one
+ *      person keep their own distance (in->rank), and a partner in the way
+ *      counts as arrived;
+ *  10. otherwise stand by them, looking where they look, gun in hand; out of
+ *      their body and out of their face.
  * Told to wait, it holds its spot instead of following (still fighting what
  * comes near, still reviving the leader wherever they fall, and giving them a
  * syringe when they come to it).
@@ -63,6 +70,23 @@
 #define COF_BRAIN_MEDIC_REACH 40.0f // the syringe reaches 48 units from the eye
 #define COF_BRAIN_WALK 150.0f
 #define COF_BRAIN_RUN_SPEED 300.0f
+#define COF_BRAIN_WARP_STEP 64.0f // the leader moved this far in one frame...
+#define COF_BRAIN_WARP_SPEED 1000.0f // ...faster than anyone walks: the game moved them (a door, a script)
+#define COF_BRAIN_DOOR_REACH 40.0f // this close to where the leader left: come out after them
+#define COF_BRAIN_DOOR_HEIGHT 48.0f
+#define COF_BRAIN_DOOR_WAIT 10.0 // no way to that spot in this long: the ordinary teleport
+#define COF_BRAIN_SETTLE 0.5 // after a cutscene no teleport this long: the script's own moves land first
+#define COF_BRAIN_PROGRESS 16.0f // stuck: not this much nearer the goal (along the trail) within COF_BRAIN_STUCK
+#define COF_BRAIN_CLIMB 40.0f // a trail point this far above or below is not reached by standing under it
+#define COF_BRAIN_PROBE_TOLERANCE 15.0f // the engine's side probe was made for this heading, give or take
+#define COF_BRAIN_PROBE_AHEAD 6.0f // stepping sideways to an opening, this much forward
+#define COF_BRAIN_PERSONAL 40.0f // closer to the leader (or a partner) than this: step out...
+#define COF_BRAIN_PERSONAL_OUT 64.0f // ...until this far
+#define COF_BRAIN_FACE 96.0f // this close in front of the leader...
+#define COF_BRAIN_FACE_ANGLE 25.0f // ...within this angle of where they look...
+#define COF_BRAIN_FACE_TIME 1.0 // ...this long: step aside...
+#define COF_BRAIN_FACE_CLEAR 35.0f // ...until this angle
+#define COF_BRAIN_RANK_GAP 48.0f // each further bot behind the same person keeps this much more distance
 
 // usercmd buttons (HLSDK in_buttons.h; the Cry of Fear meaning in the comment)
 #define COF_IN_ATTACK ( 1 << 0 ) // fire, swing, inject
@@ -128,6 +152,15 @@ typedef struct
 	// knows a way round: the next point on it (a standing body's origin there)
 	int nav;
 	float nav_point[3];
+	// the leader is held by the game (a cutscene, a camera, a door)
+	int leader_held;
+	// the engine's probe along last frame's way (out->move_to): blocked ahead, but this many
+	// units to the left (+) or right (-) the way is clear; made for heading probe_yaw
+	float side_shift, probe_yaw;
+	int rank; // other bots ahead of it behind the same person (0: the first)
+	int partner_block; // another player stands right in its way to the goal
+	int crowd; // another player (not the leader) is closer than COF_BRAIN_PERSONAL...
+	float crowd_pos[3]; // ...here
 } cof_brain_input_t;
 
 typedef struct
@@ -141,6 +174,9 @@ typedef struct
 	int going; // on the way to goal (the engine looks for a route there when the straight way is blocked)
 	float goal[3];
 	int replan; // stuck on the route: leave out the leg it was on and find another
+	float move_to[3]; // the point it walked at this frame (the engine probes that way next frame)
+	int place; // with the teleport: come out near place_at (where the game put the leader), not behind them
+	float place_at[3];
 } cof_brain_output_t;
 
 typedef struct
@@ -162,6 +198,16 @@ typedef struct
 	double door_after; // next try at a door
 	int door_grace; // the stuck time restarted for a door since the body last moved
 	int replanned; // asked for another route since the body last moved
+	float leader_last[3]; // the leader last frame (a jump faster than walking is the game moving them)
+	int have_leader_last;
+	int door; // where the game took the leader: trail point door - 1 (0: none)
+	float door_to[3]; // and where it put them
+	double door_since;
+	double held_until; // a cutscene (its or the leader's) ended: no teleport before
+	float stuck_progress; // how far along it was when the stuck time last started
+	int dropped; // trail points fallen off the ring (progress counts them)
+	double face_since; // in front of the leader's eyes since
+	int stepping; // stepping aside out of the leader's view
 } cof_brain_t;
 
 static void CoF_BrainReset( cof_brain_t *b )
@@ -239,39 +285,64 @@ static void CoF_BrainMoveToward( const float *self, const float *point, float ya
 	out->side = speed * ( x * s - y * c ); // right = ( sin yaw, -cos yaw )
 }
 
-// The leader's position this frame: a breadcrumb every COF_BRAIN_CRUMB units;
-// a teleport (door, ladder, scripted move) breaks the trail there.
-static void CoF_BrainNoteLeader( cof_brain_t *b, const float *pos )
-{
-	float moved;
-	int slot;
-	if( !b->have_sample )
-	{
-		memcpy( b->last_sample, pos, sizeof( b->last_sample ));
-		b->have_sample = 1;
-		return;
-	}
-	moved = CoF_BrainDist( pos, b->last_sample );
-	if( moved < COF_BRAIN_CRUMB ) return;
-	if( moved > COF_BRAIN_JUMP )
-	{
-		b->broken = 1;
-		b->count = b->cursor = 0;
-		memcpy( b->last_sample, pos, sizeof( b->last_sample ));
-		return;
-	}
-	slot = b->head;
-	memcpy( b->trail[slot], pos, sizeof( b->trail[slot] ));
-	b->head = ( b->head + 1 ) % COF_BRAIN_TRAIL;
-	if( b->count < COF_BRAIN_TRAIL ) b->count++;
-	else if( b->cursor > 0 ) b->cursor--; // the oldest point fell off
-	memcpy( b->last_sample, pos, sizeof( b->last_sample ));
-}
-
 // The trail point index k (0 = oldest still kept).
 static const float *CoF_BrainCrumb( const cof_brain_t *b, int k )
 {
 	return b->trail[( b->head - b->count + k + COF_BRAIN_TRAIL * 2 ) % COF_BRAIN_TRAIL];
+}
+
+static void CoF_BrainPushCrumb( cof_brain_t *b, const float *pos )
+{
+	memcpy( b->trail[b->head], pos, sizeof( b->trail[b->head] ));
+	b->head = ( b->head + 1 ) % COF_BRAIN_TRAIL;
+	if( b->count < COF_BRAIN_TRAIL ) { b->count++; return; }
+	// the oldest point fell off
+	b->dropped++;
+	if( b->cursor > 0 ) b->cursor--;
+	if( b->door > 0 && --b->door == 0 ) b->broken = 1; // the way to the door is gone
+}
+
+// The leader's position this frame: a breadcrumb every COF_BRAIN_CRUMB units.
+// When the game moves them (a door, a script: farther in a frame than anyone
+// walks) the trail is kept: the spot they left becomes its last point, the door.
+static void CoF_BrainNoteLeader( cof_brain_t *b, const cof_brain_input_t *in )
+{
+	const float *pos = in->leader_pos;
+	float moved;
+	int warp = 0;
+	if( b->have_leader_last )
+	{
+		float step = CoF_BrainDist2D( pos, b->leader_last ) + fabsf( pos[2] - b->leader_last[2] );
+		warp = step > COF_BRAIN_WARP_STEP && step > COF_BRAIN_WARP_SPEED * ( in->frametime > 0.001f ? in->frametime : 0.001f );
+	}
+	if( warp || ( b->have_sample && CoF_BrainDist( pos, b->last_sample ) > COF_BRAIN_JUMP ))
+	{
+		const float *from = warp ? b->leader_last : b->last_sample;
+		if( !b->count || CoF_BrainDist( CoF_BrainCrumb( b, b->count - 1 ), from ) > 16.0f ) CoF_BrainPushCrumb( b, from );
+		b->door = b->count;
+		memcpy( b->door_to, pos, sizeof( b->door_to ));
+		b->door_since = in->now;
+		memcpy( b->last_sample, pos, sizeof( b->last_sample ));
+		b->have_sample = 1;
+	}
+	else if( !b->have_sample )
+	{
+		memcpy( b->last_sample, pos, sizeof( b->last_sample ));
+		b->have_sample = 1;
+	}
+	else if(( moved = CoF_BrainDist( pos, b->last_sample )) >= COF_BRAIN_CRUMB )
+	{
+		CoF_BrainPushCrumb( b, pos );
+		memcpy( b->last_sample, pos, sizeof( b->last_sample ));
+	}
+	memcpy( b->leader_last, pos, sizeof( b->leader_last ));
+	b->have_leader_last = 1;
+}
+
+// A trail point counts as reached this close, at about the same height.
+static int CoF_BrainReached( const cof_brain_input_t *in, const float *point )
+{
+	return CoF_BrainDist2D( in->self, point ) < COF_BRAIN_REACHED && fabsf( point[2] - in->self[2] ) < COF_BRAIN_CLIMB;
 }
 
 // Where to walk to follow: the leader when the way is clear, else the next
@@ -279,19 +350,26 @@ static const float *CoF_BrainCrumb( const cof_brain_t *b, int k )
 // still: 2 (walked to only along a route the engine finds).
 static int CoF_BrainFollowPoint( cof_brain_t *b, const cof_brain_input_t *in, float *point )
 {
+	int last = b->door ? b->door - 1 : b->count; // never past the door: the trail beyond it is the far side
 	if( in->leader_walkable && in->leader_visible )
 	{
 		// The way is open: the trail behind us no longer matters.
 		b->cursor = b->count;
+		b->door = 0;
 		memcpy( point, in->leader_pos, sizeof( float ) * 3 );
 		return 1;
 	}
-	while( b->cursor < b->count && CoF_BrainDist2D( in->self, CoF_BrainCrumb( b, b->cursor )) < COF_BRAIN_REACHED ) b->cursor++;
+	while( b->cursor < last && CoF_BrainReached( in, CoF_BrainCrumb( b, b->cursor ))) b->cursor++;
 	// Skip ahead to the newest point we are already close to (the leader doubled back).
 	{
 		int k;
-		for( k = b->count - 1; k > b->cursor; k-- )
-			if( CoF_BrainDist2D( in->self, CoF_BrainCrumb( b, k )) < COF_BRAIN_REACHED ) { b->cursor = k + 1; break; }
+		for( k = last - 1; k > b->cursor; k-- )
+			if( CoF_BrainReached( in, CoF_BrainCrumb( b, k ))) { b->cursor = k + 1; break; }
+	}
+	if( b->door )
+	{
+		memcpy( point, CoF_BrainCrumb( b, b->cursor < last ? b->cursor : last ), sizeof( float ) * 3 );
+		return 1;
 	}
 	if( b->cursor < b->count )
 	{
@@ -307,13 +385,28 @@ static int CoF_BrainFollowPoint( cof_brain_t *b, const cof_brain_input_t *in, fl
 static void CoF_BrainGo( const cof_brain_input_t *in, const float *target, float speed, cof_brain_output_t *out )
 {
 	const float *point = in->nav ? in->nav_point : target;
-	float wanted[3];
+	float wanted[3], walk[3];
 	memcpy( out->goal, target, sizeof( out->goal ));
 	out->going = 1;
+	memcpy( walk, point, sizeof( walk ));
+	if( in->side_shift != 0.0f )
+	{
+		// The engine found the way blocked ahead and an opening to one side (a door jamb,
+		// a corner): step over to line up with it, a little forward.
+		float heading = atan2f( point[1] - in->self[1], point[0] - in->self[0] ) * 57.2957795f;
+		if( fabsf( CoF_BrainNormalize( heading - in->probe_yaw )) <= COF_BRAIN_PROBE_TOLERANCE )
+		{
+			float c = cosf( heading / 57.2957795f ), s = sinf( heading / 57.2957795f );
+			walk[0] = in->self[0] - s * in->side_shift + c * COF_BRAIN_PROBE_AHEAD;
+			walk[1] = in->self[1] + c * in->side_shift + s * COF_BRAIN_PROBE_AHEAD;
+			walk[2] = in->self[2];
+		}
+	}
+	memcpy( out->move_to, walk, sizeof( out->move_to ));
 	CoF_BrainLookAt( in->eye, point, wanted );
 	wanted[0] = 0.0f;
 	CoF_BrainTurn( in->view, wanted, COF_BRAIN_TURN_RATE * in->frametime, out->angles );
-	CoF_BrainMoveToward( in->self, point, out->angles[1], speed, out );
+	CoF_BrainMoveToward( in->self, walk, out->angles[1], speed, out );
 }
 
 // why: "far", "lost", "stuck", "trail" (the leader went through a door or was
@@ -324,23 +417,42 @@ static int CoF_BrainTeleport( cof_brain_t *b, const cof_brain_input_t *in, cof_b
 	b->teleport_after = in->now + COF_BRAIN_TELEPORT_COOLDOWN;
 	b->stuck_since = b->lost_since = 0.0;
 	b->broken = 0;
-	b->count = b->cursor = 0;
+	b->count = b->cursor = b->door = 0;
 	out->action = COF_BRAIN_ACT_TELEPORT;
 	out->why = why;
 	return 1;
 }
 
-// Moving with intent: notice when the body does not follow.
-static int CoF_BrainStuck( cof_brain_t *b, const cof_brain_input_t *in, int moving )
+// Through the door after the leader: come out where the game put them.
+static int CoF_BrainDoorTeleport( cof_brain_t *b, const cof_brain_input_t *in, cof_brain_output_t *out )
 {
+	float to[3];
+	memcpy( to, b->door_to, sizeof( to ));
+	if( !CoF_BrainTeleport( b, in, out, "door" )) return 0;
+	out->place = 1;
+	memcpy( out->place_at, to, sizeof( out->place_at ));
+	return 1;
+}
+
+// Moving with intent toward target: notice when it gets nowhere. Progress is how
+// far along the trail it is (points passed, those fallen off the ring included)
+// less how far the next point still is, so jittering back and forth is no
+// progress. On a route the planner takes its own detours: there, any motion counts.
+static int CoF_BrainStuck( cof_brain_t *b, const cof_brain_input_t *in, int moving, const float *target )
+{
+	float progress = (float)( b->dropped + b->cursor ) * COF_BRAIN_CRUMB - CoF_BrainDist2D( in->self, target );
+	int restart;
 	if( !moving )
 	{
 		b->stuck_since = 0.0;
 		return 0;
 	}
-	if( b->stuck_since == 0.0 || CoF_BrainDist( in->self, b->stuck_origin ) > 24.0f )
+	if( in->nav ) restart = CoF_BrainDist( in->self, b->stuck_origin ) > 24.0f;
+	else restart = progress > b->stuck_progress + COF_BRAIN_PROGRESS;
+	if( b->stuck_since == 0.0 || restart )
 	{
 		b->stuck_since = in->now;
+		b->stuck_progress = progress;
 		b->door_grace = b->replanned = 0;
 		memcpy( b->stuck_origin, in->self, sizeof( b->stuck_origin ));
 		return 0;
@@ -517,15 +629,64 @@ static void CoF_BrainCalm( cof_brain_t *b, const cof_brain_input_t *in, cof_brai
 	}
 }
 
+// Standing by: out of the leader's body (and a partner's), and out of the leader's
+// face: right in front of their eyes for a second, step aside.
+static void CoF_BrainSpace( cof_brain_t *b, const cof_brain_input_t *in, cof_brain_output_t *out )
+{
+	float flat = CoF_BrainDist2D( in->self, in->leader_pos ), away[3], look, angle;
+	if( flat < COF_BRAIN_PERSONAL || ( in->crowd && CoF_BrainDist2D( in->self, in->crowd_pos ) < COF_BRAIN_PERSONAL ))
+	{
+		const float *from = flat < COF_BRAIN_PERSONAL ? in->leader_pos : in->crowd_pos;
+		float x = in->self[0] - from[0], y = in->self[1] - from[1];
+		if( x * x + y * y < 1.0f )
+		{
+			// right on top: toward the leader's back
+			x = -cosf( in->leader_view[1] / 57.2957795f );
+			y = -sinf( in->leader_view[1] / 57.2957795f );
+		}
+		away[0] = in->self[0] + x * COF_BRAIN_PERSONAL_OUT;
+		away[1] = in->self[1] + y * COF_BRAIN_PERSONAL_OUT;
+		away[2] = in->self[2];
+		CoF_BrainMoveToward( in->self, away, out->angles[1], COF_BRAIN_WALK, out );
+		b->face_since = 0.0;
+		return;
+	}
+	look = atan2f( in->self[1] - in->leader_pos[1], in->self[0] - in->leader_pos[0] ) * 57.2957795f;
+	angle = CoF_BrainNormalize( look - in->leader_view[1] );
+	if( b->stepping ? ( fabsf( angle ) < COF_BRAIN_FACE_CLEAR && flat < 128.0f ) : ( flat < COF_BRAIN_FACE && fabsf( angle ) < COF_BRAIN_FACE_ANGLE ))
+	{
+		if( b->face_since == 0.0 ) b->face_since = in->now;
+		if( b->stepping || in->now - b->face_since > COF_BRAIN_FACE_TIME )
+		{
+			// sideways out of their view, away from its axis
+			float side = ( angle >= 0.0f ? 90.0f : -90.0f ) + in->leader_view[1];
+			b->stepping = 1;
+			away[0] = in->self[0] + cosf( side / 57.2957795f ) * 64.0f;
+			away[1] = in->self[1] + sinf( side / 57.2957795f ) * 64.0f;
+			away[2] = in->self[2];
+			CoF_BrainMoveToward( in->self, away, out->angles[1], COF_BRAIN_WALK, out );
+		}
+		return;
+	}
+	b->face_since = 0.0;
+	b->stepping = 0;
+}
+
 // One frame of thought. The engine keeps b between frames; in is this frame's
 // perception; out receives the usercmd and an optional action.
 static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_brain_output_t *out )
 {
-	float target[3], wanted[3], distance;
-	int danger = in->threat && in->threat_dist < COF_BRAIN_DANGER;
+	float target[3], wanted[3], distance, gap = COF_BRAIN_RANK_GAP * (float)( in->rank > 0 ? in->rank : 0 );
+	int danger = in->threat && in->threat_dist < COF_BRAIN_DANGER, calm;
 	memset( out, 0, sizeof( *out ));
 	memcpy( out->angles, in->view, sizeof( out->angles ));
-	if( in->leader && in->leader_alive ) CoF_BrainNoteLeader( b, in->leader_pos );
+	if( in->leader && in->leader_alive ) CoF_BrainNoteLeader( b, in );
+	if( in->held || in->leader_held )
+	{
+		// a cutscene: nobody is lost meanwhile, and no teleport until it has settled
+		b->lost_since = 0.0;
+		b->held_until = in->now + COF_BRAIN_SETTLE;
+	}
 	if( !in->alive )
 	{
 		// Press jump on and off: the retail respawn waits for it (PreThink 100EF5F4).
@@ -555,7 +716,7 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 		b->fire_held = 0;
 		return;
 	}
-	if( in->held ) { out->mode = b->mode = COF_BRAIN_HELD; b->stuck_since = 0.0; b->fire_held = 0; return; }
+	if( in->held ) { out->mode = b->mode = COF_BRAIN_HELD; b->stuck_since = 0.0; b->fire_held = 0; b->face_since = 0.0; return; }
 
 	// The leader is down: get to them and start the CPR (a threat right here comes first).
 	if( in->leader && in->leader_down && !danger )
@@ -565,7 +726,7 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 		distance = CoF_BrainDist2D( in->self, in->leader_pos );
 		if( distance > COF_BRAIN_REVIVE_REACH )
 		{
-			if(( !in->leader_visible && distance > 300.0f ) || distance > COF_BRAIN_FAR || CoF_BrainStuck( b, in, 1 ))
+			if(( !in->leader_visible && distance > 300.0f ) || distance > COF_BRAIN_FAR || CoF_BrainStuck( b, in, 1, in->leader_pos ))
 				CoF_BrainTeleport( b, in, out, "revive" );
 			CoF_BrainGo( in, in->leader_pos, distance > COF_BRAIN_RUN ? COF_BRAIN_RUN_SPEED : COF_BRAIN_WALK, out );
 			CoF_BrainObstacle( b, in, out );
@@ -610,7 +771,7 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 		if( CoF_BrainDist2D( in->self, in->stay_pos ) > COF_BRAIN_REACHED * 2.0f )
 		{
 			CoF_BrainGo( in, in->stay_pos, COF_BRAIN_WALK, out );
-			if( CoF_BrainStuck( b, in, 1 )) b->stuck_since = 0.0; // stay put rather than teleport
+			if( CoF_BrainStuck( b, in, 1, in->stay_pos )) b->stuck_since = 0.0; // stay put rather than teleport
 		}
 		CoF_BrainCalm( b, in, out );
 		return;
@@ -625,6 +786,36 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 
 	// Follow.
 	distance = CoF_BrainDist( in->self, in->leader_pos );
+	calm = !in->leader_held && in->now >= b->held_until; // teleports wait until a cutscene has settled
+	if( b->door && in->leader_visible && in->leader_walkable ) b->door = 0; // moved within the room
+	if( b->door )
+	{
+		// The game took the leader through a door: walk their trail to where they left,
+		// then come out after them. Neither far nor lost meanwhile.
+		const float *at = CoF_BrainCrumb( b, b->door - 1 );
+		b->lost_since = 0.0;
+		out->mode = b->mode = COF_BRAIN_FOLLOW;
+		if( in->now - b->door_since > COF_BRAIN_DOOR_WAIT )
+		{
+			if( calm ) CoF_BrainTeleport( b, in, out, "trail" );
+			return;
+		}
+		if( CoF_BrainDist2D( in->self, at ) < COF_BRAIN_DOOR_REACH && fabsf( at[2] - in->self[2] ) < COF_BRAIN_DOOR_HEIGHT )
+		{
+			if( calm ) CoF_BrainDoorTeleport( b, in, out );
+			return;
+		}
+		CoF_BrainFollowPoint( b, in, target );
+		b->following = 1;
+		CoF_BrainGo( in, target, CoF_BrainDist( in->self, target ) > COF_BRAIN_RUN ? COF_BRAIN_RUN_SPEED : COF_BRAIN_WALK, out );
+		if( CoF_BrainStuck( b, in, 1, target ) && calm ) CoF_BrainTeleport( b, in, out, "stuck" );
+		else
+		{
+			CoF_BrainCalm( b, in, out );
+			CoF_BrainObstacle( b, in, out );
+		}
+		return;
+	}
 	if( !in->leader_visible && distance > 300.0f )
 	{
 		if( b->lost_since == 0.0 ) b->lost_since = in->now;
@@ -632,24 +823,26 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 	else b->lost_since = 0.0;
 	{
 		int lost = b->lost_since != 0.0 && in->now - b->lost_since > ( in->nav ? COF_BRAIN_LOST_ROUTE : COF_BRAIN_LOST );
-		if( distance > COF_BRAIN_FAR || lost || ( b->broken && b->cursor >= b->count && !in->leader_visible ))
+		if( calm && ( distance > COF_BRAIN_FAR || lost || ( b->broken && b->cursor >= b->count && !in->leader_visible )))
 		{
 			out->mode = b->mode = COF_BRAIN_FOLLOW;
 			CoF_BrainTeleport( b, in, out, distance > COF_BRAIN_FAR ? "far" : lost ? "lost" : "trail" );
 			return;
 		}
 	}
-	if( b->following ? distance > COF_BRAIN_STOP : distance > COF_BRAIN_START )
+	// a partner standing in the way: as near as this bot gets for now
+	if( b->following ? distance > COF_BRAIN_STOP + gap : distance > COF_BRAIN_START + gap && !in->partner_block )
 	{
 		int found = CoF_BrainFollowPoint( b, in, target );
-		if( found == 1 || in->nav )
+		if(( found == 1 || in->nav ) && !in->partner_block )
 		{
 			out->mode = b->mode = COF_BRAIN_FOLLOW;
 			b->following = 1;
 			CoF_BrainGo( in, target, distance > COF_BRAIN_RUN ? COF_BRAIN_RUN_SPEED : COF_BRAIN_WALK, out );
-			if( CoF_BrainStuck( b, in, 1 ))
+			if( CoF_BrainStuck( b, in, 1, target ))
 			{
-				if( !in->nav || b->replanned )
+				if( !calm ) b->stuck_since = in->now;
+				else if( !in->nav || b->replanned )
 				{
 					CoF_BrainTeleport( b, in, out, "stuck" );
 					return;
@@ -665,8 +858,11 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 		}
 		// The leader out of sight and no trail: wait here, but say where to,
 		// so the engine looks for a route.
-		memcpy( out->goal, target, sizeof( out->goal ));
-		out->going = 1;
+		if( !in->partner_block )
+		{
+			memcpy( out->goal, target, sizeof( out->goal ));
+			out->going = 1;
+		}
 	}
 
 	// Beside the leader: stand, look where they look, weapon ready.
@@ -675,6 +871,7 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 	out->mode = b->mode = COF_BRAIN_IDLE;
 	wanted[0] = 0.0f; wanted[1] = in->leader_view[1]; wanted[2] = 0.0f;
 	CoF_BrainTurn( in->view, wanted, COF_BRAIN_TURN_RATE * 0.25f * in->frametime, out->angles );
+	CoF_BrainSpace( b, in, out );
 	CoF_BrainCalm( b, in, out );
 }
 #endif

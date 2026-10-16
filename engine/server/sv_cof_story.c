@@ -342,8 +342,8 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_RecoveryFrame();
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
+	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
 	SV_CoF_CompanionFrame();
-	SV_CoF_PartyFrame();
 	SV_CoF_TestGunFrame();
 	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();

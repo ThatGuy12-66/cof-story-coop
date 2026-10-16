@@ -13,7 +13,7 @@
  *   0, destination at 4, the blocking brush model "*N" in 4 chars at 12, hull
  *   bits at 16, length at 20); 16 bytes a node of sorted distances; the route
  *   table; 2 bytes a hash link.
- * A land node lies 8 units over the floor (NODE_HEIGHT). A link the player
+ * A land node lies on the floor (the build pushes it back down). A link the player
  * sized hull (32x32x72, walking, 18-unit steps) passes has the human hull bit;
  * one through a door names the door's brush model. Links are one way (a drop
  * walks down, not up). */
@@ -32,7 +32,7 @@
 #define COF_NAV_LAND ( 1 << 0 ) // bits_NODE_LAND
 #define COF_NAV_HUMAN ( 1 << 1 ) // bits_LINK_HUMAN_HULL
 #define COF_NAV_DISABLED ( 1 << 4 ) // bits_LINK_DISABLED
-#define COF_NAV_RAISE 28.0f // a land node is 8 over the floor, a standing body's origin 36
+#define COF_NAV_RAISE 36.0f // a land node lies on the floor (every saved graph), a standing body's origin 36 over it
 
 typedef struct
 {

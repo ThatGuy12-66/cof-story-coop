@@ -38,6 +38,9 @@
 #define COF_COMPANION_AHEAD 24.0f // how far ahead of the feet it looks for a door or a low obstacle
 #define COF_COMPANION_STEP 18.0f // the player code steps up this much by itself (sv_stepsize)
 #define COF_COMPANION_JUMP 36.0f // a jump lifts the feet about 45 units: this much leaves a margin
+#define COF_COMPANION_CONTACT 4.0f // a step is looked for this far past where the feet touch it...
+#define COF_COMPANION_LAND_AHEAD 12.0f // ...a landing this far past it...
+#define COF_COMPANION_LAND_DROP 48.0f // ...on a floor at most this far under jump height
 #define COF_COMPANION_ROUTE 128 // route nodes kept
 #define COF_COMPANION_NAV_RETRY 10.0 // no graph for the map yet (the game builds it after the map starts): look again this often
 #define COF_COMPANION_NAV_REACH 640.0f // the graph points near a body that it tries to walk to or from
@@ -49,6 +52,8 @@
 #define COF_COMPANION_AVOID 4 // links it got stuck on, left out of routes...
 #define COF_COMPANION_AVOID_TIME 30.0 // ...for this long
 #define COF_COMPANION_MODELS 1024 // brush models ("*N") mapped to their entities
+#define COF_COMPANION_PLACE_PATIENCE 3.0 // no spot out of the player's sight this long: the least seen one
+#define COF_COMPANION_PARTNER 48.0f // another player this close in its way: as near as it gets for now
 
 static convar_t *cof_companion; // how many companion bots to keep (0: none)
 static convar_t *cof_companion_name;
@@ -88,6 +93,11 @@ typedef struct
 	double avoid_until[COF_COMPANION_AVOID];
 	int avoid_next;
 	int leader_userid; // whom it looked after last frame (a new one starts a new trail)
+	qboolean place_pending, place_near; // a teleport the brain asked for, still to place...
+	vec3_t place_at; // ...near here (where the game put the leader) or behind them
+	const char *place_why;
+	double place_since;
+	qboolean leader_held; // the leader is held by the game this frame
 } cof_companion_t;
 
 static cof_companion_t cof_companions[MAX_CLIENTS];
@@ -152,7 +162,7 @@ static sv_client_t *CoF_CompanionLeader( void )
 
 // Whom a bot looks after: the downed person nearest to it (CPR comes first), else the
 // people in turn: the bot of rank k follows person k (counted again if there are fewer).
-static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank )
+static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank, int *behind )
 {
 	sv_client_t *people[MAX_CLIENTS], *down = NULL;
 	float best = 0.0f;
@@ -169,6 +179,7 @@ static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank )
 			if( !down || distance < best ) { down = cl; best = distance; }
 		}
 	}
+	*behind = n ? rank / n : 0; // bots ahead of it behind the same person
 	if( down ) return down;
 	return n ? people[rank % n] : NULL;
 }
@@ -344,12 +355,14 @@ static qboolean CoF_CompanionDoor( edict_t *e )
 
 // Just ahead of the feet, the way the AI walked last frame (its moves are
 // relative to the view yaw it sent): a door it may open; else something low that
-// a jump clears (blocked at the feet and at step height, clear at jump height).
-// A stair step is not one: the player code climbs it.
+// a jump clears. Measured from where the feet touch it: clear at step height just
+// past that (a step, or a flight of stairs: the walk climbs them; sweeping the
+// whole way at step height met the third riser and hopped up every staircase),
+// blocked there but clear at jump height, with a floor to land on beyond.
 static void CoF_CompanionAhead( edict_t *ent, cof_companion_t *c, cof_brain_input_t *in )
 {
-	float yaw = c->out.angles[1] / 57.2957795f, x, y, length;
-	vec3_t end, from, to;
+	float yaw = c->out.angles[1] / 57.2957795f, x, y, length, contact;
+	vec3_t dir, end, from, to, down;
 	trace_t tr;
 	c->door = 0;
 	if( !in->alive || in->held || !in->onground ) return;
@@ -357,9 +370,8 @@ static void CoF_CompanionAhead( edict_t *ent, cof_companion_t *c, cof_brain_inpu
 	y = c->out.forward * sinf( yaw ) - c->out.side * cosf( yaw );
 	length = sqrtf( x * x + y * y );
 	if( length < 1.0f ) return;
-	VectorCopy( ent->v.origin, end );
-	end[0] += x / length * COF_COMPANION_AHEAD;
-	end[1] += y / length * COF_COMPANION_AHEAD;
+	VectorSet( dir, x / length, y / length, 0.0f );
+	VectorMA( ent->v.origin, COF_COMPANION_AHEAD, dir, end );
 	tr = SV_Move( ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NOMONSTERS, ent, false );
 	if( tr.startsolid || tr.fraction >= 1.0f ) return;
 	if( CoF_CompanionDoor( tr.ent ))
@@ -368,14 +380,58 @@ static void CoF_CompanionAhead( edict_t *ent, cof_companion_t *c, cof_brain_inpu
 		c->door = NUM_FOR_EDICT( tr.ent );
 		return;
 	}
+	contact = COF_COMPANION_AHEAD * tr.fraction;
 	VectorCopy( ent->v.origin, from ); from[2] += COF_COMPANION_STEP;
-	VectorCopy( end, to ); to[2] += COF_COMPANION_STEP;
+	VectorMA( from, contact + COF_COMPANION_CONTACT, dir, to );
 	tr = SV_Move( from, ent->v.mins, ent->v.maxs, to, MOVE_NOMONSTERS, ent, false );
-	if( !tr.startsolid && tr.fraction >= 1.0f ) return; // a step
+	if( !tr.startsolid && tr.fraction >= 1.0f ) return; // a step, or stairs
 	VectorCopy( ent->v.origin, from ); from[2] += COF_COMPANION_JUMP;
-	VectorCopy( end, to ); to[2] += COF_COMPANION_JUMP;
+	VectorMA( from, contact + COF_COMPANION_LAND_AHEAD, dir, to );
 	tr = SV_Move( from, ent->v.mins, ent->v.maxs, to, MOVE_NOMONSTERS, ent, false );
-	in->ledge_ahead = !tr.startsolid && tr.fraction >= 1.0f;
+	if( tr.startsolid || tr.fraction < 1.0f ) return; // too high
+	VectorCopy( to, down ); down[2] -= COF_COMPANION_LAND_DROP;
+	tr = SV_Move( to, ent->v.mins, ent->v.maxs, down, MOVE_NOMONSTERS, ent, false );
+	in->ledge_ahead = !tr.startsolid && tr.fraction < 1.0f && tr.plane.normal[2] >= 0.7f; // somewhere to land
+}
+
+// The standing body walks from 'from' along dir for the probe's length (or climbs a step doing it).
+static qboolean CoF_CompanionWalks( edict_t *ent, const vec3_t from, const vec3_t dir )
+{
+	vec3_t to, up, up_to;
+	trace_t tr;
+	VectorMA( from, COF_COMPANION_AHEAD, dir, to );
+	tr = SV_Move( from, ent->v.mins, ent->v.maxs, to, MOVE_NORMAL, ent, false );
+	if( !tr.startsolid && tr.fraction >= 1.0f ) return true;
+	VectorCopy( from, up ); up[2] += COF_COMPANION_STEP;
+	VectorCopy( to, up_to ); up_to[2] += COF_COMPANION_STEP;
+	tr = SV_Move( up, ent->v.mins, ent->v.maxs, up_to, MOVE_NORMAL, ent, false );
+	return !tr.startsolid && tr.fraction >= 1.0f;
+}
+
+// Blocked the way it walked last frame (a door jamb, a corner, a partner): a spot a
+// little to one side from which the way is clear, for the brain to line up with.
+// Pushing straight into a wall, the player code slides too little to get round it.
+static void CoF_CompanionProbe( edict_t *ent, cof_companion_t *c, cof_brain_input_t *in )
+{
+	static const float offsets[] = { 8.0f, 16.0f, 24.0f, 32.0f };
+	vec3_t dir, left, beside;
+	float x = c->out.move_to[0] - ent->v.origin[0], y = c->out.move_to[1] - ent->v.origin[1], length = sqrtf( x * x + y * y );
+	int i, side;
+	if( !c->out.going || !in->alive || in->held || !in->onground || length < 1.0f ) return;
+	VectorSet( dir, x / length, y / length, 0.0f );
+	VectorSet( left, -dir[1], dir[0], 0.0f );
+	if( CoF_CompanionWalks( ent, ent->v.origin, dir )) return;
+	for( i = 0; i < (int)ARRAYSIZE( offsets ); i++ )
+		for( side = 1; side >= -1; side -= 2 )
+		{
+			trace_t tr;
+			VectorMA( ent->v.origin, offsets[i] * (float)side, left, beside );
+			tr = SV_Move( ent->v.origin, ent->v.mins, ent->v.maxs, beside, MOVE_NORMAL, ent, false );
+			if( tr.startsolid || tr.fraction < 1.0f || !CoF_CompanionWalks( ent, beside, dir )) continue;
+			in->side_shift = offsets[i] * (float)side;
+			in->probe_yaw = atan2f( dir[1], dir[0] ) * 57.2957795f;
+			return;
+		}
 }
 
 // The entity of brush model "*N" (a door across a link), or NULL.
@@ -637,10 +693,59 @@ static int CoF_CompanionWeapon( int arms )
 	}
 }
 
-static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_companion_t *c, qboolean bot, cof_brain_input_t *in, cof_retail_arms_t *arms )
+// Other players around it: one in its way to the goal (within reach), and the
+// nearest one closer than personal space (the leader not counted: the brain sees them).
+static void CoF_CompanionPartners( sv_client_t *cl, sv_client_t *leader, cof_companion_t *c, cof_brain_input_t *in )
+{
+	edict_t *ent = cl->edict;
+	float best = COF_BRAIN_PERSONAL;
+	int i;
+	if( c->out.going || leader )
+	{
+		// toward where it was going, or (standing) toward the leader: else the check would
+		// switch itself off the moment it stopped
+		const float *goal = c->out.going ? c->out.goal : leader->edict->v.origin;
+		float x = goal[0] - ent->v.origin[0], y = goal[1] - ent->v.origin[1], length = sqrtf( x * x + y * y );
+		if( length > 1.0f )
+		{
+			vec3_t to;
+			trace_t tr;
+			VectorCopy( ent->v.origin, to );
+			to[0] += x / length * Q_min( length, COF_COMPANION_PARTNER );
+			to[1] += y / length * Q_min( length, COF_COMPANION_PARTNER );
+			tr = SV_Move( ent->v.origin, ent->v.mins, ent->v.maxs, to, MOVE_NORMAL, ent, false );
+			if( tr.fraction < 1.0f && tr.ent && NUM_FOR_EDICT( tr.ent ) >= 1 && NUM_FOR_EDICT( tr.ent ) <= svs.maxclients &&
+				( !leader || tr.ent != leader->edict ))
+				in->partner_block = 1;
+		}
+	}
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *other = &svs.clients[i];
+		float distance;
+		if( other == cl || other == leader || other->state != cs_spawned || !SV_IsValidEdict( other->edict ) || !CoF_CompanionAlive( other->edict )) continue;
+		distance = CoF_BrainDist2D( ent->v.origin, other->edict->v.origin );
+		if( distance >= best ) continue;
+		best = distance;
+		in->crowd = 1;
+		VectorCopy( other->edict->v.origin, in->crowd_pos );
+	}
+}
+
+// Held by the game: frozen, watching another view (a cutscene camera), not walking
+// (a ladder) or going through a door.
+static qboolean CoF_CompanionHeld( sv_client_t *cl )
+{
+	edict_t *ent = cl->edict;
+	return ( ent->v.flags & FL_FROZEN ) || ( cl->pViewEntity && cl->pViewEntity != ent ) || ent->v.movetype != MOVETYPE_WALK ||
+		SV_CoF_PartyInDoor( cl );
+}
+
+static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_companion_t *c, qboolean bot, int rank, cof_brain_input_t *in, cof_retail_arms_t *arms )
 {
 	edict_t *ent = cl->edict, *threat;
 	memset( in, 0, sizeof( *in ));
+	in->rank = rank;
 	in->now = sv.time;
 	in->frametime = bound( 0.001f, (float)sv.frametime, 0.1f );
 	VectorCopy( ent->v.origin, in->self );
@@ -679,6 +784,7 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 		in->leader_alive = CoF_CompanionAlive( le );
 		in->leader_health = (int)le->v.health;
 		in->leader_down = !in->leader_alive && SV_CoF_RetailRevivable( leader );
+		in->leader_held = in->leader_alive && CoF_CompanionHeld( leader );
 		in->leader_visible = CoF_CompanionSees( in->eye, in->leader_eye, ent, le );
 		if( in->leader_alive && fabs( le->v.origin[2] - ent->v.origin[2] ) < 40.0f )
 		{
@@ -691,8 +797,11 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 	}
 	in->stay = c->stay;
 	VectorCopy( c->stay_pos, in->stay_pos );
+	c->leader_held = in->leader_held;
 	CoF_CompanionAhead( ent, c, in );
 	CoF_CompanionNavigate( cl, c, in );
+	CoF_CompanionProbe( ent, c, in );
+	CoF_CompanionPartners( cl, leader, c, in );
 	if(( threat = CoF_CompanionThreat( ent, in->eye, c->stay ? c->stay_pos : in->leader ? leader->edict->v.origin : NULL, in->threat_pos )) != NULL )
 	{
 		in->threat = NUM_FOR_EDICT( threat );
@@ -709,8 +818,11 @@ static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companio
 	{
 	case COF_BRAIN_ACT_TELEPORT:
 		c->route_length = 0; // planned from where it stood
-		if( leader && SV_CoF_PartyPlaceBehind( cl, leader->edict ))
-			Con_Printf( "cofstory phase=companion-teleport userid=%d leader=%d reason=%s\n", cl->userid, leader->userid, c->out.why ? c->out.why : "?" );
+		if( !c->place_pending ) c->place_since = sv.time;
+		c->place_pending = true;
+		c->place_near = c->out.place;
+		VectorCopy( c->out.place_at, c->place_at );
+		c->place_why = c->out.why;
 		break;
 	case COF_BRAIN_ACT_OPEN_DOOR:
 		// The game's own Use with the AI as the user, as a person's +use would, but
@@ -760,6 +872,31 @@ static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companio
 		c->mode = c->out.mode;
 		Con_Printf( "cofstory phase=companion-mode userid=%d mode=%s\n", cl->userid, c->mode >= 0 && c->mode < (int)ARRAYSIZE( cof_companion_modes ) ? cof_companion_modes[c->mode] : "?" );
 	}
+}
+
+// A teleport the brain asked for: near where the game put the leader (a door exit)
+// or behind them, always out of the player's sight; with no such spot it asks again
+// every frame, and after a while takes the least seen one. Never during a cutscene.
+static void CoF_CompanionPlace( sv_client_t *cl, sv_client_t *leader, cof_companion_t *c, int rank )
+{
+	edict_t *ent = cl->edict;
+	vec3_t at;
+	qboolean anywhere;
+	if( !c->place_pending ) return;
+	if( !leader || !SV_IsValidEdict( leader->edict ) || !CoF_CompanionAlive( ent ) || !CoF_CompanionAlive( leader->edict ))
+	{
+		c->place_pending = false;
+		return;
+	}
+	if( c->leader_held ) return;
+	anywhere = sv.time - c->place_since >= COF_COMPANION_PLACE_PATIENCE;
+	VectorCopy( ent->v.origin, at );
+	if( !SV_CoF_PartyPlaceUnseen( cl, leader->edict, c->place_near ? c->place_at : NULL, rank, anywhere )) return;
+	c->place_pending = false;
+	Con_Printf( "cofstory phase=companion-teleport userid=%d leader=%d reason=%s at=%.0f,%.0f,%.0f leader_at=%.0f,%.0f,%.0f to=%.0f,%.0f,%.0f%s\n",
+		cl->userid, leader->userid, c->place_why ? c->place_why : "?", at[0], at[1], at[2],
+		leader->edict->v.origin[0], leader->edict->v.origin[1], leader->edict->v.origin[2],
+		ent->v.origin[0], ent->v.origin[1], ent->v.origin[2], anywhere ? " seen=maybe" : "" );
 }
 
 // What the AI looks after besides its decisions: standing up after a hard
@@ -904,7 +1041,7 @@ static void CoF_CompanionKeepBots( sv_client_t *leader )
 void SV_CoF_CompanionFrame( void )
 {
 	sv_client_t *leader;
-	int i, rank;
+	int i, rank, behind;
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	if( cof_companion_generation != svs.spawncount )
 	{
@@ -943,7 +1080,8 @@ void SV_CoF_CompanionFrame( void )
 		if( !c->driving && human ) Con_Printf( "cofstory phase=companion-driving userid=%d\n", cl->userid );
 		c->driving = true;
 		// a driven person's client keeps the first person; bots share the people out
-		mine = bot ? CoF_CompanionLeaderFor( cl, rank++ ) : leader;
+		behind = 0;
+		mine = bot ? CoF_CompanionLeaderFor( cl, rank++, &behind ) : leader;
 		if(( mine ? mine->userid : 0 ) != c->leader_userid )
 		{
 			// another person: their trail starts now (the old one leads to someone else)
@@ -952,7 +1090,7 @@ void SV_CoF_CompanionFrame( void )
 			c->brain.following = 0;
 			c->route_length = 0;
 		}
-		CoF_CompanionPerceive( cl, mine, c, bot, &in, &arms );
+		CoF_CompanionPerceive( cl, mine, c, bot, behind, &in, &arms );
 		CoF_BrainThink( &c->brain, &in, &c->out );
 		if( bot )
 		{
@@ -962,6 +1100,7 @@ void SV_CoF_CompanionFrame( void )
 			if( c->brain.medic_after > cof_companion_medic_after ) cof_companion_medic_after = c->brain.medic_after;
 		}
 		CoF_CompanionAct( cl, mine, c, &arms );
+		CoF_CompanionPlace( cl, mine, c, behind );
 		CoF_CompanionUpkeep( cl, c, bot, &arms, in.alive );
 		if( human ) c->taps |= c->out.buttons & COF_BRAIN_TAPS;
 		if( in.threat || c->calm_since == 0.0 ) c->calm_since = sv.time;

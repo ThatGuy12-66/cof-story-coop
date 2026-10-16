@@ -13,8 +13,11 @@ qboolean SV_CoF_PartyInExit( const edict_t *player, const int *models, int count
 // Something can still ask for this exit by touch: its own trigger_changelevel
 // (not use-only), or a live trigger that fires it by name.
 qboolean SV_CoF_PartyExitRefires( const int *models, int count );
-// Place mover behind leader (out of their view where possible), facing their way.
-qboolean SV_CoF_PartyPlaceBehind( sv_client_t *mover, edict_t *leader );
+// Place an AI companion out of the leader's sight, near exit_at (a door exit) or behind them,
+// rank rows back, facing their way; false when no spot is out of sight (anywhere: the least seen).
+qboolean SV_CoF_PartyPlaceUnseen( sv_client_t *mover, edict_t *leader, const vec3_t exit_at, int rank, qboolean anywhere );
+// Going through an inter_door (the game holds the player meanwhile).
+qboolean SV_CoF_PartyInDoor( const sv_client_t *cl );
 // The ending door holds a partner (frozen, blacked out): saves wait for it.
 qboolean SV_CoF_PartyHolding( void );
 // cof_warp and other commands the story layer handles itself; true when handled.

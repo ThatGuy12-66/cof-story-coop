@@ -27,6 +27,9 @@
 // another player's; boxes are padded 1 unit, so centers 34 apart still touch.
 #define COF_PARTY_JOIN_WAIT 30.0
 #define COF_PARTY_JOIN_NEAR 128.0f
+#define COF_PARTY_UNSEEN_ANGLE 75.0f // an AI companion is placed at least this far off where the player looks...
+#define COF_PARTY_UNSEEN_MIN 48.0f // ...and never closer than this
+#define COF_PARTY_SEEN_LEAST 30.0f // with no spot out of sight (after a wait): at least this far off the view axis
 #define COF_PARTY_JOIN_WANDER 64.0f
 #define COF_PARTY_TELEPORT_MIN 96.0f
 #define COF_PARTY_TELEPORT_WAIT 10.0
@@ -671,36 +674,107 @@ static qboolean CoF_PartyLandingWithin( sv_client_t *cl, edict_t *owner, const v
 	return false;
 }
 
-// The AI companion catching up: a spot behind the leader (out of their view
-// where possible), else anywhere beside them; facing the way they face.
-qboolean SV_CoF_PartyPlaceBehind( sv_client_t *mover, edict_t *leader )
+// Where a player looks from, and which way: their eyes, or the camera they watch.
+static void CoF_PartyView( edict_t *leader, vec3_t eye, float *yaw )
+{
+	int i;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->edict != leader || !cl->pViewEntity || cl->pViewEntity == leader || !SV_IsValidEdict( cl->pViewEntity )) continue;
+		VectorCopy( cl->pViewEntity->v.origin, eye );
+		*yaw = cl->pViewEntity->v.angles[1];
+		return;
+	}
+	VectorAdd( leader->v.origin, leader->v.view_ofs, eye );
+	*yaw = leader->v.v_angle[1];
+}
+
+// How far off the view axis a spot is, in degrees (0 dead ahead, 180 behind).
+static float CoF_PartyOffView( const vec3_t eye, float yaw, const vec3_t spot )
+{
+	float off = atan2f( spot[1] - eye[1], spot[0] - eye[0] ) * 57.2957795f - yaw;
+	while( off > 180.0f ) off -= 360.0f;
+	while( off < -180.0f ) off += 360.0f;
+	return fabsf( off );
+}
+
+// The eye sees a body standing at spot (its head or its feet).
+static qboolean CoF_PartySees( const vec3_t eye, const vec3_t spot, edict_t *ignore )
+{
+	vec3_t zero = { 0, 0, 0 }, end;
+	trace_t tr;
+	int i;
+	for( i = 0; i < 2; i++ )
+	{
+		VectorCopy( spot, end );
+		end[2] += i ? -28.0f : 28.0f;
+		tr = SV_Move( eye, zero, zero, end, MOVE_NOMONSTERS, ignore, false );
+		if( !tr.startsolid && tr.fraction >= 1.0f ) return true;
+	}
+	return false;
+}
+
+// The AI companion catching up (or coming out of a door after the leader: exit_at is
+// where the game put them): a spot out of the player's sight, never on top of them.
+// Behind the leader first (rank k starts k rows further back), then a ring round
+// them; around exit_at first when given. Nothing out of sight: false, and the caller
+// asks again; with anywhere, the least seen spot, never in the middle of the view.
+// Facing the way the leader faces.
+qboolean SV_CoF_PartyPlaceUnseen( sv_client_t *mover, edict_t *leader, const vec3_t exit_at, int rank, qboolean anywhere )
 {
 	static const float behind[][2] = { { -64, 0 }, { -64, 40 }, { -64, -40 }, { -96, 0 }, { -40, 48 }, { -40, -48 } };
-	vec3_t feet, center, point, landing, angles = { 0, 0, 0 };
-	float yaw, c, s;
+	static const float ring_angle[] = { 180, 150, -150, 120, -120, 90, -90, 60, -60 };
+	static const float ring_radius[] = { 64, 96, 128, 160 };
+	const int behinds = (int)ARRAYSIZE( behind ), angles_n = (int)ARRAYSIZE( ring_angle );
+	vec3_t eye, center, point, landing, best_spot, angles = { 0, 0, 0 };
+	float yaw, view, c, s, best = -1.0f;
 	byte *pv = CoF_PartyPlayer( mover );
-	int i;
+	int pass, i;
 	if( !pv || !SV_IsValidEdict( leader ) || !CoF_PartyVectorValid( leader->v.origin ) ||
 		!CoF_PartyVectorValid( mover->edict->v.mins ) || !CoF_PartyVectorValid( mover->edict->v.maxs )) return false;
+	if( exit_at && !CoF_PartyVectorValid( exit_at )) exit_at = NULL;
+	CoF_PartyView( leader, eye, &view );
 	yaw = leader->v.angles[1] / 57.2957795f;
 	c = cosf( yaw ); s = sinf( yaw );
-	VectorCopy( leader->v.origin, feet );
-	feet[2] += mover->edict->v.mins[2] - 1.0f;
-	VectorCopy( feet, center );
-	center[2] -= mover->edict->v.mins[2];
-	center[2] += 1.0f;
 	angles[1] = leader->v.angles[1];
-	for( i = 0; i < (int)ARRAYSIZE( behind ); i++ )
+	for( pass = exit_at ? 0 : 1; pass < 2; pass++ )
 	{
-		VectorCopy( center, point );
-		point[0] += behind[i][0] * c - behind[i][1] * s;
-		point[1] += behind[i][0] * s + behind[i][1] * c;
-		if( CoF_PartyLandingPoint( mover, leader, center, point, landing ))
-			return CoF_PartyMoveEdict( mover->edict, pv, landing, angles );
+		VectorCopy( pass ? leader->v.origin : exit_at, center );
+		for( i = 0; i < behinds + angles_n * (int)ARRAYSIZE( ring_radius ); i++ )
+		{
+			float x, y, off;
+			if( i < behinds ) { x = behind[i][0] - 40.0f * (float)rank; y = behind[i][1]; }
+			else
+			{
+				int k = i - behinds;
+				float a = ring_angle[k % angles_n] / 57.2957795f, r = ring_radius[k / angles_n];
+				if( fabsf( ring_angle[k % angles_n] ) < 90.0f && !anywhere ) continue; // ahead of them: only as a last resort
+				x = r * cosf( a ); y = r * sinf( a );
+			}
+			VectorCopy( center, point );
+			point[0] += x * c - y * s;
+			point[1] += x * s + y * c;
+			if( !CoF_PartyLandingPoint( mover, leader, center, point, landing )) continue;
+			if( CoF_PartyDistanceSquared( landing, leader->v.origin ) < COF_PARTY_UNSEEN_MIN * COF_PARTY_UNSEEN_MIN ) continue;
+			off = CoF_PartyOffView( eye, view, landing );
+			if( off >= COF_PARTY_UNSEEN_ANGLE || !CoF_PartySees( eye, landing, leader ))
+				return CoF_PartyMoveEdict( mover->edict, pv, landing, angles );
+			if( anywhere && off >= COF_PARTY_SEEN_LEAST && off > best )
+			{
+				best = off;
+				VectorCopy( landing, best_spot );
+			}
+		}
 	}
-	if( CoF_PartyLanding( mover, leader, feet, landing ))
-		return CoF_PartyMoveEdict( mover->edict, pv, landing, angles );
+	if( best >= 0.0f ) return CoF_PartyMoveEdict( mover->edict, pv, best_spot, angles );
 	return false;
+}
+
+qboolean SV_CoF_PartyInDoor( const sv_client_t *cl )
+{
+	byte *pv = cl ? CoF_PartyPlayer( (sv_client_t *)cl ) : NULL;
+	return pv && pv[COF_PARTY_DOOR_FLAG];
 }
 
 // Mirrors retail CBaseEntity::Intersects on engine-padded absboxes (VA 10017D80).
