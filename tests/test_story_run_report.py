@@ -41,6 +41,25 @@ class StoryRunReportTests(unittest.TestCase):
         self.assertEqual(session['transitions'], [])
         self.assertEqual(len(session['warnings']), 1)
 
+    def test_merged_maps_count_as_their_original_maps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'host.log'
+            log.write_text(
+                # a door between two sections: instant, both movers in one transition, original names
+                '[2026:10:16|20:00:00] [cof-story-transition] phase=section-move userid=1 from=c_apartment3 to=c_apartment4 landmark=land1 origin=1,2,3\n'
+                '[2026:10:16|20:00:00] [cof-story-transition] phase=section-move userid=2 from=c_apartment3 to=c_apartment4 landmark=land1 origin=4,5,6\n'
+                # a level change out of one merged file into another: reported by the original maps
+                '[2026:10:16|20:05:00] [cof-sections] changelevel from=c_apartment5 to=c_apartment1 landmark=land5 file=cm_apartment1 dest=land5\n'
+                '[2026:10:16|20:05:01] [cof-story-transition] phase=capture generation=4 slot=1 userid=1 source=cm_apartment3 destination=cm_apartment1 landmark=land5\n'
+                '[2026:10:16|20:05:01] [cof-story-transition] phase=restore generation=4 slot=1 userid=1 map=cm_apartment1 origin=1,2,3\n'
+                '[2026:10:16|20:05:02] [cof-story-transition] phase=ready generation=4 map=cm_apartment1\n')
+            session = rr.parse_log(log)
+        moves = [(t['src'], t['dst'], t['landmark'], len(t['players']), t['ready']) for t in session['transitions']]
+        self.assertEqual(moves, [('c_apartment3', 'c_apartment4', 'land1', 2, True),
+                                 ('c_apartment5', 'c_apartment1', 'land5', 1, True)])
+        self.assertEqual(session['first_map'], 'c_apartment3')
+        self.assertEqual(session['party']['section-move'], 2)
+
     def test_parse_counts_finished_transitions_and_redacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / 'host.log'

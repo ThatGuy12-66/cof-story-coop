@@ -27,6 +27,10 @@ STAMP = r'(?:\[(?P<time>[\d:|]+)\]\s*)?'
 CAPTURE = re.compile(STAMP + r'\[cof-story-transition\] phase=capture generation=(?P<gen>\d+) slot=\d+ userid=(?P<userid>\d+) source=(?P<src>\S+) destination=(?P<dst>\S+) landmark=(?P<landmark>\S*)')
 RESTORE = re.compile(STAMP + r'\[cof-story-transition\] phase=restore generation=(?P<gen>\d+) slot=\d+ userid=(?P<userid>\d+) map=(?P<map>\S+) origin=(?P<origin>\S+)')
 READY = re.compile(STAMP + r'\[cof-story-transition\] phase=ready generation=(?P<gen>\d+) map=(?P<map>\S+)')
+# Merged story maps: a door between two sections of one map file (instant, no capture), and a level change
+# into or out of a merged file, both with the original map and landmark names.
+SECTION_MOVE = re.compile(STAMP + r'\[cof-story-transition\] phase=section-move userid=(?P<userid>\d+) from=(?P<src>\S+) to=(?P<dst>\S+) landmark=(?P<landmark>\S*) origin=(?P<origin>\S+)')
+SECTION_CHANGE = re.compile(STAMP + r'\[cof-sections\] changelevel from=(?P<src>\S+) to=(?P<dst>\S+) landmark=(?P<landmark>\S*) file=(?P<file>\S+) dest=(?P<dest>\S*)')
 REJECTED = re.compile(STAMP + r'.*\[cof-story-transition\] rejected: (?P<reason>.*)')
 PARTY = re.compile(STAMP + r'cofstory phase=(?P<phase>[a-z-]+)(?P<rest>.*)')
 FATAL = re.compile(r'Host_Error|Sys_Error|Stopped with reason "crashed"|Story transition .*(failed|cannot|did not)|Level transition ERROR', re.I)
@@ -83,15 +87,29 @@ def parse_log(path):
     transitions = collections.OrderedDict()
     problems, warnings, party = [], [], collections.Counter()
     first_map = None
+    originals = {}   # (merged file, landmark there) -> the original (src, dst, landmark) of a level change
     text = Path(path).read_text(encoding='latin-1', errors='replace')
     for raw in text.splitlines():
         line = raw.strip()
-        if m := CAPTURE.search(line):
+        if m := SECTION_MOVE.search(line):
+            src, dst = m['src'].lower(), m['dst'].lower()
+            t = transitions.setdefault(('move', m['time'], src, dst, m['landmark']), {
+                'src': src, 'dst': dst, 'landmark': m['landmark'], 'time': m['time'], 'players': set(),
+                'restored': {}, 'ready': True, 'rejected': None})
+            t['players'].add(int(m['userid']))
+            t['restored'][int(m['userid'])] = m['origin']
+            party['section-move'] += 1
+            first_map = first_map or src
+        elif m := SECTION_CHANGE.search(line):
+            originals[(m['file'].lower(), m['dest'])] = (m['src'].lower(), m['dst'].lower(), m['landmark'])
+        elif m := CAPTURE.search(line):
+            src, dst, landmark = originals.get((m['dst'].lower(), m['landmark']),
+                                               (m['src'].lower(), m['dst'].lower(), m['landmark']))
             t = transitions.setdefault(int(m['gen']), {
-                'src': m['src'].lower(), 'dst': m['dst'].lower(), 'landmark': m['landmark'],
+                'src': src, 'dst': dst, 'landmark': landmark,
                 'time': m['time'], 'players': set(), 'restored': {}, 'ready': False, 'rejected': None})
             t['players'].add(int(m['userid']))
-            first_map = first_map or m['src'].lower()
+            first_map = first_map or src
         elif m := RESTORE.search(line):
             if int(m['gen']) in transitions:
                 transitions[int(m['gen'])]['restored'][int(m['userid'])] = m['origin']
