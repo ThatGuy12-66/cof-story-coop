@@ -87,6 +87,7 @@ typedef struct
 	int avoid[COF_COMPANION_AVOID]; // links (+1) it got stuck on
 	double avoid_until[COF_COMPANION_AVOID];
 	int avoid_next;
+	int leader_userid; // whom it looked after last frame (a new one starts a new trail)
 } cof_companion_t;
 
 static cof_companion_t cof_companions[MAX_CLIENTS];
@@ -147,6 +148,29 @@ static sv_client_t *CoF_CompanionLeader( void )
 			return cl;
 	}
 	return NULL;
+}
+
+// Whom a bot looks after: the downed person nearest to it (CPR comes first), else the
+// people in turn: the bot of rank k follows person k (counted again if there are fewer).
+static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank )
+{
+	sv_client_t *people[MAX_CLIENTS], *down = NULL;
+	float best = 0.0f;
+	int i, n = 0;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
+			( cof_companion_drive && cof_companion_drive->value && cof_companions[i].driving )) continue;
+		people[n++] = cl;
+		if( !CoF_CompanionAlive( cl->edict ) && SV_CoF_RetailRevivable( cl ))
+		{
+			float distance = (float)VectorDistance( cl->edict->v.origin, self->edict->v.origin );
+			if( !down || distance < best ) { down = cl; best = distance; }
+		}
+	}
+	if( down ) return down;
+	return n ? people[rank % n] : NULL;
 }
 
 // A person is alive in the game. The game declares "Game over" when the last
@@ -880,7 +904,7 @@ static void CoF_CompanionKeepBots( sv_client_t *leader )
 void SV_CoF_CompanionFrame( void )
 {
 	sv_client_t *leader;
-	int i;
+	int i, rank;
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	if( cof_companion_generation != svs.spawncount )
 	{
@@ -900,9 +924,9 @@ void SV_CoF_CompanionFrame( void )
 	if( !leader || CoF_CompanionAlive( leader->edict )) cof_companion_down_told = 0;
 	if( cof_companion_medic_slot >= 0 && !( cof_companions[cof_companion_medic_slot].bot && svs.clients[cof_companion_medic_slot].state == cs_spawned ))
 		cof_companion_medic_slot = -1;
-	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	for( i = 0, rank = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
-		sv_client_t *cl = &svs.clients[i];
+		sv_client_t *cl = &svs.clients[i], *mine;
 		cof_companion_t *c = &cof_companions[i];
 		cof_brain_input_t in;
 		cof_retail_arms_t arms;
@@ -918,7 +942,17 @@ void SV_CoF_CompanionFrame( void )
 		}
 		if( !c->driving && human ) Con_Printf( "cofstory phase=companion-driving userid=%d\n", cl->userid );
 		c->driving = true;
-		CoF_CompanionPerceive( cl, leader, c, bot, &in, &arms );
+		// a driven person's client keeps the first person; bots share the people out
+		mine = bot ? CoF_CompanionLeaderFor( cl, rank++ ) : leader;
+		if(( mine ? mine->userid : 0 ) != c->leader_userid )
+		{
+			// another person: their trail starts now (the old one leads to someone else)
+			c->leader_userid = mine ? mine->userid : 0;
+			c->brain.count = c->brain.cursor = c->brain.have_sample = c->brain.broken = 0;
+			c->brain.following = 0;
+			c->route_length = 0;
+		}
+		CoF_CompanionPerceive( cl, mine, c, bot, &in, &arms );
 		CoF_BrainThink( &c->brain, &in, &c->out );
 		if( bot )
 		{
@@ -927,7 +961,7 @@ void SV_CoF_CompanionFrame( void )
 			else if( cof_companion_medic_slot == i ) cof_companion_medic_slot = -1;
 			if( c->brain.medic_after > cof_companion_medic_after ) cof_companion_medic_after = c->brain.medic_after;
 		}
-		CoF_CompanionAct( cl, leader, c, &arms );
+		CoF_CompanionAct( cl, mine, c, &arms );
 		CoF_CompanionUpkeep( cl, c, bot, &arms, in.alive );
 		if( human ) c->taps |= c->out.buttons & COF_BRAIN_TAPS;
 		if( in.threat || c->calm_since == 0.0 ) c->calm_since = sv.time;
