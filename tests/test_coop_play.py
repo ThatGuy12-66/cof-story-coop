@@ -199,6 +199,15 @@ class HostWatchTests(unittest.TestCase):
         now[0] = 91
         self.assertIn('another program', watch.poll(True))
 
+    def test_a_missed_answer_after_the_game_is_up_keeps_the_last_status(self):
+        # a level change can make one status query time out: it is not the game starting again
+        net = FakeNet()
+        watch = play.HostWatch(27015, lan_only=True, net=net)
+        up = watch.poll(True)
+        self.assertIn('1/4', up)
+        net.up = False
+        self.assertEqual(watch.poll(True), up)
+
     def test_closing_the_app_while_hosting_asks_first(self):
         # closing removes the router port, which can drop friends who are still playing
         self.assertIsNone(play.close_warning(None))

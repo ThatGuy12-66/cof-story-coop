@@ -235,7 +235,7 @@ class HostWatch:
         self.started = clock()
         self.up = self.closed = False
         self.mapping = None
-        self.code = self.address = self.router = ""
+        self.code = self.address = self.router = self.last = ""
 
     def open_router(self) -> None:
         if self.lan_only:
@@ -264,12 +264,15 @@ class HostWatch:
         try:
             info = self.net.query_info(self.net.Endpoint("127.0.0.1", self.port), timeout=1)
         except self.net.NetworkError:
-            if not self.up and self.clock() - self.started > self.wait:
+            if self.up:   # a level change can make one query time out
+                return self.last
+            if self.clock() - self.started > self.wait:
                 return (f"The game has not answered on UDP {self.port}. If it showed an error, another program "
                         "may be using that port: close it, or pick another port.")
             return "Starting the game..."
         self.up = True
-        return f"Your game is up: {info.get('numcl', '?')}/{info.get('maxcl', '?')} players."
+        self.last = f"Your game is up: {info.get('numcl', '?')}/{info.get('maxcl', '?')} players."
+        return self.last
 
     def close(self) -> None:
         if self.closed:

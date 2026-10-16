@@ -18,6 +18,7 @@ from tools import coop_play as play
 from tools import friend_setup as setup_lib
 
 DEFAULT_COPY = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CoF-Story-Coop"
+COPY_POINTER = DEFAULT_COPY.with_name("CoF-Story-Coop.txt")   # where setup last made a copy
 
 
 def payload_dir(explicit=None) -> Path:
@@ -57,18 +58,36 @@ def start_game(root: Path, args: list[str]) -> subprocess.Popen:
                             stderr=subprocess.DEVNULL, creationflags=0x08000000)   # CREATE_NO_WINDOW
 
 
-def where_to_start(exe_dir: Path, default_copy: Path, build: int):
+def remember_copy(copy: Path, pointer: Path = COPY_POINTER) -> None:
+    """A newer package finds a copy set up outside the default folder through this note."""
+    try:
+        pointer.write_text(str(Path(copy).resolve()), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def remembered_copy(pointer: Path) -> Path | None:
+    try:
+        return Path(pointer.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def where_to_start(exe_dir: Path, default_copy: Path, build: int, pointer: Path | None = COPY_POINTER):
     """'main' (a copy to play from), 'update' (an older copy), 'newer' (a copy newer than this app) or 'setup'."""
     if setup_lib.installed_state(exe_dir):
         return "main", Path(exe_dir)
-    state = setup_lib.installed_state(default_copy)
+    copy, state = Path(default_copy), setup_lib.installed_state(default_copy)
+    if not state and pointer is not None:
+        copy = remembered_copy(pointer)
+        state = setup_lib.installed_state(copy) if copy else None
     if not state:
         return "setup", None
     if state["build"] < build:
-        return "update", Path(default_copy)
+        return "update", copy
     if state["build"] > build:
-        return "newer", Path(default_copy)
-    return "main", Path(default_copy)
+        return "newer", copy
+    return "main", copy
 
 
 class App:
@@ -190,12 +209,16 @@ class App:
             status.set("Setup stopped. Your Steam game is unchanged.")
             self.error(error)
 
+        def made(copy):
+            remember_copy(copy)
+            self.show_main(copy)
+
         def start():
             button.configure(state="disabled")
             src, dst = Path(source.get()), Path(destination.get())
             self.work(lambda: setup_lib.setup(src, dst, self.payload, exe=self.exe,
                                               progress=lambda text, part: self.messages.put((show_progress, (text, part)))),
-                      self.show_main, stopped)
+                      made, stopped)
         button.configure(command=start)
         self.work(setup_lib.steam_candidates, found, lambda _: found([]))
 
@@ -459,7 +482,7 @@ def main(argv=None) -> int:
             else:
                 setup_lib.update(Path(args.update), payload, exe=this_exe(), shortcuts=not args.no_shortcuts)
             return 0
-        open_window(payload, this_exe(), args.copy)
+        open_window(payload, this_exe(), Path(args.copy).resolve() if args.copy else None)
         return 0
     except (OSError, ValueError, RuntimeError, AssertionError) as error:
         if sys.stderr:
