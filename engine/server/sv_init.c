@@ -21,6 +21,7 @@ GNU General Public License for more details.
 #include "pm_local.h"
 #include "sv_cof_state.h"
 #include "sv_cof_inventory12.h"
+#include "sv_cof_story.h"
 
 #if XASH_LOW_MEMORY != 2
 int SV_UPDATE_BACKUP = SINGLEPLAYER_BACKUP;
@@ -599,6 +600,7 @@ void SV_ActivateServer( int runPhysics )
 	svgame.globals->time = sv.time;
 	SV_CoF_StateActivate();
 	SV_CoF_Inventory12Activate();
+	SV_CoF_WeaponModelActivate();
 	svgame.dllFuncs.pfnServerActivate( svgame.edicts, svgame.numEntities, svs.maxclients );
 
 	SV_SetStringArrayMode( true );

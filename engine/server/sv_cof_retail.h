@@ -56,6 +56,8 @@ qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname );
 // After `inventorydualwield`: switch to the weapon_dualweapon the game just built
 // for this player (multiplayer rules never do). True when a switch was started.
 qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl );
+// The item in hand (its classname) and, for weapon_dualweapon, the weapon id in each hand.
+qboolean SV_CoF_RetailHeld( sv_client_t *cl, char *classname, size_t size, int *right_hand, int *left_hand );
 // A companion bot never runs dry: the game's own infinite-ammo switch, and a
 // magazine in reserve for every gun it carries (a syringe for the syringe).
 void SV_CoF_RetailSupply( sv_client_t *cl );

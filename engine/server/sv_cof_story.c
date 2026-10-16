@@ -344,6 +344,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_SessionFrame();
 	SV_CoF_TraceFrame();
 	SV_CoF_Inventory12Frame();
+	SV_CoF_WeaponModelFrame();
 }
 
 void SV_CoF_StoryShutdown( void )

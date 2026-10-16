@@ -558,6 +558,29 @@ qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl )
 	return false;
 }
 
+qboolean SV_CoF_RetailHeld( sv_client_t *cl, char *classname, size_t size, int *right_hand, int *left_hand )
+{
+	byte *player = CoF_RetailStoryPlayer( cl ), *active;
+	int i, first, second;
+	if( !player || !classname || !size ) return false;
+	memcpy( &active, player + COF_RETAIL_ACTIVE_ITEM, sizeof( active ));
+	memcpy( &first, player + COF_RETAIL_DUAL_LEFT, sizeof( first ));
+	memcpy( &second, player + COF_RETAIL_DUAL_RIGHT, sizeof( second ));
+	if( !active ) return false;
+	// the item's own edict, by comparing pointers: the game's pointer is never followed
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *e = SV_EdictNum( i );
+		if( !SV_IsValidEdict( e ) || e->pvPrivateData != active ) continue;
+		Q_strncpy( classname, SV_GetString( e->v.classname ), size );
+		// StartDualWield puts the light second: Simon holds it in his left hand, the other item in his right
+		if( right_hand ) *right_hand = first;
+		if( left_hand ) *left_hand = second;
+		return true;
+	}
+	return false;
+}
+
 void SV_CoF_RetailSupply( sv_client_t *cl )
 {
 	cof_retail_carried_t carried[COF_RETAIL_CARRIED];
