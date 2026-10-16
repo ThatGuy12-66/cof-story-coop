@@ -1027,6 +1027,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		Info_SetValueForKey( s, "gamedir", GI->gamefolder, sizeof( s ));
 		Info_SetValueForKey( s, "password", SV_HavePassword() ? "1" : "0", sizeof( s ));
 		if( build[0] ) Info_SetValueForKey( s, "cofbuild", build, sizeof( s )); // story co-op: the tester app checks it before a join
+		if( build[0] ) Info_SetValueForKeyf( s, "bots", sizeof( s ), "%i", bots ); // ...and shows the AI companions in its status
 
 		// write host last so we can try to cut off too long hostnames
 		// TODO: value size limit for infostrings
