@@ -102,6 +102,18 @@ def reference_problems(members: list, sections: list) -> list:
     return out
 
 
+def origin_brush_problems(members: list) -> list:
+    """Brush entities whose geometry is local to their origin (origin brushes), in a member that moves: the merger
+    moves every vertex of a moved member and the engine moves every origin, so they would move twice."""
+    out = []
+    for name, ents in members[1:]:
+        for e in ents:
+            model, origin = ent_get(e, 'model', ''), ent_get(e, 'origin')
+            if model.startswith('*') and origin and any(float(v) for v in origin.split()[:3] if number(v)):
+                out.append(f'{name}: {ent_get(e, "classname")} {model} has an origin brush ({origin}); not supported yet')
+    return out
+
+
 def globalname_problems(members: list) -> list:
     seen = {}
     for name, ents in members:
@@ -175,6 +187,7 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     if any(f != fogs[0] for f in fogs[1:]):
         report.problems.append('env_fog differs between members')
     report.problems += globalname_problems(named)
+    report.problems += origin_brush_problems(named)
     report.problems += reference_problems(named, sections)
 
     landmarks = [[ent_get(e, 'targetname') for e in x.ents if ent_get(e, 'classname') == 'info_landmark'] for x in maps]

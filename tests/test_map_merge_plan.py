@@ -66,6 +66,14 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertIn('enemyname', found[0])
 
+    def test_origin_brush_entity_in_a_moved_member_is_refused(self):
+        # its geometry is local to its origin: moving the section's geometry and its origin would move it twice
+        members = [('c_a', [ent(classname='func_door_rotating', model='*1', origin='10 20 30')]),
+                   ('c_b', [ent(classname='func_rotating', model='*2', origin='0 0 64'), ent(classname='func_wall', model='*3')])]
+        found = plan.origin_brush_problems(members)
+        self.assertEqual(len(found), 1)
+        self.assertIn('c_b', found[0])
+
     def test_shared_globalname_is_refused(self):
         members = [('c_a', [ent(classname='func_door', globalname='lift')]),
                    ('c_b', [ent(classname='func_door', globalname='lift')])]
