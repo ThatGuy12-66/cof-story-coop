@@ -98,6 +98,14 @@ def read_member(maps_dir: Path, group: Group, member: str) -> bytes:
 def build_group(maps_dir: Path, group: Group) -> tuple:
     """(merged BSP bytes, .sections text) from the members in maps_dir."""
     members = [bsp.Bsp.from_bytes(read_member(maps_dir, group, m)) for m in group.members]
+    merged, sections = merge_members(group.name, list(zip(group.members, members)))
+    return bsp.write_bytes(bsp.to_lumps(merged)), rules.to_text(group.name, sections)
+
+
+def merge_members(name: str, named: list) -> tuple:
+    """The merged Bsp and the section rules of (map name, Bsp) members, stacked in order, every pair checked."""
+    names = [m for m, _ in named]
+    members = [x for _, x in named]
     dzs, bounds = [0.0], [(members[0].models[0][2], members[0].models[0][5])]
     lo, hi = bounds[0]
     for b in members[1:]:
@@ -106,7 +114,7 @@ def build_group(maps_dir: Path, group: Group) -> tuple:
         bounds.append((b.models[0][2] + dz, b.models[0][5] + dz))
         lo, hi = min(lo, bounds[-1][0]), max(hi, bounds[-1][1])
     face_styles = [{s for f in x.faces for s in f[5:9]} for x in members]
-    sections = rules.section_rules([(m, x.ents) for m, x in zip(group.members, members)], dzs,
+    sections = rules.section_rules([(m, x.ents) for m, x in zip(names, members)], dzs,
                                    [len(x.models) for x in members], bounds, face_styles)
     current = members[0]
     for k, b in enumerate(members[1:], 1):
@@ -114,9 +122,9 @@ def build_group(maps_dir: Path, group: Group) -> tuple:
         merged = bsp.Bsp.from_bytes(bsp.write_bytes(lumps))
         problems = check.check_pair(current, b, merged, info, sections[k].styles)
         if problems:
-            raise MergeCheckFailed(f'{group.name}: adding {group.members[k]}: ' + '; '.join(problems[:5]))
+            raise MergeCheckFailed(f'{name}: adding {names[k]}: ' + '; '.join(problems[:5]))
         current = merged
-    return bsp.write_bytes(bsp.to_lumps(current)), rules.to_text(group.name, sections)
+    return current, sections
 
 
 def write_checked(path: Path, data: bytes, expected: str) -> str:
