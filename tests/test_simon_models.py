@@ -73,8 +73,34 @@ class SimonModelTests(unittest.TestCase):
             with self.subTest(sequence=native):
                 self.assertEqual(record[32:], donor[32:])
 
+    def test_aim_pitch_bends_the_spine_like_police(self):
+        # The client writes the aim pitch into controller 3. On Simon's Half-Life skeleton that
+        # twisted Bip01 Spine3 sideways; police1 bends Bip01 Spine forward and back instead.
+        police_names = models.bone_names(self.police)
+        police = [c for c in models.bone_controllers(self.police) if c["index"] == 3][0]
+        for data in (self.standard, self.alternate):
+            names = models.bone_names(data)
+            controller = [c for c in models.bone_controllers(data) if c["index"] == 3]
+            self.assertEqual(len(controller), 1)
+            self.assertEqual(names[controller[0]["bone"]], police_names[police["bone"]])
+            self.assertEqual({k: v for k, v in controller[0].items() if k != "bone"},
+                             {k: v for k, v in police.items() if k != "bone"})
+            self.assertEqual((police["type"], police["start"], police["end"]), (0x20, -45.0, 45.0))
+            links = {(names[bone], dof) for bone, dof in models.controller_links(data, 3)}
+            self.assertEqual(links, {("Bip01 Spine", 5)})
+            # The yaw controllers 0-2 stay Simon's own.
+            for index in range(3):
+                self.assertEqual([c for c in models.bone_controllers(data) if c["index"] == index],
+                                 [c for c in models.bone_controllers(self.simon) if c["index"] == index])
+
     def test_original_skeleton_meshes_and_animation_payload_are_byte_exact(self):
         allowed = set(range(8, 76)) | set(range(164, 172)) | set(range(236, 244))
+        bones, bone_offset = struct.unpack_from("<ii", self.simon, 140)
+        controllers, controller_offset = struct.unpack_from("<ii", self.simon, 148)
+        names = models.bone_names(self.simon)
+        for bone in (names.index("Bip01 Spine"), names.index("Bip01 Spine3")):
+            allowed.update(range(bone_offset + 112 * bone + 40, bone_offset + 112 * bone + 64))
+        allowed.update(range(controller_offset, controller_offset + 24 * controllers))
         changed = {i for i, (a, b) in enumerate(zip(self.simon, self.standard)) if a != b}
         self.assertLessEqual(changed, allowed)
         self.assertEqual(hashlib.sha256(self.simon).hexdigest(), models.SIMON_SHA)

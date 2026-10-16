@@ -140,6 +140,25 @@ class FriendSetupTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "incomplete"):
                 friend.inspect_payload(folder)
 
+    def test_models_are_remade_from_the_copys_own_files(self):
+        # An update must replace models made by an older generator (the aim-pitch fix), not keep them.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = root / "cryoffear/models/player/cof_s1/cof_s1.mdl"
+            old.parent.mkdir(parents=True); old.write_bytes(b"old model")
+            made = {"models/player/cof_s1/cof_s1.mdl": b"new model", "models/coop/p_axe.mdl": b"axe",
+                    "model-report.json": b"{}", "previews/standard-jeans.png": b"png"}
+            with mock.patch.object(friend, "generated_models", return_value=made) as generate, \
+                 mock.patch.object(friend, "validate_model") as validate:
+                hashes = friend.make_models(root)
+            generate.assert_called_once_with(root / "cryoffear/models")
+            self.assertEqual(validate.call_count, 2)
+            self.assertEqual(old.read_bytes(), b"new model")
+            self.assertEqual((root / "cryoffear/models/coop/p_axe.mdl").read_bytes(), b"axe")
+            self.assertFalse((root / "cryoffear/model-report.json").exists())
+            self.assertEqual(hashes, {rel: hashlib.sha256(made[rel]).hexdigest()
+                                      for rel in ("models/player/cof_s1/cof_s1.mdl", "models/coop/p_axe.mdl")})
+
     def test_update_lays_the_new_engine_over_and_keeps_saves_settings_models(self):
         with tempfile.TemporaryDirectory() as temp:
             root, exe = Path(temp) / "CoF-Story-Coop", Path(temp) / "new.exe"
@@ -152,18 +171,20 @@ class FriendSetupTests(unittest.TestCase):
             (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test1", "build": 1,
                 "xash_sha256": hashlib.sha256(b"old engine").hexdigest(), "models": models, "source_game": "src"}))
             payload = make_payload(Path(temp) / "payload", b"new engine", build=2)
+            remade = {"models/player/cof_s1/cof_s1.mdl": "1" * 64, "models/coop/p_axe.mdl": "2" * 64}
             with mock.patch.object(friend, "game_is_running", return_value=False), \
                  mock.patch.object(friend.subprocess, "run", side_effect=fake_installer), \
+                 mock.patch.object(friend, "make_models", return_value=remade) as make, \
                  mock.patch.object(friend.art, "generate", return_value=[]) as art:
                 friend.update(root, payload, exe=exe, shortcuts=False)
             self.assertEqual((root / "xash.dll").read_bytes(), b"new engine")
             art.assert_called_once_with(root.resolve())
-            for rel, data in {"SAVE/cofcoop/autosave.cof": b"save", "cryoffear/config.cfg": b"my binds",
-                              "cryoffear/models/player/cof_s1/cof_s1.mdl": b"model"}.items():
+            make.assert_called_once_with(root.resolve())
+            for rel, data in {"SAVE/cofcoop/autosave.cof": b"save", "cryoffear/config.cfg": b"my binds"}.items():
                 self.assertEqual((root / rel).read_bytes(), data, rel)
             self.assertEqual((root / friend.APP_EXE).read_bytes(), b"new app")
             state = friend.installed_state(root)
-            self.assertEqual((state["build"], state["models"]), (2, models))
+            self.assertEqual((state["build"], state["models"]), (2, remade))
             self.assertIn("cof_test_gun 0", (root / "cryoffear/cof_story.cfg").read_text())
 
     def test_update_refuses_while_the_game_runs(self):

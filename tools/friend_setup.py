@@ -237,6 +237,32 @@ def make_art(root: Path) -> None:
         raise RuntimeError(f"The inventory art could not be made: {error}") from None
 
 
+def generated_models(models: Path) -> dict[str, bytes]:
+    """Everything the generators make from a copy's own stock models, keyed by path under cryoffear."""
+    return build_models((models / "cutscene/player.mdl").read_bytes(), (models / "player/police1/police1.mdl").read_bytes(),
+                        {name: (models / "costumes/Sick_Simon" / name).read_bytes() for name, _ in TEXTURES.values()})
+
+
+def make_models(root: Path) -> dict[str, str]:
+    """(Re)make the generated models in a copy from its own files; an update replaces older generator output."""
+    hashes = {}
+    for rel, data in generated_models(root / "cryoffear/models").items():
+        if not rel.endswith(".mdl"):
+            continue
+        validate_model(data)
+        target = root / "cryoffear" / rel
+        reject_links(target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.with_name(target.name + ".partial")
+        partial.write_bytes(data)
+        os.replace(partial, target)
+        expected = hashlib.sha256(data).hexdigest()
+        if digest_file(target) != expected:
+            raise RuntimeError("Generated model verification failed.")
+        hashes[rel] = expected
+    return hashes
+
+
 def default_controls() -> str:
     binds = {"w": "+forward", "s": "+back", "a": "+moveleft", "d": "+moveright", "SPACE": "+jump",
              "CTRL": "+duck", "SHIFT": "+sprint", "ALT": "+dodge", "e": "+use", "r": "+reload",
@@ -336,23 +362,8 @@ def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress
         raise RuntimeError("Installed engine hash differs from the package.")
     if digest_file(destination / "cryoffear/cl_dlls/hl.dll") != STOCK_DLL_SHA:
         raise RuntimeError("The copied retail game DLL changed unexpectedly.")
-    progress("Making both Simon models from your game files", .92)
-    models = destination / "cryoffear/models"
-    generated = build_models((models / "cutscene/player.mdl").read_bytes(), (models / "player/police1/police1.mdl").read_bytes(),
-                             {name: (models / "costumes/Sick_Simon" / name).read_bytes() for name, _ in TEXTURES.values()})
-    model_hashes = {}
-    for rel, data in generated.items():
-        if not rel.endswith(".mdl"):
-            continue
-        validate_model(data)
-        target = destination / "cryoffear" / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("xb") as stream:
-            stream.write(data)
-        expected = hashlib.sha256(data).hexdigest()
-        if digest_file(target) != expected:
-            raise RuntimeError("Generated model verification failed.")
-        model_hashes[rel] = expected
+    progress("Making the Simon and weapon models from your game files", .92)
+    model_hashes = make_models(destination)
     progress("Making the inventory art", .96)
     make_art(destination)
     (destination / "cryoffear/config.cfg").write_text(default_controls() + f'name "{DEFAULT_NAME}"\nsensitivity 4\n', encoding="ascii")
@@ -377,9 +388,11 @@ def update(root: Path, payload: Path, *, exe: Path, progress=lambda *_: None, sh
     run_installer(root)
     if digest_file(root / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
+    progress("Making the Simon and weapon models", .6)
+    models = make_models(root)
     progress("Making the inventory art", .7)
     make_art(root)
-    finish(root, manifest, state["models"], state["source_game"], exe, shortcuts, progress)
+    finish(root, manifest, models, state["source_game"], exe, shortcuts, progress)
     return root
 
 

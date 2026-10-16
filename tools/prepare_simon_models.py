@@ -113,6 +113,48 @@ def validate_model(data):
             "textures": len(textures), "skin_families": families}
 
 
+def bone_names(data):
+    bones, offset = struct.unpack_from("<ii", data, 140)
+    _range(data, offset, bones * 112, "bones")
+    return [data[offset + 112 * i:offset + 112 * i + 32].split(b"\0", 1)[0].decode("ascii") for i in range(bones)]
+
+
+def bone_controllers(data):
+    count, offset = struct.unpack_from("<ii", data, 148)
+    _range(data, offset, count * 24, "bone controllers")
+    keys = ("bone", "type", "start", "end", "rest", "index")
+    return [dict(zip(keys, struct.unpack_from("<iiffii", data, offset + 24 * i))) for i in range(count)]
+
+
+def controller_links(data, index):
+    """(bone, degree of freedom) pairs driven by bone controller `index`."""
+    bones, offset = struct.unpack_from("<ii", data, 140)
+    return [(bone, dof) for bone in range(bones)
+            for dof, value in enumerate(struct.unpack_from("<6i", data, offset + 112 * bone + 40)) if value == index]
+
+
+def copy_controller(model: bytearray, donor: bytes, index):
+    """Give `model` the donor's bone controller `index` (record and bone links), matching bones by name.
+
+    The CoF client writes the aim pitch into controller 3: police1 bends Bip01 Spine forward and back,
+    the Half-Life skeleton Simon comes from twists Bip01 Spine3 sideways."""
+    names, donor_names = bone_names(model), bone_names(donor)
+    record = [c for c in bone_controllers(donor) if c["index"] == index]
+    slots = [i for i, c in enumerate(bone_controllers(model)) if c["index"] == index]
+    if len(record) != 1 or len(slots) != 1:
+        raise ValueError(f"Expected one bone controller {index} in each model")
+    _bones, bone_offset = struct.unpack_from("<ii", model, 140)
+    for bone, dof in controller_links(model, index):
+        struct.pack_into("<i", model, bone_offset + 112 * bone + 40 + 4 * dof, -1)
+    for bone, dof in controller_links(donor, index):
+        target = names.index(donor_names[bone])
+        struct.pack_into("<i", model, bone_offset + 112 * target + 40 + 4 * dof, index)
+    controller = dict(record[0], bone=names.index(donor_names[record[0]["bone"]]))
+    _count, controller_offset = struct.unpack_from("<ii", model, 148)
+    struct.pack_into("<iiffii", model, controller_offset + 24 * slots[0], *(controller[key] for key in
+                     ("bone", "type", "start", "end", "rest", "index")))
+
+
 def mapped_animation(name):
     fixed = {
         "pro": "look_idle", "idle": "idle", "knockout": "die_backwards1",
@@ -171,6 +213,7 @@ def adapt_sequences(simon: bytes, police: bytes, name=MODEL_NAMES[0]):
     if len(encoded_name) >= 64:
         raise ValueError("Model name too long")
     output[8:72] = encoded_name + b"\0" * (64 - len(encoded_name))
+    copy_controller(output, police, 3)
     struct.pack_into("<i", output, 72, len(output))
     struct.pack_into("<ii", output, 164, 85, table)
     struct.pack_into("<ii", output, 236, 0, 0)
