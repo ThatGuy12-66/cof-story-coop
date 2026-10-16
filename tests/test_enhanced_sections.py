@@ -126,6 +126,20 @@ class ServerWiringTests(unittest.TestCase):
         self.assertLess(load.index('SV_SpawnEntities('), load.index('SV_CoF_SectionsEntry()'))
         self.assertLess(load.index('SV_CoF_SectionsEntry()'), load.index('SV_ActivateServer('))
 
+    def test_play_everywhere_sounds_reach_only_their_section(self):
+        multicast = body_of(SERVER / 'sv_game.c', 'static int SV_Multicast(')
+        skip = multicast.index('cof_multicast_section >= 0 && SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section')
+        self.assertLess(skip, multicast.index('SV_CheckClientVisiblity( cl, mask )'))
+        for signature, origin in (('void GAME_EXPORT SV_StartSound(', 'origin'), ('static void GAME_EXPORT pfnEmitAmbientSound(', 'pos')):
+            body = body_of(SERVER / 'sv_game.c', signature)
+            set_at = body.index(f'cof_multicast_section = SV_CoF_SoundSection( attn, flags, {origin} );')
+            self.assertLess(set_at, body.index('SV_Multicast('))
+            self.assertLess(body.index('SV_Multicast('), body.index('cof_multicast_section = -1;'))
+        module = (SERVER / 'sv_cof_sections.c').read_text(encoding='latin-1')
+        sound = module[module.index('int SV_CoF_SoundSection('):]
+        self.assertIn('attn > 0.0f', sound[:400])
+        self.assertIn('SND_STOP', sound[:400])
+
     def test_the_story_layer_runs_the_sections(self):
         init = body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryInit(')
         self.assertIn('SV_CoF_SectionsInit();', init)
