@@ -44,6 +44,12 @@ class LandmarkTests(unittest.TestCase):
         self.assertFalse([p for p in report.problems if 'land4' in p], report.problems)
         self.assertTrue(any('land4' in n and 'start' in n for n in report.notes), report.notes)
 
+    def test_changetarget_on_a_door_between_members_is_a_problem(self):
+        # hl.dll fires it in the destination map; the composer would rename it by the source's rules
+        door = [['classname', 'trigger_changelevel'], ['map', 'c_b'], ['landmark', 'l1'], ['changetarget', 'arrive']]
+        problems, _ = plan.door_checks(['c_a', 'c_b'], [['l1'], ['l1']], [[door], []])
+        self.assertTrue(any('changetarget' in p for p in problems), problems)
+
     def test_landmark_on_one_side_only_is_a_problem(self):
         problems, notes = plan.door_checks(['c_a', 'c_b'], [['l1'], []],
                                            [[[['classname', 'trigger_changelevel'], ['map', 'c_b'], ['landmark', 'l1']]], []])

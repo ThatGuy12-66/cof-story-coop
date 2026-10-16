@@ -143,7 +143,9 @@ def door_checks(members: list, landmarks: list, member_ents: list) -> tuple:
             else:
                 problems.append(f'door {members[k]} -> {dest}: landmark {landmark} is not exactly once on both sides')
             if ent_get(e, 'changetarget'):
-                notes.append(f'door {members[k]} -> {dest} fires changetarget {ent_get(e, "changetarget")}')
+                # hl.dll fires it in the destination map, but the composer renames it by the source's rules
+                problems.append(f'door {members[k]} -> {dest} fires changetarget {ent_get(e, "changetarget")}: '
+                                f'not supported in a merged map yet')
     return problems, notes
 
 
