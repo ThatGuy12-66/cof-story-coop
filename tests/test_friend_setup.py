@@ -189,17 +189,78 @@ class FriendSetupTests(unittest.TestCase):
             with mock.patch.object(friend, "game_is_running", return_value=False), \
                  mock.patch.object(friend.subprocess, "run", side_effect=fake_installer), \
                  mock.patch.object(friend, "make_models", return_value=remade) as make, \
+                 mock.patch.object(friend, "make_merged_maps", return_value={"maps/cm_x.bsp": "3" * 64}) as merge, \
                  mock.patch.object(friend.art, "generate", return_value=[]) as art:
                 friend.update(root, payload, exe=exe, shortcuts=False)
             self.assertEqual((root / "xash.dll").read_bytes(), b"new engine")
             art.assert_called_once_with(root.resolve())
             make.assert_called_once_with(root.resolve())
+            merge.assert_called_once_with(root.resolve())
+            self.assertEqual(friend.installed_state(root)["merged_maps"], {"maps/cm_x.bsp": "3" * 64})
             for rel, data in {"SAVE/cofcoop/autosave.cof": b"save", "cryoffear/config.cfg": b"my binds"}.items():
                 self.assertEqual((root / rel).read_bytes(), data, rel)
             self.assertEqual((root / friend.APP_EXE).read_bytes(), b"new app")
             state = friend.installed_state(root)
             self.assertEqual((state["build"], state["models"]), (2, remade))
             self.assertIn("cof_test_gun 0", (root / "cryoffear/cof_story.cfg").read_text())
+
+    def test_merged_maps_are_made_and_a_mismatched_group_is_skipped(self):
+        from tools.map_merge import groups
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            maps = root / "cryoffear/maps"; maps.mkdir(parents=True)
+            for stale in ("cm_old.bsp", "cm_old.sections"):
+                (maps / stale).write_bytes(b"from an older build")
+            (maps / "c_apartment1.bsp").write_bytes(b"retail")
+            good = groups.Group("cm_apartment1", ["c_apartment1", "c_apartment2"], {}, "1" * 64, "2" * 64, 1, True)
+            modded = groups.Group("cm_apartment3", ["c_apartment3", "c_apartment4"], {}, "3" * 64, "4" * 64, 1, True)
+            off = groups.Group("cm_park", ["c_park", "c_park2"], {}, "5" * 64, "6" * 64, 2, False)
+
+            def install(folder, group):
+                if group is modded:
+                    raise groups.GroupInputMismatch("cm_apartment3: c_apartment4.bsp is not the retail map")
+                return {f"maps/{group.name}.bsp": "1" * 64, f"maps/{group.name}.sections": "2" * 64}
+
+            with mock.patch.object(friend.merge_groups, "load_groups", return_value=[good, modded, off]), \
+                 mock.patch.object(friend.merge_groups, "install_group", side_effect=install) as made:
+                merged = friend.make_merged_maps(root)
+            self.assertEqual([c.args[1].name for c in made.call_args_list], ["cm_apartment1", "cm_apartment3"])
+            self.assertEqual(merged, {"maps/cm_apartment1.bsp": "1" * 64, "maps/cm_apartment1.sections": "2" * 64})
+            self.assertFalse((maps / "cm_old.bsp").exists() or (maps / "cm_old.sections").exists())
+            self.assertTrue((maps / "c_apartment1.bsp").exists())
+            log = (root / friend.MERGE_LOG).read_text(encoding="utf-8")
+            self.assertIn("cm_apartment1: merged", log)
+            self.assertIn("cm_apartment3: not merged", log)
+
+    def test_merged_maps_from_the_retail_maps(self):
+        from tools.map_merge import groups
+        retail_maps = Path(__file__).resolve().parents[1] / "baseline/Cry of Fear/cryoffear/maps"
+        if not (retail_maps / "c_apartment1.bsp").is_file():
+            self.skipTest("retail map fixtures are not installed")
+        group = next(g for g in groups.load_groups() if g.name == "cm_apartment1")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            maps = root / "cryoffear/maps"; maps.mkdir(parents=True)
+            for member in group.members:
+                (maps / f"{member}.bsp").write_bytes((retail_maps / f"{member}.bsp").read_bytes())
+            with mock.patch.object(friend.merge_groups, "load_groups", return_value=[group]):
+                merged = friend.make_merged_maps(root)
+            self.assertEqual(merged, {"maps/cm_apartment1.bsp": group.bsp_sha256,
+                                      "maps/cm_apartment1.sections": group.sections_sha256})
+
+    def test_runtime_check_covers_the_merged_maps(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "copy"
+            (root / "cryoffear/maps").mkdir(parents=True)
+            (root / "xash.dll").write_bytes(b"engine")
+            (root / "cryoffear/maps/cm_apartment1.bsp").write_bytes(b"merged")
+            (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test1", "build": 1,
+                "xash_sha256": hashlib.sha256(b"engine").hexdigest(), "models": {}, "source_game": "src",
+                "merged_maps": {"maps/cm_apartment1.bsp": hashlib.sha256(b"merged").hexdigest()}}))
+            self.assertEqual(friend.validate_runtime(root), root.resolve())
+            (root / "cryoffear/maps/cm_apartment1.bsp").write_bytes(b"changed")
+            with self.assertRaisesRegex(ValueError, "merged"):
+                friend.validate_runtime(root)
 
     def test_update_refuses_while_the_game_runs(self):
         with tempfile.TemporaryDirectory() as temp:

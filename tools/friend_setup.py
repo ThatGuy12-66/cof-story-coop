@@ -23,6 +23,7 @@ if not getattr(sys, "frozen", False):
 from tools import coop_play as play
 from tools import make_inventory12_art as art
 from tools import prepare_coop_weapons as weapons
+from tools.map_merge import groups as merge_groups
 from tools.prepare_simon_models import build_models, costume_files, validate_model
 
 STOCK_DLL_SHA = "0036b91c01e92ed205513f52563053a55a66a32d257efb5f476b8f1f3dde0e63"
@@ -33,6 +34,7 @@ APP_EXE = "CoF Story Co-op.exe"
 PAYLOAD_ZIP = "engine-payload.zip"
 PAYLOAD_JSON = "payload.json"
 INSTALLED = "cof-story-installed.json"
+MERGE_LOG = "cof-story-merge.log"
 # The name in the first config.cfg, before anyone has typed one in the app.
 DEFAULT_NAME = "Player"
 
@@ -296,6 +298,27 @@ def keep_previous_log(root: Path, name: str) -> Path | None:
     return kept
 
 
+def make_merged_maps(root: Path) -> dict[str, str]:
+    """(Re)make the merged story maps from this copy's own retail maps (tools/map_groups.json). A group whose maps
+    are not the retail files it was made from plays unmerged; merged files of older builds are removed."""
+    maps = root / "cryoffear/maps"
+    reject_links(maps)
+    made, lines = {}, []
+    for group in merge_groups.load_groups():
+        if not group.enabled:
+            continue
+        try:
+            made.update(merge_groups.install_group(maps, group))
+            lines.append(f"{group.name}: merged {' + '.join(group.members)}")
+        except (merge_groups.GroupInputMismatch, merge_groups.MergeCheckFailed, RuntimeError, ValueError, OSError) as error:
+            lines.append(f"{group.name}: not merged, its maps play as usual: {error}")
+    for path in maps.glob("cm_*"):
+        if path.suffix in (".bsp", ".sections", ".partial") and f"maps/{path.name}" not in made:
+            path.unlink()
+    (root / MERGE_LOG).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return made
+
+
 def installed_state(root: Path) -> dict | None:
     """The record setup writes into a copy, or None when the folder holds no copy made by this app."""
     try:
@@ -324,15 +347,16 @@ def write_shortcuts(root: Path) -> bool:
     return result.returncode == 0
 
 
-def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path, shortcuts: bool, progress) -> None:
+def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path, shortcuts: bool, progress,
+           merged: dict | None = None) -> None:
     """The parts setup and update share: the story cfg, the app in the copy, the installed record, shortcuts."""
     (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
     target = root / APP_EXE
     if Path(exe).resolve() != target.resolve():
         shutil.copyfile(exe, target)
     state = {"schema": 2, "version": manifest["version"], "build": manifest["build"],
-             "xash_sha256": manifest["xash_sha256"], "models": models, "source_game": source_game,
-             "campaign_verified": False}
+             "xash_sha256": manifest["xash_sha256"], "models": models, "merged_maps": merged or {},
+             "source_game": source_game, "campaign_verified": False}
     (root / INSTALLED).write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     if shortcuts and not write_shortcuts(root):
         progress(f"Done, but the desktop shortcut could not be made: start {APP_EXE} in {root}.", 1)
@@ -368,12 +392,14 @@ def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress
         raise RuntimeError("The copied retail game DLL changed unexpectedly.")
     progress("Making the Simon and weapon models from your game files", .92)
     model_hashes = make_models(destination)
-    progress("Making the inventory art", .96)
+    progress("Making the inventory art", .95)
     make_art(destination)
+    progress("Joining story maps (fewer loading screens)", .97)
+    merged = make_merged_maps(destination)
     (destination / "cryoffear/config.cfg").write_text(default_controls() + f'name "{DEFAULT_NAME}"\nsensitivity 4\n', encoding="ascii")
     (destination / "steam_appid.txt").write_text("223710\n", encoding="ascii")
     (destination / "SETUP-INCOMPLETE.txt").unlink()
-    finish(destination, manifest, model_hashes, str(source), exe, shortcuts, progress)
+    finish(destination, manifest, model_hashes, str(source), exe, shortcuts, progress, merged)
     return destination
 
 
@@ -396,7 +422,9 @@ def update(root: Path, payload: Path, *, exe: Path, progress=lambda *_: None, sh
     models = make_models(root)
     progress("Making the inventory art", .7)
     make_art(root)
-    finish(root, manifest, models, state["source_game"], exe, shortcuts, progress)
+    progress("Joining story maps (fewer loading screens)", .8)
+    merged = make_merged_maps(root)
+    finish(root, manifest, models, state["source_game"], exe, shortcuts, progress, merged)
     return root
 
 
@@ -419,6 +447,14 @@ def validate_runtime(runtime: Path) -> Path:
         reject_links(model)
         if not model.is_file() or digest_file(model) != expected:
             raise ValueError("A generated Simon model is missing or changed. " + message)
+    for rel, expected in state.get("merged_maps", {}).items():
+        path = PurePosixPath(rel)
+        if path.is_absolute() or ".." in path.parts or "\\" in rel or ":" in rel or path.parts[:1] != ("maps",):
+            raise ValueError("Invalid installed merged map path")
+        merged = root / "cryoffear" / rel
+        reject_links(merged)
+        if not merged.is_file() or digest_file(merged) != expected:
+            raise ValueError("A merged story map is missing or changed. " + message)
     return root
 
 
