@@ -127,6 +127,20 @@ class RouteTests(unittest.TestCase):
         ])
 
 
+class MoverTests(unittest.TestCase):
+    """Who a section move takes: the players in the exit and anyone right beside them; nobody in the exit (a
+    scripted change): every living player. Bots, the dead and players who just moved stay."""
+
+    def test_movers(self):
+        out = run_native(self, 'cof_sections_movers_harness.c', {'sections_under_test.h': header()})
+        self.assertEqual(program_output(out), [
+            'walk-in: 1 1 0 0 0 0',          # 0 in the exit, 1 beside them (100 units), 2 far, 3 a bot, 4 dead, 5 just moved
+            'scripted: 1 1 1 0 0 0',         # nobody in the exit: every living person who did not just move
+            'two exits: 1 0 1 0 0 0',        # 0 and 2 both in the exit, 1 is 200 away from each
+            'only a bot in the exit: 1 1 1 0 0 0',
+        ])
+
+
 class ComposeTests(unittest.TestCase):
     def check_group(self, name):
         g, named, sections = wave1_group(name)
