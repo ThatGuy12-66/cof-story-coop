@@ -122,6 +122,53 @@ def section_rules(members: list, dzs: list, model_counts: list, z_bounds: list, 
     return out
 
 
+def coordinate(v: float) -> str:
+    """A coordinate as the engine's composer writes it: up to 6 decimals, trailing zeros dropped."""
+    s = f'{v:.6f}'.rstrip('0').rstrip('.')
+    return '0' if s in ('', '-0') else s
+
+
+def moved_origin(value: str, dz: float) -> str:
+    parts = value.split()
+    if len(parts) != 3:
+        return value
+    try:
+        z = float(parts[2])
+    except ValueError:
+        return value
+    return f'{parts[0]} {parts[1]} {coordinate(z + dz)}'
+
+
+def compose_entity(e: list, s: Section) -> list:
+    """One member entity as the engine puts it into the merged map (cof_sections.h CoF_ComposeEntities)."""
+    cls = ent_get(e, 'classname', '')
+    out = []
+    for k, v in e:
+        if k == 'origin' and s.dz:
+            v = moved_origin(v, s.dz)
+        elif k == 'model' and v.startswith('*') and v[1:].isdigit() and int(v[1:]) >= 1:
+            v = f'*{int(v[1:]) - 1 + s.first_model}'
+        elif k in REF_KEYS or (k == 'message' and cls in PATH_MESSAGE_CLASSES):
+            v = s.renames.get(v, v)
+        elif k == 'style' and cls.startswith('light') and v.lstrip('-').isdigit():
+            v = str(s.styles.get(int(v), int(v)))
+        elif cls == 'multi_manager' and k not in MM_RESERVED:
+            base = k.split('#')[0]
+            k = s.renames.get(base, base) + k[len(base):]
+        out.append([k, v])
+    return out
+
+
+def compose_reference(world: list, members: list, sections: list) -> bytes:
+    """The merged map's entity lump the engine composes at load (the reference its tests compare with): the merged
+    file's worldspawn, then every member's entities but its worldspawn, through that member's rules."""
+    from tools.map_merge.bsp import serialize_ents
+    ents = [world]
+    for member, s in zip(members, sections):
+        ents += [compose_entity(e, s) for e in member if ent_get(e, 'classname') != 'worldspawn']
+    return serialize_ents(ents)
+
+
 def number(x: float) -> str:
     return f'{x:.10g}'
 

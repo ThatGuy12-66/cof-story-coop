@@ -101,6 +101,37 @@ class FileTests(unittest.TestCase):
             rules.parse('cof-sections 1 cm_x\nrename a b\n')
 
 
+class ComposeTests(unittest.TestCase):
+    def test_entities_are_moved_renumbered_renamed_and_restyled(self):
+        world = ent(classname='worldspawn', wad='a.wad;b.wad')
+        m0 = [ent(classname='worldspawn', wad='a.wad'), ent(classname='info_landmark', targetname='land1', origin='1 2 3'),
+              ent(classname='trigger_relay', target='lift')]
+        m1 = [ent(classname='worldspawn'), ent(classname='info_landmark', targetname='land1', origin='4  5 -6.5'),
+              ent(classname='func_door', targetname='lift', model='*3'), ent(classname='light', style='32', targetname='l'),
+              ent(classname='multi_manager', targetname='mm', land1='0.5', **{'land1#1': '1'}),
+              ent(classname='path_corner', targetname='p', message='land1'), ent(classname='game_text', message='land1')]
+        s = rules.section_rules([('c_a', m0), ('c_b', m1)], [0.0, 1536.0], [10, 5], [(-1.0, 1.0), (1535.0, 1537.0)],
+                                face_styles=[{32}, set()])
+        text = rules.compose_reference(world, [m0, m1], s).decode('latin-1')
+        ents = bsp_parse(text)
+        self.assertEqual(ents[0], world)
+        self.assertEqual(ents[1], m0[1])                                     # member 0: unchanged
+        self.assertEqual(ents[2], ent(classname='trigger_relay', target='lift_x0'))
+        self.assertEqual(ents[3], ent(classname='info_landmark', targetname='land1_m1', origin='4 5 1529.5'))
+        self.assertEqual(ents[4], ent(classname='func_door', targetname='lift', model='*12'))
+        self.assertEqual(ents[5], ent(classname='light', style='33', targetname='l'))
+        self.assertEqual(ents[6], [['classname', 'multi_manager'], ['targetname', 'mm'], ['land1_m1', '0.5'],
+                                   ['land1_m1#1', '1']])
+        self.assertEqual(ents[7], ent(classname='path_corner', targetname='p', message='land1_m1'))
+        self.assertEqual(ents[8], ent(classname='game_text', message='land1'))   # text, not a target
+        self.assertEqual(len(ents), 9)
+
+
+def bsp_parse(text):
+    from tools.map_merge import bsp
+    return bsp.parse_ents(text)
+
+
 class RetailTests(unittest.TestCase):
     def test_apartment3_and_4_rename_the_names_the_spike_found(self):
         a, b = retail('c_apartment3'), retail('c_apartment4')
