@@ -630,7 +630,15 @@ qboolean SV_CoF_SessionWipe( const char *map, const char *landmark )
 	for( slot = 0; slot < svs.maxclients; slot++ )
 	{
 		sv_client_t *client = &svs.clients[slot];
-		if( FBitSet( client->flags, FCL_FAKECLIENT ) || client->state < cs_connected ) continue;
+		if( client->state < cs_connected ) continue;
+		if( FBitSet( client->flags, FCL_FAKECLIENT ))
+		{
+			// A living AI companion can still revive the person (its CPR takes
+			// seconds), who can also respawn beside it: no wipe yet.
+			if( client->state == cs_spawned && SV_IsValidEdict( client->edict ) &&
+				client->edict->v.health > 0 && client->edict->v.deadflag == DEAD_NO ) return false;
+			continue;
+		}
 		if( client->state != cs_spawned )
 		{
 			// Still joining: never load under a signon. The game's own restart
@@ -641,7 +649,7 @@ qboolean SV_CoF_SessionWipe( const char *map, const char *landmark )
 		}
 		players++;
 		if( !SV_IsValidEdict( client->edict ) || client->edict->v.fuser3 == 3 ||
-			( client->edict->v.health > 0 && client->edict->v.deadflag == DEAD_NO )) return false;
+			( client->edict->v.health > 0 && client->edict->v.deadflag == DEAD_NO ) || SV_CoF_RetailRevived( client )) return false;
 	}
 	waiting = false;
 	if( !players ) return false;

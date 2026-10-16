@@ -92,6 +92,9 @@ typedef struct
 static cof_companion_t cof_companions[MAX_CLIENTS];
 static int cof_companion_generation = -1;
 static double cof_companion_add_after;
+static double cof_companion_medic_after; // the party's next syringe for the leader: one per cooldown, whoever gives it
+static int cof_companion_medic_slot = -1; // the bot giving it now
+static int cof_companion_down_told; // the leader's userid last told that help is coming (0: nobody down)
 
 // The map's route graph (sv_cof_nav.h), read once a companion needs it.
 static cof_nav_t cof_nav;
@@ -115,6 +118,9 @@ void SV_CoF_CompanionReset( void )
 	memset( cof_companions, 0, sizeof( cof_companions ));
 	cof_companion_generation = -1;
 	cof_companion_add_after = 0.0;
+	cof_companion_medic_after = 0.0;
+	cof_companion_medic_slot = -1;
+	cof_companion_down_told = 0;
 	CoF_CompanionNavReset();
 }
 
@@ -162,6 +168,23 @@ static int CoF_CompanionBots( void )
 	return bots;
 }
 
+// The first of "Companion", "Companion 2", "Companion 3"... no other player has (the
+// engine would rename a duplicate "Companion (1)").
+static void CoF_CompanionName( char *name, size_t size )
+{
+	const char *base = cof_companion_name && cof_companion_name->string[0] ? cof_companion_name->string : "Companion";
+	int n, i;
+	for( n = 1; n <= MAX_CLIENTS; n++ )
+	{
+		qboolean taken = false;
+		if( n == 1 ) Q_strncpy( name, base, size );
+		else Q_snprintf( name, size, "%s %d", base, n );
+		for( i = 0; i < svs.maxclients && !taken; i++ )
+			taken = svs.clients[i].state >= cs_connected && !Q_stricmp( svs.clients[i].name, name );
+		if( !taken ) return;
+	}
+}
+
 static qboolean CoF_CompanionAdd( void )
 {
 	char reject[128] = "", name[32];
@@ -179,7 +202,7 @@ static qboolean CoF_CompanionAdd( void )
 	// state (and the game's name-change hook would announce it). SV_FakeConnect
 	// takes this same first free slot.
 	SV_InitEdict( SV_EdictNum( open_slot + 1 ));
-	Q_strncpy( name, cof_companion_name && cof_companion_name->string[0] ? cof_companion_name->string : "Companion", sizeof( name ));
+	CoF_CompanionName( name, sizeof( name ));
 	if( !( ent = SV_FakeConnect( name )) || !( cl = SV_ClientFromEdict( ent, false )) || ( slot = CoF_CompanionSlot( cl )) < 0 )
 		return false;
 	if( slot != open_slot ) SV_InitEdict( ent );
@@ -213,17 +236,32 @@ static void CoF_CompanionRemove( sv_client_t *cl )
 	if( slot >= 0 ) memset( &cof_companions[slot], 0, sizeof( cof_companions[slot] ));
 }
 
+// Someone besides this client is up: a person, or another bot of ours. The game
+// declares "Game over" when the last living player leaves while the rest are dead.
+static qboolean CoF_CompanionOtherAlive( const sv_client_t *except )
+{
+	int i;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl == except || cl->state != cs_spawned || !SV_IsValidEdict( cl->edict ) || !CoF_CompanionAlive( cl->edict )) continue;
+		if( !FBitSet( cl->flags, FCL_FAKECLIENT ) || cof_companions[i].bot ) return true;
+	}
+	return false;
+}
+
 qboolean SV_CoF_CompanionMakeRoom( void )
 {
 	int i;
-	if( !CoF_CompanionPersonAlive()) return false; // the server stays full a moment longer
 	for( i = svs.maxclients - 1; i >= 0 && i < MAX_CLIENTS; i-- )
 	{
 		sv_client_t *cl = &svs.clients[i];
 		if( cof_companions[i].bot && cl->state >= cs_connected && FBitSet( cl->flags, FCL_FAKECLIENT ))
 		{
+			if( !CoF_CompanionOtherAlive( cl )) return false; // the server stays full a moment longer
 			CoF_CompanionRemove( cl );
-			cof_companion_add_after = sv.time + 1e9; // not back while the person plays
+			// The person takes the place at once; a bot comes back only when one is free again.
+			cof_companion_add_after = sv.time + 2.0;
 			return true;
 		}
 	}
@@ -491,7 +529,7 @@ static qboolean CoF_CompanionSees( const vec3_t from, const vec3_t to, edict_t *
 	return !tr.startsolid && ( tr.fraction >= 1.0f || ( target && tr.ent == target ));
 }
 
-// The leader within clearance of the segment from a to b.
+// A point within clearance of the segment from a to b.
 static qboolean CoF_CompanionInLine( const vec3_t a, const vec3_t b, const vec3_t p )
 {
 	vec3_t ab, ap, closest;
@@ -504,6 +542,23 @@ static qboolean CoF_CompanionInLine( const vec3_t a, const vec3_t b, const vec3_
 	if( t <= 0.0f || t >= 1.0f ) return false;
 	VectorMA( a, t, ab, closest );
 	return VectorDistance( closest, p ) < COF_COMPANION_FIRE_CLEARANCE;
+}
+
+// No other living player (a person or another bot) stands in the line of fire.
+static qboolean CoF_CompanionFireClear( const sv_client_t *self, const vec3_t eye, const vec3_t target )
+{
+	int i;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		vec3_t body;
+		if( cl == self || cl->state != cs_spawned || !SV_IsValidEdict( cl->edict ) || !CoF_CompanionAlive( cl->edict )) continue;
+		VectorCopy( cl->edict->v.origin, body ); // the chest, and the head
+		if( CoF_CompanionInLine( eye, target, body )) return false;
+		VectorAdd( cl->edict->v.origin, cl->edict->v.view_ofs, body );
+		if( CoF_CompanionInLine( eye, target, body )) return false;
+	}
+	return true;
 }
 
 // How far a point is from a box (0 inside it).
@@ -587,7 +642,8 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 		in->has_melee = arms->has_melee;
 		in->has_heal = bot && arms->has_heal; // a person's syringes are their own
 	}
-	in->medic = bot && cof_companion_medic ? cof_companion_medic->value : 0.0f;
+	in->medic = bot && cof_companion_medic && ( cof_companion_medic_slot < 0 || &svs.clients[cof_companion_medic_slot] == cl ) &&
+		sv.time >= cof_companion_medic_after ? cof_companion_medic->value : 0.0f;
 	if( leader && leader != cl && SV_IsValidEdict( leader->edict ))
 	{
 		edict_t *le = leader->edict;
@@ -618,7 +674,7 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 		in->threat = NUM_FOR_EDICT( threat );
 		in->threat_dist = (float)VectorDistance( in->eye, in->threat_pos );
 		in->threat_gap = CoF_CompanionGap( in->eye, threat->v.absmin, threat->v.absmax );
-		in->line_clear = !in->leader || !CoF_CompanionInLine( in->eye, in->threat_pos, in->leader_eye );
+		in->line_clear = CoF_CompanionFireClear( cl, in->eye, in->threat_pos );
 	}
 }
 
@@ -667,10 +723,13 @@ static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companio
 	}
 	if( c->out.mode != c->mode )
 	{
-		// Say so when coming to help a downed leader (who sees only the ceiling).
-		if( c->out.mode == COF_BRAIN_REVIVE && leader && !FBitSet( leader->flags, FCL_FAKECLIENT ) && !CoF_CompanionAlive( leader->edict ))
+		// Say so when coming to help a downed leader (who sees only the ceiling): once,
+		// from the first that sets off.
+		if( c->out.mode == COF_BRAIN_REVIVE && leader && !FBitSet( leader->flags, FCL_FAKECLIENT ) && !CoF_CompanionAlive( leader->edict ) &&
+			cof_companion_down_told != leader->userid )
 		{
 			char text[96];
+			cof_companion_down_told = leader->userid;
 			Q_snprintf( text, sizeof( text ), "%s is coming to help you up.", cl->name );
 			SV_CoF_RetailProFont( leader, 4, text, false );
 		}
@@ -830,11 +889,17 @@ void SV_CoF_CompanionFrame( void )
 		memset( cof_companions, 0, sizeof( cof_companions ));
 		cof_companion_generation = svs.spawncount;
 		cof_companion_add_after = sv.time + 2.0;
+		cof_companion_medic_after = 0.0;
+		cof_companion_medic_slot = -1;
+		cof_companion_down_told = 0;
 		CoF_CompanionNavReset(); // another map, another graph
 	}
 	SV_CoF_RetailCprRepair(); // for any pair of players, not only companions
 	leader = CoF_CompanionLeader();
 	CoF_CompanionKeepBots( leader );
+	if( !leader || CoF_CompanionAlive( leader->edict )) cof_companion_down_told = 0;
+	if( cof_companion_medic_slot >= 0 && !( cof_companions[cof_companion_medic_slot].bot && svs.clients[cof_companion_medic_slot].state == cs_spawned ))
+		cof_companion_medic_slot = -1;
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
@@ -855,6 +920,13 @@ void SV_CoF_CompanionFrame( void )
 		c->driving = true;
 		CoF_CompanionPerceive( cl, leader, c, bot, &in, &arms );
 		CoF_BrainThink( &c->brain, &in, &c->out );
+		if( bot )
+		{
+			// one syringe for the leader at a time, and the cooldown counts for the whole party
+			if( c->out.mode == COF_BRAIN_MEDIC ) cof_companion_medic_slot = i;
+			else if( cof_companion_medic_slot == i ) cof_companion_medic_slot = -1;
+			if( c->brain.medic_after > cof_companion_medic_after ) cof_companion_medic_after = c->brain.medic_after;
+		}
 		CoF_CompanionAct( cl, leader, c, &arms );
 		CoF_CompanionUpkeep( cl, c, bot, &arms, in.alive );
 		if( human ) c->taps |= c->out.buttons & COF_BRAIN_TAPS;
@@ -896,7 +968,8 @@ qboolean SV_CoF_CompanionClientCommand( sv_client_t *cl )
 	if( Cmd_Argc() > 1 ) stay = !Q_stricmp( Cmd_Argv( 1 ), "wait" );
 	heard = CoF_CompanionOrder( stay );
 	if( !heard ) Q_strncpy( text, "No companion to give orders to.", sizeof( text ));
-	else Q_snprintf( text, sizeof( text ), stay ? "Your companion waits here." : "Your companion follows you." );
+	else if( heard == 1 ) Q_strncpy( text, stay ? "Your companion waits here." : "Your companion follows you.", sizeof( text ));
+	else Q_strncpy( text, stay ? "Your companions wait here." : "Your companions follow you.", sizeof( text ));
 	SV_CoF_RetailProFont( cl, 5, text, false );
 	return true;
 }
