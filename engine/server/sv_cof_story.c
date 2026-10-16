@@ -286,9 +286,16 @@ void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
 	char *cursor, *end, *value_start = NULL, *value_end = NULL;
 	size_t length, model_length;
 	int slot = (int)( cl - svs.clients );
+	static const char *models[] = { "cof_s1", "cof_s2", "cof_s3", "cof_s4" };
 	if( !info || !size || slot < 0 || slot >= svs.maxclients || !SV_CoF_StoryCoopEnabled() ) return;
-	model = slot == 0 ? "cof_s1" : "cof_s2";
+	// the host Simon, then the costumes; a copy made before cof_s3/cof_s4 existed shows cof_s2
+	model = models[slot < 4 ? slot : 1];
 	Q_snprintf( path, sizeof( path ), "models/player/%s/%s.mdl", model, model );
+	if( !FS_FileExists( path, false ) && slot > 1 )
+	{
+		model = models[1];
+		Q_snprintf( path, sizeof( path ), "models/player/%s/%s.mdl", model, model );
+	}
 	if( !FS_FileExists( path, false )) return;
 	length = Q_strnlen( info, size );
 	if( length == size ) return;
