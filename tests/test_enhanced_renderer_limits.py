@@ -15,6 +15,15 @@ class WiringTests(unittest.TestCase):
         module = (ENGINE_CLIENT / 'cof_renderer_limits.c').read_text()
         self.assertIn(f'"{CLIENT_SHA}"', module)
 
+    def test_its_load_lines_reach_the_log(self):
+        # client.dll loads while host.allow_console is still false, and Con_Printf drops everything then:
+        # a live run had the patch working and no [cof-renderer] line in story-session.log
+        module = (ENGINE_CLIENT / 'cof_renderer_limits.c').read_text()
+        load = module[module.index('void CL_CoF_RendererLimitsLoad('):module.index('void CL_CoF_RendererLimitsUnload(')]
+        self.assertNotIn('Con_Printf', load)
+        self.assertNotIn('Con_Reportf', load)
+        self.assertIn('Sys_Print( buf );', module)
+
 
 class RetailClientTests(unittest.TestCase):
     def setUp(self):
