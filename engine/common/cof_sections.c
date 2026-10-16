@@ -81,10 +81,22 @@ NULL when map is not merged (or on an error, logged); otherwise a Z_Malloc'd NUL
 */
 char *COM_CoF_MergedEntities( const char *map, const char *world, size_t worldsize, size_t *outsize )
 {
-	char *members[COF_SECT_MAX] = { 0 }, *worldtext, *composed, *out = NULL;
+	// the last composition, reused while nothing it came from changed (exits and holds read it often)
+	static char *cache, cache_key[MAX_QPATH * 3];
+	static size_t cache_len;
+	char *members[COF_SECT_MAX] = { 0 }, *worldtext, *composed, *out = NULL, key[sizeof( cache_key )];
 	size_t len = 0;
 	int i;
 	if( !COM_CoF_LoadSections( map, &com_cof_sections )) return NULL;
+	Q_snprintf( key, sizeof( key ), "%s|%s|%d|%d", map, Cvar_VariableString( "cof_language" ),
+		FS_FileTime( va( "maps/%s.sections", map ), true ), FS_FileTime( va( "maps/%s.bsp", map ), false ));
+	if( cache && !Q_strcmp( key, cache_key ))
+	{
+		out = Z_Malloc( cache_len + 1 );
+		memcpy( out, cache, cache_len + 1 );
+		if( outsize ) *outsize = cache_len;
+		return out;
+	}
 	worldtext = Z_Calloc( worldsize + 1 );
 	memcpy( worldtext, world, worldsize );
 	for( i = 0; i < com_cof_sections.count; i++ )
@@ -103,6 +115,11 @@ char *COM_CoF_MergedEntities( const char *map, const char *world, size_t worldsi
 		free( composed );
 		if( outsize ) *outsize = len;
 		Con_Printf( "[cof-sections] %s: entities of %d maps, %u bytes\n", map, com_cof_sections.count, (unsigned)len );
+		if( cache ) Mem_Free( cache );
+		cache = Z_Malloc( len + 1 );
+		memcpy( cache, out, len + 1 );
+		cache_len = len;
+		Q_strncpy( cache_key, key, sizeof( cache_key ));
 	}
 	else if( i == com_cof_sections.count )
 		Con_Printf( S_ERROR "[cof-sections] %s: its entities cannot be put together\n", map );

@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "server.h"
+#include "sv_cof_sections.h"
 
 /*
 =================
@@ -212,6 +213,9 @@ static void SV_Map_f( void )
 	// menu map is never a real level here, whatever route asked for it
 	if( CL_CoF_MenuMapLevelChange( mapname, "map command" ))
 		return;
+
+	// Cry of Fear merged story maps: a member map loads its merged file, starting in its section
+	SV_CoF_SectionsMapCommand( mapname, sizeof( mapname ));
 
 	if( !SV_ValidateMap( mapname ))
 		return;

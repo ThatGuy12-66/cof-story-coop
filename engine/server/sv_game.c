@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "ref_common.h" // decals
 #include "cof_language.h"
 #include "cof_merged.h"
+#include "sv_cof_sections.h"
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_sender.h"
@@ -718,6 +719,14 @@ void SV_QueueChangeLevel( const char *level, const char *landname )
 {
 	uint	flags, smooth = false;
 	char	mapname[MAX_QPATH];
+	char	cof_file[MAX_QPATH], cof_landmark[MAX_QPATH];
+
+	// Cry of Fear merged story maps: the file that holds this map now, and the landmark's name there
+	if( SV_CoF_SectionsResolve( level, landname, cof_file, sizeof( cof_file ), cof_landmark, sizeof( cof_landmark )))
+	{
+		level = cof_file;
+		landname = cof_landmark;
+	}
 
 	// hold mapname to other place
 	Q_strncpy( mapname, level, sizeof( mapname ));
@@ -1527,6 +1536,9 @@ static void GAME_EXPORT pfnChangeLevel( const char *level, const char *landmark 
 	if( COM_StringEmptyOrNULL( level ) || sv.state != ss_active )
 		return; // ???
 	if( SV_CoF_SessionWipe( level, landmark )) return;
+	// Cry of Fear merged story maps: a door between two sections of this map moves the players there now
+	// (no exit hold, no load); before the one-change-per-map guard, which it must not use up
+	if( SV_CoF_SectionChangeLevel( level, landmark )) return;
 
 	// make sure we don't issue two changelevels
 	if( svs.spawncount == last_spawncount )

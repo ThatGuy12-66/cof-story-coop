@@ -14,6 +14,8 @@ void SV_CoF_CompanionDrop( sv_client_t *cl );
 qboolean SV_CoF_CompanionClientCommand( sv_client_t *cl );
 // This client is a companion the AI is driving right now (a bot, or an idle second player).
 qboolean SV_CoF_CompanionDriven( const sv_client_t *cl );
+// The person this companion bot looks after (userid; 0: none, or not a bot).
+int SV_CoF_CompanionLeaderUserid( const sv_client_t *cl );
 // A person's client the AI may drive (solo testing, cof_companion_drive): not the
 // one the companions follow, and nobody at its controls for the idle time. Such
 // a client does not hold a level exit; it comes along like a companion bot.

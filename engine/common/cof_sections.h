@@ -289,11 +289,11 @@ typedef struct
 
 /*
 Who a section move takes (movers[i] = 1): every living person in the exit who did not just move, and every
-living person within near of one of them. Nobody in the exit (a scripted change, say a cutscene's end): every
+living person within reach of one of them. Nobody in the exit (a scripted change, say a cutscene's end): every
 living person who did not just move. Bots follow their leader on their own; the dead respawn where they are.
 Returns how many move.
 */
-COF_SECT_FN int CoF_SectionMovers( const cof_sect_player_t *p, int count, int *movers, float near )
+COF_SECT_FN int CoF_SectionMovers( const cof_sect_player_t *p, int count, int *movers, float reach )
 {
 	int i, j, activators = 0, moved = 0;
 	for( i = 0; i < count; i++ )
@@ -316,7 +316,7 @@ COF_SECT_FN int CoF_SectionMovers( const cof_sect_player_t *p, int count, int *m
 			dx = p[i].origin[0] - p[j].origin[0];
 			dy = p[i].origin[1] - p[j].origin[1];
 			dz = p[i].origin[2] - p[j].origin[2];
-			if( dx * dx + dy * dy + dz * dz <= near * near )
+			if( dx * dx + dy * dy + dz * dz <= reach * reach )
 			{
 				movers[i] = 1;
 				break;

@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "server.h"
+#include "sv_cof_sections.h"
 #include "net_encode.h"
 #include "library.h"
 #include "voice.h"
@@ -1116,6 +1117,7 @@ void SV_ExecLoadLevel( void )
 	if( SV_SpawnServer( GameState->levelName, NULL, GameState->backgroundMap ))
 	{
 		SV_SpawnEntities( GameState->levelName );
+		SV_CoF_SectionsEntry(); // a merged map started for one of its sections: players start there
 		SV_ActivateServer( true );
 	}
 }

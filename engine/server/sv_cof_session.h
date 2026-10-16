@@ -7,4 +7,6 @@ qboolean SV_CoF_SessionSave( const char *slot );
 qboolean SV_CoF_SessionLoad( const char *slot );
 qboolean SV_CoF_SessionClientCommand( sv_client_t *cl );
 qboolean SV_CoF_SessionWipe( const char *map, const char *landmark );
+// A merged map's section was entered for the first time: the autosave, as after a new map.
+void SV_CoF_SessionAutosaveSoon( void );
 #endif

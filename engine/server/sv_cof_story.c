@@ -19,6 +19,7 @@
 #include "sv_cof_scene.h"
 #include "sv_cof_moments.h"
 #include "sv_cof_companion.h"
+#include "sv_cof_sections.h"
 #include "sv_cof_testgun.h"
 #include "sv_cof_inventory12.h"
 #if XASH_WIN32
@@ -276,6 +277,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_RecoveryInit();
 	SV_CoF_Inventory12Init();
 	SV_CoF_SessionInit();
+	SV_CoF_SectionsInit();
 	SV_CoF_BonusInit();
 }
 
@@ -343,6 +345,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
 	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
+	SV_CoF_SectionsFrame(); // merged maps: respawns, companions and gone exits, before the AI decides
 	SV_CoF_CompanionFrame();
 	SV_CoF_TestGunFrame();
 	SV_CoF_ExitFrame();

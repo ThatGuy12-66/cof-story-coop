@@ -1220,6 +1220,31 @@ static qboolean CoF_PartyStandable( edict_t *ent )
 	return !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f && tr.plane.normal[2] >= 0.7f;
 }
 
+// A merged map's section move (sv_cof_sections.c): cl to landing, its view kept. Inside something solid there, or
+// on top of anchor, a free spot beside anchor's new place (or beside the landing when anchor is cl or NULL); none:
+// cl stays where it was. Half a second of black fading in, like the retail co-op door. True when moved.
+qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor )
+{
+	edict_t *at;
+	vec3_t old, feet, spot;
+	if( !CoF_PartyPlayer( cl )) return false;
+	VectorCopy( cl->edict->v.origin, old );
+	if( !CoF_PartyMove( cl, landing, NULL )) return false;
+	at = anchor && anchor != cl && SV_IsValidEdict( anchor->edict ) ? anchor->edict : cl->edict;
+	if( CoF_PartyInSolid( cl->edict ) || ( at != cl->edict && CoF_PartyBoxesTouch( cl->edict, at )))
+	{
+		CoF_PartyFeet( cl, at, feet );
+		if( !CoF_PartyLanding( cl, at, feet, spot ) || !CoF_PartyMove( cl, spot, NULL ))
+		{
+			CoF_PartyMove( cl, old, NULL );
+			return false;
+		}
+	}
+	if( !( cl->flags & FCL_FAKECLIENT ))
+		SV_CoF_RetailScreenFade( cl, 0.5f, 0.0f, 0, 0, 0, 0, 255 );
+	return true;
+}
+
 static byte *CoF_PartyArrived( sv_client_t *cl, int userid )
 {
 	byte *pv;

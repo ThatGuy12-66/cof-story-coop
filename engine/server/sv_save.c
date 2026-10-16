@@ -26,6 +26,7 @@ GNU General Public License for more details.
 #include "sv_cof_state.h"
 #include "sv_cof_recovery.h"
 #include "sv_cof_session.h"
+#include "sv_cof_sections.h"
 #include "sv_cof_scene.h"
 #include "sv_cof_archive.h"
 #include "sv_story_transition_state.h"
@@ -127,7 +128,9 @@ qboolean SV_CoF_LiveLandmark( const char *name, vec3_t origin )
 qboolean SV_CoF_TransitionValidate( const char *map, const char *landmark )
 {
 	vec3_t origin;
-	if( COM_StringEmptyOrNULL( landmark ) || !SV_CoF_LiveLandmark( landmark, origin ) || !SV_CoF_MapLandmark( map, landmark, origin ))
+	// a merged map's landmark can have another name where the change was asked (sv_cof_sections.c)
+	if( COM_StringEmptyOrNULL( landmark ) || !SV_CoF_LiveLandmark( SV_CoF_TransitionSourceLandmark( map, landmark ), origin ) ||
+		!SV_CoF_MapLandmark( map, landmark, origin ))
 	{
 		Con_Printf( S_ERROR "[cof-story-transition] rejected: unique info_landmark '%s' required in both %s and %s\n", landmark ? landmark : "", sv.name, map );
 		return false;
@@ -153,7 +156,7 @@ static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark 
 	Q_strncpy( cof_transition.source, sv.name, sizeof( cof_transition.source ));
 	Q_strncpy( cof_transition.destination, map, sizeof( cof_transition.destination ));
 	Q_strncpy( cof_transition.landmark, landmark, sizeof( cof_transition.landmark ));
-	SV_CoF_LiveLandmark( landmark, cof_transition.source_origin );
+	SV_CoF_LiveLandmark( SV_CoF_TransitionSourceLandmark( map, landmark ), cof_transition.source_origin );
 	SV_CoF_MapLandmark( map, landmark, cof_transition.destination_origin );
 	cof_transition.entity_count = svgame.numEntities;
 	cof_transition.inventory_owner = Mem_Calloc( host.mempool, sizeof( int ) * svgame.numEntities );
@@ -187,7 +190,8 @@ static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark 
 			SV_IsValidEdict( ent->v.aiment ) ? NUM_FOR_EDICT( ent->v.aiment ) : 0 );
 	}
 	{
-		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, map, landmark, exits, ARRAYSIZE( exits ), NULL, NULL );
+		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, SV_CoF_TransitionRequestedLevel( map, landmark ),
+			SV_CoF_TransitionSourceLandmark( map, landmark ), exits, ARRAYSIZE( exits ), NULL, NULL );
 		SV_CoF_PartyTransitionCapture( cof_transition.tickets.epoch, cof_transition.source_origin, exits, exit_count );
 	}
 	// The transition save carries every player's flags: no camera survives the

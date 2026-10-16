@@ -20,6 +20,8 @@ qboolean SV_CoF_PartyPlaceUnseen( sv_client_t *mover, edict_t *leader, const vec
 qboolean SV_CoF_PartyInDoor( const sv_client_t *cl );
 // The ending door holds a partner (frozen, blacked out): saves wait for it.
 qboolean SV_CoF_PartyHolding( void );
+// A merged map's section move: cl to landing (view kept), beside anchor when that spot is solid; a short fade.
+qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor );
 // cof_warp and other commands the story layer handles itself; true when handled.
 qboolean SV_CoF_PartyClientCommand( sv_client_t *cl );
 #endif

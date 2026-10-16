@@ -315,6 +315,12 @@ qboolean SV_CoF_CompanionDriven( const sv_client_t *cl )
 	return slot >= 0 && cof_companions[slot].userid == cl->userid && ( cof_companions[slot].bot || cof_companions[slot].driving );
 }
 
+int SV_CoF_CompanionLeaderUserid( const sv_client_t *cl )
+{
+	int slot = cl ? CoF_CompanionSlot( cl ) : -1;
+	return slot >= 0 && cof_companions[slot].userid == cl->userid && cof_companions[slot].bot ? cof_companions[slot].leader_userid : 0;
+}
+
 qboolean SV_CoF_CompanionAway( const sv_client_t *cl )
 {
 	int slot = cl ? CoF_CompanionSlot( cl ) : -1;

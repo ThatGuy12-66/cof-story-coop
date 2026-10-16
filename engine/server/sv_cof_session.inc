@@ -622,6 +622,12 @@ void SV_CoF_SessionFrame( void )
 	}
 }
 
+void SV_CoF_SessionAutosaveSoon( void )
+{
+	cof_session_auto_needed = true;
+	cof_session_save_after = sv.time + 2;
+}
+
 qboolean SV_CoF_SessionWipe( const char *map, const char *landmark )
 {
 	static qboolean waiting; // said once: the recovery waits for a player still joining
