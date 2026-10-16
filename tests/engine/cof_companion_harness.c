@@ -114,7 +114,8 @@ static const char *argv0 = "", *argv1 = ""; static int argc = 1;
 static int Cmd_Argc( void ) { return argc; }
 static const char *Cmd_Argv( int i ) { return i == 0 ? argv0 : i == 1 ? argv1 : ""; }
 static char told[MAX_CLIENTS][96];
-static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable ) { snprintf( told[cl - clients], sizeof( told[0] ), "%s", text ); return true; }
+static int told_count[MAX_CLIENTS];
+static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable ) { told_count[cl - clients]++; snprintf( told[cl - clients], sizeof( told[0] ), "%s", text ); return true; }
 static edict_t *SV_FakeConnect( const char *name )
 {
 	int i;
@@ -169,7 +170,8 @@ static trace_t SV_Move( const vec3_t start, vec3_t mins, vec3_t maxs, const vec3
 	return t;
 }
 /* The player code: the view follows the usercmd. */
-static void SV_RunCmd( sv_client_t *cl, usercmd_t *cmd, int seed ) { runs++; last_run = *cmd; VectorCopy( cmd->viewangles, cl->edict->v.v_angle ); }
+static usercmd_t ran[MAX_CLIENTS];
+static void SV_RunCmd( sv_client_t *cl, usercmd_t *cmd, int seed ) { runs++; last_run = *cmd; ran[cl - clients] = *cmd; VectorCopy( cmd->viewangles, cl->edict->v.v_angle ); }
 enum { COF_ARMS_NONE, COF_ARMS_MELEE, COF_ARMS_GUN, COF_ARMS_HEAL };
 static int arms_weapon = COF_ARMS_MELEE, arms_has_gun, arms_clip, arms_reserve, arms_has_heal, arms_sights, arms_has_melee = 1;
 typedef struct { int weapon, ready, sights, reloading, struggle, clip, reserve, has_gun, has_melee, has_heal; char gun[32], melee[32], heal[32]; } cof_retail_arms_t;
@@ -316,10 +318,14 @@ int main( void )
 	clients[1].state = cs_free; svs.spawncount++; frame( 0.1 ); assert( clients[1].state == cs_free );
 	frame( 2.5 ); assert( clients[1].state == cs_spawned && put_in == 2 );
 
-	/* A person wants to join a full server: the bot gives its place and stays away. */
+	/* A person wants to join a full server: the bot gives its place while they play, and comes
+	 * back once they leave. */
 	setup(); cvars[0].value = 1; settle(); assert( clients[1].state == cs_spawned );
 	assert( SV_CoF_CompanionMakeRoom() && clients[1].state == cs_free );
-	frame( 5.0 ); assert( clients[1].state == cs_free );
+	clients[1].state = cs_spawned; clients[1].userid = 50; clients[1].edict = &entities[2]; /* the friend took it */
+	frame( 1.0 ); frame( 5.0 ); assert( put_in == 1 && clients[1].userid == 50 );
+	clients[1].state = cs_free; frame( 0.1 ); frame( 2.5 );
+	assert( put_in == 2 && clients[1].state == cs_spawned && ( clients[1].flags & FCL_FAKECLIENT ));
 	/* nothing to give: false */
 	setup(); assert( !SV_CoF_CompanionMakeRoom() );
 
@@ -623,6 +629,56 @@ int main( void )
 	clients[1].state = cs_free; svs.spawncount++; frame( 0.1 ); frame( 2.5 ); assert( clients[1].state == cs_spawned );
 	for( i = 0; i < 4; i++ ) { entities[2].v.origin[0] = 200; entities[2].v.origin[1] = 0; frame( 0.05 ); }
 	assert( logged( "companion-nav map=c_test nodes=3" ) == 2 && loads == 3 );
+
+	/* Three AI companions (a party of four): one a second after the settle, with names of their own. */
+	setup(); svs.maxclients = 4; cvars[0].value = 3; settle(); frame( 1.0 ); frame( 1.0 );
+	assert( put_in == 3 && clients[1].state == cs_spawned && clients[2].state == cs_spawned && clients[3].state == cs_spawned );
+	assert( !strcmp( clients[1].name, "Companion" ) && !strcmp( clients[2].name, "Companion 2" ) && !strcmp( clients[3].name, "Companion 3" ));
+	/* the host is down: a friend still gets a place while another bot stays up to help */
+	entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+	assert( SV_CoF_CompanionMakeRoom() && clients[3].state == cs_free );
+	assert( SV_CoF_CompanionMakeRoom() && clients[2].state == cs_free );
+	assert( !SV_CoF_CompanionMakeRoom() && clients[1].state == cs_spawned ); /* the last one up stays */
+	/* back up: the missing two return, under the free names */
+	entities[1].v.health = 100; entities[1].v.deadflag = DEAD_NO; frame( 1.0 ); frame( 1.0 ); frame( 1.0 );
+	assert( put_in == 5 && !strcmp( clients[2].name, "Companion 2" ) && !strcmp( clients[3].name, "Companion 3" ));
+	/* none of them up either: no place is given */
+	entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+	for( i = 2; i <= 4; i++ ) { entities[i].v.health = 0; entities[i].v.deadflag = DEAD_DEAD; }
+	assert( !SV_CoF_CompanionMakeRoom() && clients[3].state == cs_spawned );
+
+	/* The host hurt with three bots beside them: one syringe for the party per cooldown, not three in a row. */
+	setup(); svs.maxclients = 4; cvars[0].value = 3; settle(); frame( 1.0 ); frame( 1.0 );
+	arms_has_heal = 1; arms_weapon = COF_ARMS_HEAL; entities[1].v.health = 40;
+	for( i = 2; i <= 4; i++ ) entities[i].v.origin[0] = 10.0f * i;
+	for( i = 0; i < 100; i++ ) frame( 0.05 );
+	assert( logged( "mode=medic" ) == 1 );
+
+	/* The host goes down among three bots: told once that help is coming; the order reply speaks of them all. */
+	setup(); svs.maxclients = 4; cvars[0].value = 3; settle(); frame( 1.0 ); frame( 1.0 ); memset( told_count, 0, sizeof( told_count ));
+	for( i = 2; i <= 4; i++ ) entities[i].v.origin[0] = 300.0f;
+	entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+	frame( 0.05 ); frame( 0.05 ); assert( told_count[0] == 1 && strstr( told[0], "coming to help you up" ));
+	entities[1].v.health = 100; entities[1].v.deadflag = DEAD_NO;
+	argv0 = "cof_companion_order"; argc = 1;
+	assert( SV_CoF_CompanionClientCommand( &clients[0] ) && !strcmp( told[0], "Your companions wait here." ));
+	assert( SV_CoF_CompanionClientCommand( &clients[0] ) && !strcmp( told[0], "Your companions follow you." )); argv0 = "";
+
+	/* Line of fire: a bot holds fire while another player (another bot here) stands in it. */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; settle(); frame( 1.0 );
+	arms_weapon = COF_ARMS_GUN; arms_has_gun = 1; arms_clip = 10; arms_reserve = 10;
+	entities[1].v.origin[1] = 300; /* the host aside */
+	entities[2].v.origin[0] = -100; entities[3].v.origin[0] = 100; monster( 6, 2, 300 );
+	{
+		int first = 0, second = 0;
+		for( i = 0; i < 40; i++ )
+		{
+			entities[2].v.origin[0] = -100; entities[2].v.origin[1] = 0; entities[3].v.origin[0] = 100; entities[3].v.origin[1] = 0;
+			frame( 0.05 );
+			first += ( ran[1].buttons & COF_IN_ATTACK ) != 0; second += ( ran[2].buttons & COF_IN_ATTACK ) != 0;
+		}
+		assert( !first && second > 0 );
+	}
 
 	/* The story layer off: nothing at all. */
 	setup(); cvars[0].value = 1; gate = 0; settle(); assert( clients[1].state == cs_free );

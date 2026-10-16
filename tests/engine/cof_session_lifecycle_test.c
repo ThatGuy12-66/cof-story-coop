@@ -49,6 +49,8 @@ static const char *Cmd_Argv( int index ) { return index < argc ? argv[index] : "
 static void Con_Printf( const char *format, ... ) {}
 static void SV_ClientPrintf( sv_client_t *client, const char *format, ... ) {}
 static int SV_CoF_RetailProFont( sv_client_t *client, int colour, const char *text, int reliable ) { profont++; return 1; }
+static int revived[2];
+static qboolean SV_CoF_RetailRevived( sv_client_t *client ) { return revived[client - clients]; }
 qboolean SV_CoF_SessionWipe( const char *map, const char *landmark );
 #include "session_lifecycle_under_test.c"
 
@@ -107,5 +109,18 @@ int main( void )
 	continue_var.value = 1; result = 0; sv.time = 120; SV_CoF_SessionFrame();
 	assert( loads == 2 && profont == 1 && continue_var.value == 0 );
 	sv.time = 130; SV_CoF_SessionFrame(); assert( loads == 2 ); result = 1;
+	/* a living AI companion can still revive the person (or they respawn beside it):
+	 * no checkpoint load under its CPR; a downed companion does not count */
+	loads = 0; cof_session_pending = NULL; sv.time = 200; cof_session_wipe_after = 0;
+	edicts[0].v.health = 0; edicts[0].v.fuser3 = edicts[1].v.fuser3 = 0;
+	clients[1].flags = FCL_FAKECLIENT; edicts[1].v.health = 100;
+	assert( !SV_CoF_SessionWipe( "c_start", NULL ) && !loads );
+	edicts[1].v.health = 0; assert( SV_CoF_SessionWipe( "c_start", NULL ) && loads == 1 );
+	clients[1].state = cs_connected; edicts[1].v.health = 100; /* a companion not in the world yet */
+	assert( SV_CoF_SessionWipe( "c_start", NULL ) && loads == 2 ); clients[1].state = cs_spawned;
+	/* a person someone is reviving (the reviver link is set) is not wiped either */
+	loads = 0; clients[1].flags = 0; edicts[1].v.health = 0; revived[1] = 1;
+	assert( !SV_CoF_SessionWipe( "c_start", NULL ) && !loads );
+	revived[1] = 0; assert( SV_CoF_SessionWipe( "c_start", NULL ) && loads == 1 );
 	puts( "session lifecycle scenarios passed" ); return 0;
 }
