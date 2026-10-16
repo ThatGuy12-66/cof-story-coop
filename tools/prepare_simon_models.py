@@ -25,8 +25,15 @@ TEXTURES = {
     "hoodie_grey.bmp": ("Sick_Simon_Hoodie.TGA", "7a92824d8aac79002372722fd23579c021dae3e4a682507c6800732e6e53fc72"),
     "jeans.bmp": ("Sick_Simon_Jeans.TGA", "107c21324e34673c05a5b7fa6a854550803ad3e2f32feb69e354a8653cda10ab"),
 }
+# The other players' looks: the game's own costume textures over Simon's (cof_s1 is
+# the host's, unchanged). Players 3 and 4 get bright hoodies: most costumes are near black.
+COSTUMES = {
+    "cof_s2": ("Sick_Simon", TEXTURES),
+    "cof_s3": ("ModDB", {"hoodie_grey.bmp": ("ModDB_Hoodie.tga", "9340e39ee3b98229ad609922430e0afcb639e62939f246f72642e39040491a8c")}),
+    "cof_s4": ("HLC", {"hoodie_grey.bmp": ("HLC_Hoodie.tga", "e2c43ea89b7e4b811af6b0c3505b3f603a44f518baf093ebfdce0510ecb93b1c")}),
+}
 SEQ_SIZE = 176
-MODEL_NAMES = ("cof_s1", "cof_s2")
+MODEL_NAMES = ("cof_s1", "cof_s2", "cof_s3", "cof_s4")
 
 
 def sha(data):
@@ -268,12 +275,19 @@ def quantize(rgb):
     return bytes(lookup[color] for color in rgb), bytes(palette)
 
 
-def apply_costume(model: bytes, donors: dict[str, bytes]):
+def costume_files():
+    """The costume textures the generator reads, relative to models/costumes."""
+    return [f"{folder}/{filename}" for folder, textures in COSTUMES.values() for filename, _ in textures.values()]
+
+
+def apply_costume(model: bytes, donors: dict[str, bytes], costume=COSTUMES["cof_s2"]):
+    """donors: costume texture bytes keyed by their path relative to models/costumes."""
     output = bytearray(model)
     report = []
     textures = texture_info(model)
-    for texture_name, (filename, expected_hash) in TEXTURES.items():
-        tga = donors[filename]
+    folder, wanted = costume
+    for texture_name, (filename, expected_hash) in wanted.items():
+        tga = donors[f"{folder}/{filename}"]
         if sha(tga) != expected_hash:
             raise ValueError(f"Stock costume hash mismatch: {filename}")
         width, height, rgb = decode_tga(tga)
@@ -306,16 +320,20 @@ def texture_png(model, texture):
 
 def build_models(simon, police, donors):
     standard, mapping = adapt_sequences(simon, police)
-    alternate, _ = adapt_sequences(simon, police, MODEL_NAMES[1])
-    alternate, costume = apply_costume(alternate, donors)
+    dressed, costume = {}, []
+    for name in MODEL_NAMES[1:]:
+        model, _ = adapt_sequences(simon, police, name)
+        dressed[name], applied = apply_costume(model, donors, COSTUMES[name])
+        costume.extend(dict(item, model=name) for item in applied)
+    alternate = dressed[MODEL_NAMES[1]]
     report = {"source_simon_sha256": SIMON_SHA, "source_police_sha256": POLICE_SHA,
               "model_names": list(MODEL_NAMES),
               "sequence_mapping": mapping, "costume": costume,
               "limitations": ["Reload/CPR/door actions use recorded Simon fallback animations.",
                               "Dimensional texture compatibility is checked; rendered UV fit and two-client animation remain to be verified.",
                               "Generated models are private stock-derived assets and are excluded from packages."]}
-    files = {f"models/player/{MODEL_NAMES[0]}/{MODEL_NAMES[0]}.mdl": standard,
-             f"models/player/{MODEL_NAMES[1]}/{MODEL_NAMES[1]}.mdl": alternate}
+    files = {f"models/player/{MODEL_NAMES[0]}/{MODEL_NAMES[0]}.mdl": standard}
+    files.update({f"models/player/{name}/{name}.mdl": data for name, data in dressed.items()})
     report["outputs"] = {path: {"sha256": sha(data), "bytes": len(data), **validate_model(data)} for path, data in files.items()}
     for texture in TEXTURES:
         stem = texture.rsplit(".", 1)[0]
@@ -339,7 +357,7 @@ def main(argv=None):
         model_root = args.game_dir / "cryoffear/models"
         files = build_models((model_root / "cutscene/player.mdl").read_bytes(),
                              (model_root / "player/police1/police1.mdl").read_bytes(),
-                             {name: (model_root / "costumes/Sick_Simon" / name).read_bytes() for name, _hash in TEXTURES.values()})
+                             {rel: (model_root / "costumes" / rel).read_bytes() for rel in costume_files()})
         if args.write:
             out.mkdir(parents=True, exist_ok=False)
             for name, data in files.items():

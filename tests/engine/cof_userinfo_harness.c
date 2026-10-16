@@ -33,11 +33,12 @@ static void Q_strncpy(char *out, const char *in, size_t n) { if(n) { size_t k=st
 static size_t Q_strnlen(const char *s,size_t n) {size_t i;for(i=0;i<n&&s[i];i++);return i;}
 static void Con_Printf(const char *fmt,...) {(void)fmt;}
 typedef struct {int unused;} sv_client_t;
-static sv_client_t clients[2];
+static sv_client_t clients[4];
 static struct {int maxclients;sv_client_t *clients;} svs={2,clients};
 static int enabled=1,asset_exists=1;
+static const char *missing; /* a generated model this copy lacks */
 static qboolean SV_CoF_StoryCoopEnabled(void) {return enabled;}
-static qboolean FS_FileExists(const char *path,qboolean local) {(void)path;(void)local;return asset_exists;}
+static qboolean FS_FileExists(const char *path,qboolean local) {(void)local;return asset_exists&&!(missing&&strstr(path,missing));}
 #include "userinfo_under_test.c"
 #include "model_hook_under_test.c"
 
@@ -79,6 +80,16 @@ int main(void)
     CHECK(!strcmp(g.info,"\\model_note\\keep\\model\\cof_s1\\name\\synthetic"));CHECK(guarded(&g));
     strcpy(g.info,"\\name\\synthetic");SV_CoF_StoryUserinfo(&clients[0],g.info,sizeof(g.info));
     CHECK(!strcmp(g.info,"\\name\\synthetic\\model\\cof_s1"));CHECK(guarded(&g));
+    /* Players 3 and 4 wear costumes of their own; a copy without one gives that player cof_s2. */
+    svs.maxclients=4;
+    strcpy(g.info,"\\model\\police3");SV_CoF_StoryUserinfo(&clients[2],g.info,sizeof(g.info));
+    CHECK(!strcmp(Info_ValueForKey(g.info,"model"),"cof_s3"));
+    strcpy(g.info,"\\model\\police4");SV_CoF_StoryUserinfo(&clients[3],g.info,sizeof(g.info));
+    CHECK(!strcmp(Info_ValueForKey(g.info,"model"),"cof_s4"));
+    missing="cof_s4";strcpy(g.info,"\\model\\police4");SV_CoF_StoryUserinfo(&clients[3],g.info,sizeof(g.info));
+    CHECK(!strcmp(Info_ValueForKey(g.info,"model"),"cof_s2"));
+    missing="cof_s";strcpy(g.info,"\\model\\police4");SV_CoF_StoryUserinfo(&clients[3],g.info,sizeof(g.info));
+    CHECK(!strcmp(g.info,"\\model\\police4"));missing=NULL;svs.maxclients=2;
     strcpy(g.info,"\\model\\gordon");enabled=0;
     SV_CoF_StoryUserinfo(&clients[0],g.info,sizeof(g.info));CHECK(!strcmp(g.info,"\\model\\gordon"));
     enabled=1;asset_exists=0;

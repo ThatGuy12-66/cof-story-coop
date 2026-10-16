@@ -40,14 +40,16 @@ class SimonModelTests(unittest.TestCase):
     def setUpClass(cls):
         cls.simon = (MODEL_ROOT / "cutscene/player.mdl").read_bytes()
         cls.police = (MODEL_ROOT / "player/police1/police1.mdl").read_bytes()
-        cls.donors = {name: (MODEL_ROOT / "costumes/Sick_Simon" / name).read_bytes() for name, _sha in models.TEXTURES.values()}
+        cls.donors = {rel: (MODEL_ROOT / "costumes" / rel).read_bytes() for rel in models.costume_files()}
         cls.files = models.build_models(cls.simon, cls.police, cls.donors)
         cls.standard = cls.files["models/player/cof_s1/cof_s1.mdl"]
         cls.alternate = cls.files["models/player/cof_s2/cof_s2.mdl"]
+        cls.third = cls.files["models/player/cof_s3/cof_s3.mdl"]
+        cls.fourth = cls.files["models/player/cof_s4/cof_s4.mdl"]
 
     def test_six_character_network_names_change_only_embedded_name(self):
-        self.assertEqual(models.MODEL_NAMES, ("cof_s1", "cof_s2"))
-        for name, data in zip(models.MODEL_NAMES, (self.standard, self.alternate)):
+        self.assertEqual(models.MODEL_NAMES, ("cof_s1", "cof_s2", "cof_s3", "cof_s4"))
+        for name, data in zip(models.MODEL_NAMES, (self.standard, self.alternate, self.third, self.fourth)):
             self.assertEqual(len(name), 6)
             self.assertEqual(data[8:72].split(b"\0", 1)[0].decode(), name + ".mdl")
         old, _ = models.adapt_sequences(self.simon, self.police, "cof_simon")
@@ -117,8 +119,22 @@ class SimonModelTests(unittest.TestCase):
         self.assertLessEqual(changed, allowed)
         self.assertEqual(models.sequences(self.standard), models.sequences(self.alternate))
         report = json.loads(self.files["model-report.json"])
-        self.assertEqual(len(report["costume"]), 3)
+        self.assertEqual(len(report["costume"]), 5)
         self.assertIn("fallback", report["sequence_mapping"][0])
+
+    def test_players_three_and_four_wear_their_own_hoodies(self):
+        # Everyone after the host wore cof_s2: players 3 and 4 get the ModDB (red) and HLC (light) hoodies.
+        info = models.texture_info(self.standard)
+        hoodie = info["hoodie_grey.bmp"]
+        span = range(hoodie["offset"], hoodie["offset"] + hoodie["width"] * hoodie["height"] + 768)
+        seen = set()
+        for data in (self.third, self.fourth):
+            changed = {i for i, (a, b) in enumerate(zip(self.standard, data)) if a != b}
+            self.assertTrue(changed - set(range(8, 72)))
+            self.assertLessEqual(changed, set(range(8, 72)) | set(span))
+            self.assertEqual(models.sequences(data), models.sequences(self.standard))
+            seen.add(data[span.start:span.stop])
+        self.assertEqual(len(seen), 2)
 
     def test_tampered_sources_and_costumes_refused(self):
         with self.assertRaises(ValueError):
@@ -127,7 +143,7 @@ class SimonModelTests(unittest.TestCase):
         name = next(iter(bad))
         bad[name] = bad[name][:-1]
         with self.assertRaises(ValueError):
-            models.apply_costume(self.standard, bad)
+            models.apply_costume(self.standard, bad, models.COSTUMES["cof_s2"])
 
     def test_bad_animation_reference_and_zero_length_run_refused(self):
         corrupt = bytearray(self.standard)
