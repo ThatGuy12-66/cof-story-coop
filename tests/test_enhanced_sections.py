@@ -62,6 +62,33 @@ class SectionsFileTests(unittest.TestCase):
         self.assertEqual(program_output(out), ['refused'] * len(cases))
 
 
+class LoadWiringTests(unittest.TestCase):
+    """Both places that read a map's entities compose a merged map's from its members."""
+
+    def function(self, path, signature):
+        text = path.read_text(encoding='latin-1')
+        start = text.index(signature)
+        end = text.index('\n}\n', start)
+        return text, text[start:end]
+
+    def test_the_map_loader_composes_merged_maps(self):
+        text, body = self.function(ENGINE_COMMON / 'mod_bmodel.c', 'static void Mod_LoadEntities(')
+        self.assertIn('#include "cof_merged.h"', text)
+        merged = body.index('COM_CoF_IsMergedMap( mapname )')
+        self.assertLess(merged, body.index('CoF_Lang_EntPatch( entfilename'))
+        self.assertIn('COM_CoF_MergedEntities( mapname, entdata, entdatasize, &mergedsize )', body)
+        self.assertIn('Host_Error', body[merged:body.index('CoF_Lang_EntPatch( entfilename')])
+
+    def test_map_checks_exits_and_landmarks_see_the_composed_entities(self):
+        server = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/server'
+        text, body = self.function(server / 'sv_game.c', 'static char *SV_ReadEntityScript(')
+        self.assertIn('#include "cof_merged.h"', text)
+        merged = body.index('COM_CoF_IsMergedMap( filename )')
+        self.assertLess(body.index('lumplen = entities.filelen'), merged)
+        self.assertLess(merged, body.index('CoF_Lang_EntPatch( entfilename'))
+        self.assertIn('COM_CoF_MergedEntities( filename,', body)
+
+
 ROUTE_FILES = {
     # c_apartment3 + 4 + 5 as the real group names them (land1-3 clash: renamed in c_apartment4)
     'cur.txt': 'cof-sections 1 cm_apartment3\n'
