@@ -140,6 +140,16 @@ class ServerWiringTests(unittest.TestCase):
         self.assertIn('attn > 0.0f', sound[:400])
         self.assertIn('SND_STOP', sound[:400])
 
+    def test_a_session_keeps_its_own_merged_mode(self):
+        session = SERVER / 'sv_cof_session.inc'
+        save = body_of(session, 'qboolean SV_CoF_SessionSave(')
+        self.assertIn('SV_CoF_SectionsSessionRecord( record, sizeof( record ))', save)
+        self.assertIn('"merged.txt"', save)
+        load = body_of(session, 'qboolean SV_CoF_SessionLoad(')
+        restore = load.index('SV_CoF_SectionsSessionRestore(')
+        self.assertLess(load.index('CoF_ArchiveFind( archive, "merged.txt"'), restore)
+        self.assertLess(restore, load.index('COM_ChangeLevel( metadata->map'))
+
     def test_the_story_layer_runs_the_sections(self):
         init = body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryInit(')
         self.assertIn('SV_CoF_SectionsInit();', init)
@@ -199,6 +209,21 @@ class MoverTests(unittest.TestCase):
             'scripted: 1 1 1 0 0 0',         # nobody in the exit: every living person who did not just move
             'two exits: 1 0 1 0 0 0',        # 0 and 2 both in the exit, 1 is 200 away from each
             'only a bot in the exit: 1 1 1 0 0 0',
+        ])
+
+
+class SessionRecordTests(unittest.TestCase):
+    """merged.txt in a session archive: the session's mode and the original map its first player is in."""
+
+    def test_record(self):
+        out = run_native(self, 'cof_sections_record_harness.c', {'sections_under_test.h': header()})
+        self.assertEqual(program_output(out), [
+            'write: merged 1|section c_apartment4|',
+            'read merged on: 1 1 c_apartment4',
+            'read merged off: 1 0 c_apartment1',
+            'read none: 0 0 -',                 # a save from before merged maps: unmerged
+            'read junk: 0 0 -',
+            'read long: 0 0 -',
         ])
 
 
