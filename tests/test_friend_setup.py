@@ -23,8 +23,10 @@ def make_payload(folder: Path, engine=b"engine", build=1):
 
 
 def fake_installer(args, cwd, **kwargs):
-    """Stands in for install.ps1: it puts files\\xash.dll in the game folder, as the real one does."""
+    """Stands in for install.ps1: it puts files\\xash.dll in the game folder and writes gameinfo.txt, as the real one does."""
     (Path(cwd) / "xash.dll").write_bytes((Path(cwd) / "cof-enhanced/files/xash.dll").read_bytes())
+    (Path(cwd) / "cryoffear").mkdir(exist_ok=True)
+    (Path(cwd) / "cryoffear/gameinfo.txt").write_bytes(b'gamedir "cryoffear"\r\n')
     return subprocess.CompletedProcess(args, 0)
 
 
@@ -247,6 +249,22 @@ class FriendSetupTests(unittest.TestCase):
                 merged = friend.make_merged_maps(root)
             self.assertEqual(merged, {"maps/cm_apartment1.bsp": group.bsp_sha256,
                                       "maps/cm_apartment1.sections": group.sections_sha256})
+
+    def test_the_copy_gets_cry_of_fears_own_entity_limit(self):
+        # liblist.gam asks GoldSrc for -num_edicts 4096; the engine reads max_edicts from gameinfo.txt only
+        # (default 1200), and a merged map holds more than that
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            info = root / "cryoffear/gameinfo.txt"
+            info.parent.mkdir(parents=True)
+            info.write_bytes(b'gamedir "cryoffear"\r\nrender_picbutton_text 1\r\n')
+            friend.ensure_entity_limit(root)
+            self.assertEqual(info.read_bytes(), b'gamedir "cryoffear"\r\nrender_picbutton_text 1\r\nmax_edicts 4096\r\n')
+            info.write_bytes(b'gamedir "cryoffear"\r\nmax_edicts 900\r\n')
+            friend.ensure_entity_limit(root)
+            self.assertEqual(info.read_bytes(), b'gamedir "cryoffear"\r\nmax_edicts 4096\r\n')
+            friend.ensure_entity_limit(root)
+            self.assertEqual(info.read_bytes().count(b"max_edicts"), 1)
 
     def test_runtime_check_covers_the_merged_maps(self):
         with tempfile.TemporaryDirectory() as temp:

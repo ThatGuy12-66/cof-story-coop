@@ -35,6 +35,7 @@ PAYLOAD_ZIP = "engine-payload.zip"
 PAYLOAD_JSON = "payload.json"
 INSTALLED = "cof-story-installed.json"
 MERGE_LOG = "cof-story-merge.log"
+ENTITY_LIMIT = 4096   # liblist.gam's commandargs "-num_edicts 4096": the limit Cry of Fear was made for
 # The name in the first config.cfg, before anyone has typed one in the app.
 DEFAULT_NAME = "Player"
 
@@ -298,6 +299,16 @@ def keep_previous_log(root: Path, name: str) -> Path | None:
     return kept
 
 
+def ensure_entity_limit(root: Path) -> None:
+    """Cry of Fear's own entity limit in gameinfo.txt (written by the Enhanced installer): liblist.gam asks
+    GoldSrc for -num_edicts 4096, but this engine reads only gameinfo.txt's max_edicts (default 1200), and a
+    merged story map holds more entities than that."""
+    path = root / "cryoffear/gameinfo.txt"
+    lines = [line for line in path.read_text(encoding="ascii").splitlines() if not line.strip().startswith("max_edicts")]
+    lines.append(f"max_edicts {ENTITY_LIMIT}")
+    path.write_text("\r\n".join(lines) + "\r\n", encoding="ascii", newline="")
+
+
 def make_merged_maps(root: Path) -> dict[str, str]:
     """(Re)make the merged story maps from this copy's own retail maps (tools/map_groups.json). A group whose maps
     are not the retail files it was made from plays unmerged; merged files of older builds are removed."""
@@ -388,6 +399,7 @@ def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress
     run_installer(destination)
     if digest_file(destination / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
+    ensure_entity_limit(destination)
     if digest_file(destination / "cryoffear/cl_dlls/hl.dll") != STOCK_DLL_SHA:
         raise RuntimeError("The copied retail game DLL changed unexpectedly.")
     progress("Making the Simon and weapon models from your game files", .92)
@@ -418,6 +430,7 @@ def update(root: Path, payload: Path, *, exe: Path, progress=lambda *_: None, sh
     run_installer(root)
     if digest_file(root / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
+    ensure_entity_limit(root)
     progress("Making the Simon and weapon models", .6)
     models = make_models(root)
     progress("Making the inventory art", .7)
