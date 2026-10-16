@@ -4572,6 +4572,7 @@ void CL_UnloadProgs( void )
 	Cmd_Unlink( CMD_CLIENTDLL );
 
 	CL_CoF_Inventory12Unload();
+	CL_CoF_RendererLimitsUnload();
 	COM_FreeLibrary( clgame.hInstance );
 	Mem_FreePool( &cls.mempool );
 	Mem_FreePool( &clgame.mempool );
@@ -4733,6 +4734,9 @@ qboolean CL_LoadProgs( const char *name )
 	// (engine/client/cof_enter_hook.c)
 	CL_CoF_EnterHookModule( clgame.hInstance, name );
 	CL_CoF_Inventory12Load( clgame.hInstance );
+	// the Paranoia renderer's 64 lightmap pages and brush-entity bounds raised
+	// (engine/client/cof_renderer_limits.c)
+	CL_CoF_RendererLimitsLoad( clgame.hInstance );
 
 	// delayed vgui initialization for internal support
 	if( try_internal_vgui_support && VGui_LoadProgs( clgame.hInstance ))
