@@ -80,6 +80,15 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertIn('c_b', found[0])
 
+    def test_play_everywhere_sound_that_starts_with_the_map_is_refused(self):
+        # it would go to every section's players in the sign-on data
+        members = [('c_a', [ent(classname='ambient_generic', message='ambience/hum.wav', spawnflags='1')]),
+                   ('c_b', [ent(classname='ambient_generic', message='ambience/x.wav', spawnflags='17'),
+                            ent(classname='ambient_generic', message='ambience/y.wav', spawnflags='4')])]
+        found = plan.everywhere_sound_problems(members)
+        self.assertEqual(len(found), 1)
+        self.assertIn('hum.wav', found[0])
+
     def test_shared_globalname_is_refused(self):
         members = [('c_a', [ent(classname='func_door', globalname='lift')]),
                    ('c_b', [ent(classname='func_door', globalname='lift')])]

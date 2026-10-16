@@ -114,6 +114,24 @@ def origin_brush_problems(members: list) -> list:
     return out
 
 
+def everywhere_sound_problems(members: list) -> list:
+    """ambient_generic sounds that play everywhere (spawnflags 1) and start with the map (no 16, start silent): the
+    engine sends those in the sign-on data, to every section's players; it filters only sounds started later."""
+    out = []
+    for name, ents in members:
+        for e in ents:
+            if ent_get(e, 'classname') != 'ambient_generic':
+                continue
+            try:
+                flags = int(ent_get(e, 'spawnflags', '0') or 0)
+            except ValueError:
+                continue
+            if flags & 1 and not flags & 16:
+                out.append(f'{name}: ambient_generic {ent_get(e, "message")} plays everywhere from the start: '
+                           f'every section would hear it')
+    return out
+
+
 def globalname_problems(members: list) -> list:
     seen = {}
     for name, ents in members:
@@ -190,6 +208,7 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
         report.problems.append('env_fog differs between members')
     report.problems += globalname_problems(named)
     report.problems += origin_brush_problems(named)
+    report.problems += everywhere_sound_problems(named)
     report.problems += reference_problems(named, sections)
 
     landmarks = [[ent_get(e, 'targetname') for e in x.ents if ent_get(e, 'classname') == 'info_landmark'] for x in maps]
