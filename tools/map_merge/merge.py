@@ -74,6 +74,19 @@ def joined_wads(a_value: str, b_value: str) -> str:
     return ';'.join(items) + (';' if items else '')
 
 
+def merged_worldspawn(worlds: list) -> list:
+    """The merged file's worldspawn: the first member's, with every member's wad files joined (as merge_pair does
+    pair by pair)."""
+    world = [list(kv) for kv in worlds[0]]
+    joined = ent_get(world, 'wad', '')
+    for other in worlds[1:]:
+        joined = joined_wads(joined, ent_get(other, 'wad', ''))
+    world = [[k, joined if k == 'wad' else v] for k, v in world]
+    if not any(k == 'wad' for k, _ in world) and joined:
+        world.append(['wad', joined])
+    return world
+
+
 def world_nodes(x: Bsp) -> int:
     """How many nodes the world's tree has; they must be nodes 0..count-1."""
     seen, stack = set(), [x.models[0][9]]

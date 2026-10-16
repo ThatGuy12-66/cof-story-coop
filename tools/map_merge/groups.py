@@ -102,9 +102,8 @@ def build_group(maps_dir: Path, group: Group) -> tuple:
     return bsp.write_bytes(bsp.to_lumps(merged)), rules.to_text(group.name, sections)
 
 
-def merge_members(name: str, named: list) -> tuple:
-    """The merged Bsp and the section rules of (map name, Bsp) members, stacked in order, every pair checked."""
-    names = [m for m, _ in named]
+def plan_sections(named: list) -> list:
+    """The section rules of (map name, Bsp) members stacked in order (each above or below all before it)."""
     members = [x for _, x in named]
     dzs, bounds = [0.0], [(members[0].models[0][2], members[0].models[0][5])]
     lo, hi = bounds[0]
@@ -114,8 +113,16 @@ def merge_members(name: str, named: list) -> tuple:
         bounds.append((b.models[0][2] + dz, b.models[0][5] + dz))
         lo, hi = min(lo, bounds[-1][0]), max(hi, bounds[-1][1])
     face_styles = [{s for f in x.faces for s in f[5:9]} for x in members]
-    sections = rules.section_rules([(m, x.ents) for m, x in zip(names, members)], dzs,
-                                   [len(x.models) for x in members], bounds, face_styles)
+    return rules.section_rules([(m, x.ents) for m, x in named], dzs, [len(x.models) for x in members], bounds,
+                               face_styles)
+
+
+def merge_members(name: str, named: list) -> tuple:
+    """The merged Bsp and the section rules of (map name, Bsp) members, stacked in order, every pair checked."""
+    names = [m for m, _ in named]
+    members = [x for _, x in named]
+    sections = plan_sections(named)
+    dzs = [s.dz for s in sections]
     current = members[0]
     for k, b in enumerate(members[1:], 1):
         lumps, info = merge.merge_pair(current, b, dzs[k], sections[k].styles)
