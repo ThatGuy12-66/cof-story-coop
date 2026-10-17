@@ -8,11 +8,12 @@
         and numpy: uv run --no-project --with pillow --with numpy python -m tools.merged_maps_check ...)
 
 The run turns sv_cheats and the entity tools on for itself (god, notarget, ent_fire set origin) and puts the
-copy's normal story settings back afterwards. Method: AGENT_NOTES "Renderer patch live" (2026-10-16).
+copy's normal story settings and its saves back afterwards (its autosaves never become the player's Continue). Method: AGENT_NOTES "Renderer patch live" (2026-10-16).
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -20,6 +21,7 @@ import random
 import re
 import shutil
 import sys
+import tempfile
 import time
 
 if __package__ in (None, ""):
@@ -206,6 +208,27 @@ def compare_pictures(merged: list, original: list) -> list:
 
 # ---- running the game ----
 
+SAVE_DIR = "SAVE"   # the copy's saves (the story's checkpoints in SAVE/cofcoop: the app's Continue)
+
+
+@contextlib.contextmanager
+def saves_kept(copy: Path):
+    """The copy's saves exactly as they were once the block ends, however it ends: a check run's autosaves
+    (cheats, empty inventory) must not become the player's Continue."""
+    saves = copy / SAVE_DIR
+    with tempfile.TemporaryDirectory() as tmp:
+        kept = Path(tmp) / SAVE_DIR
+        if saves.exists():
+            shutil.copytree(saves, kept)
+        try:
+            yield
+        finally:
+            if saves.exists():
+                shutil.rmtree(saves)
+            if kept.exists():
+                shutil.copytree(kept, saves)
+
+
 def run_game(copy: Path, map_name: str, merged: bool, script: str, timeout: float = 600.0) -> str:
     """Start the copy on map_name with the script, wait for it to quit, return the session log."""
     from tools import coop_app as app
@@ -225,11 +248,15 @@ def run_game(copy: Path, map_name: str, merged: bool, script: str, timeout: floa
     (copy / "cryoffear" / play.SESSION_CFG).write_text(config, encoding="ascii")
     setup_lib.keep_previous_log(copy, play.LOG)
     try:
-        app.start_game(copy, list(args) + ["+exec", SCRIPT])
-        deadline = time.time() + timeout
-        time.sleep(5)
-        while time.time() < deadline and setup_lib.game_is_running(copy):
-            time.sleep(2)
+        with saves_kept(copy):
+            app.start_game(copy, list(args) + ["+exec", SCRIPT])
+            deadline = time.time() + timeout
+            time.sleep(5)
+            while time.time() < deadline and setup_lib.game_is_running(copy):
+                time.sleep(2)
+            if setup_lib.game_is_running(copy):
+                raise SystemExit(f"The game did not quit within {timeout:.0f} s. The copy's saves were put back, "
+                                 "but close the game: it can still write new ones.")
         return (copy / play.LOG).read_text(encoding="latin-1", errors="replace")
     finally:
         (copy / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")

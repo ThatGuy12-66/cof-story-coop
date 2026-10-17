@@ -1,5 +1,7 @@
 """The merged-maps check tool's offline parts: the doors between sections, the script that walks into them, and
 reading the result from the game's log."""
+from pathlib import Path
+import tempfile
 import unittest
 
 from tests.test_map_merge_bsp import MAPS, retail
@@ -74,6 +76,46 @@ class ResultTests(unittest.TestCase):
         log = self.LOG.split('[t] merged-check door 1')[0] + \
             '[t] [cof-story-transition] phase=section-move userid=1 from=c_b to=c_a landmark=l1 origin=5.000,5.000,37.000\n'
         self.assertEqual(mc.door_results(log, exits)[0].verdict, 'bounced')
+
+
+class SavesKeptTests(unittest.TestCase):
+    """A check run starts the story with cheats and an empty inventory; its autosaves must not stay behind as
+    the player's Continue (seen live 2026-10-16: the app offered the door check's save)."""
+
+    def copy_with_save(self, root):
+        save = root / 'SAVE' / 'cofcoop'
+        save.mkdir(parents=True)
+        (save / 'autosave.cof').write_bytes(b'players own')
+        (save / 'latest.txt').write_text('autosave', encoding='ascii')
+        return save
+
+    def test_the_players_saves_come_back_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            save = self.copy_with_save(root)
+            with mc.saves_kept(root):
+                (save / 'autosave.cof').write_bytes(b'check run')
+                (save / 'autosave.cof.bak').write_bytes(b'players own')
+                (root / 'SAVE' / 'cm_apartment1.HL1').write_bytes(b'check run')
+            self.assertEqual(sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()),
+                             ['SAVE/cofcoop/autosave.cof', 'SAVE/cofcoop/latest.txt'])
+            self.assertEqual((save / 'autosave.cof').read_bytes(), b'players own')
+
+    def test_no_saves_before_means_none_after(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mc.saves_kept(root):
+                self.copy_with_save(root)
+            self.assertFalse((root / 'SAVE').exists())
+
+    def test_put_back_when_the_run_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            save = self.copy_with_save(root)
+            with self.assertRaises(RuntimeError), mc.saves_kept(root):
+                (save / 'autosave.cof').write_bytes(b'check run')
+                raise RuntimeError('game did not start')
+            self.assertEqual((save / 'autosave.cof').read_bytes(), b'players own')
 
 
 if __name__ == '__main__':
