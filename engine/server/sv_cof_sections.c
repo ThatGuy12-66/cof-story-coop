@@ -28,6 +28,7 @@ static cof_sections_t cof_sect_other;     // scratch: another merged file's rule
 static qboolean cof_sect_loaded_ok;
 static int cof_sect_generation = -1;
 static double cof_sect_moved_at[MAX_CLIENTS];
+static double cof_sect_refused_at[MAX_CLIENTS]; // a refused move logged (once a second: it is tried every frame)
 static int cof_sect_alive[MAX_CLIENTS];   // userid while alive, -userid once dead (a respawn follows)
 static int cof_sect_last[MAX_CLIENTS];    // the section a player was last in, alive
 static qboolean cof_sect_entered[COF_SECT_MAX];
@@ -62,7 +63,7 @@ static const cof_sections_t *CoF_SectLoaded( void )
 		cof_sect_loaded_ok = sv.state != ss_dead && COM_CoF_LoadSections( sv.name, &cof_sect_loaded );
 		for( i = 0; i < MAX_CLIENTS; i++ )
 		{
-			cof_sect_moved_at[i] = -1000.0;
+			cof_sect_moved_at[i] = cof_sect_refused_at[i] = -1000.0;
 			cof_sect_alive[i] = 0;
 			cof_sect_last[i] = -1;
 		}
@@ -209,12 +210,15 @@ static qboolean CoF_SectAlive( const edict_t *e )
 	return e->v.health > 0 && e->v.deadflag == DEAD_NO;
 }
 
-static void CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r, int slot, const vec3_t landing, sv_client_t *anchor )
+static void CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r, int slot, const vec3_t landing, sv_client_t *anchor, const float *landmark )
 {
 	sv_client_t *cl = &svs.clients[slot];
 	int from = CoF_SectionsAt( s, cl->edict->v.origin[2] );
-	if( !SV_CoF_PartySectionMove( cl, landing, anchor ))
+	if( !SV_CoF_PartySectionMove( cl, landing, anchor, landmark ))
 	{
+		// tried again every frame while they stand in the door: logged once a second
+		if( sv.time < cof_sect_refused_at[slot] + 1.0 ) return;
+		cof_sect_refused_at[slot] = sv.time;
 		Con_Printf( S_WARN "[cof-story-transition] phase=section-move-refused userid=%d to=%s reason=no-room\n", cl->userid, s->sec[r->to_section].map );
 		return;
 	}
@@ -268,13 +272,14 @@ static void CoF_SectMove( const cof_sections_t *s, const cof_sect_route_t *r, co
 		VectorCopy( start->v.origin, landing );
 		landing[2] += 1.0f;
 	}
-	CoF_SectMoveOne( s, r, anchor, landing, NULL );
+	// the destination landmark is the last resort when the offset lands in a wall (a door entered off its usual spot)
+	CoF_SectMoveOne( s, r, anchor, landing, NULL, landmarks ? dst : NULL );
 	for( i = 0; i < n; i++ )
 	{
 		if( !movers[i] || i == anchor ) continue;
 		if( landmarks ) VectorAdd( svs.clients[i].edict->v.origin, offset, landing );
 		else VectorCopy( svs.clients[anchor].edict->v.origin, landing );
-		CoF_SectMoveOne( s, r, i, landing, &svs.clients[anchor] );
+		CoF_SectMoveOne( s, r, i, landing, &svs.clients[anchor], landmarks ? dst : NULL );
 	}
 	if( forced < 0 && count ) CoF_SectRememberExit( models, count, level, landmark );
 }
@@ -393,7 +398,7 @@ void SV_CoF_SectionsFrame( void )
 			{
 				VectorCopy( start->v.origin, landing );
 				landing[2] += 1.0f;
-				if( SV_CoF_PartySectionMove( cl, landing, NULL ))
+				if( SV_CoF_PartySectionMove( cl, landing, NULL, NULL ))
 				{
 					Con_Printf( "[cof-story-transition] phase=section-respawn userid=%d section=%s\n", cl->userid, s->sec[cof_sect_last[i]].map );
 					section = cof_sect_last[i];
@@ -417,7 +422,7 @@ void SV_CoF_SectionsFrame( void )
 		if( !leader || !CoF_SectAlive( leader->edict ) ||
 			CoF_SectionsAt( s, bot->edict->v.origin[2] ) == CoF_SectionsAt( s, leader->edict->v.origin[2] )) continue;
 		cof_sect_moved_at[i] = sv.time;
-		if( SV_CoF_PartySectionMove( bot, leader->edict->v.origin, leader ))
+		if( SV_CoF_PartySectionMove( bot, leader->edict->v.origin, leader, NULL ))
 			Con_Printf( "[cof-story-transition] phase=section-companion userid=%d leader=%d\n", bot->userid, leader->userid );
 	}
 	// once-only exits that are gone: the place they were still moves a player

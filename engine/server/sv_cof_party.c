@@ -1220,10 +1220,24 @@ static qboolean CoF_PartyStandable( edict_t *ent )
 	return !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f && tr.plane.normal[2] >= 0.7f;
 }
 
+// The section move's last resort: the destination landmark itself (it stands in the doorway it names), or a free
+// spot beside it.
+static qboolean CoF_PartySectionFallback( sv_client_t *cl, const vec3_t fallback )
+{
+	vec3_t feet, spot;
+	if( !CoF_PartyMove( cl, fallback, NULL )) return false;
+	if( !CoF_PartyInSolid( cl->edict )) return true;
+	VectorCopy( fallback, feet );
+	feet[2] += cl->edict->v.mins[2] - 1.0f; // CoF_PartyLanding adds -mins.z + 1 back
+	return CoF_PartyLanding( cl, cl->edict, feet, spot ) && CoF_PartyMove( cl, spot, NULL );
+}
+
 // A merged map's section move (sv_cof_sections.c): cl to landing, its view kept. Inside something solid there, or
-// on top of anchor, a free spot beside anchor's new place (or beside the landing when anchor is cl or NULL); none:
-// cl stays where it was. Half a second of black fading in, like the retail co-op door. True when moved.
-qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor )
+// on top of anchor, a free spot beside anchor's new place (or beside the landing when anchor is cl or NULL); then,
+// with a fallback (the destination landmark), there or beside it: the landing can lie deep in a wall when the door
+// was entered off its usual spot, and every spot beside a point inside a wall fails too. None: cl stays where it
+// was. Half a second of black fading in, like the retail co-op door. True when moved.
+qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor, const float *fallback )
 {
 	edict_t *at;
 	vec3_t old, feet, spot;
@@ -1234,7 +1248,8 @@ qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_clie
 	if( CoF_PartyInSolid( cl->edict ) || ( at != cl->edict && CoF_PartyBoxesTouch( cl->edict, at )))
 	{
 		CoF_PartyFeet( cl, at, feet );
-		if( !CoF_PartyLanding( cl, at, feet, spot ) || !CoF_PartyMove( cl, spot, NULL ))
+		if(( !CoF_PartyLanding( cl, at, feet, spot ) || !CoF_PartyMove( cl, spot, NULL )) &&
+			( !fallback || !CoF_PartySectionFallback( cl, fallback )))
 		{
 			CoF_PartyMove( cl, old, NULL );
 			return false;
