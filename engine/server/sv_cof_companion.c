@@ -56,6 +56,7 @@
 #define COF_COMPANION_PARTNER 48.0f // another player this close in its way: as near as it gets for now
 #define COF_COMPANION_LINE_STICK 48.0f // a bot further back in the line counts this much farther for each place
 #define COF_COMPANION_PARTNER_PACE 40.0f // a partner in the way moving on at least this fast: keep its pace
+#define COF_COMPANION_DOWN_MEMORY 0.5 // a downed person stays down this long when their body leaves the ground a moment
 
 static convar_t *cof_companion; // how many companion bots to keep (0: none)
 static convar_t *cof_companion_name;
@@ -102,6 +103,7 @@ typedef struct
 	const char *place_why;
 	double place_since;
 	qboolean leader_held; // the leader is held by the game this frame
+	double leader_down_until; // the leader counts as down until then (see COF_COMPANION_DOWN_MEMORY)
 } cof_companion_t;
 
 static cof_companion_t cof_companions[MAX_CLIENTS];
@@ -828,6 +830,10 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 		in->leader_alive = CoF_CompanionAlive( le );
 		in->leader_health = (int)le->v.health;
 		in->leader_down = !in->leader_alive && SV_CoF_RetailRevivable( leader );
+		// A dead body's FL_ONGROUND comes and goes from frame to frame (live 2026-10-17), and the game's CPR wants it
+		// on the ground: down stays down a moment, else the bot drops out of coming to revive every other frame.
+		if( in->leader_down ) c->leader_down_until = sv.time + COF_COMPANION_DOWN_MEMORY;
+		else if( !in->leader_alive && sv.time < c->leader_down_until ) in->leader_down = 1;
 		in->leader_held = in->leader_alive && CoF_CompanionHeld( leader );
 		in->leader_visible = CoF_CompanionSees( in->eye, in->leader_eye, ent, le );
 		if( in->leader_alive && fabs( le->v.origin[2] - ent->v.origin[2] ) < 40.0f )
@@ -881,7 +887,8 @@ static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companio
 	case COF_BRAIN_ACT_EQUIP_MELEE: weapon = arms->melee; break;
 	case COF_BRAIN_ACT_EQUIP_HEAL: weapon = arms->heal; break;
 	case COF_BRAIN_ACT_REVIVE:
-		if( !leader || sv.time < c->revive_after ) break;
+		// on a frame the body lies on the ground (the game's CPR refuses it otherwise; see leader_down_until)
+		if( !leader || sv.time < c->revive_after || !SV_CoF_RetailRevivable( leader )) break;
 		c->revive_after = sv.time + 1.0;
 		if( SV_CoF_RetailRevive( cl, leader ))
 			Con_Printf( "cofstory phase=companion-cpr userid=%d leader=%d\n", cl->userid, leader->userid );
@@ -1140,10 +1147,14 @@ void SV_CoF_CompanionFrame( void )
 		CoF_BrainThink( &c->brain, &in, &c->out );
 		if( cof_companion_debug && cof_companion_debug->value && c->out.mode != c->mode )
 			Con_Printf( "cofstory phase=companion-why userid=%d mode=%s distance=%.0f rank=%d visible=%d walkable=%d block=%d crowd=%d "
-				"nav=%d going=%d goal=%.0f,%.0f,%.0f trail=%d/%d door=%d held=%d leader_held=%d threat=%d\n", cl->userid,
+				"nav=%d going=%d goal=%.0f,%.0f,%.0f trail=%d/%d door=%d held=%d leader_held=%d threat=%d leader_alive=%d down=%d "
+				"leader_flags=%x leader_fuser3=%g leader_deadflag=%d\n", cl->userid,
 				cof_companion_modes[c->out.mode], in.leader ? CoF_BrainDist( in.self, in.leader_pos ) : -1.0f, in.rank,
 				in.leader_visible, in.leader_walkable, in.partner_block, in.crowd, in.nav, c->out.going, c->out.goal[0],
-				c->out.goal[1], c->out.goal[2], c->brain.cursor, c->brain.count, c->brain.door, in.held, in.leader_held, in.threat );
+				c->out.goal[1], c->out.goal[2], c->brain.cursor, c->brain.count, c->brain.door, in.held, in.leader_held, in.threat,
+				in.leader_alive, in.leader_down, leads && SV_IsValidEdict( leads->edict ) ? leads->edict->v.flags : 0,
+				leads && SV_IsValidEdict( leads->edict ) ? leads->edict->v.fuser3 : 0.0f,
+				leads && SV_IsValidEdict( leads->edict ) ? leads->edict->v.deadflag : -1 );
 		if( bot )
 		{
 			// one syringe for the leader at a time, and the cooldown counts for the whole party
@@ -1239,4 +1250,21 @@ void SV_CoF_CompanionInit( void )
 	cof_companion_light = Cvar_Get( "cof_companion_light", "1", 0, "story co-op: a companion bot keeps its flashlight on" );
 	cof_companion_debug = Cvar_Get( "cof_companion_debug", "0", 0, "story co-op: log what a companion perceived at each change of mode" );
 	Cmd_AddCommand( "cof_companion_cmd", CoF_CompanionCommand_f, "story co-op AI companion: add | remove | wait | follow | status" );
+}
+
+// The engine moved this companion to its person's side (a merged map's section move, a story door the party took
+// together): a teleport it asked for before is not wanted any more (it moved the bot away again, where the player
+// could see it), and its trail leads back through where they both were. It starts afresh from here.
+void SV_CoF_CompanionMoved( sv_client_t *cl )
+{
+	int slot = CoF_CompanionSlot( cl );
+	cof_companion_t *c;
+	if( slot < 0 ) return;
+	c = &cof_companions[slot];
+	if( c->userid != cl->userid ) return;
+	c->place_pending = false;
+	c->route_length = 0;
+	c->brain.count = c->brain.cursor = c->brain.door = c->brain.broken = 0;
+	c->brain.have_sample = c->brain.have_leader_last = c->brain.following = 0;
+	c->brain.stuck_since = c->brain.lost_since = 0.0;
 }

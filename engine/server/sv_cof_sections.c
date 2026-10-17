@@ -223,6 +223,7 @@ static void CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r,
 		return;
 	}
 	cof_sect_moved_at[slot] = sv.time;
+	SV_CoF_CompanionMoved( cl ); // a companion bot carried along starts afresh beside its person
 	// original map and landmark names: the run report counts this exit as the original game's
 	Con_Printf( "[cof-story-transition] phase=section-move userid=%d from=%s to=%s landmark=%s origin=%.3f,%.3f,%.3f\n", cl->userid,
 		s->sec[from].map, s->sec[r->to_section].map, CoF_SectionsOriginalName( &s->sec[r->to_section], r->dest_landmark ),
@@ -423,7 +424,10 @@ void SV_CoF_SectionsFrame( void )
 			CoF_SectionsAt( s, bot->edict->v.origin[2] ) == CoF_SectionsAt( s, leader->edict->v.origin[2] )) continue;
 		cof_sect_moved_at[i] = sv.time;
 		if( SV_CoF_PartySectionMove( bot, leader->edict->v.origin, leader, NULL ))
+		{
+			SV_CoF_CompanionMoved( bot );
 			Con_Printf( "[cof-story-transition] phase=section-companion userid=%d leader=%d\n", bot->userid, leader->userid );
+		}
 	}
 	// once-only exits that are gone: the place they were still moves a player
 	for( j = 0; j < cof_sect_open_count; j++ )

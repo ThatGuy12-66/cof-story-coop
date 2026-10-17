@@ -24,4 +24,6 @@ qboolean SV_CoF_CompanionAway( const sv_client_t *cl );
 // but push, gravity and a hurt volume that fires nothing: story scripts, exits
 // and items are the people's).
 qboolean SV_CoF_CompanionTriggerTouch( edict_t *trigger, edict_t *ent );
+// The engine moved this companion to its person's side (a section move, a door the party took together).
+void SV_CoF_CompanionMoved( sv_client_t *cl );
 #endif

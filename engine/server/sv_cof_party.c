@@ -17,6 +17,7 @@
 #include "sv_cof_retail.h"
 #include "sv_cof_exit.h"
 #include "sv_cof_scene.h"
+#include "sv_cof_companion.h"
 
 #define COF_PARTY_DOOR_FLAG 0x1EA4
 #define COF_PARTY_PREVIOUS_ORIGIN 0x618
@@ -922,6 +923,7 @@ static void CoF_PartyFinishDoors( void )
 			event->pending[i] = false;
 			if( event->froze[i] ) CoF_PartyEndingHold( event, i, false );
 			Con_Printf( "cofstory phase=%s-party-moved userid=%d owner=%d origin=%.3f,%.3f,%.3f\n", kind, cl->userid, owner->userid, landing[0], landing[1], landing[2] );
+			SV_CoF_CompanionMoved( cl ); // a companion bot starts afresh beside its person
 		}
 		if( !pending ) event->active = false;
 	}
