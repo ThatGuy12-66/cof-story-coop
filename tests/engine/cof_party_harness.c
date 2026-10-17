@@ -127,6 +127,9 @@ static char gift_log[256]; /* the story gifts reported to the test gun, "userid:
 static void SV_CoF_TestGunGift(sv_client_t *cl,const char *name) {
     size_t n=strlen(gift_log); snprintf(gift_log+n,sizeof(gift_log)-n,"%d:%s;",cl->userid,name);
 }
+/* the companion module told that the party code moved a player (a bot starts afresh beside its person) */
+static int companion_moved;
+static void SV_CoF_CompanionMoved(sv_client_t *cl) { companion_moved++; }
 static int ending_fades_out,ending_fades_in;
 static qboolean SV_CoF_RetailScreenFade(sv_client_t *cl,float duration,float hold,int flags,int r,int g,int b,int a) {
     assert(duration==0.5f && r==0 && g==0 && b==0 && a==255);
@@ -156,7 +159,7 @@ static void setup(void) {
     int i;
     memset(entities,0,sizeof(entities)); memset(clients,0,sizeof(clients));
     memset(private_data,0,sizeof(private_data)); memset(prompts,0,sizeof(prompts));
-    exit_key=exit_waiter=fades=scene_watching=0; ending_fades_out=ending_fades_in=0; gift_log[0]=0;
+    exit_key=exit_waiter=fades=scene_watching=companion_moved=0; ending_fades_out=ending_fades_in=0; gift_log[0]=0;
     gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=0; front_only_x=0;
     status_log[0]=0; status_length=0; sv.name="c_start";
     sv.state=ss_active; sv.time=10; svs.clients=clients; svs.maxclients=2;
@@ -360,7 +363,7 @@ int main(void) {
     entities[2].v.origin[0]=64; tick(0.1);
     VectorCopy(entities[1].v.origin,before); entities[1].v.origin[0]=2000; entities[1].v.angles[1]=90;
     SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1);
-    assert(strstr(status_log,"teleport-begin userid=100 target=tp-dest companions=1"));
+    assert(strstr(status_log,"teleport-begin userid=100 target=tp-dest companions=1") && companion_moved==1);
     assert(links==1 && entities[2].v.origin[0]==2035 && entities[2].v.angles[1]==90);
     assert(strstr(status_log,"teleport-party-moved userid=101 owner=100"));
     /* ...into a room only one fits (c_intro `kunitei`, live 2026-10-12): the partner

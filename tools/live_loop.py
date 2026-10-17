@@ -489,6 +489,46 @@ def start(game: Game) -> None:
     game.sleep(8)
 
 
+@scenario("checkpoint", "c_start2", companions=2)
+def checkpoint(game: Game) -> None:
+    """Save, walk elsewhere, load (one session, two bots): everyone back where they saved, the bots added again."""
+    game.wait_for(r"companion-added userid=\d+ name=Companion 2", 60)
+    game.cmd("god"); game.cmd("notarget"); game.cmd("cof_companion_debug 1")
+    game.at(*C_START2_SPOTS[2])
+    game.sleep(8)
+    at = game.mark("save")
+    game.cmd("cof_save manual")
+    if not game.wait_for(r"session-saved slot=manual", 30, at):
+        game.mark("NOTE no manual save within 30 s")
+    game.at(*C_START2_SPOTS[6])
+    game.sleep(6)
+    at = game.mark("load")
+    game.cmd("cof_load manual")
+    if not game.wait_for(r"companion-added userid=\d+ name=Companion 2", 90, at):
+        game.mark("NOTE the companions were not back within 90 s of the load")
+    game.cmd("god"); game.cmd("notarget")
+    game.sleep(8)
+    game.hold("forward", 1.5)
+    game.sleep(6)
+
+
+@scenario("death", "c_start2", companions=2)
+def death(game: Game) -> None:
+    """The player dies with two bots up: a bot comes to revive them (CPR) or they respawn beside it; twice."""
+    game.wait_for(r"companion-added userid=\d+ name=Companion 2", 60)
+    game.cmd("notarget"); game.cmd("cof_companion_debug 1")
+    game.at(*C_START2_SPOTS[2])
+    game.sleep(8)
+    for k in range(2):
+        at = game.mark(f"kill {k}")
+        game.cmd("kill")
+        if not game.wait_for(r"companion-cpr|respawn|inventory-restored", 30, at):
+            game.mark(f"NOTE nothing brought the player back within 30 s ({k})")
+        game.sleep(12)
+        game.hold("forward", 1.0)
+        game.sleep(5)
+
+
 @scenario("merged", "cm_apartment1", companions=2)
 def merged(game: Game) -> None:
     """A merged map (--map cm_apartment1 or cm_apartment3): the player goes through every door between its sections

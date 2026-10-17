@@ -265,9 +265,16 @@ static qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname ) { e
 static void SV_CoF_RetailSupply( sv_client_t *cl ) { supplies++; }
 static qboolean SV_CoF_RetailReviving( sv_client_t *cl ) { return reviving; }
 static qboolean SV_CoF_RetailRevived( sv_client_t *cl ) { return false; }
-/* as the retail layer: dead, nobody at it, not in its get-up */
-static qboolean SV_CoF_RetailRevivable( sv_client_t *cl ) { return cl->edict->v.health <= 0 && !reviving && cl->edict->v.fuser3 != 3.0f; }
-static qboolean SV_CoF_RetailRevive( sv_client_t *reviver, sv_client_t *body ) { revives++; reviving = revive_ok; return revive_ok; }
+/* as the retail layer: dead, nobody at it, not in its get-up, on the ground (with body_flicker, only every other
+ * frame: a dead player's FL_ONGROUND came and went each frame live, 2026-10-17) */
+static int body_flicker;
+static qboolean SV_CoF_RetailRevivable( sv_client_t *cl )
+{
+	if( body_flicker && ( (long)( sv.time * 20.0 + 0.5 ) & 1 )) return false;
+	return cl->edict->v.health <= 0 && !reviving && cl->edict->v.fuser3 != 3.0f;
+}
+/* the game's Use starts CPR only when the body is revivable right then */
+static qboolean SV_CoF_RetailRevive( sv_client_t *reviver, sv_client_t *body ) { revives++; if( !SV_CoF_RetailRevivable( body )) return false; reviving = revive_ok; return revive_ok; }
 static void SV_CoF_RetailCprRepair( void ) { repairs++; }
 static qboolean SV_CoF_RetailFallen( sv_client_t *cl ) { return fallen; }
 static qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command )
@@ -341,7 +348,7 @@ static void setup( void )
 	memset( entities, 0, sizeof( entities )); memset( clients, 0, sizeof( clients ));
 	memset( log_text, 0, sizeof( log_text )); log_length = 0;
 	gate = 1; connect_ok = 1; put_in = placed = ready = equips = runs = wall = inits = 0; next_userid = 200;
-	supplies = revives = reviving = repairs = fallen = gives = command_count = 0; revive_ok = 1; free_slots = 4;
+	supplies = revives = reviving = repairs = fallen = gives = command_count = body_flicker = 0; revive_ok = 1; free_slots = 4;
 	memset( commands, 0, sizeof( commands )); last_equip[0] = 0;
 	arms_weapon = COF_ARMS_MELEE; arms_has_gun = arms_has_heal = arms_sights = 0; arms_clip = arms_reserve = 0; arms_has_melee = 1;
 	memset( in_game, 0, sizeof( in_game )); in_game[1] = 1;
@@ -615,6 +622,18 @@ int main( void )
 	/* done: the host plays its get-up, still dead: no second CPR, no second announcement */
 	reviving = 0; entities[1].v.fuser3 = 3; memset( told, 0, sizeof( told ));
 	frame( 0.05 ); frame( 1.5 ); assert( revives == 1 && !told[0][0] && !( last_run.buttons & COF_IN_USE ));
+	/* The body off the ground every other frame: the bot keeps coming to revive (no revive/idle switch each frame)
+	 * and starts the CPR on a frame the body lies still, not a second later. */
+	setup(); cvars[0].value = 1; settle(); body_flicker = 1;
+	entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+	{
+		int before = logged( "userid=200 mode=" ), started = -1;
+		for( i = 0; i < 12; i++ ) { entities[2].v.origin[0] = 200; frame( 0.05 ); }
+		assert( logged( "userid=200 mode=" ) - before <= 1 && cof_companions[1].mode == COF_BRAIN_REVIVE );
+		for( i = 0; i < 12 && started < 0; i++ ) { entities[2].v.origin[0] = 40; frame( 0.05 ); if( reviving ) started = i; }
+		assert( started >= 0 && started <= 2 );
+	}
+	body_flicker = 0;
 	/* the game refused: again a second later, and no +use meanwhile (it would use whatever is nearest) */
 	setup(); cvars[0].value = 1; settle(); revive_ok = 0;
 	entities[2].v.origin[0] = 40; entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
@@ -818,6 +837,14 @@ int main( void )
 	assert( placed == 1 && place_had_near && place_near[0] == 1500 && logged( "reason=door" ) == 1 );
 	/* the teleport line says where everyone was */
 	assert( logged( "companion-teleport userid=200 leader=1 reason=door at=880,0,0 leader_at=1500,0,0" ) == 1 );
+	/* A teleport still waiting for a spot out of sight is dropped when the engine carries the bot to its person
+	 * meanwhile (a merged map's section move, a story door the party takes together): it was placed a second time,
+	 * away from them where they could see it (live 2026-10-17: "reason=stuck ... seen=maybe" after "section-companion"). */
+	setup(); cvars[0].value = 1; settle(); place_ok = 0; entities[2].v.origin[0] = 3000; frame( 0.05 );
+	assert( !placed && cof_companions[1].place_pending );
+	entities[2].v.origin[0] = 60; SV_CoF_CompanionMoved( &clients[1] );
+	for( i = 0; i < 50; i++ ) { entities[2].v.origin[0] = 60; frame( 0.1 ); }
+	assert( !placed && !cof_companions[1].place_pending );
 	/* no spot out of the player's sight: asked again each frame, then (after 3 s) the least seen */
 	setup(); cvars[0].value = 1; settle(); place_ok = 0; entities[2].v.origin[0] = 3000; frame( 0.05 );
 	assert( !placed && !logged( "companion-teleport" ));

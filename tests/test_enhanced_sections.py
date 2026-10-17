@@ -135,6 +135,14 @@ class ServerWiringTests(unittest.TestCase):
         refused = one[one.index('if( !SV_CoF_PartySectionMove( cl, landing, anchor, landmark ))'):]
         self.assertLess(refused.index('if( sv.time < cof_sect_refused_at[slot] + 1.0 ) return;'), refused.index('section-move-refused'))
 
+    def test_a_companion_carried_through_a_section_move_starts_afresh(self):
+        # a teleport it had asked for before fired after the move and put it away from its person (live 2026-10-17)
+        one = body_of(SERVER / 'sv_cof_sections.c', 'static void CoF_SectMoveOne(')
+        self.assertLess(one.index('cof_sect_moved_at[slot] = sv.time;'), one.index('SV_CoF_CompanionMoved( cl );'))
+        text = (SERVER / 'sv_cof_sections.c').read_text(encoding='latin-1')
+        follow = text[text.index('if( SV_CoF_PartySectionMove( bot, leader->edict->v.origin, leader, NULL ))'):]
+        self.assertLess(follow.index('SV_CoF_CompanionMoved( bot );'), follow.index('phase=section-companion'))
+
     def test_play_everywhere_sounds_reach_only_their_section(self):
         multicast = body_of(SERVER / 'sv_game.c', 'static int SV_Multicast(')
         skip = multicast.index('cof_multicast_section >= 0 && SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section')
