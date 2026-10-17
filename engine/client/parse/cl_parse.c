@@ -344,8 +344,15 @@ void CL_ParseStaticDecal( sizebuf_t *msg )
 	else modelIndex = 0;
 	int flags = MSG_ReadByte( msg );
 	float scale = (float)MSG_ReadWord( msg ) / 4096.0f;
+	int texture = CL_DecalIndex( decalIndex );
 
-	CL_FireCustomDecal( CL_DecalIndex( decalIndex ), entityIndex, modelIndex, origin, flags, scale );
+	// Cry of Fear story co-op: which map decal the renderer will refuse ("Decal has invalid texture!", seen only
+	// on merged maps), so the cause can be traced
+	if( !texture )
+		Con_Printf( S_WARN "static decal %d \"%s\" at %.1f %.1f %.1f (entity %d, model %d): no texture\n", decalIndex,
+			decalIndex >= 0 && decalIndex < MAX_DECALS ? host.draw_decals[decalIndex] : "?", origin[0], origin[1], origin[2],
+			entityIndex, modelIndex );
+	CL_FireCustomDecal( texture, entityIndex, modelIndex, origin, flags, scale );
 }
 
 /*

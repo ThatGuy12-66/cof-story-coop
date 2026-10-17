@@ -422,20 +422,32 @@ COF_SECT_FN void CoF_SectPutStr( cof_sect_buf_t *b, const char *s )
 	CoF_SectPut( b, s, strlen( s ));
 }
 
-// the next entity: the text between a '{' and the next '}' with no '{' between them (as bsp.py parse_ents)
+// the next entity: the text between a '{' and the next '}' with no '{' between them, braces inside a quoted value
+// being the value's, as in the engine's tokenizer (decals are named like "{ding10": split there, a decal lost every
+// key, and merged maps logged "Decal has invalid texture!"); as bsp.py entity_blocks
 COF_SECT_FN int CoF_SectNextBlock( const char **cursor, const char **start, const char **stop )
 {
 	const char *p = *cursor;
 	while( *p )
 	{
 		const char *q;
+		if( *p == '"' )
+		{
+			for( p++; *p && *p != '"'; p++ ) ;
+			if( *p ) p++;
+			continue;
+		}
 		if( *p != '{' )
 		{
 			p++;
 			continue;
 		}
-		q = p + 1;
-		while( *q && *q != '{' && *q != '}' ) q++;
+		for( q = p + 1; *q && *q != '{' && *q != '}'; q++ )
+		{
+			if( *q != '"' ) continue;
+			for( q++; *q && *q != '"'; q++ ) ;
+			if( !*q ) return 0;
+		}
 		if( !*q ) return 0;
 		if( *q == '{' )
 		{
