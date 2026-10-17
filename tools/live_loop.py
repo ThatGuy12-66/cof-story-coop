@@ -9,10 +9,14 @@ log. Run after run, an engine change can be built, installed and tried with nobo
     python -m tools.live_loop report LOG
     python -m tools.live_loop install COPY XASH_DLL     (an engine build into the copy; the old one kept as .bak)
 
-Every run: -nosound (and, should the game open a Windows audio session anyway, that session muted, and unmuted
-again before the game quits, so the copy keeps its sound for the next person); sv_cheats, the entity tools and an
-RCON password on for this run only; the copy's story settings, configs and saves put back afterwards. The game
-is closed if it outlives the scenario.
+    python -m tools.live_loop recover COPY              (after a run that was killed: saves, cfgs, sound back)
+
+Every run: -nosound, and every output device muted from before the game starts until after it has exited (Cry of
+Fear still plays through an audio session of its own; a per-program mute would be remembered by Windows), then
+each device put back as it was; sv_cheats, the entity tools and an RCON password on for this run only; the copy's
+story settings, cfgs, launcher settings and saves put back afterwards. A recovery record under
+evidence/live-loop/pending holds all of that while a run lasts, so a run killed halfway is undone by the next one
+(or by recover). The game is closed if it outlives the scenario.
 """
 from __future__ import annotations
 
@@ -31,7 +35,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 
 if __package__ in (None, ""):
@@ -60,43 +63,17 @@ def game_processes(copy: Path) -> list[int]:
     return [int(r["ProcessId"]) for r in rows if str(r.get("ExecutablePath") or "").casefold().startswith(prefix)]
 
 
-class AudioGuard:
-    """game_audio.ps1 guard: from before the game starts until stop(), every audio session of a process from the
-    copy is muted the moment it appears; stop() unmutes them (the game still running: Windows remembers a session's
-    mute for the program)."""
+PENDING = EVIDENCE / "pending"   # the recovery record of the run in progress
 
-    def __init__(self, copy: Path):
-        import threading
-        self.stop_file = Path(tempfile.gettempdir()) / f"live-loop-audio-stop-{secrets.token_hex(6)}"
-        self.lines: list[str] = []
-        self.process = subprocess.Popen([str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                                         "-File", str(AUDIO), "-Action", "guard", "-Root", str(Path(copy).resolve()),
-                                         "-Stop", str(self.stop_file)],
-                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                        creationflags=NO_WINDOW)
-        self.ready = threading.Event()
-        self.reader = threading.Thread(target=self._read, daemon=True)
-        self.reader.start()
-        if not self.ready.wait(30):
-            raise SystemExit("The audio guard did not start; the game was not started.")
 
-    def _read(self) -> None:
-        for line in self.process.stdout:
-            line = line.rstrip()
-            if line == "guard ready":
-                self.ready.set()
-            elif line:
-                self.lines.append(line)
-                print(f"  audio: {line}")
-
-    def stop(self) -> None:
-        self.stop_file.write_text("stop", encoding="ascii")
-        try:
-            self.process.wait(20)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-        self.reader.join(5)
-        self.stop_file.unlink(missing_ok=True)
+def devices(action: str, state: Path) -> str:
+    """game_audio.ps1: mute every output device (their states recorded in state first), or restore them."""
+    out = subprocess.run([str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                          str(AUDIO), "-Action", action, "-State", str(state)],
+                         capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW)
+    if out.returncode:
+        raise SystemExit(f"Sound devices: {action} failed: {out.stdout.strip()} {out.stderr.strip()}")
+    return out.stdout.strip()
 
 
 def kill(pids: list[int]) -> None:
@@ -135,7 +112,7 @@ class Game:
     copy: Path
     rcon: Rcon
     log_path: Path
-    guard: AudioGuard | None = None
+    map_name: str = ""
     started: float = field(default_factory=time.time)
 
     def cmd(self, command: str, timeout: float = 3.0) -> str:
@@ -182,29 +159,64 @@ class Game:
         self.cmd(f"-{button}")
 
 
-def _snapshot_cfgs(copy: Path) -> dict:
+def _kept_files(copy: Path) -> list[Path]:
+    """What a run changes and puts back: the game's cfgs (volumes included), the launcher's settings, the saves."""
+    from tools import coop_play as play
     game = copy / "cryoffear"
-    return {p.name: p.read_bytes() for p in game.glob("*.cfg")} | {
-        p.name: p.read_bytes() for p in game.glob("*.json")}
+    return [*game.glob("*.cfg"), *game.glob("*.json"), copy / play.SETTINGS]
 
 
-def _restore_cfgs(copy: Path, kept: dict) -> None:
-    game = copy / "cryoffear"
-    for name, data in kept.items():
-        path = game / name
-        if not path.exists() or path.read_bytes() != data:
-            path.write_bytes(data)
+def _begin(copy: Path) -> Path:
+    """The recovery record: the copy's kept files and saves, then the sound devices' states (and muted)."""
+    if PENDING.exists():
+        recover(copy)
+    record = PENDING
+    (record / "files").mkdir(parents=True)
+    (record / "copy.txt").write_text(str(copy), encoding="utf-8")
+    for path in _kept_files(copy):
+        if path.is_file():
+            shutil.copy2(path, record / "files" / f"{path.parent.name}--{path.name}")
+    if (copy / "SAVE").exists():
+        shutil.copytree(copy / "SAVE", record / "SAVE")
+    print(f"  sound: {devices('mute', record / 'devices.txt')}")
+    return record
+
+
+def recover(copy: Path | None = None) -> bool:
+    """Undo a run (finished or killed): the game closed, the sound devices, kept files and saves put back."""
+    if not PENDING.exists():
+        return False
+    copy = Path((PENDING / "copy.txt").read_text(encoding="utf-8")) if (PENDING / "copy.txt").exists() else copy
+    left = game_processes(copy) if copy else []
+    if left:
+        kill(left)
+        time.sleep(2)
+    if (PENDING / "devices.txt").exists():
+        print(f"  sound: {devices('restore', PENDING / 'devices.txt')}")
+    if copy and (PENDING / "files").exists():
+        for kept in (PENDING / "files").iterdir():
+            folder, name = kept.name.split("--", 1)
+            target = (copy / "cryoffear" if folder == "cryoffear" else copy) / name
+            if not target.exists() or target.read_bytes() != kept.read_bytes():
+                shutil.copy2(kept, target)
+    if copy and (PENDING / "SAVE").exists():
+        if (copy / "SAVE").exists():
+            shutil.rmtree(copy / "SAVE")
+        shutil.copytree(PENDING / "SAVE", copy / "SAVE")
+    elif copy and (PENDING / "files").exists() and (copy / "SAVE").exists():
+        shutil.rmtree(copy / "SAVE")   # there were none before the run
+    shutil.rmtree(PENDING)
+    return True
 
 
 @contextlib.contextmanager
 def session(copy: Path, map_name: str, *, companions: int = 1, merged: bool = True, bonus_room: bool = False,
             coop_flashlight: bool = False, cheats: bool = True, extra: tuple = (), ready_timeout: float = 120.0):
-    """Start the copy's game on map_name, yield a Game once the host is in, close it afterwards and put the copy's
-    story settings, configs and saves back."""
+    """Start the copy's game on map_name, yield a Game once the host is in; afterwards close it and put the copy's
+    settings, saves and the sound devices back."""
     from tools import coop_app as app
     from tools import coop_play as play
     from tools import friend_setup as setup_lib
-    from tools.merged_maps_check import saves_kept
     copy = Path(copy).resolve()
     try:
         setup_lib.validate_runtime(copy)
@@ -212,48 +224,35 @@ def session(copy: Path, map_name: str, *, companions: int = 1, merged: bool = Tr
         if not dev_engine(copy):
             raise
         print(f"  developer engine {dev_engine(copy)} (python -m tools.live_loop restore puts the packaged one back)")
-    if game_processes(copy):
+    if game_processes(copy) and not PENDING.exists():
         raise SystemExit("The game is already running in this copy.")
-    settings_file = copy / play.SETTINGS
-    settings_before = settings_file.read_bytes() if settings_file.exists() else None
-    cfgs = _snapshot_cfgs(copy)
     password = secrets.token_hex(8)
     args, config = play.host_launch(copy, solo=True, name="Tester", map_name=map_name, players=companions + 1,
                                     password="", companions=companions, port=PORT, cont=False, video=[],
                                     bonus_room=bonus_room, merged=merged, coop_flashlight=coop_flashlight)
     config += f'rcon_password "{password}"\nrcon_enable 1\n'
-    # silent from the first frame: the guard mutes what still opens a session; the volumes come back with the cfgs
     story = play.story_config() + "volume 0\nMP3Volume 0\n"
     if cheats:
         story = story.replace("sv_cheats 0", "sv_cheats 1").replace("sv_enttools_enable 0", "sv_enttools_enable 1")
-    game_dir = copy / "cryoffear"
-    (game_dir / play.STORY_CFG).write_text(story, encoding="ascii")
-    (game_dir / play.SESSION_CFG).write_text(config, encoding="ascii")
-    setup_lib.keep_previous_log(copy, play.LOG)
-    game = Game(copy, Rcon(password), copy / play.LOG)
+    game = Game(copy, Rcon(password), copy / play.LOG, map_name)
     try:
-        with saves_kept(copy):
-            game.guard = AudioGuard(copy)
-            try:
-                app.start_game(copy, [args[0], "-nosound", *args[1:], *extra])
-                if not game.wait_for(r"cofstory phase=|cof-story-transition\] phase=ready", ready_timeout):
-                    raise SystemExit("The game did not come up (see the session log).")
-                time.sleep(3)
-                yield game
-            finally:
-                _close(game)
+        _begin(copy)   # silences every output device first: no game without it
+        game_dir = copy / "cryoffear"
+        (game_dir / play.STORY_CFG).write_text(story, encoding="ascii")
+        (game_dir / play.SESSION_CFG).write_text(config, encoding="ascii")
+        setup_lib.keep_previous_log(copy, play.LOG)
+        app.start_game(copy, [args[0], "-nosound", *args[1:], *extra])
+        if not game.wait_for(r"cofstory phase=|cof-story-transition\] phase=ready", ready_timeout):
+            raise SystemExit("The game did not come up (see the session log).")
+        time.sleep(3)
+        yield game
     finally:
-        (game_dir / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
-        (game_dir / play.SESSION_CFG).write_text(config.replace(f'rcon_password "{password}"\n', 'rcon_password ""\n'),
-                                                 encoding="ascii")
-        _restore_cfgs(copy, cfgs)
-        if settings_before is not None and settings_file.read_bytes() != settings_before:
-            settings_file.write_bytes(settings_before)
+        _close(game)
+        recover(copy)
 
 
 def _close(game: Game, timeout: float = 30.0) -> None:
-    if game.guard:
-        game.guard.stop()   # unmutes while the game still runs: the session's mute is remembered for the exe
+    """Quit the game and wait until it has exited (the sound devices stay muted until then)."""
     if not game_processes(game.copy):
         return
     try:
@@ -267,6 +266,9 @@ def _close(game: Game, timeout: float = 30.0) -> None:
     if left:
         print("  the game did not quit: closed it")
         kill(left)
+    deadline = time.time() + 15
+    while time.time() < deadline and game_processes(game.copy):
+        time.sleep(1)
 
 
 # --- reading a log -------------------------------------------------------------------------------------------
@@ -281,9 +283,20 @@ class Report:
     teleports: Counter      # by reason
     maps: list
     notes: list
+    finished: bool = True   # the scenario's last marker is in the log (else the game died or hung)
+    sections: int = 0       # section moves of merged maps
+    section_companions: int = 0
+
+    @property
+    def verdict(self) -> str:
+        if not self.finished:
+            return "DIED"
+        return "ERRORS" if self.errors else "ok"
 
     def text(self) -> str:
-        out = [f"{self.minutes:.1f} min, {self.lines} lines; maps: {' -> '.join(self.maps) or '-'}"]
+        out = [f"{self.verdict}: {self.minutes:.1f} min, {self.lines} lines; maps: {' -> '.join(self.maps) or '-'}"]
+        if self.sections:
+            out.append(f"section moves: {self.sections}, companions moved with them: {self.section_companions}")
         rate = sum(self.modes.values()) / self.minutes if self.minutes else 0.0
         out.append(f"companion mode changes: {sum(self.modes.values())} ({rate:.0f}/min) "
                    f"{dict(self.modes)}; worst second: {self.worst_second[0]} ({self.worst_second[1]})")
@@ -314,7 +327,9 @@ def read_report(log: str) -> Report:
             notes.append(f"limit: {body.strip()}")
     minutes = (times[-1] - times[0]).total_seconds() / 60.0 if len(times) > 1 else 0.0
     worst = per_second.most_common(1)[0][::-1] if per_second else (0, "-")
-    return Report(minutes, len(lines), errors, modes, worst, teleports, maps, notes)
+    return Report(minutes, len(lines), errors, modes, worst, teleports, maps, notes,
+                  finished="live-loop done" in log or "live-loop" not in log,
+                  sections=log.count("phase=section-move "), section_companions=log.count("phase=section-companion"))
 
 
 # --- scenarios -----------------------------------------------------------------------------------------------
@@ -413,8 +428,46 @@ def levels(game: Game) -> None:
     walk_spots(game, [(2376, -1254, -731), (2167, -1300, -731), (2101, -1534, -731)])
 
 
-def run(copy: Path, name: str, out: Path, companions: int | None = None, keep_open: bool = False) -> Path:
-    fn, map_name, default_companions, options = SCENARIOS[name]
+@scenario("start", "c_start", companions=2)
+def start(game: Game) -> None:
+    """A story start (--map): the companions join, the opening is skipped, the player walks a little."""
+    joined = game.wait_for(r"companion-added userid=\d+ name=Companion 2", 60)
+    if not joined:
+        game.mark("NOTE the companions were not added within 60 s")
+    game.cmd("god"); game.cmd("notarget"); game.cmd("cof_companion_debug 1")
+    skip_cutscenes(game, 16)
+    game.sleep(8)
+    game.hold("forward", 2.0)
+    game.sleep(6)
+    game.hold("back", 2.0)
+    game.sleep(8)
+
+
+@scenario("merged", "cm_apartment1", companions=2)
+def merged(game: Game) -> None:
+    """A merged map (--map cm_apartment1 or cm_apartment3): the player goes through every door between its sections
+    with two bots; each door must move them and the bots come along."""
+    from tools.merged_maps_check import load_group, section_exits
+    named, sections = load_group(game.copy, game.map_name)
+    exits = section_exits(named, sections)
+    game.wait_for(r"companion-added userid=\d+ name=Companion 2", 90)
+    game.cmd("god"); game.cmd("notarget"); game.cmd("cof_companion_debug 1")
+    skip_cutscenes(game, 12)
+    for i, e in enumerate(exits):
+        # first next to the door, so the bots gather; then into it
+        at = game.mark(f"door {i} {e.src} {e.dst} {e.landmark}")
+        game.at(e.stand[0] - 48, e.stand[1], e.stand[2])
+        game.sleep(5)
+        game.at(*e.stand)
+        if not game.wait_for(r"phase=section-move ", 10, at):
+            game.mark(f"NOTE door {i} {e.src} -> {e.dst}: no section move")
+        game.sleep(6)
+
+
+def run(copy: Path, name: str, out: Path, companions: int | None = None, keep_open: bool = False,
+        map_name: str | None = None) -> Path:
+    fn, default_map, default_companions, options = SCENARIOS[name]
+    map_name = map_name or default_map
     out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"{stamp} {name}: {map_name}, {companions or default_companions} companions")
@@ -424,6 +477,8 @@ def run(copy: Path, name: str, out: Path, companions: int | None = None, keep_op
         if keep_open:
             input("The game stays open; Enter closes it. ")
         log = game.log()
+    if map_name != default_map:
+        name = f"{name}-{map_name}"
     saved = out / f"{stamp}-{name}.log"
     saved.write_text(log, encoding="latin-1")
     report = read_report(log)
@@ -479,6 +534,22 @@ def restore(copy: Path) -> None:
     print(f"xash.dll {packaged[:8]} (packaged) restored")
 
 
+def sweep(copy: Path, out: Path, maps: list[str], companions: int = 2) -> int:
+    """The start scenario on each map, one game each; a table of verdicts."""
+    rows = []
+    for map_name in maps:
+        try:
+            log = run(copy, "start", out, companions, map_name=map_name).read_text(encoding="latin-1")
+            report = read_report(log)
+            rows.append(f"{map_name:16} {report.verdict:7} {report.minutes:4.1f} min  modes {sum(report.modes.values()):4}  "
+                        f"teleports {sum(report.teleports.values()):3}  errors {len(report.errors)}")
+        except (SystemExit, Exception) as error:   # one map's trouble must not end the sweep
+            rows.append(f"{map_name:16} FAILED  {error}")
+    print("\n".join(rows))
+    (out / f"{datetime.now():%Y%m%d-%H%M%S}-sweep.txt").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -489,24 +560,35 @@ def main(argv=None) -> int:
     r.add_argument("--out", type=Path, default=EVIDENCE)
     r.add_argument("--companions", type=int)
     r.add_argument("--keep-open", action="store_true")
+    r.add_argument("--map", help="another map than the scenario's own")
     p = sub.add_parser("report")
     p.add_argument("log", type=Path)
     i = sub.add_parser("install")
     i.add_argument("copy", type=Path)
     i.add_argument("dll", type=Path)
     sub.add_parser("restore").add_argument("copy", type=Path)
+    sub.add_parser("recover").add_argument("copy", type=Path)
+    w = sub.add_parser("sweep", help="the start scenario on every chapter's first map (or --maps)")
+    w.add_argument("copy", type=Path)
+    w.add_argument("--maps", nargs="*")
+    w.add_argument("--out", type=Path, default=EVIDENCE)
     a = parser.parse_args(argv)
     if a.command == "scenarios":
         for name, (fn, map_name, companions, _) in sorted(SCENARIOS.items()):
             print(f"{name:20} {map_name:14} {companions} AI  {(fn.__doc__ or '').strip().splitlines()[0]}")
     elif a.command == "run":
-        run(a.copy, a.scenario, a.out, a.companions, a.keep_open)
+        run(a.copy, a.scenario, a.out, a.companions, a.keep_open, a.map)
     elif a.command == "report":
         print(read_report(a.log.read_text(encoding="latin-1", errors="replace")).text())
     elif a.command == "install":
         install(a.copy, a.dll)
     elif a.command == "restore":
         restore(a.copy)
+    elif a.command == "recover":
+        print("recovered" if recover(Path(a.copy).resolve()) else "nothing to recover")
+    elif a.command == "sweep":
+        from cofcoop.core import CHAPTERS
+        sweep(a.copy, a.out, a.maps or [name for _, name in CHAPTERS])
     return 0
 
 

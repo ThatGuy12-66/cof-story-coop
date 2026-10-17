@@ -63,5 +63,47 @@ class EngineInstallTests(unittest.TestCase):
             self.assertIsNone(live_loop.dev_engine(copy))
 
 
+class RecoveryTests(unittest.TestCase):
+    def test_a_killed_run_is_undone_settings_saves_and_sound(self):
+        from unittest import mock
+        calls = []
+
+        def devices(action, state):
+            # game_audio.ps1 writes the devices' states before it mutes them
+            calls.append(action)
+            if action == "mute":
+                state.write_text("{device}\t0\t1.00\n")
+            return action
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(live_loop, "PENDING", Path(tmp) / "pending"), \
+                mock.patch.object(live_loop, "devices", devices), \
+                mock.patch.object(live_loop, "game_processes", lambda copy: []):
+            copy = Path(tmp) / "copy"
+            (copy / "cryoffear").mkdir(parents=True)
+            (copy / "SAVE" / "cofcoop").mkdir(parents=True)
+            (copy / "cryoffear" / "config.cfg").write_text('volume "0.3"\n')
+            (copy / "cryoffear" / "cof_story.cfg").write_text("sv_cheats 0\n")
+            (copy / "cof-story-coop-settings.json").write_text('{"name": "gore"}')
+            (copy / "SAVE" / "c_start.HL1").write_bytes(b"theirs")
+            (copy / "SAVE" / "cofcoop" / "latest.txt").write_text("autosave")
+            live_loop._begin(copy)
+            # the run: cheats on, volume 0, a new game clears the map saves and autosaves elsewhere
+            (copy / "cryoffear" / "config.cfg").write_text('volume "0"\n')
+            (copy / "cryoffear" / "cof_story.cfg").write_text("sv_cheats 1\n")
+            (copy / "cof-story-coop-settings.json").write_text('{"name": "Tester"}')
+            (copy / "SAVE" / "c_start.HL1").unlink()
+            (copy / "SAVE" / "c_nightmare.HL1").write_bytes(b"run")
+            # ...killed here; the next run (or recover) undoes it
+            self.assertTrue(live_loop.recover(copy))
+            self.assertEqual((copy / "cryoffear" / "config.cfg").read_text(), 'volume "0.3"\n')
+            self.assertEqual((copy / "cryoffear" / "cof_story.cfg").read_text(), "sv_cheats 0\n")
+            self.assertEqual((copy / "cof-story-coop-settings.json").read_text(), '{"name": "gore"}')
+            self.assertEqual(sorted(p.name for p in (copy / "SAVE").rglob("*") if p.is_file()), ["c_start.HL1", "latest.txt"])
+            self.assertEqual(calls, ["mute", "restore"])
+            self.assertFalse(live_loop.PENDING.exists())
+            self.assertFalse(live_loop.recover(copy))   # nothing left to undo
+
+
 if __name__ == "__main__":
     unittest.main()
