@@ -926,8 +926,9 @@ static void CoF_CompanionUpkeep( sv_client_t *cl, cof_companion_t *c, qboolean b
 		if( SV_CoF_RetailFreeSlots( cl ) >= 2 && SV_CoF_StoryGiveItem( cl, "weapon_syringe" ))
 			Con_Printf( "cofstory phase=companion-syringe userid=%d\n", cl->userid );
 	}
-	// The co-op flashlight (frags 32, drawn by every client); a weapon light change resets it.
-	if( cof_companion_light && cof_companion_light->value && (int)ent->v.frags != 32 && sv.time >= c->light_after )
+	// The co-op flashlight (frags 32, drawn by every client), when the host allows it as for the players; a weapon
+	// light change resets it.
+	if( cof_companion_light && cof_companion_light->value && SV_CoF_CoopFlashlightAllowed() && (int)ent->v.frags != 32 && sv.time >= c->light_after )
 	{
 		c->light_after = sv.time + 2.0;
 		SV_CoF_RetailCommand( cl, "flashlight" );

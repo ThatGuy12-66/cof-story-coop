@@ -3176,6 +3176,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	if( SV_CoF_Inventory12ClientCommand( cl ))
 		return;
 
+	// Cry of Fear story co-op: the co-op flashlight (F) only when the host allows it
+	if( SV_CoF_LightClientCommand( cl ))
+		return;
+
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )
 	{
 		if( !Q_strcmp( Cmd_Argv( 0 ), ucmds[i].name ))

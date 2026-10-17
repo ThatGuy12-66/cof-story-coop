@@ -17,6 +17,12 @@ qboolean SV_CoF_StoryFireTargets( const char *name, void *activator, void *calle
 // LoadFileForMe, which shows the game scriptsettings.dat in the session's state.
 void SV_CoF_BonusInit( void );
 byte *SV_CoF_BonusLoadFile( const char *filename, int *pLength );
+// The co-op flashlight (sv_cof_light.c): cof_coop_flashlight, the host's choice, off by default. The client
+// command hook drops a player's "flashlight" (true: handled); the frame switches off a torch not allowed.
+void SV_CoF_LightInit( void );
+void SV_CoF_LightFrame( void );
+qboolean SV_CoF_CoopFlashlightAllowed( void );
+qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
 // What the others see in a player's hands (sv_cof_weaponmodel.c): the generated
 // models are precached at activation, picked each frame and sent in the player's state.
 void SV_CoF_WeaponModelActivate( void );

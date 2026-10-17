@@ -279,6 +279,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_SessionInit();
 	SV_CoF_SectionsInit();
 	SV_CoF_BonusInit();
+	SV_CoF_LightInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -347,6 +348,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
 	SV_CoF_SectionsFrame(); // merged maps: respawns, companions and gone exits, before the AI decides
 	SV_CoF_CompanionFrame();
+	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
 	SV_CoF_TestGunFrame();
 	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();
