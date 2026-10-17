@@ -9,14 +9,16 @@ log. Run after run, an engine change can be built, installed and tried with nobo
     python -m tools.live_loop report LOG
     python -m tools.live_loop install COPY XASH_DLL     (an engine build into the copy; the old one kept as .bak)
 
-    python -m tools.live_loop recover COPY              (after a run that was killed: saves, cfgs, sound back)
+    python -m tools.live_loop recover COPY              (after a run that was killed: saves and cfgs back)
 
-Every run: -nosound, and every output device muted from before the game starts until after it has exited (Cry of
-Fear still plays through an audio session of its own; a per-program mute would be remembered by Windows), then
-each device put back as it was; sv_cheats, the entity tools and an RCON password on for this run only; the copy's
-story settings, cfgs, launcher settings and saves put back afterwards. A recovery record under
-evidence/live-loop/pending holds all of that while a run lasts, so a run killed halfway is undone by the next one
-(or by recover). The game is closed if it outlives the scenario.
+Every run: the game starts through the copy's test launcher, CoFLaunchApp-autotest.exe (a copy of CoFLaunchApp.exe),
+with -nosound, and every audio session of that program is muted the moment it appears and stays muted (Cry of Fear
+still plays through a session of its own). Windows remembers that program's mute, so later runs start silent; the
+player's own launcher and every other program keep their sound, and the output devices are never touched.
+sv_cheats, the entity tools and an RCON password are on for the run only; the copy's story settings, cfgs, launcher
+settings and saves are put back afterwards. A recovery record under evidence/live-loop/pending holds all of that
+while a run lasts, so a run killed halfway is undone by the next one (or by recover). The game is closed if it
+outlives the scenario, or at once if one of its audio sessions will not mute.
 """
 from __future__ import annotations
 
@@ -43,6 +45,7 @@ if __package__ in (None, ""):
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "evidence" / "live-loop"
 AUDIO = Path(__file__).with_name("game_audio.ps1")
+TEST_EXE = "CoFLaunchApp-autotest.exe"   # the game under a name of its own: its muted sound stays its own
 PORT = 27015
 STAMP = re.compile(r"^\[(\d{4}):(\d\d):(\d\d)\|(\d\d):(\d\d):(\d\d)\] ")
 POWERSHELL = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
@@ -53,7 +56,8 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 def game_processes(copy: Path) -> list[int]:
     """Process ids of this copy's game (CoFLaunchApp.exe and cof.exe started from it)."""
-    command = ('Get-CimInstance Win32_Process -Filter "Name=\'cof.exe\' OR Name=\'CoFLaunchApp.exe\'" | '
+    command = ('Get-CimInstance Win32_Process -Filter "Name=\'cof.exe\' OR Name=\'CoFLaunchApp.exe\' OR '
+               f'Name=\'{TEST_EXE}\'" | '
                'Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress')
     out = subprocess.run([str(POWERSHELL), "-NoProfile", "-NonInteractive", "-Command", command],
                          capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW).stdout
@@ -66,14 +70,54 @@ def game_processes(copy: Path) -> list[int]:
 PENDING = EVIDENCE / "pending"   # the recovery record of the run in progress
 
 
-def devices(action: str, state: Path) -> str:
-    """game_audio.ps1: mute every output device (their states recorded in state first), or restore them."""
-    out = subprocess.run([str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
-                          str(AUDIO), "-Action", action, "-State", str(state)],
-                         capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW)
-    if out.returncode:
-        raise SystemExit(f"Sound devices: {action} failed: {out.stdout.strip()} {out.stderr.strip()}")
-    return out.stdout.strip()
+def test_launcher(copy: Path) -> Path:
+    """The copy's launcher under the test name (made again when the launcher changes)."""
+    source, target = copy / "CoFLaunchApp.exe", copy / TEST_EXE
+    if not target.exists() or target.read_bytes() != source.read_bytes():
+        shutil.copy2(source, target)
+    return target
+
+
+class AudioGuard:
+    """game_audio.ps1 guard over the test launcher: from before the game starts until after it has exited, each of
+    its audio sessions is muted the moment it appears (and stays muted). A session that will not mute closes the
+    game at once."""
+
+    def __init__(self, copy: Path, exe: Path):
+        import threading
+        self.copy = copy
+        self.stop_file = EVIDENCE / f"audio-stop-{secrets.token_hex(6)}"
+        self.failed = threading.Event()
+        self.process = subprocess.Popen([str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                                         "-File", str(AUDIO), "-Action", "guard", "-Exe", str(exe),
+                                         "-Stop", str(self.stop_file)],
+                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                        creationflags=NO_WINDOW)
+        self.ready = threading.Event()
+        threading.Thread(target=self._read, daemon=True).start()
+        if not self.ready.wait(30):
+            self.process.kill()
+            raise SystemExit("The audio guard did not start; the game was not started.")
+
+    def _read(self) -> None:
+        for line in self.process.stdout:
+            line = line.rstrip()
+            if line == "guard ready":
+                self.ready.set()
+            elif line:
+                print(f"  audio: {line}")
+                if "NOT MUTED" in line or line.startswith("error"):
+                    self.failed.set()
+                    kill(game_processes(self.copy))
+
+    def stop(self) -> None:
+        EVIDENCE.mkdir(parents=True, exist_ok=True)
+        self.stop_file.write_text("stop", encoding="ascii")
+        try:
+            self.process.wait(20)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+        self.stop_file.unlink(missing_ok=True)
 
 
 def kill(pids: list[int]) -> None:
@@ -113,6 +157,7 @@ class Game:
     rcon: Rcon
     log_path: Path
     map_name: str = ""
+    guard: AudioGuard | None = None
     started: float = field(default_factory=time.time)
 
     def cmd(self, command: str, timeout: float = 3.0) -> str:
@@ -167,7 +212,7 @@ def _kept_files(copy: Path) -> list[Path]:
 
 
 def _begin(copy: Path) -> Path:
-    """The recovery record: the copy's kept files and saves, then the sound devices' states (and muted)."""
+    """The recovery record: the copy's kept files and saves."""
     if PENDING.exists():
         recover(copy)
     record = PENDING
@@ -178,12 +223,11 @@ def _begin(copy: Path) -> Path:
             shutil.copy2(path, record / "files" / f"{path.parent.name}--{path.name}")
     if (copy / "SAVE").exists():
         shutil.copytree(copy / "SAVE", record / "SAVE")
-    print(f"  sound: {devices('mute', record / 'devices.txt')}")
     return record
 
 
 def recover(copy: Path | None = None) -> bool:
-    """Undo a run (finished or killed): the game closed, the sound devices, kept files and saves put back."""
+    """Undo a run (finished or killed): the game closed, the kept files and saves put back."""
     if not PENDING.exists():
         return False
     copy = Path((PENDING / "copy.txt").read_text(encoding="utf-8")) if (PENDING / "copy.txt").exists() else copy
@@ -191,8 +235,6 @@ def recover(copy: Path | None = None) -> bool:
     if left:
         kill(left)
         time.sleep(2)
-    if (PENDING / "devices.txt").exists():
-        print(f"  sound: {devices('restore', PENDING / 'devices.txt')}")
     if copy and (PENDING / "files").exists():
         for kept in (PENDING / "files").iterdir():
             folder, name = kept.name.split("--", 1)
@@ -213,7 +255,7 @@ def recover(copy: Path | None = None) -> bool:
 def session(copy: Path, map_name: str, *, companions: int = 1, merged: bool = True, bonus_room: bool = False,
             coop_flashlight: bool = False, cheats: bool = True, extra: tuple = (), ready_timeout: float = 120.0):
     """Start the copy's game on map_name, yield a Game once the host is in; afterwards close it and put the copy's
-    settings, saves and the sound devices back."""
+    settings and saves back."""
     from tools import coop_app as app
     from tools import coop_play as play
     from tools import friend_setup as setup_lib
@@ -236,23 +278,27 @@ def session(copy: Path, map_name: str, *, companions: int = 1, merged: bool = Tr
         story = story.replace("sv_cheats 0", "sv_cheats 1").replace("sv_enttools_enable 0", "sv_enttools_enable 1")
     game = Game(copy, Rcon(password), copy / play.LOG, map_name)
     try:
-        _begin(copy)   # silences every output device first: no game without it
+        _begin(copy)
+        exe = test_launcher(copy)
+        game.guard = AudioGuard(copy, exe)   # before the game starts: no sound gets out
         game_dir = copy / "cryoffear"
         (game_dir / play.STORY_CFG).write_text(story, encoding="ascii")
         (game_dir / play.SESSION_CFG).write_text(config, encoding="ascii")
         setup_lib.keep_previous_log(copy, play.LOG)
-        app.start_game(copy, [args[0], "-nosound", *args[1:], *extra])
+        app.start_game(copy, [str(exe), "-nosound", *args[1:], *extra])
         if not game.wait_for(r"cofstory phase=|cof-story-transition\] phase=ready", ready_timeout):
             raise SystemExit("The game did not come up (see the session log).")
         time.sleep(3)
         yield game
     finally:
         _close(game)
+        if game.guard:
+            game.guard.stop()   # after the game has exited; its sessions stay muted (that program's own)
         recover(copy)
 
 
 def _close(game: Game, timeout: float = 30.0) -> None:
-    """Quit the game and wait until it has exited (the sound devices stay muted until then)."""
+    """Quit the game and wait until it has exited."""
     if not game_processes(game.copy):
         return
     try:

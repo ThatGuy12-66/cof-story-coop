@@ -64,20 +64,10 @@ class EngineInstallTests(unittest.TestCase):
 
 
 class RecoveryTests(unittest.TestCase):
-    def test_a_killed_run_is_undone_settings_saves_and_sound(self):
+    def test_a_killed_run_is_undone_settings_and_saves(self):
         from unittest import mock
-        calls = []
-
-        def devices(action, state):
-            # game_audio.ps1 writes the devices' states before it mutes them
-            calls.append(action)
-            if action == "mute":
-                state.write_text("{device}\t0\t1.00\n")
-            return action
-
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(live_loop, "PENDING", Path(tmp) / "pending"), \
-                mock.patch.object(live_loop, "devices", devices), \
                 mock.patch.object(live_loop, "game_processes", lambda copy: []):
             copy = Path(tmp) / "copy"
             (copy / "cryoffear").mkdir(parents=True)
@@ -100,9 +90,20 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual((copy / "cryoffear" / "cof_story.cfg").read_text(), "sv_cheats 0\n")
             self.assertEqual((copy / "cof-story-coop-settings.json").read_text(), '{"name": "gore"}')
             self.assertEqual(sorted(p.name for p in (copy / "SAVE").rglob("*") if p.is_file()), ["c_start.HL1", "latest.txt"])
-            self.assertEqual(calls, ["mute", "restore"])
             self.assertFalse(live_loop.PENDING.exists())
             self.assertFalse(live_loop.recover(copy))   # nothing left to undo
+
+
+class TestLauncherTests(unittest.TestCase):
+    def test_the_game_runs_under_a_name_of_its_own_kept_in_step_with_the_launcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp)
+            (copy / "CoFLaunchApp.exe").write_bytes(b"launcher 1")
+            exe = live_loop.test_launcher(copy)
+            self.assertEqual(exe.name, "CoFLaunchApp-autotest.exe")
+            self.assertEqual(exe.read_bytes(), b"launcher 1")
+            (copy / "CoFLaunchApp.exe").write_bytes(b"launcher 2")   # an update
+            self.assertEqual(live_loop.test_launcher(copy).read_bytes(), b"launcher 2")
 
 
 if __name__ == "__main__":
