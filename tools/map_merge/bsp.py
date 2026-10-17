@@ -73,11 +73,38 @@ def write_bytes(lumps: dict) -> bytes:
     return struct.pack('<i', 30) + b''.join(struct.pack('<ii', *entry) for entry in table) + bytes(body)
 
 
+def entity_blocks(text: str):
+    """Each entity's text: from a '{' to the next '}' with no '{' between them, braces inside a quoted value being
+    the value's (a decal named "{ding10"), as in the engine's tokenizer and cof_sections.h CoF_SectNextBlock."""
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            end = text.find('"', i + 1)
+            i = n if end < 0 else end + 1
+            continue
+        if c != '{':
+            i += 1
+            continue
+        q = i + 1
+        while q < n and text[q] not in '{}':
+            if text[q] == '"':
+                end = text.find('"', q + 1)
+                if end < 0:
+                    return
+                q = end
+            q += 1
+        if q >= n:
+            return
+        if text[q] == '{':
+            i = q
+            continue
+        yield text[i + 1:q]
+        i = q + 1
+
+
 def parse_ents(text: str) -> list:
-    out = []
-    for block in re.findall(r'\{([^{}]*)\}', text):
-        out.append([list(kv) for kv in re.findall(r'"([^"]*)"\s*"([^"]*)"', block)])
-    return out
+    return [[list(kv) for kv in re.findall(r'"([^"]*)"\s*"([^"]*)"', block)] for block in entity_blocks(text)]
 
 
 def serialize_ents(ents: list) -> bytes:

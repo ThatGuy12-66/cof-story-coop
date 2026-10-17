@@ -40,6 +40,9 @@ int main( void )
 	for( i = 0; i < len; i++ )
 		h = ( h ^ (unsigned char)out[i] ) * 0x100000001b3ULL;
 	printf( "%u %016llx\n", (unsigned)len, h );
+#ifdef PRINT_TEXT
+	fwrite( out, 1, len, stdout );
+#endif
 	free( out );
 	return 0;
 }

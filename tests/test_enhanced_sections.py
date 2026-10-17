@@ -261,6 +261,21 @@ class ComposeTests(unittest.TestCase):
         out = run_native(self, 'cof_sections_compose_harness.c', files)
         self.assertEqual(program_output(out), [f'{len(expected)} {fnv64(expected):016x}'])
 
+    def test_a_brace_inside_a_value_stays_in_the_composed_entity(self):
+        # a decal named "{ding10": the composer split the entity at that brace and the decal lost its keys
+        member = ('{\n"classname" "worldspawn"\n}\n{\n"origin" "1 2 3"\n"texture" "{ding10"\n"classname" "infodecal"\n}\n'
+                  '{\n"targetname" "door"\n"classname" "func_door"\n"model" "*1"\n}\n')
+        section = rules.Section('c_x', 0.0, 1, 1, (0.0, 100.0))
+        world = [['classname', 'worldspawn']]
+        expected = rules.compose_reference(world, [bsp.parse_ents(member)], [section])[:-1]
+        out = run_native(self, 'cof_sections_compose_harness.c', {
+            'sections_under_test.h': header(), 'sections.txt': rules.to_text('cm_x', [section]),
+            'world.ent': bsp.serialize_ents([world])[:-1].decode('latin-1'), 'member0.ent': member,
+            'members.h': '#define MEMBERS 1\n#define PRINT_TEXT\n'})
+        lines = program_output(out)
+        self.assertEqual(lines[0], f'{len(expected)} {fnv64(expected):016x}')
+        self.assertIn('"origin" "1 2 3"\n"texture" "{ding10"\n"classname" "infodecal"', out)
+
     def test_apartment3_4_5_compose_like_the_reference(self):
         self.check_group('cm_apartment3')
 
