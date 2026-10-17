@@ -275,6 +275,9 @@ static qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command )
 	return true;
 }
 static int SV_CoF_RetailFreeSlots( sv_client_t *cl ) { return free_slots; }
+/* the host's co-op flashlight setting (sv_cof_light.c) */
+static qboolean coop_light = 1;
+static qboolean SV_CoF_CoopFlashlightAllowed( void ) { return coop_light; }
 static qboolean SV_CoF_StoryGiveItem( sv_client_t *cl, const char *classname ) { gives++; return !strcmp( classname, "weapon_syringe" ); }
 /* hostile: monster_slower; already after a player: monster_engaged; never: monster_friend */
 static int SV_CoF_RetailHostile( edict_t *monster ) { return monster->v.classname == 2 ? 1 : monster->v.classname == 4 ? 2 : 0; }
@@ -597,6 +600,9 @@ int main( void )
 	setup(); cvars[0].value = 1; free_slots = 1; settle(); assert( !gives );
 	setup(); cvars[0].value = 1; cvars[5].value = 0; cvars[6].value = 0; cvars[7].value = 0; settle();
 	assert( !gives && !supplies && !commanded( "flashlight" ));
+	/* the host has not allowed the co-op flashlight: the bot has no light either, like the players */
+	coop_light = 0; setup(); cvars[0].value = 1; settle(); frame( 3.0 );
+	assert( !commanded( "flashlight" )); coop_light = 1;
 
 	/* The host goes down beside the bot: it says it is coming, starts the game's CPR once and
 	 * holds +use while it runs. */
