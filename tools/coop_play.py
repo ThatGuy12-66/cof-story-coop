@@ -36,7 +36,8 @@ STORY_SETTINGS = (
     "cl_sidespeed 200", "+mlook",
 )
 DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion": False, "password": "",
-                    "bonus_room": False, "first_launch_done": False, "companions": 1, "merged_maps": True}
+                    "bonus_room": False, "first_launch_done": False, "companions": 1, "merged_maps": True,
+                    "coop_flashlight": False}
 MAX_COMPANIONS = 3   # the game takes four players at most
 _MAP = re.compile(r"[a-z0-9_]{1,32}\Z")
 _SLOT = re.compile(r"[a-z0-9_-]{1,24}\Z")
@@ -105,14 +106,16 @@ def party_size(*, solo: bool, players: int, companions: int, fill: bool, checkpo
 
 def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
                 companions: int, port: int, cont: bool, video: list[str],
-                bonus_room: bool = False, merged: bool = True) -> tuple[list[str], str]:
+                bonus_room: bool = False, merged: bool = True, coop_flashlight: bool = False) -> tuple[list[str], str]:
     """Play solo (LAN only, with AI companions) or host: the command line and the session cfg.
 
     companions: how many AI companion bots to keep (each gives its place to a friend who joins).
     bonus_room opens the bonus room of c_start and c_bridge (the FAMAS, the axe and the
     rest) for everyone in this game; shut otherwise, whatever the host's own game says.
     merged: door-joined story maps load as one map (fewer loading screens); a continued
-    session keeps the mode it was saved with (Checkpoint.merged)."""
+    session keeps the mode it was saved with (Checkpoint.merged).
+    coop_flashlight: F gives everyone a free torch (Cry of Fear's co-op mode); off, the light is Simon's phone and
+    the story's own lights, as in the single-player game."""
     name = clean_name(name)
     password = "" if solo else clean_password(password)
     map_name = map_name.lower()
@@ -126,7 +129,7 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {companions}", "cof_companion_drive 0",
              f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
-             f"cof_merged_maps {1 if merged else 0}"]
+             f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}"]
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
     return args, "\n".join(lines) + "\n"

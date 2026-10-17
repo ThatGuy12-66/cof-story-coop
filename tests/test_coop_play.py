@@ -78,6 +78,16 @@ class StartTests(unittest.TestCase):
         self.assertIn('cof_merged_maps 0\n', cfg)
         self.assertIs(play.DEFAULT_SETTINGS['merged_maps'], True)
 
+    def test_the_coop_flashlight_is_the_hosts_choice_and_off_by_default(self):
+        # the original story has only Simon's phone; F's free torch is Cry of Fear's co-op mode
+        _, cfg = play.host_launch(Path('copy'), solo=True, name='Bob', map_name='c_start', players=2, password='',
+                                  companions=1, port=27015, cont=False, video=[])
+        self.assertIn('cof_coop_flashlight 0\n', cfg)
+        _, cfg = play.host_launch(Path('copy'), solo=False, name='Bob', map_name='c_start', players=2, password='',
+                                  companions=0, port=27015, cont=False, video=[], coop_flashlight=True)
+        self.assertIn('cof_coop_flashlight 1\n', cfg)
+        self.assertIs(play.DEFAULT_SETTINGS['coop_flashlight'], False)
+
     def test_story_config_removes_the_test_tools(self):
         cfg = play.story_config()
         for line in ('cof_story_coop 1', 'cof_story_trace 1', 'sv_cheats 0', 'sv_enttools_enable 0', 'cof_test_gun 0',

@@ -70,8 +70,10 @@ The first game opens full screen at your desktop's size; change it in the game's
 ## Controls
 
 The usual game keys are set up for you: WASD, Space jump, Ctrl crouch, Shift sprint, Alt dodge,
-E use, R reload, Tab inventory, B objectives, F flashlight, 1–3 quick select. Change them in
-Options > Keybinds. The co-op keys:
+E use, R reload, Tab inventory, B objectives, F co-op flashlight, 1–3 quick select. Change them in
+Options > Keybinds. The co-op flashlight (a free torch everyone sees, from Cry of Fear's own co-op
+mode) works only when the host ticks "Co-op flashlight on F"; otherwise your light is Simon's
+phone and the lights the story hands out, as in the single-player game. The co-op keys:
 
 | Key | What it does |
 | --- | --- |

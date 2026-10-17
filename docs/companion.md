@@ -53,7 +53,8 @@ live, two or three only in offline tests so far.
   the whole party. Both of you are held still for a moment while it goes in.
 - **Looks after itself.** It injects a syringe when badly hurt and safe, recovers slowly out of a
   fight, and never runs out of rounds. It gets up after a hard landing.
-- **Lights the way.** It keeps the co-op flashlight on, which you see as its torch beam.
+- **Lights the way.** When the host allows the co-op flashlight ("Co-op flashlight on F", off by
+  default), it keeps it on, which you see as its torch beam. Otherwise it has no light, like you.
 - **Shares the story's weapons.** It gets the phone and switchblade and the weapons the story hands
   out, as a second player would. It never picks anything up: keys, notes, ammo and syringes on the
   map are all yours.
@@ -82,7 +83,7 @@ live, two or three only in offline tests so far.
 | `cof_companion_name` | Companion | Its name (the second and third get " 2" and " 3"). |
 | `cof_companion_medic` | 90 | Seconds between the syringes it gives you; 0: never (and it carries none). |
 | `cof_companion_ammo` | 1 | It never runs out of rounds; 0: it has only what the story gives it. |
-| `cof_companion_light` | 1 | It keeps its flashlight on. |
+| `cof_companion_light` | 1 | It keeps its flashlight on, while `cof_coop_flashlight` (the host's setting, 0 by default) allows one. |
 | `cof_companion_regen` | 3 | Health it recovers each second out of a fight. |
 | `cof_companion_drive` | 0 | Testing: the AI also plays a second person's client while its controls rest. |
 | `cof_companion_idle` | 8 | Seconds of rest before the AI takes such a client over. |

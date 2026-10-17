@@ -82,7 +82,7 @@ inventory brought back after a death or a checkpoint load.
 
 | Situation | Expected behaviour (log phase) |
 |---|---|
-| Map loaded | Companion mode: the bot joins beside you (`companion-added`), with a flashlight beam on. |
+| Map loaded | Companion mode: the bot joins beside you (`companion-added`), with a flashlight beam on only if `cof_coop_flashlight 1`. |
 | Level change | It leaves with the old map and rejoins in the new one; never two bots, never a stuck slot. |
 | You walk off | It follows your path; lost or stuck, it reappears behind you (`companion-teleport reason=far/lost/stuck/trail`). |
 | You walk slowly | It walks with you without stopping and starting (few `companion-mode` lines). |

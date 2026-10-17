@@ -329,6 +329,9 @@ class App:
         merged = tk.BooleanVar(value=self.settings["merged_maps"])
         ttk.Checkbutton(body, text="Merged maps (fewer loading screens; Continue keeps the checkpoint's own)",
                         variable=merged).pack(anchor="w")
+        torch = tk.BooleanVar(value=self.settings["coop_flashlight"])
+        ttk.Checkbutton(body, text="Co-op flashlight on F (a free torch for everyone; the original has only Simon's phone)",
+                        variable=torch).pack(anchor="w")
         if solo:
             ttk.Frame(body, height=8).pack()
             ttk.Spinbox(self.row(body, "AI companions", 14), from_=1, to=play.MAX_COMPANIONS, textvariable=companions,
@@ -362,9 +365,10 @@ class App:
             args, config = play.host_launch(self.root, solo=solo, name=name, map_name=map_name, players=count,
                                             password=password.get(), companions=ais, port=number,
                                             cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get(),
-                                            merged=play.merged_for_start(checkpoint, checkbox=merged.get()))
+                                            merged=play.merged_for_start(checkpoint, checkbox=merged.get()),
+                                            coop_flashlight=torch.get())
             self.launch(args, config)
-            self.remember(bonus_room=bonus.get(), merged_maps=merged.get())
+            self.remember(bonus_room=bonus.get(), merged_maps=merged.get(), coop_flashlight=torch.get())
             if solo and not checkpoint:
                 self.remember(companions=ais)
             if not solo:
