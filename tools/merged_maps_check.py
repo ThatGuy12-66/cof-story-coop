@@ -108,7 +108,8 @@ def door_script(exits: list) -> str:
     for i, e in enumerate(exits):
         lines += [f"echo merged-check door {i} {e.src} {e.dst} {e.landmark}",
                   f'ent_fire 1 set origin "{number(e.stand[0])} {number(e.stand[1])} {number(e.stand[2])}"',
-                  "wait 180"]
+                  # frames, not seconds: the game ran ~400 a second (2026-10-16); past the 1.5 s re-move guard
+                  "wait 1500"]
     lines += ["echo merged-check done", "wait 30", "quit"]
     return "\n".join(lines) + "\n"
 
