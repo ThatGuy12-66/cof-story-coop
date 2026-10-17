@@ -14,6 +14,20 @@ exits, landmarks) both use it, so everything sees the same entities.
 
 static cof_sections_t com_cof_sections;   // large: one at a time
 
+// Straight to Sys_Print: a map given on the command line loads while host.allow_console is still false, and
+// Con_Printf drops everything then (as in cof_language.c and cof_renderer_limits.c).
+void COM_CoF_SectionsNote( const char *fmt, ... )
+{
+	char buf[512];
+	va_list args;
+
+	va_start( args, fmt );
+	Q_vsnprintf( buf, sizeof( buf ), fmt, args );
+	va_end( args );
+
+	Sys_Print( buf );
+}
+
 qboolean COM_CoF_IsMergedMap( const char *map )
 {
 	return !COM_StringEmptyOrNULL( map ) && FS_FileExists( va( "maps/%s.sections", map ), true );
@@ -28,7 +42,7 @@ qboolean COM_CoF_LoadSections( const char *map, cof_sections_t *out )
 	if( !text ) return false;
 	ok = CoF_SectionsParse( (const char *)text, out ) && !Q_stricmp( out->name, map );
 	Mem_Free( text );
-	if( !ok ) Con_Printf( S_ERROR "[cof-sections] maps/%s.sections is not a valid sections file\n", map );
+	if( !ok ) COM_CoF_SectionsNote( S_ERROR "[cof-sections] maps/%s.sections is not a valid sections file\n", map );
 	return ok;
 }
 
@@ -103,7 +117,7 @@ char *COM_CoF_MergedEntities( const char *map, const char *world, size_t worldsi
 	{
 		if(( members[i] = COM_CoF_MemberEntities( com_cof_sections.sec[i].map )) == NULL )
 		{
-			Con_Printf( S_ERROR "[cof-sections] %s: the entities of %s cannot be read\n", map, com_cof_sections.sec[i].map );
+			COM_CoF_SectionsNote( S_ERROR "[cof-sections] %s: the entities of %s cannot be read\n", map, com_cof_sections.sec[i].map );
 			break;
 		}
 	}
@@ -114,7 +128,7 @@ char *COM_CoF_MergedEntities( const char *map, const char *world, size_t worldsi
 		memcpy( out, composed, len + 1 );
 		free( composed );
 		if( outsize ) *outsize = len;
-		Con_Printf( "[cof-sections] %s: entities of %d maps, %u bytes\n", map, com_cof_sections.count, (unsigned)len );
+		COM_CoF_SectionsNote( "[cof-sections] %s: entities of %d maps, %u bytes\n", map, com_cof_sections.count, (unsigned)len );
 		if( cache ) Mem_Free( cache );
 		cache = Z_Malloc( len + 1 );
 		memcpy( cache, out, len + 1 );
@@ -122,7 +136,7 @@ char *COM_CoF_MergedEntities( const char *map, const char *world, size_t worldsi
 		Q_strncpy( cache_key, key, sizeof( cache_key ));
 	}
 	else if( i == com_cof_sections.count )
-		Con_Printf( S_ERROR "[cof-sections] %s: its entities cannot be put together\n", map );
+		COM_CoF_SectionsNote( S_ERROR "[cof-sections] %s: its entities cannot be put together\n", map );
 	for( i = 0; i < COF_SECT_MAX; i++ )
 		if( members[i] ) Mem_Free( members[i] );
 	Mem_Free( worldtext );

@@ -112,7 +112,7 @@ void SV_CoF_SectionsSessionRestore( const byte *record, size_t length )
 	int merged = 0;
 	CoF_SectionsRecordParse( (const char *)record, record ? length : 0, &merged, section, sizeof( section ));
 	Cvar_DirectSet( &cof_merged_maps, merged ? "1" : "0" );
-	Con_Printf( "[cof-sections] session merged=%d\n", merged );
+	COM_CoF_SectionsNote( "[cof-sections] session merged=%d\n", merged );
 }
 
 // The merged file (with merging on) that holds this original map; its rules in out.
@@ -308,7 +308,7 @@ qboolean SV_CoF_SectionsResolve( const char *level, const char *landmark, char *
 	{
 		// original names too: the run report counts the exit as the original game's
 		int from = s && r.source_landmark[0] ? CoF_SectionsLandmarkSection( s, r.source_landmark ) : -1;
-		Con_Printf( "[cof-sections] changelevel from=%s to=%s landmark=%s file=%s dest=%s\n",
+		COM_CoF_SectionsNote( "[cof-sections] changelevel from=%s to=%s landmark=%s file=%s dest=%s\n",
 			from >= 0 ? s->sec[from].map : sv.name, level,
 			from >= 0 ? CoF_SectionsOriginalName( &s->sec[from], r.source_landmark ) : r.source_landmark, r.file, r.dest_landmark );
 	}
@@ -336,7 +336,7 @@ void SV_CoF_SectionsMapCommand( char *mapname, size_t size )
 	if( !CoF_SectFileOf( mapname, &cof_sect_other )) return;
 	cof_sect_entry = CoF_SectionsFind( &cof_sect_other, mapname );
 	Q_strncpy( cof_sect_entry_map, cof_sect_other.name, sizeof( cof_sect_entry_map ));
-	Con_Printf( "[cof-sections] map %s -> %s, section %d\n", mapname, cof_sect_other.name, cof_sect_entry );
+	COM_CoF_SectionsNote( "[cof-sections] map %s -> %s, section %d\n", mapname, cof_sect_other.name, cof_sect_entry );
 	Q_strncpy( mapname, cof_sect_other.name, size );
 }
 
@@ -361,7 +361,7 @@ void SV_CoF_SectionsEntry( void )
 	VectorCopy( want->v.angles, first->v.angles );
 	VectorCopy( origin, want->v.origin );
 	VectorCopy( angles, want->v.angles );
-	Con_Printf( "[cof-sections] %s starts in section %s\n", sv.name, s->sec[entry].map );
+	COM_CoF_SectionsNote( "[cof-sections] %s starts in section %s\n", sv.name, s->sec[entry].map );
 }
 
 void SV_CoF_SectionsFrame( void )
