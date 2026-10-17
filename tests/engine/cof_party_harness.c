@@ -752,5 +752,22 @@ int main(void) {
     gate=false; command_name="cof_warp"; assert(!SV_CoF_PartyClientCommand(&clients[1])); gate=true;
     /* A player still joining presses J: handled, nothing moves. */
     setup(); tick(0.1); clients[1].state=3; warp(1); assert(links==0 && !strstr(status_log,"warp"));
+    /* A merged map's section move whose landing (the landmark offset) is deep in a wall with nothing free beside
+     * it (a door entered off its usual spot; live 2026-10-16 refused it 140 times a second): the player lands at
+     * the destination landmark instead. Nowhere free at all: refused, the player stays where they were. */
+    setup(); tick(0.1); solid_probe=1; solid_x=-500; front_only_x=0.001f;
+    {
+        vec3_t landing={-500,0,0}, landmark={300,0,0};
+        assert(SV_CoF_PartySectionMove(&clients[0],landing,NULL,landmark));
+        assert(entities[1].v.origin[0]==300);
+        entities[1].v.origin[0]=0; blocked=1;
+        assert(!SV_CoF_PartySectionMove(&clients[0],landing,NULL,landmark));
+        assert(entities[1].v.origin[0]==0);
+        /* no landmark to fall back on (a section entered at its start spot): refused as before */
+        blocked=0;
+        assert(!SV_CoF_PartySectionMove(&clients[0],landing,NULL,NULL));
+        assert(entities[1].v.origin[0]==0);
+    }
+    solid_probe=0; front_only_x=0; blocked=0;
     puts("party scenarios passed"); return 0;
 }

@@ -126,6 +126,15 @@ class ServerWiringTests(unittest.TestCase):
         self.assertLess(load.index('SV_SpawnEntities('), load.index('SV_CoF_SectionsEntry()'))
         self.assertLess(load.index('SV_CoF_SectionsEntry()'), load.index('SV_ActivateServer('))
 
+    def test_a_door_entered_off_its_usual_spot_lands_at_the_landmark_and_a_refusal_is_logged_once_a_second(self):
+        # live 2026-10-16: the offset landing deep in a wall, refused (and logged) 140 times a second
+        move = body_of(SERVER / 'sv_cof_sections.c', 'static void CoF_SectMove(')
+        self.assertIn('CoF_SectMoveOne( s, r, anchor, landing, NULL, landmarks ? dst : NULL )', move)
+        self.assertIn('CoF_SectMoveOne( s, r, i, landing, &svs.clients[anchor], landmarks ? dst : NULL )', move)
+        one = body_of(SERVER / 'sv_cof_sections.c', 'static void CoF_SectMoveOne(')
+        refused = one[one.index('if( !SV_CoF_PartySectionMove( cl, landing, anchor, landmark ))'):]
+        self.assertLess(refused.index('if( sv.time < cof_sect_refused_at[slot] + 1.0 ) return;'), refused.index('section-move-refused'))
+
     def test_play_everywhere_sounds_reach_only_their_section(self):
         multicast = body_of(SERVER / 'sv_game.c', 'static int SV_Multicast(')
         skip = multicast.index('cof_multicast_section >= 0 && SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section')
