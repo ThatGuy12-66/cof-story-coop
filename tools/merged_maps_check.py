@@ -181,7 +181,9 @@ def open_spots(x: bsp.Bsp, count: int, seed: int = 20261016) -> list:
 
 
 def picture_script(spots: list, dz: float) -> str:
-    lines = ["wait 900", "god", "notarget", "noclip", "hud_draw 0", "r_drawviewmodel 0", "wait 60"]
+    # a map's opening cutscene holds the view: skip it (Enter's cof_skip) before any snapshot
+    lines = ["wait 1500", "cof_skip", "wait 600", "cof_skip", "wait 600", "god", "notarget", "noclip", "hud_draw 0",
+             "r_drawviewmodel 0", "wait 60"]
     for i, (eye, yaw) in enumerate(spots):
         lines += [f"echo merged-check spot {i}",
                   f'ent_fire 1 set origin "{number(eye[0])} {number(eye[1])} {number(eye[2] + dz - EYE)}"',

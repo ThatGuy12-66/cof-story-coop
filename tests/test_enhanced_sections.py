@@ -150,6 +150,16 @@ class ServerWiringTests(unittest.TestCase):
         self.assertLess(load.index('CoF_ArchiveFind( archive, "merged.txt"'), restore)
         self.assertLess(restore, load.index('COM_ChangeLevel( metadata->map'))
 
+    def test_load_time_lines_reach_the_log(self):
+        # a map given on the command line loads while host.allow_console is false: Con_Printf drops those lines
+        # (seen live 2026-10-16: the redirect and composition lines missing, the map merged all the same)
+        common = (ENGINE_COMMON / 'cof_sections.c').read_text(encoding='latin-1')
+        self.assertIn('Sys_Print( buf );', common)
+        server = (SERVER / 'sv_cof_sections.c').read_text(encoding='latin-1')
+        for text in (common, server):
+            self.assertNotIn('Con_Printf( "[cof-sections]', text)
+            self.assertNotIn('Con_Printf( S_ERROR "[cof-sections]', text)
+
     def test_the_story_layer_runs_the_sections(self):
         init = body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryInit(')
         self.assertIn('SV_CoF_SectionsInit();', init)
