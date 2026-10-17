@@ -529,6 +529,34 @@ def death(game: Game) -> None:
         game.sleep(5)
 
 
+@scenario("flashlight", "c_start2", companions=1)
+def flashlight(game: Game) -> None:
+    """The co-op flashlight off (the default): F is refused for the player and the bot lights no torch."""
+    game.wait_for(r"companion-added userid=\d+ name=Companion", 60)
+    game.cmd("god"); game.cmd("notarget")
+    game.sleep(4)
+    at = game.mark("press F")
+    game.cmd("cmd flashlight")
+    if not game.wait_for(r"phase=flashlight-refused", 10, at):
+        game.mark("NOTE the flashlight was not refused")
+    game.sleep(15)
+    if re.search(r'phase=cmd userid=\d+ cmd=flashlight', game.log()[at:]):   # one the game got (not refused)
+        game.mark("NOTE a flashlight command went through")
+
+
+@scenario("flashlight-on", "c_start2", companions=1, coop_flashlight=True)
+def flashlight_on(game: Game) -> None:
+    """The co-op flashlight allowed: F switches the torch on (nothing refused) and the bot lights its own."""
+    game.wait_for(r"companion-added userid=\d+ name=Companion", 60)
+    game.cmd("god"); game.cmd("notarget")
+    game.sleep(4)
+    at = game.mark("press F")
+    game.cmd("cmd flashlight")
+    game.sleep(15)
+    if "flashlight-refused" in game.log()[at:]:
+        game.mark("NOTE the flashlight was refused although allowed")
+
+
 @scenario("merged", "cm_apartment1", companions=2)
 def merged(game: Game) -> None:
     """A merged map (--map cm_apartment1 or cm_apartment3): the player goes through every door between its sections
