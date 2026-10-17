@@ -251,6 +251,19 @@ def recover(copy: Path | None = None) -> bool:
     return True
 
 
+def launch_config(copy: Path, map_name: str, *, companions: int, password: str, merged: bool = True,
+                  bonus_room: bool = False, coop_flashlight: bool = False) -> tuple[list[str], str]:
+    """A test run's command line and session cfg, with RCON for the scenario; companions 0 turns the bots off."""
+    from tools import coop_play as play
+    bots = max(companions, 1)   # a solo game keeps a place for one at least
+    args, config = play.host_launch(copy, solo=True, name="Tester", map_name=map_name, players=bots + 1,
+                                    password="", companions=bots, port=PORT, cont=False, video=[],
+                                    bonus_room=bonus_room, merged=merged, coop_flashlight=coop_flashlight)
+    if not companions:
+        config = config.replace("cof_companion 1\n", "cof_companion 0\n")
+    return args, config + f'rcon_password "{password}"\nrcon_enable 1\n'
+
+
 @contextlib.contextmanager
 def session(copy: Path, map_name: str, *, companions: int = 1, merged: bool = True, bonus_room: bool = False,
             coop_flashlight: bool = False, cheats: bool = True, extra: tuple = (), ready_timeout: float = 120.0):
@@ -269,11 +282,9 @@ def session(copy: Path, map_name: str, *, companions: int = 1, merged: bool = Tr
     if game_processes(copy) and not PENDING.exists():
         raise SystemExit("The game is already running in this copy.")
     password = secrets.token_hex(8)
-    args, config = play.host_launch(copy, solo=True, name="Tester", map_name=map_name, players=companions + 1,
-                                    password="", companions=companions, port=PORT, cont=False, video=[],
-                                    bonus_room=bonus_room, merged=merged, coop_flashlight=coop_flashlight)
-    config += f'rcon_password "{password}"\nrcon_enable 1\n'
-    story = play.story_config() + "volume 0\nMP3Volume 0\n"
+    args, config = launch_config(copy, map_name, companions=companions, password=password, merged=merged,
+                                 bonus_room=bonus_room, coop_flashlight=coop_flashlight)
+    story =play.story_config() + "volume 0\nMP3Volume 0\n"
     if cheats:
         story = story.replace("sv_cheats 0", "sv_cheats 1").replace("sv_enttools_enable 0", "sv_enttools_enable 1")
     game = Game(copy, Rcon(password), copy / play.LOG, map_name)

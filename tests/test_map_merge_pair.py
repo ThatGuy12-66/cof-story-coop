@@ -59,6 +59,32 @@ class PairTests(unittest.TestCase):
         again, _ = merge.merge_pair(self.a, self.b, self.dz, {})
         self.assertEqual(bsp.write_bytes(again), self.data)
 
+    def test_worldspawn_is_the_merged_worldspawn(self):
+        m = bsp.Bsp.from_bytes(self.data)
+        self.assertEqual(m.ents[0], merge.merged_worldspawn([self.a.ents[0], self.b.ents[0]]))
+
+
+class WorldspawnTests(unittest.TestCase):
+    """The merged worldspawn: hl.dll reads MaxRange (the view distance) from it, so it takes the largest."""
+
+    def world(self, **kv):
+        return [['classname', 'worldspawn']] + [[k, v] for k, v in kv.items()]
+
+    def test_view_distance_is_the_largest(self):
+        merged = merge.merged_worldspawn([self.world(MaxRange='4096'), self.world(MaxRange='8000'),
+                                          self.world(MaxRange='6000')])
+        self.assertEqual(bsp.ent_get(merged, 'MaxRange'), '8000')
+
+    def test_first_members_value_kept_when_it_is_the_largest(self):
+        merged = merge.merged_worldspawn([self.world(MaxRange='10000'), self.world(MaxRange='4096')])
+        self.assertEqual(bsp.ent_get(merged, 'MaxRange'), '10000')
+
+    def test_absent_is_the_game_default(self):
+        # hl.dll's default view distance is 4096: a smaller value elsewhere adds nothing, a larger one is set
+        self.assertIsNone(bsp.ent_get(merge.merged_worldspawn([self.world(), self.world(MaxRange='2000')]), 'MaxRange'))
+        self.assertEqual(bsp.ent_get(merge.merged_worldspawn([self.world(), self.world(MaxRange='8000')]), 'MaxRange'),
+                         '8000')
+
 
 if __name__ == '__main__':
     unittest.main()

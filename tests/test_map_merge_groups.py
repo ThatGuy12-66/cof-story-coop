@@ -55,6 +55,26 @@ class LoadTests(unittest.TestCase):
     def test_the_committed_list_loads(self):
         groups.load_groups()
 
+    def test_a_map_hl_dll_names_only_as_a_destination_can_be_a_member(self):
+        groups.load_groups(self.write([self.item(members=['c_city2', 'c_city'], name='cm_city2',
+                                                 inputs={'c_city2': 'a' * 64, 'c_city': 'b' * 64})]))
+
+    def test_nightmare_start_and_the_menu_are_never_members(self):
+        for m in ('c_nightmare', 'c_start', 'c_game_menu1'):
+            bad = self.item(members=['c_apartment3', m], inputs={'c_apartment3': 'a' * 64, m: 'b' * 64})
+            with self.assertRaises(ValueError, msg=m):
+                groups.load_groups(self.write([bad]))
+
+    def test_a_group_with_an_ending_map_keeps_c_ending_in_its_name(self):
+        # hl.dll's cof_credits counts the ending, the rank and the unlocks only when the map name contains c_ending
+        self.assertEqual(groups.group_name(['c_ending4b', 'c_ending4']), 'cm_c_ending4b')
+        self.assertEqual(groups.group_name(['c_hamn', 'c_hamn2']), 'cm_hamn')
+        good = self.item(members=['c_ending4b', 'c_ending4'], name='cm_c_ending4b',
+                         inputs={'c_ending4b': 'a' * 64, 'c_ending4': 'b' * 64})
+        groups.load_groups(self.write([good]))
+        with self.assertRaises(ValueError):
+            groups.load_groups(self.write([dict(good, name='cm_ending4b')]))
+
 
 class CommittedGroupTests(unittest.TestCase):
     """Every group in tools/map_groups.json, from the retail maps: as recorded, and passing the planner."""

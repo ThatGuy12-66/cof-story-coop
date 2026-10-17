@@ -61,6 +61,38 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - Decision left to the user: monster damage scales with every participant, bots included (1 AI ×1.68, 2 ×1.92, 3 ×2.16 vs alone ×1.44); left as retail.
 - Verification: full suite **241 OK** (`evidence/weapons-companions-20261015/full-suite-w2.log`), engine builds exit 0 (`build-*.log`). Commits: launcher `9d2790d..720e972`, engine `d887312d..715170e8` (branch `tester-package`). Live: not yet (next: package-fix4, smoke copy update, Play solo with three AIs).
 
+## Merged maps wave 2 (2026-10-17)
+
+The user asked which overlapping groups made most sense, then "Do it. What is it?". Choices and reasons:
+`docs/research/2026-10-17-merging-the-rest.md` section 6 (most loads removed on the route actually walked; on a tie,
+leave a map free for a later pair). 14 groups, `wave: 2` in `tools/map_groups.json`: cm_sewer3 (sewer3+sewer2),
+cm_city2 (city2+park), cm_hamn (hamn+hamn2+hamn3), cm_college2 (college2+college1+college1dark), cm_buscity
+(buscity+buscity2), cm_subway2st3 (subway2st3+subway2st2), cm_forest2/4/6 (2+3, 4+5, 6+7), cm_asylum1dark
+(asylum1dark+asylum2dark+asylumb+asylum2), cm_asylum1day (asylum1day+attic+forestday), cm_fsewer1 (fsewer1+lake),
+cm_village1 (village1-3), cm_c_ending4b (ending4b+ending4).
+
+- **Merger rules (no engine change)**: worldspawn player1-4 never block, materialstxt absent = `sound/materials.txt`,
+  WaveHeight absent = 0 (`plan.WORLD_KEYS_IGNORED`/`WORLD_KEY_DEFAULTS`); MaxRange takes the largest
+  (`merge.merged_worldspawn`, also used by `merge_pair`); never merged now only c_nightmare (client.dll), c_start
+  (the easter egg, until the merger adds it) and c_game_menu1 (`groups.NEVER_MERGED`); a group with a c_ending
+  member keeps `c_ending` in its file name (`groups.group_name`: `cm_c_ending4b`). The planner checks the engine's
+  `.sections` limits (`plan.section_limit_problems`). `python -m tools.map_merge.plan MAPS --record WAVE m1 m2 ...`
+  plans, builds and writes a group with its hashes. Wave 1's files come out unchanged.
+- Planner notes for every group: `evidence/map-merge-plan-20261017/wave2-notes.txt` (no door without landmarks).
+  **Watch: view distance.** c_forest3 2000 → 10000 in cm_forest2, c_forest4 1500 → 4000 in cm_forest4, c_city2
+  4096 → 6000, c_hamn 6000 → 8000. The forests have no env_fog and a black sky: their short MaxRange is the
+  darkness. If the pictures show distant trees, the fix is per-section view distance in the engine's client
+  (each member's MaxRange kept at entity composition, the local player's section sets the far clip).
+- **Live checks now silent**: `merged_maps_check.run_game` goes through `live_loop.session` (test launcher,
+  `-nosound`, guard, recovery); `live_loop.launch_config(companions=0)` turns the bots off for the door and picture
+  runs. Before this, `merged_maps_check` started the player's own `CoFLaunchApp.exe` with sound.
+- Smoke copy: all 16 groups built into it with `friend_setup.make_merged_maps` from the repo's list (74 s; the copy's
+  maps are the recorded inputs; `validate_runtime` passes, it checks only the install record's wave 1 files). No new
+  package yet: `build_tester_package` refuses the untracked `docs/research/2026-10-17-uni-coop-notes.md`, which another
+  session wrote; not this agent's to commit or delete.
+- Live-check driver: `evidence/merged-maps-wave2/run_checks.py doors|walk|pictures|starts [GROUP ...]` (results and
+  `summary.txt` beside it).
+
 ## Overnight debug with automated live runs (2026-10-16 night → 10-17)
 
 The user played Chapter 1 (2 AIs, merged maps on, co-op flashlight off) 20:46–20:52 and said "Multiple things were broken", then asked for "a long, very thorough debug on the whole system" while they sleep, and for "a powerful iterative development cycle that's completely automated … launching and closing the game" on the real project ("I want you to do this on the main system, on our current project"). They heard a run ("I was able to hear it last time") and then: "I don't want you muting my entire computer because I have audio playing while I sleep from chrome".

@@ -17,9 +17,15 @@ from tools.map_merge import bsp, check, merge, rules
 
 HEX64 = re.compile(r'^[0-9a-f]{64}$')
 MAP_NAME = re.compile(r'^[a-z0-9_]{1,32}$')
-# Maps the game DLL treats specially by name, and the menu map: never merged.
-HL_NAMED = ('c_city', 'c_forest3', 'c_intro', 'c_nightmare', 'c_start', 'c_subwaysick1', 'c_game_menu1')
-HL_NAMED_PREFIXES = ('c_ending',)
+# Maps never merged, and why (evidence/map-merge-plan-20261017/hl-names/hl-map-names-re.md). hl.dll names c_city,
+# c_forest3, c_subwaysick1 and c_intro only as level destinations, which the engine's name routing covers.
+NEVER_MERGED = {
+    'c_nightmare': 'client.dll hides the HUD and turns off sprint and the inventory by this name',
+    'c_start': 'the game DLL spawns its easter egg by this name (until the merger adds the egg to the section)',
+    'c_game_menu1': 'the menu map',
+}
+# hl.dll's cof_credits counts the ending, the rank and the unlocks only in a map whose name contains this.
+CREDITS_NAME = 'c_ending'
 
 
 class GroupInputMismatch(Exception):
@@ -48,7 +54,14 @@ def groups_path() -> Path:
 
 
 def hl_named(name: str) -> bool:
-    return name in HL_NAMED or name.startswith(HL_NAMED_PREFIXES)
+    return name in NEVER_MERGED
+
+
+def group_name(members: list) -> str:
+    """cm_ + the first member without c_, or with it when a member's name holds c_ending (the credits test)."""
+    if any(CREDITS_NAME in m for m in members):
+        return 'cm_' + members[0]
+    return 'cm_' + members[0][2:]
 
 
 def validate(g: Group) -> Group:
@@ -59,8 +72,9 @@ def validate(g: Group) -> Group:
             raise ValueError(f'{g.name}: member {m!r} cannot be merged')
     if len(set(g.members)) != len(g.members):
         raise ValueError(f'{g.name}: a member is listed twice')
-    if not isinstance(g.name, str) or not MAP_NAME.match(g.name) or g.name != 'cm_' + g.members[0][2:]:
-        raise ValueError(f'bad group name {g.name!r}: cm_ + the first member without c_, [a-z0-9_]{{1,32}}')
+    if not isinstance(g.name, str) or not MAP_NAME.match(g.name) or g.name != group_name(g.members):
+        raise ValueError(f'bad group name {g.name!r}: cm_ + the first member without c_ (with it when a member '
+                         f'is a c_ending map), [a-z0-9_]{{1,32}}')
     if not isinstance(g.inputs, dict) or set(g.inputs) != set(g.members) or not all(
             isinstance(v, str) and HEX64.match(v) for v in g.inputs.values()):
         raise ValueError(f'{g.name}: inputs must give a SHA-256 for every member')

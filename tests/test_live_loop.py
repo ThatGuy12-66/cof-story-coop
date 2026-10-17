@@ -106,5 +106,21 @@ class TestLauncherTests(unittest.TestCase):
             self.assertEqual(live_loop.test_launcher(copy).read_bytes(), b"launcher 2")
 
 
+class LaunchTests(unittest.TestCase):
+    def test_no_companions_turns_the_bots_off(self):
+        # the merged-map checks stand the player in each door alone: no bot following through the doors
+        args, config = live_loop.launch_config(Path("C:/copy"), "cm_hamn", companions=0, password="pw")
+        self.assertIn("cof_companion 0\n", config)
+        self.assertIn("maxplayers 2\n", config)
+        self.assertIn('rcon_password "pw"\nrcon_enable 1\n', config)
+        self.assertEqual(args[-2:], ["+map", "cm_hamn"])
+
+    def test_companions_as_asked(self):
+        _, config = live_loop.launch_config(Path("C:/copy"), "c_start2", companions=2, password="pw", merged=False)
+        self.assertIn("cof_companion 2\n", config)
+        self.assertIn("maxplayers 3\n", config)
+        self.assertIn("cof_merged_maps 0\n", config)
+
+
 if __name__ == "__main__":
     unittest.main()

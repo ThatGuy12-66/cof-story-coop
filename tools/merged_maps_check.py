@@ -230,36 +230,21 @@ def saves_kept(copy: Path):
 
 
 def run_game(copy: Path, map_name: str, merged: bool, script: str, timeout: float = 600.0) -> str:
-    """Start the copy on map_name with the script, wait for it to quit, return the session log."""
-    from tools import coop_app as app
-    from tools import coop_play as play
-    from tools import friend_setup as setup_lib
-    setup_lib.validate_runtime(copy)
-    if setup_lib.game_is_running(copy):
-        raise SystemExit("The game is already running in this copy.")
+    """Start the copy on map_name with the script, wait for it to quit, return the session log. It runs through the
+    live loop's session: the test launcher with its sound muted, cheats for this run only, no bots, and the copy's
+    settings and saves put back however it ends."""
+    from tools import live_loop
     (copy / "cryoffear" / SCRIPT).write_text(script, encoding="ascii")
-    settings = play.load_settings(copy)
-    args, config = play.host_launch(copy, solo=True, name=play.clean_name(settings["name"] or "Player"), map_name=map_name,
-                                    players=2, password="", companions=1, port=play.DEFAULT_PORT, cont=False,
-                                    video=play.video_flags(False, app.desktop_size()), merged=merged)
-    config = config.replace("cof_companion 1\n", "cof_companion 0\n")
-    story = play.story_config().replace("sv_cheats 0", "sv_cheats 1").replace("sv_enttools_enable 0", "sv_enttools_enable 1")
-    (copy / "cryoffear" / play.STORY_CFG).write_text(story, encoding="ascii")
-    (copy / "cryoffear" / play.SESSION_CFG).write_text(config, encoding="ascii")
-    setup_lib.keep_previous_log(copy, play.LOG)
     try:
-        with saves_kept(copy):
-            app.start_game(copy, list(args) + ["+exec", SCRIPT])
+        with saves_kept(copy), live_loop.session(copy, map_name, companions=0, merged=merged,
+                                                 extra=("+exec", SCRIPT)) as game:
             deadline = time.time() + timeout
-            time.sleep(5)
-            while time.time() < deadline and setup_lib.game_is_running(copy):
+            while time.time() < deadline and live_loop.game_processes(copy):
                 time.sleep(2)
-            if setup_lib.game_is_running(copy):
-                raise SystemExit(f"The game did not quit within {timeout:.0f} s. The copy's saves were put back, "
-                                 "but close the game: it can still write new ones.")
-        return (copy / play.LOG).read_text(encoding="latin-1", errors="replace")
+            if live_loop.game_processes(copy):
+                print(f"  the game did not quit within {timeout:.0f} s: closed it")
+            return game.log()
     finally:
-        (copy / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
         (copy / "cryoffear" / SCRIPT).unlink(missing_ok=True)
 
 

@@ -57,6 +57,11 @@ file build one graph), equal `skyname`, equal fog setup, `worldspawn` keys hl.dl
 shared between members (refused until handled), maps hl.dll names (`c_city`, `c_forest3`, `c_intro`,
 `c_nightmare`, `c_start`, `c_subwaysick1`, `c_ending*`) never merged, and for every level door between two
 members: exactly one source and one destination landmark, and its `changetarget`.
+*Wave 2 (2026-10-17), from the hl.dll name research and the wave 1 exceptions:* player models never block,
+an absent `materialstxt` is the default file, an absent `WaveHeight` is 0, `MaxRange` takes the largest; only
+`c_nightmare`, `c_start` (until its easter egg is added) and `c_game_menu1` are never merged; a group with a
+`c_ending` member is named `cm_` + the whole first member name (`cm_c_ending4b`), since hl.dll's credits test
+looks for `c_ending` in the map name (`docs/research/2026-10-17-merging-the-rest.md`).
 
 ## 2. Loading a merged map (engine)
 

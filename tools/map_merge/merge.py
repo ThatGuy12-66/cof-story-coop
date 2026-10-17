@@ -1,8 +1,8 @@
 """Two maps' geometry stacked into one BSP30 file: map b moved by dz in height above or below map a.
 
 Geometry only (planes, textures, vertexes, vis, nodes, clip hulls, leafs, faces, lighting, models); the entity
-lump is a's worldspawn with b's wad files added. The entities themselves are put together by the engine at map
-load from each member's own entity source and the .sections rules (rules.py).
+lump is a's worldspawn with b's wad files added and the larger view distance. The entities themselves are put
+together by the engine at map load from each member's own entity source and the .sections rules (rules.py).
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from tools.map_merge.bsp import (WORLD_HALF, Bsp, bits_of, build_textures, compr
 
 GAP = 128.0
 STEP = 512.0
+DEFAULT_VIEW_DISTANCE = 4096.0      # the HLSDK worldspawn: sv_zmax = MaxRange, or 4096 (every story map sets one)
 
 
 @dataclass
@@ -74,9 +75,14 @@ def joined_wads(a_value: str, b_value: str) -> str:
     return ';'.join(items) + (';' if items else '')
 
 
+def view_distance(world: list) -> float:
+    """The view distance hl.dll takes from a worldspawn: MaxRange, 4096 when absent."""
+    return float(ent_get(world, 'MaxRange', '') or DEFAULT_VIEW_DISTANCE)
+
+
 def merged_worldspawn(worlds: list) -> list:
-    """The merged file's worldspawn: the first member's, with every member's wad files joined (as merge_pair does
-    pair by pair)."""
+    """The merged file's worldspawn: the first member's, with every member's wad files joined and the largest view
+    distance (MaxRange) of them all."""
     world = [list(kv) for kv in worlds[0]]
     joined = ent_get(world, 'wad', '')
     for other in worlds[1:]:
@@ -84,6 +90,12 @@ def merged_worldspawn(worlds: list) -> list:
     world = [[k, joined if k == 'wad' else v] for k, v in world]
     if not any(k == 'wad' for k, _ in world) and joined:
         world.append(['wad', joined])
+    farthest = max(worlds, key=view_distance)
+    if view_distance(farthest) > view_distance(world):
+        value = ent_get(farthest, 'MaxRange')
+        world = [[k, value if k == 'MaxRange' else v] for k, v in world]
+        if not any(k == 'MaxRange' for k, _ in world):
+            world.append(['MaxRange', value])
     return world
 
 
@@ -324,12 +336,7 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
         models.append(q)
     out['models'] = models
 
-    world = [list(kv) for kv in a.ents[0]]
-    joined = joined_wads(ent_get(a.ents[0], 'wad', ''), ent_get(b.ents[0], 'wad', ''))
-    world = [[k, joined if k == 'wad' else v] for k, v in world]
-    if not any(k == 'wad' for k, _ in world) and joined:
-        world.append(['wad', joined])
-    out['entities'] = serialize_ents([world])
+    out['entities'] = serialize_ents([merged_worldspawn([a.ents[0], b.ents[0]])])
     relaid = fix_lightmaps(b, out, faceB)
     info = PairInfo(dz=float(dz), above=above, split=split, Aw=Aw, Af=Af, Bw=Bw, Bf=Bf, Av=Av, Bv=Bv, An=An, Bn=Bn,
                     a_models=len(a.models), lightmaps_relaid=relaid,

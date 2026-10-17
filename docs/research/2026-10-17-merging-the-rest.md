@@ -17,21 +17,22 @@ client.dll) do with the map names the planner refuses.
 
   | Group (first member stays, the others stack above or below) | Lightmap pages | Doors removed |
   |---|---|---|
-  | c_sewer + c_sewer2 (or c_sewer3 + c_sewer2) | 88 | 2 |
+  | c_sewer3 + c_sewer2 | 77 | 2 |
   | c_city2 + c_park | 75 | 2 |
-  | c_stad + c_hamn + c_hamn2 | 89 | 4 |
-  | c_college2 + c_college1 | 41 | 2 |
+  | c_hamn + c_hamn2 + c_hamn3 | 83 | 4 |
+  | c_college2 + c_college1 + c_college1dark | 79 | 4 |
   | c_buscity + c_buscity2 | 69 | 2 |
   | c_subway2st3 + c_subway2st2 | 80 | 2 |
   | c_forest2 + c_forest3, c_forest4 + c_forest5, c_forest6 + c_forest7 | 64, 44, 52 | 6 |
-  | c_asylum1dark + c_asylum2dark + c_asylumb | 61 | 4 |
+  | c_asylum1dark + c_asylum2dark + c_asylumb + c_asylum2 | 88 | 6 |
   | c_asylum1day + c_attic + c_forestday | 96 | 4 |
   | c_fsewer1 + c_lake | 78 | 2 |
   | c_village1 + c_village2 + c_village3 | 137 | 4 |
-  | (c_ending4b + c_ending4) | 54 | 2 |
+  | c_ending4b + c_ending4 (file `cm_c_ending4b`, rule 2.3) | 54 | 2 |
 
   "Doors removed" counts level-door directions inside the group; a playthrough crosses most of them once or
-  twice, the hubs more.
+  twice, the hubs more. This is the wave 2 list the user chose on 2026-10-17 (section 6 says why each overlap
+  went the way it did).
 - **Four pieces of engine and merger work** unlock most of the rest, in this order of value:
   1. **Per-section fog events**: Chapter 1's c_start + c_start2 and nine more pairs.
   2. **Origin-brush models in a moved member** (mostly `func_train`): the subway, subtunnel and train chains.
@@ -78,6 +79,14 @@ Blockers over the 88 story pairs, as the planner reports them today:
    map is exactly `c_start`. A merged c_start group adds that entity to the c_start section itself.
 
 Each of these is small (planner and composer, with tests) and changes nothing for wave 1's files.
+
+**Done for wave 2 (2026-10-17):** rule 1 (`plan.WORLD_KEYS_IGNORED`, `plan.WORLD_KEY_DEFAULTS`, the largest
+`MaxRange` in `merge.merged_worldspawn`); rule 2 by hand (the group list puts the member with origin brushes
+first, e.g. c_college2's train); rule 3 (`groups.NEVER_MERGED` is c_nightmare, c_game_menu1 and c_start;
+`groups.group_name` keeps `c_ending`). c_start stays refused until rule 4 (wave 3 needs it with the fog work anyway).
+The planner also checks what the engine's `.sections` reader holds (512 renames, 32 styles, 64 landmarks a section,
+names up to 63 characters: `cof_sections.h`), and `python -m tools.map_merge.plan MAPS --record WAVE m1 m2 ...` plans,
+builds and writes a group into `tools/map_groups.json` with its hashes.
 
 ## 3. What hl.dll does with the map names (summary of `hl-names/hl-map-names-re.md`)
 
@@ -161,7 +170,30 @@ Teach the engine's client side to report the section's original map name to clie
 - **Wave 5: research items** (4.4 coordinates, 4.6 sky, 4.7 c_nightmare), each only if the playtests show the
   remaining loads are worth it.
 
-Choices for the user (each map can be in only one group): c_sewer + c_sewer2 or c_sewer3 + c_sewer2;
-c_stad + c_hamn + c_hamn2 or c_hamn2 + c_hamn3 + c_college1; the dark asylum group or c_asylum2 + c_asylumb;
-c_buscity + c_buscity2 or c_subway2st1 + c_buscity (after 4.2); merging c_village3 with one ending is possible
-(c_ending1-5 + c_village3 all pass) but saves only that ending's one load.
+## 6. The overlaps, decided (2026-10-17)
+
+The choices were: c_sewer + c_sewer2 or c_sewer3 + c_sewer2; c_stad + c_hamn + c_hamn2 or c_hamn2 + c_hamn3 +
+c_college1; the dark asylum group or c_asylum2 + c_asylumb; c_buscity + c_buscity2 or c_subway2st1 + c_buscity
+(after 4.2); c_village3 with one ending. The rule used: the most loads removed on the route actually walked, and on
+a tie the choice that leaves a map free for a later pair. More groups were planned for this
+(`evidence/map-merge-plan-20261017/overlaps.txt`, `more_groups.py`). The user agreed ("Do it").
+
+- **Sewers: c_sewer3 + c_sewer2.** Either pair removes one load on the walk from chapter 2 into 3; this one leaves
+  c_sewer for c_basement after 4.1 (`c_sewer + c_basement` fails only on fog), so that stretch ends with one load
+  instead of two. All three sewers: too many clipnodes.
+- **Harbour and college: c_hamn + c_hamn2 + c_hamn3 and c_college2 + c_college1 + c_college1dark** (neither listed
+  option). The college connects only to c_hamn3 and the harbour only to c_stad, so the branch is walked in and back
+  out: 10 loads from the stadium round trip. c_hamn3's door to the college switches to c_college1dark once the
+  player is back (`exdoorch1`). These groups remove 6, as many as the best listed option, and keep c_stad free for
+  `c_stad + c_park2` after 4.1 (only fog left). `c_hamn3 + c_college1 + c_college1dark`: too many vertexes; all
+  four with c_hamn3: too tall.
+- **Asylum: c_asylum1dark + c_asylum2dark + c_asylumb + c_asylum2.** One pass: c_forest7 → c_asylum1dark →
+  c_asylum2dark → c_asylumb, whose power puzzle switches the basement door from c_asylum2dark to c_asylum2
+  (`changeexio`) → c_asylum2 → c_asylum1 → c_attic. Three loads removed, against two or one. c_forest7 stays with
+  c_forest6 (joining it to the asylum instead removes one load fewer overall).
+- **Bus city: c_buscity + c_buscity2.** It needs no engine work; c_subway2st1 is the subway hub, with other partners
+  after 4.2 (c_subtunnel2, c_subwaysick2).
+- **c_village3 stays in the village group:** two loads every playthrough against one load in one ending.
+- client.dll draws one model type nearer in maps named `college1dark` or `forest1`-`forest6` (section 3): in
+  `cm_forest6` the c_forest7 section gets that, in `cm_college2` the c_college1dark section loses it. Cosmetic;
+  look for it in the pictures run.

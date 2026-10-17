@@ -40,6 +40,242 @@
         "player4": "story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); worldspawn models are not shown",
         "materialstxt": "absent means the game default sound/materials.txt, the same file"
       }
+    },
+    {
+      "name": "cm_sewer3",
+      "members": [
+        "c_sewer3",
+        "c_sewer2"
+      ],
+      "inputs": {
+        "c_sewer3": "518796f14122c13fc3eb605415860ea291f5c222f8875b255520544333ea98b1",
+        "c_sewer2": "f66c1fd3acbd0f9cd7cf4c1fad94ff0cca00d789c717e4d12841d761274172b7"
+      },
+      "bsp_sha256": "aafe42674844dfde9c59b515f7b44845388acc03d2e1fed9212efbd2950ecb50",
+      "sections_sha256": "361377df7ca534f3bd640d714a3a2797471de547c0eae8304615905bb8b887ae",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_city2",
+      "members": [
+        "c_city2",
+        "c_park"
+      ],
+      "inputs": {
+        "c_city2": "cf0b35b377ca8a4bb79c1814b788ff6fc13892ad6143c49fc281271db8a5ffcf",
+        "c_park": "552c6d92822c41dd286d12c004cca9e8b5bd4167358efae22b83af09e354039e"
+      },
+      "bsp_sha256": "24934f22cd9afbf98d868bc3d35deeb4502736ce4e0c1fe6a0e18640133afdf1",
+      "sections_sha256": "2e45d756b3fdce2d54a96d4d0c92863189e5bae84ae95869b0a0b2e8666a80e0",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_hamn",
+      "members": [
+        "c_hamn",
+        "c_hamn2",
+        "c_hamn3"
+      ],
+      "inputs": {
+        "c_hamn": "afcd70aa74463b0f41938e0f31a73a0bc06ca7c72a5b064d01d93003e69c3049",
+        "c_hamn2": "769aaa0b2df830d4e55c91d1027d221bcf2d72abc1b499e8972aed5d1832e156",
+        "c_hamn3": "59d6f76eed6d1d2c4b6d75ebe9f736ec982ef7024700cffffe31fbbeeba9990b"
+      },
+      "bsp_sha256": "0d957b347cc3d263f05c6ea0caf81c2ad5d0fcf787cb813ddcd728cb2d23d04e",
+      "sections_sha256": "bf38fcb04c07bbc4aa94925ec74becdfacc4b8ce16911796f9ff4507ad7dd72d",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_college2",
+      "members": [
+        "c_college2",
+        "c_college1",
+        "c_college1dark"
+      ],
+      "inputs": {
+        "c_college2": "3a5b468df6cf4f60283a9f390a6dec1df3b893a71c70043c2f5a3bbc26dd3a23",
+        "c_college1": "d5121392187d8459f7bf6af2660a18f8a002ba70e44b0d1e29c22b63cc5b5b69",
+        "c_college1dark": "7bbc5ac77913e536edf91f192df7eb1d89ea4d4f924e8b6d311c415859796dfd"
+      },
+      "bsp_sha256": "664940351181b654e6dbd7c7ae894309c4bb366b0ef33348412df3c6d0f3f003",
+      "sections_sha256": "3215c4ba90c4a107471ab5dce87aa401524b3cbe60ab2898386273c32c9f8fbd",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_buscity",
+      "members": [
+        "c_buscity",
+        "c_buscity2"
+      ],
+      "inputs": {
+        "c_buscity": "f717df5e6a7d74e7ce09cdc479fc0cc1526d53550e43931d2308c5c25d654560",
+        "c_buscity2": "b5452b8fc1fc07c11a5e828f6ebb06b8b25da07a8ba7ad61c2420f43467517ad"
+      },
+      "bsp_sha256": "e770a37853d346e6f9dbf0b2647e046d48d80e840eb47b9ef60ed06d0121636f",
+      "sections_sha256": "55e98fd83b76f781c5936f0fe2886ce52d2cdc765e0a3778f7316ed11fd49697",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_subway2st3",
+      "members": [
+        "c_subway2st3",
+        "c_subway2st2"
+      ],
+      "inputs": {
+        "c_subway2st3": "8f8d45e907523784aa53f15a795ea98edfc9f989f8252390f85afedafdc543c0",
+        "c_subway2st2": "433ed52a1decd2c673a785882d319dbebd351641678c10ff4f56b03d471ecc1c"
+      },
+      "bsp_sha256": "1e1c922faf4718f41bd80dca94a6716704a199e0807584787dca489bc579a491",
+      "sections_sha256": "82d054fe9687e463550ef0aae5bec051f82242666568b2600f85dfba03b11e2d",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_forest2",
+      "members": [
+        "c_forest2",
+        "c_forest3"
+      ],
+      "inputs": {
+        "c_forest2": "27ba09e671bc192bc329499842dd7a2de0084fbe4da621f2fc08324207032c55",
+        "c_forest3": "1e033e8d90e9bb0f051108a02a897e4c6ced08348d439479af0cac60d773922e"
+      },
+      "bsp_sha256": "62ece18f072854bb05610b62bcd2212b04c0592a6db6996ec43e5acc2f3903d9",
+      "sections_sha256": "b01b5f85ae8a2aa6e981074c1950b6753ea18ce94282da5f6c59a3e3d645c76b",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_forest4",
+      "members": [
+        "c_forest4",
+        "c_forest5"
+      ],
+      "inputs": {
+        "c_forest4": "c316ae4e77cbcc94b9c2cf31d2940da2aea79fabfd6c813e61e9557212f1824d",
+        "c_forest5": "dedbd961e485cb7973a7ed1eae1a5bf52a8fe0e3fe76b46688bbfcea9bb40597"
+      },
+      "bsp_sha256": "b63b81cd129b00e03388a52855ea8e0f3756cddf8756a2977e75c6c916132028",
+      "sections_sha256": "95291ca316cfa4ad54ead75a04e931ecee6aedc7ca6bebeb3023a273bcabc371",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_forest6",
+      "members": [
+        "c_forest6",
+        "c_forest7"
+      ],
+      "inputs": {
+        "c_forest6": "cb8be4c8a578735e826a1dd3b482a7160edb9ba38c187bbd91b6a9b4444d2062",
+        "c_forest7": "507283109a372309c8aa6073e7548427cb475cf5d54bf1ab49232ad4604c737b"
+      },
+      "bsp_sha256": "52ddfc0d66278fc391ed16ee37264c11345f9410a8bdcc0ec36b84c2e92aa1c1",
+      "sections_sha256": "7d6ba5dc9ee2c0a62d5e1d2e38237c6184f1793faa1b743463d032b01c03d7dc",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_asylum1dark",
+      "members": [
+        "c_asylum1dark",
+        "c_asylum2dark",
+        "c_asylumb",
+        "c_asylum2"
+      ],
+      "inputs": {
+        "c_asylum1dark": "474d57c8e5a4da43e964f1973bd29a69408fe1279315dcce2b47ca25d230d2ce",
+        "c_asylum2dark": "c360d70a76e12838dd581b6780efb1ce26fcd72fca3816660d17aaec2d35bf85",
+        "c_asylumb": "d70d74998edd2157d4db80e48e68da5a03be84518aa28aca8822e40d0345b9a3",
+        "c_asylum2": "eea9b4fd8b8800f35952b6d0b093ce91d78127b8f5bce7b2b31fb5c4c3f2b2fd"
+      },
+      "bsp_sha256": "ab8f19c057e5a1607387b552a3414b8ec64f16fe7cfd9f9bfdef90c47394ed7d",
+      "sections_sha256": "194f19fbeb8a522d5af4ca05dc5025e0d38a189ddef13ee98505682b82dc284c",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_asylum1day",
+      "members": [
+        "c_asylum1day",
+        "c_attic",
+        "c_forestday"
+      ],
+      "inputs": {
+        "c_asylum1day": "3c38e15c4199f944a743c0285fec991e1e81fd91a585c7e48591844fbeb58619",
+        "c_attic": "b6ec870157a92c23a0c475369d5f6623f6f056872fec723fae97cf302c107156",
+        "c_forestday": "694815df375ced2784f5cbe86cd2f2703f973fb95d6ae4578aaaf71d5d4a7f0f"
+      },
+      "bsp_sha256": "2c3a54291cebd9f07ebde186f8de03a2ad8befdf37d7a490915f5f096d20665e",
+      "sections_sha256": "857b72a42ca3eb2b997478a5b0f1d95c8dcb6a3c4c1d16cc125ae92aa2c22b49",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_fsewer1",
+      "members": [
+        "c_fsewer1",
+        "c_lake"
+      ],
+      "inputs": {
+        "c_fsewer1": "9419ddfe0c392d384a394622ee3df3bcccc789528c5bc02a70a5e86f18f8455a",
+        "c_lake": "f75807aaeb3ef1cdea198953f63ea71a4db4bcb94198beffad8b9697d3dcac39"
+      },
+      "bsp_sha256": "62692515d2a8d29fbb165527d6cefd26542b3e53293def7bf5946a4d3fea895a",
+      "sections_sha256": "66843c332016a866520676109e6e398e6174bdeffb4d1c0b44560ebc3e5c9a5c",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_village1",
+      "members": [
+        "c_village1",
+        "c_village2",
+        "c_village3"
+      ],
+      "inputs": {
+        "c_village1": "640dbf067342da9a79dd21ae1f0d758a2612e0a6a0f02d0b1815ac988bf2c6d3",
+        "c_village2": "7aab892b7ccd197bb3628216926076209c71c2afc5b9b0b25d3269c773e3d066",
+        "c_village3": "ff8fe4c708c49f7fe3abb9fa66e3eb96994b17ab6105aa34e9768888c9526771"
+      },
+      "bsp_sha256": "da49fe127d0ed9955988c7736ebd8df51c52f6635628ba1bc7cb02e0587a2f05",
+      "sections_sha256": "286371d645d3dbeaca3674610ddc96c6a54679dac4a1ea4a2cb9305e679ff381",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
+    },
+    {
+      "name": "cm_c_ending4b",
+      "members": [
+        "c_ending4b",
+        "c_ending4"
+      ],
+      "inputs": {
+        "c_ending4b": "da517288cf1bd88b45c47db02cae902012928f9e53ca15594f75845026aee3cb",
+        "c_ending4": "5680c28c6a2eb63250806d77d80e27437ff67ac12825f8b1e9828ea101fb3b33"
+      },
+      "bsp_sha256": "c8af5a07d09bca55c4c9ee9d358770a17782a1a584531847f9ccb88c40ac526c",
+      "sections_sha256": "3501e4f343adb482ac4f6d0f22f7f19bd262515721b30d908a5ebcb0001a6674",
+      "wave": 2,
+      "enabled": true,
+      "accepted": {}
     }
   ]
 }

@@ -2,6 +2,7 @@
 
     python -m tools.map_merge.plan MAPS_DIR c_apartment3 c_apartment4 [...]
     python -m tools.map_merge.plan MAPS_DIR --graph
+    python -m tools.map_merge.plan MAPS_DIR --record WAVE c_apartment3 c_apartment4 [...]   (into map_groups.json)
 
 It merges the maps for real and checks every limit the merged map must stay within (file format, the renderer,
 the engine, the game DLL) and every story rule the design depends on. Problems block a group; notes are for the
@@ -9,15 +10,26 @@ person adding it.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+import hashlib
+import json
 from pathlib import Path
 import sys
 
-from tools.map_merge import bsp, groups, rules
+from tools.map_merge import bsp, groups, merge, rules
 from tools.map_merge.bsp import ent_get, face_box
 
 # hl.dll reads these worldspawn keys; a merged map has only its first member's worldspawn.
 HL_WORLD_KEYS = ('player1', 'player2', 'player3', 'player4', 'materialstxt', 'MaxRange', 'WaveHeight', 'sounds')
+# Differences that never matter, and why.
+WORLD_KEYS_IGNORED = {
+    key: 'story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); '
+         'worldspawn models are not shown' for key in ('player1', 'player2', 'player3', 'player4')}
+# Keys whose absence means a value: equal once the absent value is filled in.
+WORLD_KEY_DEFAULTS = {'materialstxt': 'sound/materials.txt', 'WaveHeight': '0'}
+# cof_sections.h: COF_SECT_RENAMES, COF_SECT_STYLES, COF_SECT_LANDMARKS a section; COF_SECT_NAME with its 0.
+SECTION_LIMITS = {'renames': 512, 'styles': 32, 'landmarks': 64}
+SECTION_NAME_MAX = 63
 LIMITS = {
     'planes': 65535, 'nodes': 32767, 'clipnodes': 32767, 'leafs': 32767, 'faces': 65535, 'marksurfaces': 65535,
     'vertexes': 65535, 'texinfo': 32767,
@@ -143,6 +155,54 @@ def globalname_problems(members: list) -> list:
             for g, m in sorted(seen.items()) if len(m) > 1]
 
 
+def world_value(key: str, value: str | None):
+    """A worldspawn value as hl.dll sees it, for comparing members."""
+    value = WORLD_KEY_DEFAULTS.get(key) if value is None else value
+    if key == 'WaveHeight' and value is not None and number(value):
+        return float(value)
+    if key == 'materialstxt' and value is not None:
+        return value.replace('\\', '/').lower()
+    return value
+
+
+def world_key_problems(members: list, worlds: list, accepted: dict) -> tuple:
+    """(problems, notes) for the worldspawn keys hl.dll reads; worlds are dicts. MaxRange may differ: the merged
+    worldspawn takes the largest (merge.merged_worldspawn)."""
+    problems, notes = [], []
+    for key in HL_WORLD_KEYS:
+        values = [w.get(key) for w in worlds]
+        if len(set(values)) < 2:
+            continue
+        listed = ', '.join(f'{m}={v}' for m, v in zip(members, values))
+        if key in WORLD_KEYS_IGNORED or key in accepted:
+            notes.append(f'worldspawn {key} differs ({listed}): {WORLD_KEYS_IGNORED.get(key) or accepted[key]}')
+        elif key == 'MaxRange':
+            if all(v is None or number(v) for v in values):
+                world = merge.merged_worldspawn([[['MaxRange', v]] if v is not None else [] for v in values])
+                notes.append(f'worldspawn MaxRange differs ({listed}): the merged map takes '
+                             f'{ent_get(world, "MaxRange", "the default")}')
+            else:
+                problems.append(f'worldspawn MaxRange is not a number: {listed}')
+        elif len({world_value(key, v) for v in values}) > 1:
+            problems.append(f'worldspawn {key} differs: {listed}')
+    return problems, notes
+
+
+def section_limit_problems(sections: list) -> list:
+    """What the engine's .sections reader (cof_sections.h) cannot hold: it refuses the whole file."""
+    out = []
+    for s in sections:
+        for what, limit in SECTION_LIMITS.items():
+            count = len(getattr(s, what))
+            if count > limit:
+                out.append(f'{s.map}: {count} {what}, the engine holds {limit} a section')
+        names = [s.map, *s.renames, *s.renames.values(), *s.landmarks]
+        long = [n for n in names if len(n) > SECTION_NAME_MAX]
+        if long:
+            out.append(f'{s.map}: {long[0]} is longer than the engine\'s {SECTION_NAME_MAX} characters')
+    return out
+
+
 def door_checks(members: list, landmarks: list, member_ents: list) -> tuple:
     """Every level door between two members: its landmark once on both sides (a section move keeps the
     position relative to it), or on neither (the original game spawns at the map start; so does the move)."""
@@ -172,13 +232,13 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     report = PlanReport(members=list(members))
     for m in members:
         if groups.hl_named(m):
-            report.problems.append(f'{m} is named by the game DLL (or is the menu map) and is never merged')
+            report.problems.append(f'{m} is never merged: {groups.NEVER_MERGED[m]}')
     if report.problems:
         return report
     maps = [bsp.Bsp.read(Path(maps_dir) / f'{m}.bsp') for m in members]
     named = list(zip(members, [x.ents for x in maps]))
     try:
-        merged, sections = groups.merge_members('cm_' + members[0][2:], list(zip(members, maps)))
+        merged, sections = groups.merge_members(groups.group_name(members), list(zip(members, maps)))
     except (ValueError, groups.MergeCheckFailed) as error:
         report.problems.append(f'merge: {error}')
         return report
@@ -198,11 +258,11 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     worlds = [dict((k, v) for k, v in x.ents[0]) for x in maps]
     if len({w.get('skyname', '').lower() for w in worlds}) > 1:
         report.problems.append('skyname differs: ' + ', '.join(f'{m}={w.get("skyname")}' for m, w in zip(members, worlds)))
-    for key in HL_WORLD_KEYS:
-        values = [w.get(key) for w in worlds]
-        if len(set(values)) > 1 and key not in accepted:
-            report.problems.append(f'worldspawn {key} differs: ' + ', '.join(f'{m}={v}' for m, v in zip(members, values)))
-    fogs = [sorted(tuple(sorted((k, v) for k, v in e if k not in ('origin', 'targetname')))
+    problems, notes = world_key_problems(members, worlds, accepted)
+    report.problems += problems
+    report.notes += notes
+    report.problems += section_limit_problems(sections)
+    fogs =[sorted(tuple(sorted((k, v) for k, v in e if k not in ('origin', 'targetname')))
                    for e in x.ents if ent_get(e, 'classname') == 'env_fog') for x in maps]
     if any(f != fogs[0] for f in fogs[1:]):
         report.problems.append('env_fog differs between members')
@@ -221,6 +281,34 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     return report
 
 
+def record_group(maps_dir: Path, members: list, wave: int, path: Path | None = None) -> groups.Group:
+    """Plan the group, build it from the maps in maps_dir and write it into the group list with its input and
+    output hashes, in place of a group of the same name."""
+    report = plan_group(maps_dir, members)
+    if not report.ok:
+        raise ValueError(f'{" + ".join(members)} is refused: ' + '; '.join(report.problems[:5]))
+    inputs = {m: hashlib.sha256((Path(maps_dir) / f'{m}.bsp').read_bytes()).hexdigest() for m in members}
+    group = groups.Group(name=groups.group_name(members), members=list(members), inputs=inputs,
+                         bsp_sha256='0' * 64, sections_sha256='0' * 64, wave=wave, enabled=True)
+    data, text = groups.build_group(maps_dir, group)
+    group.bsp_sha256 = hashlib.sha256(data).hexdigest()
+    group.sections_sha256 = hashlib.sha256(text.encode('ascii')).hexdigest()
+    groups.validate(group)
+    path = Path(path or groups.groups_path())
+    listed = json.loads(path.read_text(encoding='utf-8'))
+    others = [g for g in listed['groups'] if g['name'] != group.name]
+    shared = sorted({m for g in others for m in g['members']} & set(members))
+    if shared:
+        raise ValueError(f'{group.name}: {", ".join(shared)} already in another group')
+    names = [g['name'] for g in listed['groups']]
+    if group.name in names:
+        listed['groups'][names.index(group.name)] = asdict(group)
+    else:
+        listed['groups'].append(asdict(group))
+    path.write_text(json.dumps(listed, indent=2) + '\n', encoding='utf-8')
+    return group
+
+
 def door_graph(maps_dir: Path, maps: list) -> dict:
     out = {}
     for m in maps:
@@ -236,6 +324,10 @@ def main(argv: list) -> int:
         for m, dests in door_graph(maps_dir, names).items():
             if dests:
                 print(f'{m} -> {", ".join(sorted(dests))}')
+        return 0
+    if argv[1:2] == ['--record']:
+        group = record_group(maps_dir, argv[3:], int(argv[2]))
+        print(f'recorded {group.name} = {" + ".join(group.members)} (wave {group.wave}) in {groups.groups_path()}')
         return 0
     report = plan_group(maps_dir, argv[1:])
     print('OK' if report.ok else 'REFUSED', ' + '.join(report.members))

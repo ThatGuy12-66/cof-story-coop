@@ -1,10 +1,13 @@
 """The merged-maps check tool's offline parts: the doors between sections, the script that walks into them, and
 reading the result from the game's log."""
+import contextlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from tests.test_map_merge_bsp import MAPS, retail
+from tools import live_loop
 from tools import merged_maps_check as mc
 from tools.map_merge import bsp, groups
 
@@ -116,6 +119,28 @@ class SavesKeptTests(unittest.TestCase):
                 (save / 'autosave.cof').write_bytes(b'check run')
                 raise RuntimeError('game did not start')
             self.assertEqual((save / 'autosave.cof').read_bytes(), b'players own')
+
+
+class RunGameTests(unittest.TestCase):
+    def test_a_check_runs_silent_through_the_live_loops_test_launcher_without_bots(self):
+        # the player's own launcher plays sound: a check goes through live_loop.session (the test launcher,
+        # -nosound, its audio muted, the copy's settings and saves put back), alone in the doors
+        calls = []
+
+        @contextlib.contextmanager
+        def session(copy, map_name, **options):
+            calls.append((map_name, options))
+            yield mock.Mock(log=lambda: 'the log')
+
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp)
+            (copy / 'cryoffear').mkdir()
+            with mock.patch.object(live_loop, 'session', session), \
+                    mock.patch.object(live_loop, 'game_processes', lambda c: []):
+                log = mc.run_game(copy, 'cm_hamn', True, 'echo merged-check done\nquit\n')
+            self.assertEqual(log, 'the log')
+            self.assertEqual(calls, [('cm_hamn', {'companions': 0, 'merged': True, 'extra': ('+exec', mc.SCRIPT)})])
+            self.assertFalse((copy / 'cryoffear' / mc.SCRIPT).exists())
 
 
 if __name__ == '__main__':
