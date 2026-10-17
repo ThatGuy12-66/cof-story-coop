@@ -55,7 +55,7 @@ typedef float vec3_t[3];
 typedef struct edict_s edict_t;
 typedef struct {
 	string_t classname;
-	vec3_t origin, view_ofs, v_angle, angles, mins, maxs, absmin, absmax;
+	vec3_t origin, view_ofs, v_angle, angles, mins, maxs, absmin, absmax, velocity;
 	float health, takedamage, fuser3, frags, renderamt;
 	int deadflag, flags, effects, movetype, fixangle, rendermode, colormap;
 	string_t netname, target, targetname, model;
@@ -122,7 +122,7 @@ static edict_t *used, *user;
 static int supplies, revives, revive_ok, reviving, repairs, fallen, gives, free_slots, command_count;
 static char last_equip[32], commands[16][32];
 static usercmd_t last_run;
-static convar_t cvars[8] = { { 0, "0" }, { 0, "Companion" }, { 0, "0" }, { 8, "8" }, { 3, "3" }, { 90, "90" }, { 1, "1" }, { 1, "1" } };
+static convar_t cvars[9] = { { 0, "0" }, { 0, "Companion" }, { 0, "0" }, { 8, "8" }, { 3, "3" }, { 90, "90" }, { 1, "1" }, { 1, "1" }, { 0, "0" } };
 
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= entities && e < entities + 16 && !e->free; }
@@ -149,6 +149,7 @@ static convar_t *Cvar_Get( const char *name, const char *value, int flags, const
 	if( !strcmp( name, "cof_companion_medic" )) return &cvars[5];
 	if( !strcmp( name, "cof_companion_ammo" )) return &cvars[6];
 	if( !strcmp( name, "cof_companion_light" )) return &cvars[7];
+	if( !strcmp( name, "cof_companion_debug" )) return &cvars[8];
 	return &cvars[3];
 }
 static void Cvar_SetValue( const char *name, float value ) { Cvar_Get( name, "", 0, "" )->value = value; }
@@ -853,6 +854,73 @@ int main( void )
 	assert( cof_companions[2].out.mode == COF_BRAIN_IDLE && !ran[2].forwardmove && logged( "userid=201 mode=follow" ) <= 1 );
 	entities[1].v.origin[0] = 0; entities[2].v.origin[0] = 60; entities[3].v.origin[0] = 60; entities[3].v.origin[1] = 10;
 	frame( 0.05 ); assert( ran[2].forwardmove != 0 || ran[2].sidemove != 0 );
+
+	/* A partner in the way to the next trail point, but not on the line to the leader (who is round a
+	 * corner): it waits for the partner instead of setting off and stopping again every frame (live
+	 * 2026-10-16: 180 follow/idle switches a second). The leader walked north, east, then south behind a
+	 * wall with a gap at its far end; the partner stands north-east of the bot. */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; settle(); frame( 1.0 );
+	gap_x = 150; gap_y = 200;
+	entities[2].v.origin[0] = -40; entities[2].v.origin[1] = 0;
+	entities[3].v.origin[0] = -25; entities[3].v.origin[1] = 40;
+	entities[1].v.origin[0] = 0; entities[1].v.origin[1] = 0; frame( 0.05 );
+	for( i = 1; i <= 6; i++ ) { entities[1].v.origin[1] = 40.0f * i; frame( 0.05 ); }
+	for( i = 1; i <= 8; i++ ) { entities[1].v.origin[0] = 300.0f * i / 8; frame( 0.05 ); }
+	for( i = 1; i <= 6; i++ ) { entities[1].v.origin[1] = 240.0f - 40.0f * i; frame( 0.05 ); }
+	{
+		int before = logged( "userid=200 mode=" );
+		for( i = 0; i < 40; i++ )
+		{
+			entities[2].v.origin[0] = -40; entities[2].v.origin[1] = 0; entities[3].v.origin[0] = -25; entities[3].v.origin[1] = 40;
+			frame( 0.05 );
+		}
+		assert( logged( "userid=200 mode=" ) - before <= 1 );
+	}
+	gap_x = gap_y = 0.0f;
+
+	/* The line behind a person goes by who is nearer, not by slot: the second slot's bot stands closer, so it
+	 * keeps the near place and the first slot's bot the one behind it (it no longer tries to get past). */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; settle(); frame( 1.0 );
+	entities[1].v.origin[0] = 0; entities[1].v.origin[1] = 0;
+	for( i = 0; i < 3; i++ )
+	{
+		entities[2].v.origin[0] = -150; entities[2].v.origin[1] = 20; entities[3].v.origin[0] = -60; entities[3].v.origin[1] = -40;
+		frame( 0.05 );
+	}
+	assert( cof_companions[1].out.mode == COF_BRAIN_IDLE && cof_companions[2].out.mode == COF_BRAIN_IDLE );
+	assert( cof_companions[1].behind == 1 && cof_companions[2].behind == 0 );
+	/* ...and the two do not swap places back and forth when they are nearly as far */
+	{
+		int swaps = 0, last = cof_companions[1].behind;
+		for( i = 0; i < 20; i++ )
+		{
+			entities[2].v.origin[0] = -150 + ( i & 1 ? 6.0f : -6.0f ); entities[2].v.origin[1] = 20;
+			entities[3].v.origin[0] = -150; entities[3].v.origin[1] = -40;
+			frame( 0.05 );
+			swaps += cof_companions[1].behind != last;
+			last = cof_companions[1].behind;
+		}
+		assert( swaps <= 1 );
+	}
+
+	/* Two bots in single file after a person far ahead: the one behind slows to the pace of the one in front
+	 * instead of stopping each time it catches up (live 2026-10-16: follow/idle several times a second). */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; entities[1].v.origin[0] = 800; settle(); frame( 1.0 );
+	{
+		int stops = 0;
+		for( i = 0; i < 40; i++ )
+		{
+			entities[3].v.origin[0] = 200.0f + 7.5f * i; entities[3].v.origin[1] = 0; entities[3].v.velocity[0] = 150;
+			entities[2].v.origin[0] = entities[3].v.origin[0] - 40; entities[2].v.origin[1] = 0;
+			frame( 0.05 );
+			if( i > 4 ) stops += cof_companions[1].out.mode != COF_BRAIN_FOLLOW || ran[1].forwardmove <= 0;
+			if( i > 4 ) assert( ran[1].forwardmove <= 150.0f + 1.0f );
+		}
+		assert( !stops );
+		/* the one in front stops: as near as it gets for now */
+		entities[3].v.velocity[0] = 0; frame( 0.05 ); frame( 0.05 );
+		assert( cof_companions[1].out.mode == COF_BRAIN_IDLE && !ran[1].forwardmove );
+	}
 
 	/* Door jambs and corners: blocked straight ahead, the bot lines up with the opening the engine
 	 * probed beside it instead of pushing into the wall until it teleports. */

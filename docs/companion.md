@@ -23,8 +23,9 @@ live, two or three only in offline tests so far.
 
 - **Follows you.** It walks the path you walked, so it gets round corners and through rooms the way
   you did. It sets off once you are a few steps away and walks until it is beside you (no
-  stop-start); a second and third companion keep a little further back, and one that finds another
-  in its way waits instead of pushing. Blocked by a door jamb or a corner, it steps sideways to line
+  stop-start); a second and third companion keep a little further back (the nearest takes the place
+  closest to you), one that finds another standing in its way waits instead of pushing, and one
+  behind another that is walking on keeps its pace. Blocked by a door jamb or a corner, it steps sideways to line
   up with the opening. When something stands between it and where it is going (it was pushed off
   your path in a fight, or you are out of sight with no path to follow), it finds a way round on the
   map's own monster route graph. It opens ordinary doors in its way (never the story's: locked or
@@ -87,6 +88,7 @@ live, two or three only in offline tests so far.
 | `cof_companion_regen` | 3 | Health it recovers each second out of a fight. |
 | `cof_companion_drive` | 0 | Testing: the AI also plays a second person's client while its controls rest. |
 | `cof_companion_idle` | 8 | Seconds of rest before the AI takes such a client over. |
+| `cof_companion_debug` | 0 | Testing: each change of mode also logs what it perceived (`companion-why`: distance, place in line, sight, a partner in the way, route, trail). |
 
 ## Limits
 

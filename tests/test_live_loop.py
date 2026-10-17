@@ -1,0 +1,67 @@
+"""The automated live runs' pieces that need no game: reading a session log, and putting a developer engine into a
+copy and the packaged one back (tools/live_loop.py)."""
+from pathlib import Path
+import tempfile
+import unittest
+
+from tools import live_loop
+
+LOG = """\
+[2026:10:16|20:47:17] Spawn Server: c_start2 [hahaland]
+[2026:10:16|20:47:18] cofstory phase=companion-mode userid=3 mode=idle
+[2026:10:16|20:47:18] cofstory phase=companion-mode userid=3 mode=follow
+[2026:10:16|20:47:18] cofstory phase=companion-mode userid=4 mode=follow
+[2026:10:16|20:47:20] cofstory phase=companion-teleport userid=4 leader=1 reason=door at=1,2,3 leader_at=4,5,6 to=7,8,9
+[2026:10:16|20:47:21] Error: Could not load sound sound/save/save_no.wav
+[2026:10:16|20:47:22] Host_Error: SV_AllocEdict: no free edicts (max is 1200)
+[2026:10:16|20:48:17] Spawn Server: c_start [hahaland]
+"""
+
+
+class ReportTests(unittest.TestCase):
+    def test_counts_mode_changes_teleports_maps_and_errors(self):
+        report = live_loop.read_report(LOG)
+        self.assertAlmostEqual(report.minutes, 1.0)
+        self.assertEqual(report.modes, {"3": 2, "4": 1})
+        self.assertEqual(report.worst_second, (2, "20:47:18 u3"))
+        self.assertEqual(report.teleports, {"door": 1})
+        self.assertEqual(report.maps, ["c_start2", "c_start"])
+        # a missing sound is Cry of Fear's own (its files lack them), not a defect
+        self.assertEqual(report.errors, ["Host_Error: SV_AllocEdict: no free edicts (max is 1200)"])
+        self.assertTrue(any("no free edicts" in note for note in report.notes))
+
+
+class EngineInstallTests(unittest.TestCase):
+    def test_a_developer_engine_goes_in_and_the_packaged_one_comes_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            copy, build = Path(tmp) / "copy", Path(tmp) / "build.dll"
+            copy.mkdir()
+            (copy / "xash.dll").write_bytes(b"packaged")
+            build.write_bytes(b"developer")
+            packaged = live_loop._sha(copy / "xash.dll")
+            self.assertIsNone(live_loop.dev_engine(copy))
+            live_loop.install(copy, build)
+            self.assertEqual((copy / "xash.dll").read_bytes(), b"developer")
+            self.assertEqual(live_loop.dev_engine(copy), live_loop._sha(build)[:8])
+            # a second build replaces the first; the packaged one stays kept
+            build.write_bytes(b"developer 2")
+            live_loop.install(copy, build)
+            self.assertEqual((copy / f"xash.dll.{packaged[:8]}.bak").read_bytes(), b"packaged")
+            live_loop.restore(copy)
+            self.assertEqual((copy / "xash.dll").read_bytes(), b"packaged")
+            self.assertIsNone(live_loop.dev_engine(copy))
+            self.assertFalse((copy / live_loop.MARKER).exists())
+
+    def test_an_engine_replaced_by_an_update_is_not_taken_for_the_developer_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            copy, build = Path(tmp) / "copy", Path(tmp) / "build.dll"
+            copy.mkdir()
+            (copy / "xash.dll").write_bytes(b"packaged")
+            build.write_bytes(b"developer")
+            live_loop.install(copy, build)
+            (copy / "xash.dll").write_bytes(b"a newer package")
+            self.assertIsNone(live_loop.dev_engine(copy))
+
+
+if __name__ == "__main__":
+    unittest.main()
