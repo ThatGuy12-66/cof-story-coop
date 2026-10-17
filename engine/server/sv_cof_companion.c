@@ -54,6 +54,8 @@
 #define COF_COMPANION_MODELS 1024 // brush models ("*N") mapped to their entities
 #define COF_COMPANION_PLACE_PATIENCE 3.0 // no spot out of the player's sight this long: the least seen one
 #define COF_COMPANION_PARTNER 48.0f // another player this close in its way: as near as it gets for now
+#define COF_COMPANION_LINE_STICK 48.0f // a bot further back in the line counts this much farther for each place
+#define COF_COMPANION_PARTNER_PACE 40.0f // a partner in the way moving on at least this fast: keep its pace
 
 static convar_t *cof_companion; // how many companion bots to keep (0: none)
 static convar_t *cof_companion_name;
@@ -63,6 +65,7 @@ static convar_t *cof_companion_regen; // health a companion bot recovers each se
 static convar_t *cof_companion_medic; // seconds between syringes for the leader (0: never)
 static convar_t *cof_companion_ammo; // a bot never runs out of rounds
 static convar_t *cof_companion_light; // a bot keeps its flashlight on
+static convar_t *cof_companion_debug; // each change of mode logs what the companion perceived (companion-why)
 
 typedef struct
 {
@@ -93,6 +96,7 @@ typedef struct
 	double avoid_until[COF_COMPANION_AVOID];
 	int avoid_next;
 	int leader_userid; // whom it looked after last frame (a new one starts a new trail)
+	int behind; // its place in the line behind that person last frame (0: nearest)
 	qboolean place_pending, place_near; // a teleport the brain asked for, still to place...
 	vec3_t place_at; // ...near here (where the game put the leader) or behind them
 	const char *place_why;
@@ -162,7 +166,7 @@ static sv_client_t *CoF_CompanionLeader( void )
 
 // Whom a bot looks after: the downed person nearest to it (CPR comes first), else the
 // people in turn: the bot of rank k follows person k (counted again if there are fewer).
-static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank, int *behind )
+static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank )
 {
 	sv_client_t *people[MAX_CLIENTS], *down = NULL;
 	float best = 0.0f;
@@ -179,9 +183,38 @@ static sv_client_t *CoF_CompanionLeaderFor( const sv_client_t *self, int rank, i
 			if( !down || distance < best ) { down = cl; best = distance; }
 		}
 	}
-	*behind = n ? rank / n : 0; // bots ahead of it behind the same person
 	if( down ) return down;
 	return n ? people[rank % n] : NULL;
+}
+
+// A companion bot this module added, in the game.
+static qboolean CoF_CompanionIsBot( int i )
+{
+	const sv_client_t *cl = &svs.clients[i];
+	const cof_companion_t *c = &cof_companions[i];
+	return c->bot && FBitSet( cl->flags, FCL_FAKECLIENT ) && cl->state == cs_spawned && c->userid == cl->userid && SV_IsValidEdict( cl->edict );
+}
+
+// Whom each bot looks after, and its place in the line behind that person: the nearest first (in slot order the
+// one behind tried to get past the one in front, and stopped and went every time it caught up; live 2026-10-16).
+// A bot overtakes in the line only when it is clearly nearer, else two about as far would swap every frame.
+static void CoF_CompanionLine( sv_client_t **mine, int *behind )
+{
+	float key[MAX_CLIENTS];
+	int i, j, rank = 0;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		mine[i] = NULL;
+		behind[i] = 0;
+		key[i] = 0.0f;
+		if( !CoF_CompanionIsBot( i )) continue;
+		mine[i] = CoF_CompanionLeaderFor( &svs.clients[i], rank++ );
+		if( mine[i] && SV_IsValidEdict( mine[i]->edict ))
+			key[i] = (float)VectorDistance( svs.clients[i].edict->v.origin, mine[i]->edict->v.origin ) + COF_COMPANION_LINE_STICK * cof_companions[i].behind;
+	}
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+		for( j = 0; mine[i] && j < svs.maxclients && j < MAX_CLIENTS; j++ )
+			if( j != i && mine[j] == mine[i] && ( key[j] < key[i] || ( key[j] == key[i] && j < i ))) behind[i]++;
 }
 
 // A person is alive in the game. The game declares "Game over" when the last
@@ -706,11 +739,11 @@ static void CoF_CompanionPartners( sv_client_t *cl, sv_client_t *leader, cof_com
 	edict_t *ent = cl->edict;
 	float best = COF_BRAIN_PERSONAL;
 	int i;
-	if( c->out.going || leader )
+	if( c->out.going || c->out.aiming || leader )
 	{
-		// toward where it was going, or (standing) toward the leader: else the check would
-		// switch itself off the moment it stopped
-		const float *goal = c->out.going ? c->out.goal : leader->edict->v.origin;
+		// toward where it was going or would go (the brain's aim, also while it waits), else toward the
+		// leader: the check must look the same way whether it walks or stands, or it switches itself off
+		const float *goal = c->out.going ? c->out.goal : c->out.aiming ? c->out.aim : leader->edict->v.origin;
 		float x = goal[0] - ent->v.origin[0], y = goal[1] - ent->v.origin[1], length = sqrtf( x * x + y * y );
 		if( length > 1.0f )
 		{
@@ -722,7 +755,12 @@ static void CoF_CompanionPartners( sv_client_t *cl, sv_client_t *leader, cof_com
 			tr = SV_Move( ent->v.origin, ent->v.mins, ent->v.maxs, to, MOVE_NORMAL, ent, false );
 			if( tr.fraction < 1.0f && tr.ent && NUM_FOR_EDICT( tr.ent ) >= 1 && NUM_FOR_EDICT( tr.ent ) <= svs.maxclients &&
 				( !leader || tr.ent != leader->edict ))
+			{
+				// walking on the same way: keep its pace rather than stop each time it catches up
+				float pace = ( tr.ent->v.velocity[0] * x + tr.ent->v.velocity[1] * y ) / length;
 				in->partner_block = 1;
+				in->partner_pace = pace >= COF_COMPANION_PARTNER_PACE ? pace : 0.0f;
+			}
 		}
 	}
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
@@ -1047,8 +1085,8 @@ static void CoF_CompanionKeepBots( sv_client_t *leader )
 
 void SV_CoF_CompanionFrame( void )
 {
-	sv_client_t *leader;
-	int i, rank, behind;
+	sv_client_t *leader, *mine[MAX_CLIENTS];
+	int i, behind, line[MAX_CLIENTS];
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	if( cof_companion_generation != svs.spawncount )
 	{
@@ -1068,13 +1106,14 @@ void SV_CoF_CompanionFrame( void )
 	if( !leader || CoF_CompanionAlive( leader->edict )) cof_companion_down_told = 0;
 	if( cof_companion_medic_slot >= 0 && !( cof_companions[cof_companion_medic_slot].bot && svs.clients[cof_companion_medic_slot].state == cs_spawned ))
 		cof_companion_medic_slot = -1;
-	for( i = 0, rank = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	CoF_CompanionLine( mine, line );
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
-		sv_client_t *cl = &svs.clients[i], *mine;
+		sv_client_t *cl = &svs.clients[i], *leads;
 		cof_companion_t *c = &cof_companions[i];
 		cof_brain_input_t in;
 		cof_retail_arms_t arms;
-		qboolean bot = c->bot && FBitSet( cl->flags, FCL_FAKECLIENT ) && cl->state == cs_spawned && c->userid == cl->userid;
+		qboolean bot = CoF_CompanionIsBot( i );
 		qboolean human = !FBitSet( cl->flags, FCL_FAKECLIENT ) && cl->state == cs_spawned && cl != leader &&
 			cof_companion_drive && cof_companion_drive->value && c->userid == cl->userid && sv.time >= c->human_until && c->have_view;
 		if( !SV_IsValidEdict( cl->edict ) || ( !bot && !human ))
@@ -1087,18 +1126,24 @@ void SV_CoF_CompanionFrame( void )
 		if( !c->driving && human ) Con_Printf( "cofstory phase=companion-driving userid=%d\n", cl->userid );
 		c->driving = true;
 		// a driven person's client keeps the first person; bots share the people out
-		behind = 0;
-		mine = bot ? CoF_CompanionLeaderFor( cl, rank++, &behind ) : leader;
-		if(( mine ? mine->userid : 0 ) != c->leader_userid )
+		leads = bot ? mine[i] : leader;
+		behind = c->behind = bot ? line[i] : 0;
+		if(( leads ? leads->userid : 0 ) != c->leader_userid )
 		{
 			// another person: their trail starts now (the old one leads to someone else)
-			c->leader_userid = mine ? mine->userid : 0;
+			c->leader_userid = leads ? leads->userid : 0;
 			c->brain.count = c->brain.cursor = c->brain.have_sample = c->brain.broken = 0;
 			c->brain.following = 0;
 			c->route_length = 0;
 		}
-		CoF_CompanionPerceive( cl, mine, c, bot, behind, &in, &arms );
+		CoF_CompanionPerceive( cl, leads, c, bot, behind, &in, &arms );
 		CoF_BrainThink( &c->brain, &in, &c->out );
+		if( cof_companion_debug && cof_companion_debug->value && c->out.mode != c->mode )
+			Con_Printf( "cofstory phase=companion-why userid=%d mode=%s distance=%.0f rank=%d visible=%d walkable=%d block=%d crowd=%d "
+				"nav=%d going=%d goal=%.0f,%.0f,%.0f trail=%d/%d door=%d held=%d leader_held=%d threat=%d\n", cl->userid,
+				cof_companion_modes[c->out.mode], in.leader ? CoF_BrainDist( in.self, in.leader_pos ) : -1.0f, in.rank,
+				in.leader_visible, in.leader_walkable, in.partner_block, in.crowd, in.nav, c->out.going, c->out.goal[0],
+				c->out.goal[1], c->out.goal[2], c->brain.cursor, c->brain.count, c->brain.door, in.held, in.leader_held, in.threat );
 		if( bot )
 		{
 			// one syringe for the leader at a time, and the cooldown counts for the whole party
@@ -1106,8 +1151,8 @@ void SV_CoF_CompanionFrame( void )
 			else if( cof_companion_medic_slot == i ) cof_companion_medic_slot = -1;
 			if( c->brain.medic_after > cof_companion_medic_after ) cof_companion_medic_after = c->brain.medic_after;
 		}
-		CoF_CompanionAct( cl, mine, c, &arms );
-		CoF_CompanionPlace( cl, mine, c, behind );
+		CoF_CompanionAct( cl, leads, c, &arms );
+		CoF_CompanionPlace( cl, leads, c, behind );
 		CoF_CompanionUpkeep( cl, c, bot, &arms, in.alive );
 		if( human ) c->taps |= c->out.buttons & COF_BRAIN_TAPS;
 		if( in.threat || c->calm_since == 0.0 ) c->calm_since = sv.time;
@@ -1192,5 +1237,6 @@ void SV_CoF_CompanionInit( void )
 	cof_companion_medic = Cvar_Get( "cof_companion_medic", "90", 0, "story co-op: seconds between the companion's syringes for a hurt leader (0 never)" );
 	cof_companion_ammo = Cvar_Get( "cof_companion_ammo", "1", 0, "story co-op: a companion bot never runs out of rounds" );
 	cof_companion_light = Cvar_Get( "cof_companion_light", "1", 0, "story co-op: a companion bot keeps its flashlight on" );
+	cof_companion_debug = Cvar_Get( "cof_companion_debug", "0", 0, "story co-op: log what a companion perceived at each change of mode" );
 	Cmd_AddCommand( "cof_companion_cmd", CoF_CompanionCommand_f, "story co-op AI companion: add | remove | wait | follow | status" );
 }

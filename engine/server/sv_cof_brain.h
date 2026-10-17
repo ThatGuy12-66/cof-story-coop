@@ -158,7 +158,8 @@ typedef struct
 	// units to the left (+) or right (-) the way is clear; made for heading probe_yaw
 	float side_shift, probe_yaw;
 	int rank; // other bots ahead of it behind the same person (0: the first)
-	int partner_block; // another player stands right in its way to the goal
+	int partner_block; // another player stands right in its way to the goal...
+	float partner_pace; // ...or walks on that way at this speed (0: stands): then it keeps that pace
 	int crowd; // another player (not the leader) is closer than COF_BRAIN_PERSONAL...
 	float crowd_pos[3]; // ...here
 } cof_brain_input_t;
@@ -177,6 +178,8 @@ typedef struct
 	float move_to[3]; // the point it walked at this frame (the engine probes that way next frame)
 	int place; // with the teleport: come out near place_at (where the game put the leader), not behind them
 	float place_at[3];
+	int aiming; // far enough to follow: aim is the point it would walk to (set off for or not), where
+	float aim[3]; // the engine looks for a partner in its way next frame (in->partner_block)
 } cof_brain_output_t;
 
 typedef struct
@@ -830,15 +833,22 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 			return;
 		}
 	}
-	// a partner standing in the way: as near as this bot gets for now
-	if( b->following ? distance > COF_BRAIN_STOP + gap : distance > COF_BRAIN_START + gap && !in->partner_block )
+	// a partner standing in the way: as near as this bot gets for now; one walking on that way: its pace
+	if( b->following ? distance > COF_BRAIN_STOP + gap : distance > COF_BRAIN_START + gap )
 	{
-		int found = CoF_BrainFollowPoint( b, in, target );
-		if(( found == 1 || in->nav ) && !in->partner_block )
+		int found = CoF_BrainFollowPoint( b, in, target ), blocked = in->partner_block && in->partner_pace <= 0.0f;
+		float speed = distance > COF_BRAIN_RUN ? COF_BRAIN_RUN_SPEED : COF_BRAIN_WALK;
+		// The way it would set off, whether it does or not: the engine looks for a partner that way. (It
+		// looked toward the leader while standing and toward the trail while walking, so with a partner on
+		// one line and not the other it set off and stopped every frame; live 2026-10-16.)
+		memcpy( out->aim, target, sizeof( out->aim ));
+		out->aiming = 1;
+		if( in->partner_block && in->partner_pace > 0.0f && in->partner_pace < speed ) speed = in->partner_pace;
+		if(( found == 1 || in->nav ) && !blocked )
 		{
 			out->mode = b->mode = COF_BRAIN_FOLLOW;
 			b->following = 1;
-			CoF_BrainGo( in, target, distance > COF_BRAIN_RUN ? COF_BRAIN_RUN_SPEED : COF_BRAIN_WALK, out );
+			CoF_BrainGo( in, target, speed, out );
 			if( CoF_BrainStuck( b, in, 1, target ))
 			{
 				if( !calm ) b->stuck_since = in->now;
@@ -858,7 +868,7 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 		}
 		// The leader out of sight and no trail: wait here, but say where to,
 		// so the engine looks for a route.
-		if( !in->partner_block )
+		if( !blocked )
 		{
 			memcpy( out->goal, target, sizeof( out->goal ));
 			out->going = 1;
