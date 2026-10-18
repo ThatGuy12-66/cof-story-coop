@@ -32,6 +32,12 @@ class BonusTests(unittest.TestCase):
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         self.assertIn('SV_CoF_BonusInit();', story)
 
+    def test_the_wardrobe_is_open_by_default(self):
+        # the host's scriptsettings.dat decided every player's outfits (lines 51-62): story co-op opens them
+        module = (ENGINE_SERVER / 'sv_cof_bonus.c').read_text(encoding='latin-1')
+        self.assertIn('cof_costumes = Cvar_Get( "cof_costumes", "1",', module)
+        self.assertIn('if( costumes >= 0 ) CoF_CostumeRewrite( data, (size_t)length, costumes );', module)
+
 
 if __name__ == '__main__':
     unittest.main()

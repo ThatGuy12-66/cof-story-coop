@@ -1,4 +1,4 @@
-/* The bonus room switch (sv_cof_bonus.h): scriptsettings.dat as the game reads it.
+/* The bonus room and costume switches (sv_cof_bonus.h): scriptsettings.dat as the game reads it.
  * The reader below is the retail CheckingEndingOrUnlockables (hl.dll 0x100DD000):
  * strtok( buf, "\n" ), non-empty tokens counted from 1, then strstr( token, LOCKED )
  * is false, strstr( token, UNLOCKED ) true, neither false. */
@@ -21,23 +21,23 @@ static int Read( const unsigned char *text, size_t size, int line, const char *l
 	return result;
 }
 
-static int All( const unsigned char *text, size_t size, int want )
+static int All( const unsigned char *text, size_t size, const cof_bonus_line_t *table, int count, int want )
 {
 	int i;
-	for( i = 0; i < COF_BONUS_LINES; i++ )
-		if( Read( text, size, cof_bonus_lines[i].line, cof_bonus_lines[i].locked, cof_bonus_lines[i].unlocked ) != want ) return 0;
+	for( i = 0; i < count; i++ )
+		if( Read( text, size, table[i].line, table[i].locked, table[i].unlocked ) != want ) return 0;
 	return 1;
 }
 
-static int Gated( int line )
+static int Gated( const cof_bonus_line_t *table, int count, int line )
 {
 	int i;
-	for( i = 0; i < COF_BONUS_LINES; i++ ) if( cof_bonus_lines[i].line == line ) return 1;
+	for( i = 0; i < count; i++ ) if( table[i].line == line ) return 1;
 	return 0;
 }
 
 /* every line the switch does not own is byte for byte what it was */
-static void Untouched( const unsigned char *before, const unsigned char *after, size_t size )
+static void Untouched( const unsigned char *before, const unsigned char *after, size_t size, const cof_bonus_line_t *table, int count )
 {
 	size_t i = 0;
 	int line = 0;
@@ -48,7 +48,7 @@ static void Untouched( const unsigned char *before, const unsigned char *after, 
 		if( i >= size ) break;
 		start = i; line++;
 		while( i < size && before[i] != '\n' ) i++;
-		if( !Gated( line )) assert( !memcmp( before + start, after + start, i - start ));
+		if( !Gated( table, count, line )) assert( !memcmp( before + start, after + start, i - start ));
 	}
 }
 
@@ -66,29 +66,43 @@ static unsigned char *Load( const char *path, size_t *size )
 	return data;
 }
 
+/* each pair the same length, one character apart; no line in both tables */
+static void Table( const cof_bonus_line_t *table, int count )
+{
+	int i;
+	for( i = 0; i < count; i++ )
+	{
+		const char *a = table[i].locked, *b = table[i].unlocked;
+		size_t n = strlen( a ), j, diff = 0;
+		assert( n == strlen( b ) && n == 20 );
+		for( j = 0; j < n; j++ ) diff += a[j] != b[j];
+		assert( diff == 1 );
+		assert( table[i].line <= COF_BONUS_FILE_LINES );
+	}
+}
+
 int main( void )
 {
 	unsigned char *real, *before, synth[4096];
 	size_t size, length;
 	int i;
 
-	/* the table: each pair the same length, one character apart */
-	for( i = 0; i < COF_BONUS_LINES; i++ )
-	{
-		const char *a = cof_bonus_lines[i].locked, *b = cof_bonus_lines[i].unlocked;
-		size_t n = strlen( a ), j, diff = 0;
-		assert( n == strlen( b ) && n == 20 );
-		for( j = 0; j < n; j++ ) diff += a[j] != b[j];
-		assert( diff == 1 );
-	}
+	Table( cof_bonus_lines, COF_BONUS_LINES );
+	Table( cof_costume_lines, COF_COSTUME_LINES );
+	assert( COF_COSTUME_LINES == 12 );
+	for( i = 0; i < COF_COSTUME_LINES; i++ )
+		assert( cof_costume_lines[i].line == 51 + i && !Gated( cof_bonus_lines, COF_BONUS_LINES, cof_costume_lines[i].line ));
 
-	/* a game folder without the file: unlocked asks for one, every gated line unlocked */
-	length = CoF_BonusSynthesize( synth, sizeof( synth ), 1 );
-	assert( length > 0 && length < sizeof( synth ) && All( synth, length, 1 ));
+	/* a game folder without the file: one is made with each switch's lines as asked, every other line locked */
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 1, 1 );
+	assert( length > 0 && length < sizeof( synth ) && All( synth, length, cof_bonus_lines, COF_BONUS_LINES, 1 ));
+	assert( All( synth, length, cof_costume_lines, COF_COSTUME_LINES, 1 ));
 	assert( Read( synth, length, COF_BONUS_FILE_LINES, "x", "y" ) == 0 && Read( synth, length, 47, "a", "b" ) == 0 );
-	length = CoF_BonusSynthesize( synth, sizeof( synth ), 0 );
-	assert( All( synth, length, 0 ));
-	assert( CoF_BonusSynthesize( synth, 16, 1 ) == 0 ); /* too small: nothing */
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 0, 1 );
+	assert( All( synth, length, cof_bonus_lines, COF_BONUS_LINES, 0 ) && All( synth, length, cof_costume_lines, COF_COSTUME_LINES, 1 ));
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 1, -1 );
+	assert( All( synth, length, cof_bonus_lines, COF_BONUS_LINES, 1 ) && All( synth, length, cof_costume_lines, COF_COSTUME_LINES, 0 ));
+	assert( CoF_BonusSynthesize( synth, 16, 1, 1 ) == 0 ); /* too small: nothing */
 
 	/* the names it answers for */
 	assert( CoF_BonusIsSettings( "scriptsettings.dat" ) && CoF_BonusIsSettings( "SCRIPTSETTINGS.DAT" ));
@@ -98,11 +112,15 @@ int main( void )
 	if(( real = Load( locked_path, &size )) != NULL )
 	{
 		before = malloc( size ); memcpy( before, real, size );
-		assert( All( real, size, 0 ));
-		assert( CoF_BonusRewrite( real, size, 1 ) == COF_BONUS_LINES && All( real, size, 1 ));
-		Untouched( before, real, size );
+		assert( All( real, size, cof_bonus_lines, COF_BONUS_LINES, 0 ) && All( real, size, cof_costume_lines, COF_COSTUME_LINES, 0 ));
+		assert( CoF_BonusRewrite( real, size, 1 ) == COF_BONUS_LINES && All( real, size, cof_bonus_lines, COF_BONUS_LINES, 1 ));
+		Untouched( before, real, size, cof_bonus_lines, COF_BONUS_LINES );
 		assert( CoF_BonusRewrite( real, size, 0 ) == COF_BONUS_LINES && !memcmp( before, real, size ));
 		assert( CoF_BonusRewrite( real, size, 0 ) == 0 ); /* already so */
+		/* the wardrobe: every outfit open, only its lines changed */
+		assert( CoF_CostumeRewrite( real, size, 1 ) == COF_COSTUME_LINES && All( real, size, cof_costume_lines, COF_COSTUME_LINES, 1 ));
+		Untouched( before, real, size, cof_costume_lines, COF_COSTUME_LINES );
+		assert( CoF_CostumeRewrite( real, size, 0 ) == COF_COSTUME_LINES && !memcmp( before, real, size ));
 		free( before ); free( real );
 		puts( "locked file checked" );
 	}
@@ -110,9 +128,9 @@ int main( void )
 	if(( real = Load( unlocked_path, &size )) != NULL )
 	{
 		before = malloc( size ); memcpy( before, real, size );
-		assert( All( real, size, 1 ));
-		assert( CoF_BonusRewrite( real, size, 0 ) == COF_BONUS_LINES && All( real, size, 0 ));
-		Untouched( before, real, size );
+		assert( All( real, size, cof_bonus_lines, COF_BONUS_LINES, 1 ));
+		assert( CoF_BonusRewrite( real, size, 0 ) == COF_BONUS_LINES && All( real, size, cof_bonus_lines, COF_BONUS_LINES, 0 ));
+		Untouched( before, real, size, cof_bonus_lines, COF_BONUS_LINES );
 		free( before ); free( real );
 		puts( "unlocked file checked" );
 	}
