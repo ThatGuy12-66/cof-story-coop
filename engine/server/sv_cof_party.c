@@ -931,7 +931,9 @@ static void CoF_PartyFinishDoors( void )
 
 // info_teleport_destination at the player's new spot that a cof_teleport (a
 // scripted, activator-only move) targets. trigger_teleport and ladders are
-// excluded: the partner can walk into those themselves.
+// excluded: the partner can walk into those themselves. A boat_exit there is
+// c_lake's boat setting its one rider on the far dock (CBoat::Disembark), and
+// the boat stays on that side: partners who waited beside the rider come too.
 static edict_t *CoF_PartyScriptedDestination( const vec3_t origin )
 {
 	int i, j;
@@ -939,11 +941,13 @@ static edict_t *CoF_PartyScriptedDestination( const vec3_t origin )
 	{
 		edict_t *dest = SV_EdictNum( i );
 		const char *name;
-		if( !SV_IsValidEdict( dest ) || ( dest->v.flags & FL_KILLME ) ||
-			Q_strcmp( SV_GetString( dest->v.classname ), "info_teleport_destination" ) ||
-			!CoF_PartyVectorValid( dest->v.origin ) ||
+		qboolean dock;
+		if( !SV_IsValidEdict( dest ) || ( dest->v.flags & FL_KILLME ) || !CoF_PartyVectorValid( dest->v.origin ) ||
 			fabs( dest->v.origin[0] - origin[0] ) > 8.0f || fabs( dest->v.origin[1] - origin[1] ) > 8.0f ||
 			fabs( dest->v.origin[2] - origin[2] ) > 96.0f ) continue;
+		dock = !Q_strcmp( SV_GetString( dest->v.classname ), "boat_exit" );
+		if( dock ) return dest;
+		if( Q_strcmp( SV_GetString( dest->v.classname ), "info_teleport_destination" )) continue;
 		name = SV_GetString( dest->v.targetname );
 		if( !name[0] ) continue;
 		for( j = svs.maxclients + 1; j < svgame.numEntities; j++ )
@@ -997,7 +1001,8 @@ static void CoF_PartyTeleports( void )
 			event->pending[j] = true;
 			count++;
 		}
-		Con_Printf( "cofstory phase=teleport-begin userid=%d target=%s companions=%d\n", cl->userid, SV_GetString( dest->v.targetname ), count );
+		Con_Printf( "cofstory phase=teleport-begin userid=%d target=%s companions=%d\n", cl->userid,
+			SV_GetString( dest->v.targetname )[0] ? SV_GetString( dest->v.targetname ) : SV_GetString( dest->v.classname ), count );
 		CoF_PartyCutOff( i, event, "teleport" );
 		if( !count ) event->active = false;
 	}
