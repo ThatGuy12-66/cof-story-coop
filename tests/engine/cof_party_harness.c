@@ -66,7 +66,7 @@ static const char *strings[] = {"", "player", "weapon_mobile", "weapon_switchbla
     "inventoryitems/weapons/../weapon_mobile.txt", "info_landmark", "hahaland",
     "info_teleport_destination", "cof_teleport", "tp-dest", "trigger_teleport",
     "trigger_changelevel", "trigger_multiple", "cl-exit", "*1", "*2",
-    "endingcheck", "ending_exit4", "ending_exit3", "cof_giveitems"};
+    "endingcheck", "ending_exit4", "ending_exit3", "cof_giveitems", "boat_exit"};
 static char status_log[16384];
 static size_t status_length;
 static int gate, give_ok, give_actual, give_calls, links, blocked, narrow_direction;
@@ -391,6 +391,14 @@ int main(void) {
     entities[2].v.flags|=FL_FROZEN; VectorCopy(entities[1].v.origin,before); entities[1].v.origin[0]=2000;
     SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1); assert(links==0);
     entities[2].v.flags&=~FL_FROZEN; tick(0.1); assert(links==1);
+    /* c_lake's boat leaves its rider on the far dock (Disembark: the player is set on the boat_exit) and stays
+       there: the partner who waited beside the rider comes along, as for a scripted teleport. */
+    setup(); entities[10].v.classname=30; entities[10].v.origin[0]=2000; entities[10].v.origin[2]=0;
+    entities[2].v.origin[0]=64; tick(0.1);
+    VectorCopy(entities[1].v.origin,before); entities[1].v.origin[0]=2000;
+    SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1);
+    assert(strstr(status_log,"teleport-begin userid=100 target=boat_exit companions=1"));
+    assert(links==1 && entities[2].v.origin[0]==2035);
     /* A walk-in trigger_teleport destination is not followed. */
     setup(); entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
     entities[11].v.classname=20; entities[11].v.target=19; entities[2].v.origin[0]=64; tick(0.1);
