@@ -3180,6 +3180,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	if( SV_CoF_LightClientCommand( cl ))
 		return;
 
+	// Cry of Fear story co-op: no kick votes, no guest changing the host's server-wide settings
+	if( SV_CoF_GuardClientCommand( cl ))
+		return;
+
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )
 	{
 		if( !Q_strcmp( Cmd_Argv( 0 ), ucmds[i].name ))

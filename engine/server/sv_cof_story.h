@@ -28,6 +28,8 @@ void SV_CoF_LightInit( void );
 void SV_CoF_LightFrame( void );
 qboolean SV_CoF_CoopFlashlightAllowed( void );
 qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
+// Client commands the retail game trusts too much (sv_cof_guard.c): true when refused.
+qboolean SV_CoF_GuardClientCommand( sv_client_t *cl );
 // What the others see in a player's hands (sv_cof_weaponmodel.c): the generated
 // models are precached at activation, picked each frame and sent in the player's state.
 void SV_CoF_WeaponModelActivate( void );
