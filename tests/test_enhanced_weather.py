@@ -24,7 +24,30 @@ class WeatherRuleTests(unittest.TestCase):
         ])
 
 
+class SectionRainTests(unittest.TestCase):
+    # a merged map: the game takes every player's rain from the first rain_settings and the first constant
+    # rain_modify of the whole map (player.cpp:9694-9765 in the decompilation; survey section 5.1)
+    def test_each_section_its_own_rain(self):
+        header = strip_includes((SERVER / 'sv_cof_weather.h').read_text(encoding='latin-1'))
+        out = run_native(self, 'cof_rain_harness.c', {'weather_under_test.h': '#include <string.h>\n' + header})
+        self.assertEqual(program_output(out), [
+            'section 0: drips 300 distance 600 wind 1 2 rand 3 4 mode 0 height 500',
+            'section 1: drips 0 distance 0 wind 0 0 rand 0 0 mode 0 height 0',
+            'section 2: drips 50 distance 800 wind 5 6 rand 7 8 mode 1 height -200',
+            # RainData: short drips, coord distance, wind x, y, rand x, y, short mode, coord height
+            'payload section 0 large 0: 2c 01 c0 12 08 00 10 00 18 00 20 00 00 00 a0 0f',
+            'payload section 2 large 1: 32 00 20 03 05 00 06 00 07 00 08 00 01 00 38 ff',
+        ])
+
+
 class WeatherWiringTests(unittest.TestCase):
+    def test_a_merged_maps_rain_is_the_sections(self):
+        end = body_of(SERVER / 'sv_game.c', 'static void GAME_EXPORT pfnMessageEnd( void )')
+        assert_has(self, 'SV_CoF_RainMessage( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize )', end)
+        frame = body_of(SERVER / 'sv_cof_weather.c', 'void SV_CoF_WeatherFrame(')
+        assert_has(self, 'SV_CoF_PlayerSection( cl->edict ) != host_section', frame)  # the mirror stays in player 1's section
+        assert_has(self, 'SV_CoF_WeatherReset();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryShutdown('))
+
     def test_on_by_default_with_the_story_layer(self):
         module = (SERVER / 'sv_cof_weather.c').read_text(encoding='latin-1')
         assert_has(self, 'CVAR_DEFINE_AUTO( cof_coop_weather, "1",', module)
