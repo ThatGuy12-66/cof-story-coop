@@ -19,6 +19,9 @@ typedef struct
 	// cof_begingame (100A4080) marks the players present in c_nightmare; credits
 	// show no ending for a player without it (cof_credits 100A2710).
 	unsigned char begin[COF_STATE_BEGIN];
+	// m_iTapes (P+0x1EF4): the hardest difficulty's tape saves. The cassette gives its five to its picker only
+	// (CoF_KeyItem) and each save takes one from the saver: the party's tapes are one count.
+	int tapes;
 } cof_story_values_t;
 
 typedef struct
@@ -32,6 +35,9 @@ typedef struct
 	int known, digits_known, note_count;
 	cof_story_values_t values;
 	cof_story_note_t notes[COF_STATE_NOTES];
+	// The custom objectives file the game last sent with an objective (Objectives message): cof_objective writes it
+	// to the first player, whose PostThink sends it and zeroes it before the engine looks.
+	char sent_key[COF_STATE_TEXT], sent_file[COF_STATE_TEXT];
 } cof_state_data_t;
 
 static void CoF_StateObserve( cof_state_data_t *party, const cof_story_values_t *current, const cof_story_values_t *previous )
@@ -46,7 +52,10 @@ static void CoF_StateObserve( cof_state_data_t *party, const cof_story_values_t 
 	{
 		memcpy( party->values.objective, current->objective, sizeof( current->objective ));
 		memcpy( party->values.objective_file, current->objective_file, sizeof( current->objective_file ));
+		if( !party->values.objective_file[0] && party->sent_key[0] && !strcmp( party->values.objective, party->sent_key ))
+			memcpy( party->values.objective_file, party->sent_file, sizeof( party->sent_file ));
 	}
+	if( !party->known || ( previous && current->tapes != previous->tapes )) party->values.tapes = current->tapes;
 	for( index = 0; index < 4; index++ )
 		if( current->digits[index] < 1 || current->digits[index] > 9 ) valid_digits = 0;
 	if( !party->digits_known && valid_digits )

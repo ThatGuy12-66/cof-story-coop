@@ -42,6 +42,7 @@
 #define COF_RETAIL_ACTIVE_ITEM    0x252C // CBasePlayerItem *m_pActiveItem
 #define COF_RETAIL_AMMO           0x2540 // int m_rgAmmo[32]
 #define COF_RETAIL_AMMO_TYPES     32
+#define COF_RETAIL_TAPES          0x1EF4 // int m_iTapes: tape saves left (the hardest difficulty)
 #define COF_RETAIL_HUD_INITIALIZED 0x24D0 // BOOL m_fGameHUDInitialized: UpdateClientData runs the rules' InitHUD while 0 (100F76A4)
 #define COF_RETAIL_CPR_TARGET     0x2698 // EHANDLE: the body I am reviving
 #define COF_RETAIL_REVIVER        0x26A0 // EHANDLE: who is reviving me
@@ -352,6 +353,7 @@ qboolean SV_CoF_RetailStoryRead( sv_client_t *cl, cof_story_values_t *values )
 	values->three_slots = !!player[COF_RETAIL_THREE_SLOTS];
 	memcpy( &values->doctor_weapon, player + 0x5B0, sizeof( int ));
 	memcpy( values->begin, player + 0x678, sizeof( values->begin ));
+	memcpy( &values->tapes, player + COF_RETAIL_TAPES, sizeof( int ));
 	return true;
 }
 
@@ -367,6 +369,7 @@ qboolean SV_CoF_RetailStoryWrite( sv_client_t *cl, const cof_story_values_t *val
 	for( index = 0; index < 3; index++ ) player[0x4CD + index] = (byte)!!values->ending[index];
 	if( values->doctor_weapon == 1 || values->doctor_weapon == 2 ) memcpy( player + 0x5B0, &values->doctor_weapon, sizeof( int ));
 	if( values->begin[0] == 1 && player[0x678] != 1 ) memcpy( player + 0x678, values->begin, sizeof( values->begin ));
+	if( values->tapes >= 0 ) memcpy( player + COF_RETAIL_TAPES, &values->tapes, sizeof( int ));
 	memcpy( &current, player + 0x1E90, sizeof( current ));
 	if( Q_strcmp( SV_GetString( current ), values->objective ))
 	{

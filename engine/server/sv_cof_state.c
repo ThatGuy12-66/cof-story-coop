@@ -10,6 +10,7 @@ static struct
 	int userid, known, alive;
 	cof_story_values_t previous;
 	int notes[COF_STATE_NOTES];
+	char delivered[COF_STATE_TEXT]; // the objective the game last sent this player (Objectives)
 } cof_state_players[MAX_CLIENTS];
 static qboolean cof_state_sending;
 static edict_t *cof_state_document;
@@ -47,10 +48,30 @@ static int CoF_StatePlayer( sv_client_t *cl )
 	return slot;
 }
 
+// Objectives( string key, string file, byte isNew ): what the game sent this player. A file other than a language's
+// hints.txt is the custom one cof_objective set (the game zeroes it right after sending).
+static void CoF_StateObjectiveSent( edict_t *entity, const byte *payload, int size )
+{
+	const char *key = (const char *)payload, *file;
+	sv_client_t *client;
+	int slot, key_length, file_length;
+	for( key_length = 0; key_length < size && payload[key_length]; key_length++ );
+	if( key_length >= size || key_length >= COF_STATE_TEXT ) return;
+	file = key + key_length + 1;
+	for( file_length = 0; key_length + 1 + file_length < size && file[file_length]; file_length++ );
+	if( key_length + 1 + file_length >= size || file_length >= COF_STATE_TEXT ) return;
+	if(( client = SV_ClientFromEdict( entity, true )) != NULL && ( slot = CoF_StatePlayer( client )) >= 0 )
+		Q_strncpy( cof_state_players[slot].delivered, key, sizeof( cof_state_players[slot].delivered ));
+	if( !file_length || ( !Q_strncmp( file, "txtfiles/", 9 ) && file_length >= 9 && !Q_strcmp( file + file_length - 9, "hints.txt" ))) return;
+	Q_strncpy( cof_state.sent_key, key, sizeof( cof_state.sent_key ));
+	Q_strncpy( cof_state.sent_file, file, sizeof( cof_state.sent_file ));
+}
+
 void SV_CoF_StateMessage( edict_t *entity, const char *name, byte *payload, int size )
 {
 	sv_client_t *client;
 	int slot, entry, note;
+	if( name && payload && !Q_strcmp( name, "Objectives" ) && SV_CoF_StoryCoopEnabled()) { CoF_StateObjectiveSent( entity, payload, size ); return; }
 	if( cof_state_sending || !name || Q_strcmp( name, "AddNote" ) || !CoF_StateNoteValid( payload, size ) || !SV_CoF_StoryCoopEnabled()) return;
 	client = SV_ClientFromEdict( entity, true );
 	if( !client || ( slot = CoF_StatePlayer( client )) < 0 ) return;
@@ -117,8 +138,14 @@ void SV_CoF_StateFrame( void )
 	for( slot = 0; slot < svs.maxclients && slot < MAX_CLIENTS; slot++ )
 	{
 		sv_client_t *client = &svs.clients[slot];
+		cof_story_values_t mine;
 		if( !valid[slot] ) continue;
-		SV_CoF_RetailStoryWrite( client, &cof_state.values );
+		// The objective's file goes with its text, once: a player the game already sent it keeps the file it has
+		// (zeroed by its PostThink; the game saves that field as a time).
+		mine = cof_state.values;
+		if( !Q_strcmp( cof_state_players[slot].delivered, mine.objective ))
+			Q_strncpy( mine.objective_file, observed[slot].objective_file, sizeof( mine.objective_file ));
+		SV_CoF_RetailStoryWrite( client, &mine );
 		if( cof_state.values.three_slots && !observed[slot].three_slots && cof_state_players[slot].alive ) SV_CoF_RetailThreeSlots( client );
 		if( SV_CoF_RetailStoryRead( client, &cof_state_players[slot].previous )) cof_state_players[slot].known = 1;
 		CoF_StateDeliverNotes( client, slot );

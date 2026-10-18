@@ -2999,6 +2999,7 @@ static void GAME_EXPORT pfnMessageEnd( void )
 	{
 		SV_CoF_StateMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 		SV_CoF_MomentsMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
+		SV_CoF_SessionMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 	}
 	SV_Multicast( svgame.msg_dest, org, svgame.msg_ent, true, false );
 

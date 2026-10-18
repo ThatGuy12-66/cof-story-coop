@@ -698,8 +698,43 @@ static void CoF_SessionLoad_f( void )
 	if( !SV_CoF_SessionLoad( slot )) Con_Printf( "Co-op load refused: start story co-op with the saved player limit and unique player names; check the checkpoint slot.\n" );
 }
 
+// A tape save comes from the game's own save point: the tape recorder's SaveLoad screen (byte 0 = save; TapeUse
+// 1007C930, which checks the tapes on the hardest difficulty), the player's unfreezesave 1024 N for a slot (PreSave)
+// and the client's savehack cofsaveN 3.25 s later. Anything else is not a save point.
+#define COF_SESSION_MENU_TIME 120.0 // the save screen open this long at most
+#define COF_SESSION_SAVE_TIME 10.0 // unfreezesave to savehack
+static struct { double menu_at, chosen_at; int slot; } cof_session_points[MAX_CLIENTS];
+
+void SV_CoF_SessionMessage( edict_t *to, const char *name, const unsigned char *payload, int size )
+{
+	int i;
+	if( !name || Q_strcmp( name, "SaveLoad" ) || !payload || size < 1 || payload[0] != 0 ) return;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+		if( svs.clients[i].edict == to ) { cof_session_points[i].menu_at = sv.time; cof_session_points[i].slot = 0; }
+}
+
+static qboolean CoF_SessionSavePoint( sv_client_t *client, int slot )
+{
+	int i = (int)( client - svs.clients );
+	if( i < 0 || i >= MAX_CLIENTS || cof_session_points[i].slot != slot ) return false;
+	if( cof_session_points[i].chosen_at > sv.time || sv.time - cof_session_points[i].chosen_at > COF_SESSION_SAVE_TIME ) return false;
+	memset( &cof_session_points[i], 0, sizeof( cof_session_points[i] ));
+	return true;
+}
+
+static void CoF_SessionSaveChosen( sv_client_t *client )
+{
+	int i = (int)( client - svs.clients );
+	if( i < 0 || i >= MAX_CLIENTS || Cmd_Argc() != 3 || Q_strcmp( Cmd_Argv( 1 ), "1024" ) || Q_strlen( Cmd_Argv( 2 )) != 1 ||
+		Cmd_Argv( 2 )[0] < '1' || Cmd_Argv( 2 )[0] > '5' ) return;
+	if( cof_session_points[i].menu_at > sv.time || sv.time - cof_session_points[i].menu_at > COF_SESSION_MENU_TIME || !cof_session_points[i].menu_at ) return;
+	cof_session_points[i].slot = Cmd_Argv( 2 )[0] - '0';
+	cof_session_points[i].chosen_at = sv.time;
+}
+
 qboolean SV_CoF_SessionClientCommand( sv_client_t *client )
 {
+	if( SV_CoF_StoryCoopEnabled() && !Q_stricmp( Cmd_Argv( 0 ), "unfreezesave" )) CoF_SessionSaveChosen( client );
 	if( SV_CoF_StoryCoopEnabled() && Cmd_Argc() == 2 )
 	{
 		qboolean tape_save = !Q_stricmp( Cmd_Argv( 0 ), "savehack" ) && Q_strlen( Cmd_Argv( 1 )) == 8 &&
@@ -714,6 +749,11 @@ qboolean SV_CoF_SessionClientCommand( sv_client_t *client )
 			if( tape_load && client != svs.clients )
 			{
 				SV_CoF_RetailProFont( client, 5, "Ask the host to load the co-op checkpoint.", true );
+				return true;
+			}
+			if( tape_save && !CoF_SessionSavePoint( client, Cmd_Argv( 1 )[7] - '0' ))
+			{
+				Con_Printf( "cofstory phase=tape-save-refused slot=%s reason=no-save-point\n", slot );
 				return true;
 			}
 			success = tape_save ? SV_CoF_SessionSave( slot ) : SV_CoF_SessionLoad( slot );
