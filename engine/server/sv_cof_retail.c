@@ -675,6 +675,16 @@ qboolean SV_CoF_RetailHudInitialized( edict_t *ent )
 	return true;
 }
 
+// A trigger_camera holds the player's view: the first half of the game's IsInCutscene (100E4E00).
+qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	int view;
+	if( !player || !CoF_RetailHandle( player + COF_RETAIL_CAMERA )) return false;
+	memcpy( &view, player + COF_RETAIL_VIEW_ENT, sizeof( view ));
+	return view && view != NUM_FOR_EDICT( cl->edict );
+}
+
 // The game's single-player F (hl.dll 1001C1FB): refused in a cutscene (IsInCutscene 100E4E00: a camera holds the
 // view), on an attached camera or in the wheelchair; then the request in m_iHeadShieldOn.
 int SV_CoF_RetailNightVision( sv_client_t *cl )
