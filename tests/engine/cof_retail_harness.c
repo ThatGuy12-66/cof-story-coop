@@ -456,6 +456,14 @@ int main( void )
 		edicts[8].serialnumber++; assert( !SV_CoF_RetailInWheelchair( &clients[0] )); /* the chair is gone */
 		handle( private_data[0] + 0x390, NULL ); edicts[8].free = 1;
 	}
+	/* m_iFlashlightFlags (+0x5D0): which lights the player has on (16: a lit flare or the book laser in hand) */
+	{
+		int flags = 16;
+		memcpy( private_data[0] + 0x5D0, &flags, 4 );
+		assert( SV_CoF_RetailFlashFlags( &clients[0] ) == 16 );
+		clients[0].state = 0; assert( SV_CoF_RetailFlashFlags( &clients[0] ) == -1 ); clients[0].state = cs_spawned;
+		flags = 0; memcpy( private_data[0] + 0x5D0, &flags, 4 );
+	}
 	/* A trigger_camera holds the view: m_hCurrentCamera names a live entity and the view is not the player's own. */
 	{
 		int view = 8;
