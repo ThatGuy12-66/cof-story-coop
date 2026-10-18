@@ -125,7 +125,14 @@ static qboolean SV_CoF_StoryGiveItemEx( sv_client_t *cl, const char *classname, 
 	return give_result;
 }
 static void Cmd_TokenizeString( const char *text ) { Q_strncpy( last_command, text, sizeof( last_command )); }
-static void ClientCommand( edict_t *e ) { last_command_edict = e; }
+/* ClientCommand drops every command of a player in a phone call (m_bInPhoneCall +0x1EE8) or on the computer or
+ * phone screen (m_iUsingComputerOrPhone +0x1EA0): seen here as the gates at the time of the call */
+static int command_saw_call = -1, command_saw_screen = -1;
+static void ClientCommand( edict_t *e )
+{
+	last_command_edict = e;
+	if( e && e->pvPrivateData ) { command_saw_call = ((byte *)e->pvPrivateData)[0x1EE8]; memcpy( &command_saw_screen, (byte *)e->pvPrivateData + 0x1EA0, 4 ); }
+}
 /* The player's Use: the game's CPR start, here only its links (reviver -> body, body -> reviver). */
 static void game_use( edict_t *body, edict_t *by )
 {
@@ -244,6 +251,17 @@ int main( void )
 	assert( !strcmp( last_command, "inventorydeletenamed \"inventoryitems/hallkey.txt\" 0" ) && last_command_edict == clients[1].edict );
 	last_command[0] = 0;
 	assert( !SV_CoF_RetailRemoveItem( &clients[1], "x\";quit;\"" ) && !last_command[0] );
+	/* in a phone call or on the phone screen the game would drop it: the engine's own command still lands, and the
+	 * player is back in the call after it */
+	{
+		int screen = 2;
+		private_data[1][0x1EE8] = 1; memcpy( private_data[1] + 0x1EA0, &screen, 4 );
+		assert( SV_CoF_RetailRemoveItem( &clients[1], "inventoryitems/hallkey.txt" ));
+		assert( command_saw_call == 0 && command_saw_screen == 0 );
+		memcpy( &screen, private_data[1] + 0x1EA0, 4 ); assert( private_data[1][0x1EE8] == 1 && screen == 2 );
+		assert( SV_CoF_RetailCommand( &clients[1], "flashlight" ) && command_saw_call == 0 && private_data[1][0x1EE8] == 1 );
+		private_data[1][0x1EE8] = 0; screen = 0; memcpy( private_data[1] + 0x1EA0, &screen, 4 );
+	}
 
 	/* names */
 	assert( SV_CoF_RetailItemName( "inventoryitems/hallkey.txt", nice, sizeof( nice )) && !strcmp( nice, "Hall key" ));

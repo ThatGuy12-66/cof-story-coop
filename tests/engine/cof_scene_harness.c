@@ -84,6 +84,7 @@ static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *t
 	snprintf( told[cl - clients], sizeof( told[0] ), "%s", text ); told_count++; return true;
 }
 static void SV_CoF_CommandSender( edict_t *e ) { sender = e; }
+static void SV_CoF_RetailGameCommand( sv_client_t *cl ) { svgame.dllFuncs.pfnClientCommand( cl->edict ); }
 static void Con_Printf( const char *fmt, ... )
 {
 	va_list args; int n;
