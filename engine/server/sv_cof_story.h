@@ -43,6 +43,9 @@ qboolean SV_CoF_RoomTypeSet( const char *name, float value );
 void SV_CoF_WeatherInit( void );
 void SV_CoF_WeatherFrame( void );
 void SV_CoF_WeatherReset( void );
+// The camera models a finished model cutscene leaves, removed (sv_cof_camera_models.c).
+void SV_CoF_CameraModelsInit( void );
+void SV_CoF_CameraModelsFrame( void );
 // A merged map's view distance, each section its own (sv_cof_view.c).
 void SV_CoF_ViewInit( void );
 void SV_CoF_ViewFrame( void );

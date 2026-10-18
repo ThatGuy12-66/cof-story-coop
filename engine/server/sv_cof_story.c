@@ -311,6 +311,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_WeaponModelInit();
 	SV_CoF_SkyInit();
 	SV_CoF_ViewInit();
+	SV_CoF_CameraModelsInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -385,6 +386,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_GlobalsFrame();
 	SV_CoF_SkyFrame();
 	SV_CoF_ViewFrame();
+	SV_CoF_CameraModelsFrame();
 	SV_CoF_CompanionFrame();
 	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
 	SV_CoF_TestGunFrame();
