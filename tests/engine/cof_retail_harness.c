@@ -183,6 +183,7 @@ static void Cmd_AddCommand( const char *name, xcommand_t f, const char *desc ) {
 
 #include "sv_cof_descriptor.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_light.h"
 static int inventory_slots = 6;
 static int SV_CoF_InventorySlots( void ) { return inventory_slots; }
 #include "retail_under_test.c"
@@ -449,6 +450,31 @@ int main( void )
 		assert( SV_CoF_RetailInWheelchair( &clients[0] ) && !SV_CoF_RetailInWheelchair( &clients[1] ));
 		edicts[8].serialnumber++; assert( !SV_CoF_RetailInWheelchair( &clients[0] )); /* the chair is gone */
 		handle( private_data[0] + 0x390, NULL ); edicts[8].free = 1;
+	}
+	/* Night vision on F: only for its owner (m_bHasNightVision), with the game's own gates (1001C1FB): a scene's
+	 * camera that holds the view, an attached camera, the wheelchair. The request goes in m_iHeadShieldOn. */
+	{
+		int state = 0, view = 0; float next = 0.0f;
+		assert( SV_CoF_RetailNightVision( &clients[0] ) == -1 ); /* not owned */
+		private_data[0][0x434] = 1; memcpy( private_data[0] + 0x2300, &state, 4 ); memcpy( private_data[0] + 0x3EC, &next, 4 );
+		assert( SV_CoF_RetailNightVision( &clients[0] ) == 1 ); memcpy( &state, private_data[0] + 0x2300, 4 ); assert( state == 101 );
+		assert( SV_CoF_RetailNightVision( &clients[0] ) == 0 ); /* a switch under way */
+		state = 1; memcpy( private_data[0] + 0x2300, &state, 4 );
+		edicts[8].free = 0; edicts[8].serialnumber = 4;
+		handle( private_data[0] + 0x390, &edicts[8] ); assert( SV_CoF_RetailNightVision( &clients[0] ) == 0 ); /* the wheelchair */
+		handle( private_data[0] + 0x390, NULL );
+		handle( private_data[0] + 0x388, &edicts[8] ); assert( SV_CoF_RetailNightVision( &clients[0] ) == 0 ); /* an attached camera */
+		handle( private_data[0] + 0x388, NULL );
+		handle( private_data[0] + 0x2348, &edicts[8] ); view = 8; memcpy( private_data[0] + 0x2038, &view, 4 );
+		assert( SV_CoF_RetailNightVision( &clients[0] ) == 0 ); /* the scene's camera holds the view */
+		view = NUM_FOR_EDICT( clients[0].edict ); memcpy( private_data[0] + 0x2038, &view, 4 );
+		assert( SV_CoF_RetailNightVision( &clients[0] ) == 1 ); /* a camera that no longer holds the view */
+		memcpy( &state, private_data[0] + 0x2300, 4 ); assert( state == 100 );
+		next = (float)sv.time + 1.0f; memcpy( private_data[0] + 0x3EC, &next, 4 ); state = 0; memcpy( private_data[0] + 0x2300, &state, 4 );
+		assert( SV_CoF_RetailNightVision( &clients[0] ) == 0 ); /* the game's delay */
+		memcpy( &state, private_data[0] + 0x2300, 4 ); assert( state == 0 );
+		handle( private_data[0] + 0x2348, NULL ); view = 0; memcpy( private_data[0] + 0x2038, &view, 4 );
+		next = 0.0f; memcpy( private_data[0] + 0x3EC, &next, 4 ); private_data[0][0x434] = 0; edicts[8].free = 1;
 	}
 
 	/* CPR: player 2 dies on the ground; player 1 can start the game's CPR on them (Use, body first). */

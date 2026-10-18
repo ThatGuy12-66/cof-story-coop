@@ -13,6 +13,11 @@ static void off( float frags, int allowed, double now, double next_try )
 		CoF_LightSwitchOff( frags, allowed, now, next_try ));
 }
 
+static void night( int state, float next, double now )
+{
+	printf( "night state=%d next=%g now=%g: %d\n", state, next, now, CoF_NightVisionRequest( state, next, now ));
+}
+
 int main( void )
 {
 	refused( "flashlight", 1, 0 );   // story co-op, the host left it off: refused
@@ -26,5 +31,11 @@ int main( void )
 	off( 1.0f, 0, 5.0, 4.0 );        // the phone's light
 	off( 8.0f, 0, 5.0, 4.0 );        // the flashlight weapon
 	off( 0.0f, 0, 5.0, 4.0 );        // no light
+	night( 0, 4.0f, 5.0 );           // off: ask PostThink to switch it on (101)
+	night( 1, 4.0f, 5.0 );           // on: ask it to switch off (100)
+	night( 101, 4.0f, 5.0 );         // a switch under way
+	night( 100, 4.0f, 5.0 );
+	night( 0, 5.0f, 5.0 );           // the game's own delay: only after it
+	night( 0, 666.0f, 700.0 );       // a scene's lock
 	return 0;
 }

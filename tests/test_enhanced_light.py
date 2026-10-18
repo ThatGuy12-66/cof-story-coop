@@ -23,6 +23,12 @@ class LightRuleTests(unittest.TestCase):
             'off frags=1 allowed=0 now=5 next=4: 0',
             'off frags=8 allowed=0 now=5 next=4: 0',
             'off frags=0 allowed=0 now=5 next=4: 0',
+            'night state=0 next=4 now=5: 101',
+            'night state=1 next=4 now=5: 100',
+            'night state=101 next=4 now=5: -1',
+            'night state=100 next=4 now=5: -1',
+            'night state=0 next=5 now=5: -1',
+            'night state=0 next=666 now=700: -1',
         ])
 
 
@@ -35,6 +41,14 @@ class LightWiringTests(unittest.TestCase):
         # the definition, not the forward declaration near the top of the file
         body = body_of(SERVER / 'sv_client.c', 'static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )\n{')
         self.assertLess(body.index('SV_CoF_LightClientCommand( cl )'), body.index('svgame.dllFuncs.pfnClientCommand( cl->edict )'))
+
+    def test_night_vision_takes_f_for_its_owner_before_the_torch_rule(self):
+        # the game's single-player F branch (bonus room item_nightvision) never runs in multiplayer
+        module = (SERVER / 'sv_cof_light.c').read_text(encoding='latin-1')
+        self.assertIn('CVAR_DEFINE_AUTO( cof_coop_nightvision, "1",', module)
+        self.assertIn('Cvar_RegisterVariable( &cof_coop_nightvision );', body_of(SERVER / 'sv_cof_light.c', 'void SV_CoF_LightInit('))
+        body = body_of(SERVER / 'sv_cof_light.c', 'qboolean SV_CoF_LightClientCommand(')
+        self.assertLess(body.index('SV_CoF_RetailNightVision( cl )'), body.index('CoF_LightRefused('))
 
     def test_the_companion_lights_up_only_when_allowed(self):
         module = (SERVER / 'sv_cof_companion.c').read_text(encoding='latin-1')
