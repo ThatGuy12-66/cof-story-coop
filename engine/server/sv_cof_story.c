@@ -34,6 +34,19 @@ int SV_CoF_DonatorLevel( void )
 	return CoF_DonatorLevel( cof_donator.value );
 }
 
+static int cof_quiet_messages;
+
+void SV_CoF_QuietGameMessages( qboolean on )
+{
+	cof_quiet_messages += on ? 1 : -1;
+	if( cof_quiet_messages < 0 ) cof_quiet_messages = 0;
+}
+
+qboolean SV_CoF_GameMessagesQuiet( void )
+{
+	return cof_quiet_messages > 0;
+}
+
 static const byte cof_gate_original[6] = { 0x0f, 0x85, 0xb5, 0x01, 0x00, 0x00 };
 static const byte cof_gate_open[6] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
 static byte *cof_gate;

@@ -2974,6 +2974,12 @@ static void GAME_EXPORT pfnMessageEnd( void )
 	if( !VectorIsNull( svgame.msg_org )) org = svgame.msg_org;
 	svgame.msg_dest = bound( MSG_BROADCAST, svgame.msg_dest, MSG_SPEC );
 
+	if( SV_CoF_GameMessagesQuiet( ))
+	{
+		MSG_Clear( &sv.multicast );
+		return;
+	}
+
 	if( svgame.msg_index > 0 && svgame.msg_size_index >= 0 )
 	{
 		SV_CoF_StateMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );

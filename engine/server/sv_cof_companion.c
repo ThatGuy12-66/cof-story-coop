@@ -288,6 +288,8 @@ static qboolean CoF_CompanionAdd( void )
 		return false;
 	}
 	svgame.dllFuncs.pfnClientPutInServer( ent );
+	// the engine adds the companions again at every level change: no "has joined the game" each time
+	SV_CoF_RetailHudInitialized( ent );
 	memset( &cof_companions[slot], 0, sizeof( cof_companions[slot] ));
 	cof_companions[slot].userid = cl->userid;
 	cof_companions[slot].bot = true;

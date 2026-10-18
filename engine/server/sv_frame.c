@@ -986,7 +986,10 @@ void SV_InactivateClients( void )
 		// (the story AI companion) is known by its client flag; it never times out
 		if( FBitSet( cl->edict->v.flags, FL_FAKECLIENT ) || FBitSet( cl->flags, FCL_FAKECLIENT ))
 		{
+			// added again on the next map: none of the game's "has left the game" for it
+			SV_CoF_QuietGameMessages( true );
 			SV_DropClient( cl, false );
+			SV_CoF_QuietGameMessages( false );
 			continue;
 		}
 

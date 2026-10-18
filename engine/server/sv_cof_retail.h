@@ -71,6 +71,9 @@ int SV_CoF_RetailCarrying( sv_client_t *cl, const char *classname );
 qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl );
 // On a phone call, which refuses every weapon switch.
 qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl );
+// A new player object whose HUD the game counts as set up: the multiplayer rules' InitHUD, which announces
+// "<name> has joined the game" to everyone, is skipped (for the AI companions, added again at every level change).
+qboolean SV_CoF_RetailHudInitialized( edict_t *ent );
 // CPR: doing it on someone; having it done; a body it can start on now.
 qboolean SV_CoF_RetailReviving( sv_client_t *cl );
 qboolean SV_CoF_RetailRevived( sv_client_t *cl );

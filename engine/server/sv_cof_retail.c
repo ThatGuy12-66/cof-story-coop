@@ -39,6 +39,7 @@
 #define COF_RETAIL_ACTIVE_ITEM    0x252C // CBasePlayerItem *m_pActiveItem
 #define COF_RETAIL_AMMO           0x2540 // int m_rgAmmo[32]
 #define COF_RETAIL_AMMO_TYPES     32
+#define COF_RETAIL_HUD_INITIALIZED 0x24D0 // BOOL m_fGameHUDInitialized: UpdateClientData runs the rules' InitHUD while 0 (100F76A4)
 #define COF_RETAIL_CPR_TARGET     0x2698 // EHANDLE: the body I am reviving
 #define COF_RETAIL_REVIVER        0x26A0 // EHANDLE: who is reviving me
 #define COF_RETAIL_SELECT_ITEM    0xF1A50 // CBasePlayer::SelectItem( const char * ), thiscall, ret 4
@@ -627,6 +628,14 @@ qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );
 	return player && CoF_RetailHandle( player + COF_RETAIL_WHEELCHAIR ) != NULL;
+}
+
+qboolean SV_CoF_RetailHudInitialized( edict_t *ent )
+{
+	byte *pv = CoF_RetailPrivate( ent, COF_RETAIL_PLAYER_SIZE );
+	if( !pv ) return false;
+	*(int *)( pv + COF_RETAIL_HUD_INITIALIZED ) = 1;
+	return true;
 }
 
 qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl )
