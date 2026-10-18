@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "sv_cof_story.h"
 #include "sv_cof_moments.h"
 #include "sv_cof_companion.h"
+#include "cof_abi.h"
 #include "pm_local.h"
 #include "event_flags.h"
 #include "studio.h"
@@ -1011,6 +1012,7 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	edict_t	*clent;
 	double	frametime;
 	usercmd_t cmd;
+	cof_usercmd_t cofcmd;
 
 	// if the player got kicked, do not process commands
 	if( cl->state <= cs_zombie )
@@ -1065,7 +1067,9 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 		SV_CoF_UsercmdSender( cl->edict );
 	}
 
-	svgame.dllFuncs.pfnCmdStart( cl->edict, ucmd, random_seed );
+	// Cry of Fear's usercmd_t carries the donator level after the HL fields (cof_abi.h)
+	CoF_DonatorCommand( &cofcmd, ucmd, SV_CoF_DonatorLevel( ));
+	svgame.dllFuncs.pfnCmdStart( cl->edict, &cofcmd.cmd, random_seed );
 
 	frametime = ((double)ucmd->msec / 1000.0 );
 	cl->timebase += frametime;

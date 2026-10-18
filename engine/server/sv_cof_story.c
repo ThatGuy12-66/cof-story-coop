@@ -22,9 +22,17 @@
 #include "sv_cof_sections.h"
 #include "sv_cof_testgun.h"
 #include "sv_cof_inventory12.h"
+#include "cof_abi.h"
 #if XASH_WIN32
 #include <windows.h>
 #endif
+
+static CVAR_DEFINE_AUTO( cof_donator, "1", 0, "Cry of Fear: the donator level every player's commands carry to the game (1: a donator, weapon_tmp pickups and TMP ammo kept in multiplayer; 0: retail's non-donor)" );
+
+int SV_CoF_DonatorLevel( void )
+{
+	return CoF_DonatorLevel( cof_donator.value );
+}
 
 static const byte cof_gate_original[6] = { 0x0f, 0x85, 0xb5, 0x01, 0x00, 0x00 };
 static const byte cof_gate_open[6] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
@@ -267,6 +275,7 @@ void SV_CoF_StoryInit( void )
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
 	Cvar_Get( "cof_build", "", 0, "story co-op: the tester build this server runs, sent as cofbuild in its info reply" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
+	Cvar_RegisterVariable( &cof_donator );
 	SV_CoF_RetailInit();
 	SV_CoF_PartyInit();
 	SV_CoF_CompanionInit();

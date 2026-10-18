@@ -2,6 +2,8 @@
 #ifndef SV_COF_STORY_H
 #define SV_COF_STORY_H
 qboolean SV_CoF_StoryCoopEnabled( void );
+// The donator level every command carries to the game (cof_donator; engine/common/cof_abi.h).
+int SV_CoF_DonatorLevel( void );
 void SV_CoF_StoryInit( void );
 void SV_CoF_StoryShutdown( void );
 void SV_CoF_StoryFrame( void );

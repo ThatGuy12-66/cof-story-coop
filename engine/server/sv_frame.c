@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #include "const.h"
 #include "net_encode.h"
 #include "sv_cof_story.h"
+#include "cof_abi.h"
 
 typedef struct
 {
@@ -523,6 +524,7 @@ static void SV_WriteClientdataToMessage( sv_client_t *cl, sizebuf_t *msg )
 {
 	clientdata_t	nullcd;
 	clientdata_t	*from_cd, *to_cd;
+	cof_clientdata_t	cofcd;
 	weapon_data_t	nullwd;
 	weapon_data_t	*from_wd, *to_wd;
 	client_frame_t	*frame;
@@ -556,10 +558,11 @@ static void SV_WriteClientdataToMessage( sv_client_t *cl, sizebuf_t *msg )
 
 	clent->v.fixangle = 0; // reset fixangle
 
-	memset( &frame->clientdata, 0, sizeof( frame->clientdata ));
+	memset( &cofcd, 0, sizeof( cofcd ));
 
-	// update clientdata_t
-	svgame.dllFuncs.pfnUpdateClientData( clent, FBitSet( cl->flags, FCL_LOCAL_WEAPONS ), &frame->clientdata );
+	// update clientdata_t (Cry of Fear's has its donator level after it: cof_abi.h)
+	svgame.dllFuncs.pfnUpdateClientData( clent, FBitSet( cl->flags, FCL_LOCAL_WEAPONS ), &cofcd.cd );
+	frame->clientdata = cofcd.cd;
 
 	MSG_BeginServerCmd( msg, svc_clientdata );
 	if( FBitSet( cl->flags, FCL_HLTV_PROXY )) return;	// don't send more nothing

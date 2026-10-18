@@ -24,6 +24,7 @@ GNU General Public License for more details.
 #include "vid_common.h"
 #include "pm_local.h"
 #include "multi_emulator.h"
+#include "cof_abi.h"
 
 #define CL_CONNECTION_TIMEOUT 15.0f
 #define CL_CONNECTION_RETRIES 5
@@ -3121,7 +3122,12 @@ static void CL_CreateCmd( void )
 
 	qboolean  active = (( cls.signon == SIGNONS ) && !cl.paused && !cls.demoplayback );
 	Platform_PreCreateMove();
-	clgame.dllFuncs.CL_CreateMove( host.frametime, cmd, active );
+	// Cry of Fear's client.dll writes its donator level after the HL fields (cof_abi.h), which here is
+	// runcmd_t.processedfuncs (or past nullcmd): build the command in room for it
+	cof_usercmd_t cofcmd;
+	CoF_DonatorCommand( &cofcmd, cmd, 0 );
+	clgame.dllFuncs.CL_CreateMove( host.frametime, &cofcmd.cmd, active );
+	*cmd = cofcmd.cmd;
 	IN_EngineAppendMove( host.frametime, cmd, active );
 
 	CL_PopPMStates();
