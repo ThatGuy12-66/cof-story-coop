@@ -30,7 +30,7 @@ typedef struct {
 	string_t classname, targetname;
 	vec3_t origin, angles;
 	float health;
-	int deadflag, flags;
+	int deadflag, flags, body;
 	edict_t *owner;
 } entvars_t;
 struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; };
@@ -41,8 +41,9 @@ static struct { edict_t *edicts; int numEntities; } svgame;
 #define ENTITIES 24
 static edict_t entities[ENTITIES];
 static sv_client_t clients[MAX_CLIENTS];
-static byte private_data[ENTITIES][0x400];
-static const char *strings[] = { "", "player", "monster_bosschainsaw", "theboss", "third_person_interaction", "monster_slower" };
+static byte private_data[ENTITIES][0x2900];
+static const char *strings[] = { "", "player", "monster_bosschainsaw", "theboss", "third_person_interaction", "monster_slower",
+	"item_padlock" };
 static char log_text[8192];
 static size_t log_length;
 static int gate, spawned;
@@ -54,7 +55,7 @@ static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= entities 
 static edict_t *SV_EdictNum( int i ) { return &entities[i]; }
 static int NUM_FOR_EDICT( const edict_t *e ) { return (int)( e - entities ); }
 static const char *SV_GetString( string_t s ) { return strings[s]; }
-static byte *SV_CoF_StoryEntityPrivate( edict_t *e, size_t need ) { return SV_IsValidEdict( e ) && need <= 0x400 ? e->pvPrivateData : NULL; }
+static byte *SV_CoF_StoryEntityPrivate( edict_t *e, size_t need ) { return SV_IsValidEdict( e ) && need <= 0x2900 ? e->pvPrivateData : NULL; }
 /* the map's own boss, spawned again in the first free edict */
 static edict_t *SV_CoF_SpawnMapEntity( const char *classname, const char *targetname, const vec3_t origin, const vec3_t angles )
 {
@@ -67,6 +68,8 @@ static edict_t *SV_CoF_SpawnMapEntity( const char *classname, const char *target
 	entities[i].free = 0; entities[i].serialnumber++; entities[i].v.classname = 2; entities[i].v.targetname = 3; entities[i].v.health = 1000;
 	return &entities[i];
 }
+static char argv0[32];
+static const char *Cmd_Argv( int i ) { return i == 0 ? argv0 : ""; }
 static void Con_Printf( const char *fmt, ... )
 {
 	va_list args; int n;
@@ -166,6 +169,24 @@ int main( void )
 	setup(); boss = spawn( 5, 2, 3 ); gate = 0;
 	frame( 0.1 ); boss_grabs( 5, 2 ); entities[2].v.health = 0; entities[2].v.deadflag = DEAD_DEAD;
 	frame( 5.0 ); frame( 20.0 ); assert( !spawned );
+
+	/* The c_start padlock: whoever's padlockrotate opened it is "the first player" while its Finished think (2 s later)
+	 * runs; that think releases the first player, which was the host, not the guest left frozen in its camera. */
+	setup(); spawn( 7, 6, 0 );
+	set_handle( 2, 0x2350, &entities[7], 1 ); strcpy( argv0, "padlockrotate" );
+	assert( !SV_CoF_RescueClientCommand( &clients[1] ));                 /* observed, the game still turns the dial */
+	assert( SV_CoF_RescueThinkFirst( &entities[7] ) == NULL );            /* not open yet: no Finished to run */
+	entities[7].v.body = 1;                                               /* the guest's turn opened it */
+	assert( SV_CoF_RescueThinkFirst( &entities[7] ) == &entities[2] );
+	assert( SV_CoF_RescueThinkFirst( &entities[1] ) == NULL );            /* other thinks are left alone */
+	set_handle( 1, 0x2350, &entities[7], 1 ); assert( !SV_CoF_RescueClientCommand( &clients[0] ));
+	assert( SV_CoF_RescueThinkFirst( &entities[7] ) == &entities[1] );    /* the last turn before it opened */
+	strcpy( argv0, "padlockcancel" ); set_handle( 2, 0x2350, &entities[7], 1 ); SV_CoF_RescueClientCommand( &clients[1] );
+	assert( SV_CoF_RescueThinkFirst( &entities[7] ) == &entities[1] );    /* only turns count */
+	clients[0].state = 0; assert( SV_CoF_RescueThinkFirst( &entities[7] ) == NULL ); /* the solver left */
+	setup(); spawn( 7, 6, 0 ); entities[7].v.body = 1; gate = 0;
+	strcpy( argv0, "padlockrotate" ); set_handle( 2, 0x2350, &entities[7], 1 ); SV_CoF_RescueClientCommand( &clients[1] );
+	assert( SV_CoF_RescueThinkFirst( &entities[7] ) == NULL );            /* not story co-op */
 
 	printf( "rescue scenarios passed\n" );
 	return 0;

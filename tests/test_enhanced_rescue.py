@@ -19,6 +19,18 @@ class RescueWiringTests(unittest.TestCase):
         assert_has(self, 'SV_CoF_RescueFrame();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame('))
         assert_has(self, 'SV_CoF_RescueReset();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryShutdown('))
 
+    def test_a_think_can_have_its_own_first_player(self):
+        game = body_of(SERVER / 'sv_game.c', 'static qboolean CoF_SenderFind(')
+        assert_has(self, 'cof_command_sender ? cof_command_sender : cof_think_first ? cof_think_first : cof_first_preference', game)
+        physics = (SERVER / 'sv_phys.c').read_text(encoding='latin-1')
+        self.assertEqual(physics.count('svgame.dllFuncs.pfnThink( ent );'), 2)
+        self.assertEqual(physics.count('SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( ent ));'), 2)
+        self.assertEqual(physics.count('SV_CoF_ThinkFirst( NULL );'), 2)
+
+    def test_padlock_turns_are_seen_before_the_game(self):
+        body = body_of(SERVER / 'sv_client.c', 'static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )\n{')
+        self.assertLess(body.index('SV_CoF_RescueClientCommand( cl )'), body.index('svgame.dllFuncs.pfnClientCommand( cl->edict )'))
+
     def test_a_map_entity_is_spawned_from_the_maps_own_text(self):
         body = body_of(SERVER / 'sv_game.c', 'edict_t *SV_CoF_SpawnMapEntity(')
         assert_has(self, 'sv.worldmodel->entities', body)
