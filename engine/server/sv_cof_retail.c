@@ -765,6 +765,12 @@ static int CoF_RetailMonsterClass( const char *name, int keyed )
 	return Q_strcmp( name, "monster_sawrunner" ) ? 7 : 18;
 }
 
+edict_t *SV_CoF_RetailMonsterEnemy( edict_t *monster )
+{
+	byte *pv = CoF_RetailPrivate( monster, COF_RETAIL_MONSTER_NEED );
+	return pv ? CoF_RetailHandle( pv + COF_RETAIL_MONSTER_ENEMY ) : NULL;
+}
+
 int SV_CoF_RetailHostile( edict_t *monster )
 {
 	static const char *never[] = { "monster_generic", "monster_furniture", "monster_target" };

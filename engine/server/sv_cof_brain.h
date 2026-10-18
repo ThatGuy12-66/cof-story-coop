@@ -140,7 +140,10 @@ typedef struct
 	int threat;
 	float threat_pos[3], threat_dist; // the body's centre, and how far it is from my eye
 	float threat_gap; // how far my eye is from the body's box (what a swing must reach)
-	int line_clear; // the leader is not in the line of fire
+	int line_clear; // the leader is not in the line of fire (a swing stops on them; a bullet passes players)
+	int pass_through; // a bullet through a player hurts nobody (players cannot hurt each other): guns need no clear line
+	float threat_keep; // the threat kills whoever its swing meets (the chainsaw boss): never melee it, keep this far (0: none)
+	int stamp; // a taller after someone is this close: its stamp kills anyone lying, ducking or busy (CPR, syringe)
 	// told to wait here
 	int stay;
 	float stay_pos[3];
@@ -286,6 +289,13 @@ static void CoF_BrainMoveToward( const float *self, const float *point, float ya
 	x /= length; y /= length;
 	out->forward = speed * ( x * c + y * s ); // forward = ( cos yaw, sin yaw )
 	out->side = speed * ( x * s - y * c ); // right = ( sin yaw, -cos yaw )
+}
+
+// The usercmd's forwardmove for an intended forward and side: the game halves forwardmove whenever sidemove is
+// set too (PM_CheckParamters, before its max-speed scaling), which skewed every mixed move toward the side.
+static float CoF_BrainUsercmdForward( float forward, float side )
+{
+	return forward != 0.0f && side != 0.0f ? forward * 2.0f : forward;
 }
 
 // The trail point index k (0 = oldest still kept).
@@ -497,12 +507,27 @@ static int CoF_BrainWeapon( const cof_brain_input_t *in )
 	return in->has_melee ? COF_WEAPON_MELEE : COF_WEAPON_NONE;
 }
 
+static void CoF_BrainBackOff( const cof_brain_input_t *in, cof_brain_output_t *out )
+{
+	float away[3];
+	away[0] = in->self[0] * 2.0f - in->threat_pos[0];
+	away[1] = in->self[1] * 2.0f - in->threat_pos[1];
+	away[2] = in->self[2];
+	CoF_BrainMoveToward( in->self, away, out->angles[1], COF_BRAIN_WALK, out );
+}
+
 static void CoF_BrainFight( cof_brain_t *b, const cof_brain_input_t *in, cof_brain_output_t *out )
 {
-	float wanted[3];
+	float wanted[3], back = in->threat_keep > COF_BRAIN_BACK_OFF ? in->threat_keep : COF_BRAIN_BACK_OFF;
 	int want = CoF_BrainWeapon( in );
 	out->mode = COF_BRAIN_FIGHT;
 	CoF_BrainFace( in, in->threat_pos, wanted, out );
+	if( in->threat_keep > 0.0f && want != COF_WEAPON_GUN )
+	{
+		// a threat no swing may come near: keep out of its reach
+		if( in->threat_gap < in->threat_keep ) CoF_BrainBackOff( in, out );
+		return;
+	}
 	if( want != COF_WEAPON_NONE && in->weapon != want )
 	{
 		out->action = want == COF_WEAPON_GUN ? COF_BRAIN_ACT_EQUIP_GUN : COF_BRAIN_ACT_EQUIP_MELEE;
@@ -511,14 +536,7 @@ static void CoF_BrainFight( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 	if( in->weapon == COF_WEAPON_GUN )
 	{
 		// Too close for comfort: step back while shooting.
-		if( in->threat_gap < COF_BRAIN_BACK_OFF )
-		{
-			float away[3];
-			away[0] = in->self[0] * 2.0f - in->threat_pos[0];
-			away[1] = in->self[1] * 2.0f - in->threat_pos[1];
-			away[2] = in->self[2];
-			CoF_BrainMoveToward( in->self, away, out->angles[1], COF_BRAIN_WALK, out );
-		}
+		if( in->threat_gap < back ) CoF_BrainBackOff( in, out );
 		if( in->reloading ) return;
 		if( in->clip <= 0 )
 		{
@@ -537,9 +555,10 @@ static void CoF_BrainFight( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 			b->sights_after = in->now + 1.0;
 			return;
 		}
-		// The guns fire once per press: the trigger goes up again the next frame.
-		if( CoF_BrainAimError( out->angles, wanted ) <= COF_BRAIN_AIM_TOLERANCE && in->line_clear && in->ready &&
-			!b->fire_held && in->now >= b->fire_after )
+		// The guns fire once per press: the trigger goes up again the next frame. A bullet passes through
+		// players (FireBulletsPlayer re-traces past them): with nobody hurt by it, a partner in the line is no reason.
+		if( CoF_BrainAimError( out->angles, wanted ) <= COF_BRAIN_AIM_TOLERANCE && ( in->line_clear || in->pass_through ) &&
+			in->ready && !b->fire_held && in->now >= b->fire_after )
 		{
 			out->buttons |= COF_IN_ATTACK;
 			b->fire_after = in->now + 0.2;
@@ -680,7 +699,8 @@ static void CoF_BrainSpace( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_brain_output_t *out )
 {
 	float target[3], wanted[3], distance, gap = COF_BRAIN_RANK_GAP * (float)( in->rank > 0 ? in->rank : 0 );
-	int danger = in->threat && in->threat_dist < COF_BRAIN_DANGER, calm;
+	// a threat this close, or a taller's stamp: no CPR (nor syringe) now
+	int danger = ( in->threat && in->threat_dist < COF_BRAIN_DANGER ) || in->stamp, calm;
 	memset( out, 0, sizeof( *out ));
 	memcpy( out->angles, in->view, sizeof( out->angles ));
 	if( in->leader && in->leader_alive ) CoF_BrainNoteLeader( b, in );
@@ -758,8 +778,8 @@ static void CoF_BrainThink( cof_brain_t *b, const cof_brain_input_t *in, cof_bra
 	}
 	b->fire_held = 0;
 
-	// Quiet: see to my wounds, then the leader's.
-	if( CoF_BrainHeal( b, in, out ) || CoF_BrainMedic( b, in, out ))
+	// Quiet: see to my wounds, then the leader's (never under a taller's stamp: the syringe holds both of us).
+	if( !in->stamp && ( CoF_BrainHeal( b, in, out ) || CoF_BrainMedic( b, in, out )))
 	{
 		b->stuck_since = 0.0;
 		b->mode = out->mode;

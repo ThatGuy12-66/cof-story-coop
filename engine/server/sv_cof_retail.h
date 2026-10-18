@@ -91,4 +91,6 @@ qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command );
 // 0: leave it be (a friend, a scripted actor, a boss before its entrance);
 // 1: a monster the companion may attack; 2: one already after a player.
 int SV_CoF_RetailHostile( edict_t *monster );
+// A monster's m_hEnemy (+0x184), or NULL.
+edict_t *SV_CoF_RetailMonsterEnemy( edict_t *monster );
 #endif

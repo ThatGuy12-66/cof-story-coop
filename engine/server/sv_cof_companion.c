@@ -57,6 +57,8 @@
 #define COF_COMPANION_LINE_STICK 48.0f // a bot further back in the line counts this much farther for each place
 #define COF_COMPANION_PARTNER_PACE 40.0f // a partner in the way moving on at least this fast: keep its pace
 #define COF_COMPANION_DOWN_MEMORY 0.5 // a downed person stays down this long when their body leaves the ground a moment
+#define COF_COMPANION_BOSS_KEEP 150.0f // the chainsaw boss's reach and then some: never closer
+#define COF_COMPANION_STAMP 150.0f // a taller after someone this close stamps anyone lying, ducking or busy (CoF_Taller.cpp)
 
 static convar_t *cof_companion; // how many companion bots to keep (0: none)
 static convar_t *cof_companion_name;
@@ -685,6 +687,22 @@ static qboolean CoF_CompanionFireClear( const sv_client_t *self, const vec3_t ey
 }
 
 // How far a point is from a box (0 inside it).
+// A living monster_taller with an enemy this close: its stamp (SetActivity 1007C0A0) kills outright anyone in front
+// of it while its enemy is in CPR, getting up, ducking, on the phone or with a syringe.
+static qboolean CoF_CompanionStamp( const edict_t *ent )
+{
+	int i;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *taller = SV_EdictNum( i );
+		if( !SV_IsValidEdict( taller ) || ( taller->v.flags & FL_KILLME ) || taller->v.health <= 0 || taller->v.deadflag != DEAD_NO ||
+			Q_strcmp( SV_GetString( taller->v.classname ), "monster_taller" )) continue;
+		if( VectorDistance( taller->v.origin, ent->v.origin ) > COF_COMPANION_STAMP || !SV_CoF_RetailMonsterEnemy( taller )) continue;
+		return true;
+	}
+	return false;
+}
+
 static float CoF_CompanionGap( const vec3_t point, const vec3_t mins, const vec3_t maxs )
 {
 	vec3_t nearest;
@@ -860,7 +878,11 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 		in->threat_dist = (float)VectorDistance( in->eye, in->threat_pos );
 		in->threat_gap = CoF_CompanionGap( in->eye, threat->v.absmin, threat->v.absmax );
 		in->line_clear = CoF_CompanionFireClear( cl, in->eye, in->threat_pos );
+		// the chainsaw boss's swing makes its kill animation on whoever it meets (sv_cof_rescue.c)
+		if( !Q_strcmp( SV_GetString( threat->v.classname ), "monster_bosschainsaw" )) in->threat_keep = COF_COMPANION_BOSS_KEEP;
 	}
+	in->pass_through = !SV_CoF_FriendlyFire();
+	in->stamp = CoF_CompanionStamp( ent );
 }
 
 static void CoF_CompanionAct( sv_client_t *cl, sv_client_t *leader, cof_companion_t *c, const cof_retail_arms_t *arms )
@@ -990,7 +1012,7 @@ static void CoF_CompanionRun( sv_client_t *cl, const cof_brain_output_t *out )
 	usercmd_t cmd;
 	memset( &cmd, 0, sizeof( cmd ));
 	VectorCopy( out->angles, cmd.viewangles );
-	cmd.forwardmove = out->forward;
+	cmd.forwardmove = CoF_BrainUsercmdForward( out->forward, out->side ); // the game halves it with a side move
 	cmd.sidemove = out->side;
 	cmd.upmove = out->up;
 	cmd.buttons = (word)out->buttons;
@@ -1059,7 +1081,7 @@ void SV_CoF_CompanionUsercmd( sv_client_t *cl, usercmd_t *cmd )
 	c->sent[c->sent_next][1] = c->out.angles[1];
 	c->sent_next = ( c->sent_next + 1 ) % COF_COMPANION_ECHO;
 	if( c->sent_count < COF_COMPANION_ECHO ) c->sent_count++;
-	cmd->forwardmove = c->out.forward;
+	cmd->forwardmove = CoF_BrainUsercmdForward( c->out.forward, c->out.side );
 	cmd->sidemove = c->out.side;
 	cmd->upmove = c->out.up;
 	cmd->buttons = (word)buttons;
