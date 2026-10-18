@@ -2,8 +2,10 @@
 sv_cof_globals.c - Cry of Fear story co-op: hl.dll's single globals that hold one player's state (sv_cof_globals.h)
 GPL-3.0-or-later.
 
-With cof_coop_player_state (default 1), around every spawned player's command (SV_RunCmd, the AI companions too) the
-DLL holds that player's copy of the globals, otherwise the host's; and while a guest's or a companion's command runs,
+With cof_coop_player_state (default 1), around every spawned player's command (SV_RunCmd, the AI companions too), and
+around the other calls into the game for one player (UpdateClientData, a client command, the engine's own commands,
+weapon switches) the DLL holds that player's copy of the globals, otherwise the host's; a call for another player
+inside one of those keeps the outer player's copy; and while a guest's or a companion's command runs,
 the game's room_type is that player's: kept by the engine and sent to that guest (svc_roomtype) when it changes,
 instead of the host's own DSP.
 */
@@ -17,6 +19,7 @@ static CVAR_DEFINE_AUTO( cof_coop_player_state, "1", 0, "Cry of Fear story co-op
 static byte cof_globals_slots[MAX_CLIENTS][COF_GLOBALS_BYTES];
 static float cof_globals_room_type[MAX_CLIENTS];
 static sv_client_t *cof_globals_client; // whose command runs, with their copy in the DLL
+static int cof_globals_nested; // calls opened inside cof_globals_client's
 static byte *cof_globals_base;
 
 void SV_CoF_GlobalsInit( void )
@@ -34,7 +37,11 @@ void SV_CoF_GlobalsEnter( sv_client_t *cl )
 {
 	byte *base;
 	int slot = CoF_GlobalsSlot( cl );
-	cof_globals_client = NULL;
+	if( cof_globals_client )
+	{
+		cof_globals_nested++;
+		return;
+	}
 	if( slot < 0 || cl->state != cs_spawned || cof_coop_player_state.value == 0.0f || !SV_CoF_StoryCoopEnabled( )) return;
 	if( !( base = (byte *)SV_CoF_StoryBase( ))) return;
 	if( base != cof_globals_base ) // another DLL instance: nobody's copy is in it
@@ -50,6 +57,11 @@ void SV_CoF_GlobalsEnter( sv_client_t *cl )
 void SV_CoF_GlobalsLeave( sv_client_t *cl )
 {
 	int slot = CoF_GlobalsSlot( cl );
+	if( cof_globals_nested )
+	{
+		cof_globals_nested--;
+		return;
+	}
 	if( !cof_globals_client || cof_globals_client != cl || slot < 0 ) return;
 	CoF_GlobalsSave( cof_globals_base, cof_globals_slots[slot] );
 	CoF_GlobalsLoad( cof_globals_base, cof_globals_slots[0] ); // outside a command: the host's

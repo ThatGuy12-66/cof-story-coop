@@ -256,7 +256,9 @@ void SV_CoF_RetailGameCommand( sv_client_t *cl )
 		pv[COF_RETAIL_IN_CALL] = 0;
 		memcpy( pv + COF_RETAIL_SCREEN, &none, sizeof( none ));
 	}
+	SV_CoF_GlobalsEnter( cl );
 	svgame.dllFuncs.pfnClientCommand( cl->edict );
+	SV_CoF_GlobalsLeave( cl );
 	if( !pv ) return;
 	if( !pv[COF_RETAIL_IN_CALL] ) pv[COF_RETAIL_IN_CALL] = call;
 	memcpy( &after, pv + COF_RETAIL_SCREEN, sizeof( after ));
@@ -559,8 +561,12 @@ qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );
 	if( !player || !classname || Q_strncmp( classname, "weapon_", 7 )) return false;
+	qboolean done;
 	// What inventoryequip ends in, without its menu sound: the swap happens a moment later in PostThink.
-	return SV_CoF_StoryCallMember( COF_RETAIL_SELECT_ITEM, player, (void *)classname );
+	SV_CoF_GlobalsEnter( cl ); // a dual weapon's Holster runs on the game's one dual-weapon object
+	done = SV_CoF_StoryCallMember( COF_RETAIL_SELECT_ITEM, player, (void *)classname );
+	SV_CoF_GlobalsLeave( cl );
+	return done;
 }
 
 // Dual wield in co-op (sv_cof_story.c opens the command's multiplayer refusal):
@@ -588,7 +594,10 @@ qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl )
 		memcpy( &r, pv + COF_RETAIL_DUAL_ITEM_RIGHT, sizeof( r ));
 		if( owner != player || l != left || r != right ) continue;
 		if( pv == active || pv == next ) return false;
-		if( !SV_CoF_StoryCallMember( COF_RETAIL_SWITCH_WEAPON, player, pv )) return false;
+		SV_CoF_GlobalsEnter( cl ); // the dual weapon's Deploy runs on the game's one dual-weapon object
+		i = SV_CoF_StoryCallMember( COF_RETAIL_SWITCH_WEAPON, player, pv );
+		SV_CoF_GlobalsLeave( cl );
+		if( !i ) return false;
 		Con_Printf( "cofstory phase=dualwield-switch userid=%d left=%d right=%d\n", cl->userid, left, right );
 		return true;
 	}

@@ -561,7 +561,9 @@ static void SV_WriteClientdataToMessage( sv_client_t *cl, sizebuf_t *msg )
 	memset( &cofcd, 0, sizeof( cofcd ));
 
 	// update clientdata_t (Cry of Fear's has its donator level after it: cof_abi.h)
+	SV_CoF_GlobalsEnter( cl ); // Cry of Fear: the game's one-player globals (the dual weapon's body) are this player's
 	svgame.dllFuncs.pfnUpdateClientData( clent, FBitSet( cl->flags, FCL_LOCAL_WEAPONS ), &cofcd.cd );
+	SV_CoF_GlobalsLeave( cl );
 	frame->clientdata = cofcd.cd;
 
 	MSG_BeginServerCmd( msg, svc_clientdata );

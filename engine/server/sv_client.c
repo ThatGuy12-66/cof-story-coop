@@ -3235,11 +3235,13 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 		SV_CoF_StateCommandBegin( cl );
 		SV_CoF_ShareCommandBegin( cl );
 		SV_CoF_CommandSender( cl->state == cs_spawned && SV_CoF_StoryCoopEnabled() ? cl->edict : NULL );
+		SV_CoF_GlobalsEnter( cl ); // the game's one-player globals are the sender's
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
 		SV_CoF_CommandSender( NULL );
 		// Cry of Fear story co-op: deploy the dual weapon the game just built
 		if( SV_CoF_StoryCoopEnabled() && !Q_strcmp( Cmd_Argv( 0 ), "inventorydualwield" ))
 			SV_CoF_RetailDualDeploy( cl );
+		SV_CoF_GlobalsLeave( cl );
 		SV_CoF_ShareCommandEnd( cl );
 		SV_CoF_StateCommandEnd( cl );
 		if( cofload && Cvar_VariableInteger( "cof_trace_menu_load" ))

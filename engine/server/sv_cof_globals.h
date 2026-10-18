@@ -8,7 +8,10 @@ Written for one player, these are file globals in the retail hl.dll, so in co-op
   while it is set (EMIT_SOUND_DYN), so one player's morphine trip muffled the world for everyone;
 - m_gbIsInCutscene: PostThink (100EDF36) hides the player model and keeps heartbeat and low-health sounds quiet;
 - CalculateWeaponAccuracy's edge flags and floor (1011BB50, run in each PreThink): a moving player next to a standing
-  one got the one-time kick every frame, up to the 10 degree cap.
+  one got the one-time kick every frame, up to the 10 degree cap;
+- gDualWeapon (0x102118C0, CDualWeaponRight): one object ran every player's left hand, so with two players dual
+  wielding the wrong one swung, fired or toggled the phone light (CoF_Dual_Weapon.cpp:162-241); its own fields
+  (+0xDC..+0x134) are swapped, not its vtable or pev.
 Each player keeps a copy; while a player's command runs the DLL holds theirs, otherwise the host's.
 
 Plain C (standard library only): the offline tests share it.
@@ -29,8 +32,8 @@ typedef struct
 	int size;
 } cof_global_t;
 
-#define COF_GLOBALS 7
-#define COF_GLOBALS_BYTES 10 // the sizes added up
+#define COF_GLOBALS 8
+#define COF_GLOBALS_BYTES 98 // the sizes added up
 
 static const cof_global_t cof_player_globals[COF_GLOBALS] =
 {
@@ -41,6 +44,7 @@ static const cof_global_t cof_player_globals[COF_GLOBALS] =
 	{ "spread-ducking", 0x231F0E, 1 },  // bool wasducking
 	{ "spread-sprinting", 0x231F0F, 1 },// bool wassprinting
 	{ "spread-minimum", 0x231F5C, 4 },  // int minimum
+	{ "dual-weapon", 0x21199C, 0x58 },  // gDualWeapon.m_iCurrentShot .. m_iIdleAnimation2
 };
 
 // A player's copy into the DLL's globals.
