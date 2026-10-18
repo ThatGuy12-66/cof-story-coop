@@ -127,10 +127,13 @@ static qboolean SV_CoF_StoryGiveItemEx( sv_client_t *cl, const char *classname, 
 static void Cmd_TokenizeString( const char *text ) { Q_strncpy( last_command, text, sizeof( last_command )); }
 /* ClientCommand drops every command of a player in a phone call (m_bInPhoneCall +0x1EE8) or on the computer or
  * phone screen (m_iUsingComputerOrPhone +0x1EA0): seen here as the gates at the time of the call */
-static int command_saw_call = -1, command_saw_screen = -1;
+static int command_saw_call = -1, command_saw_screen = -1, globals_depth, command_saw_scope = -1;
+static void SV_CoF_GlobalsEnter( sv_client_t *cl ) { globals_depth++; }
+static void SV_CoF_GlobalsLeave( sv_client_t *cl ) { globals_depth--; }
 static void ClientCommand( edict_t *e )
 {
 	last_command_edict = e;
+	command_saw_scope = globals_depth;
 	if( e && e->pvPrivateData ) { command_saw_call = ((byte *)e->pvPrivateData)[0x1EE8]; memcpy( &command_saw_screen, (byte *)e->pvPrivateData + 0x1EA0, 4 ); }
 }
 /* The player's Use: the game's CPR start, here only its links (reviver -> body, body -> reviver). */
@@ -260,6 +263,7 @@ int main( void )
 		private_data[1][0x1EE8] = 1; memcpy( private_data[1] + 0x1EA0, &screen, 4 );
 		assert( SV_CoF_RetailRemoveItem( &clients[1], "inventoryitems/hallkey.txt" ));
 		assert( command_saw_call == 0 && command_saw_screen == 0 );
+		assert( command_saw_scope == 1 && globals_depth == 0 ); /* the player's own copy of the game's globals */
 		memcpy( &screen, private_data[1] + 0x1EA0, 4 ); assert( private_data[1][0x1EE8] == 1 && screen == 2 );
 		assert( SV_CoF_RetailCommand( &clients[1], "flashlight" ) && command_saw_call == 0 && private_data[1][0x1EE8] == 1 );
 		private_data[1][0x1EE8] = 0; screen = 0; memcpy( private_data[1] + 0x1EA0, &screen, 4 );

@@ -22,11 +22,12 @@ class GlobalsRuleTests(unittest.TestCase):
             'global spread-ducking 231F0E 1',
             'global spread-sprinting 231F0F 1',
             'global spread-minimum 231F5C 4',
-            'bytes 10',
-            'after the host\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0',
-            # the guest's movement stays theirs; outside a command the host's state is back
-            'after the guest\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0',
-            'the guest\'s own command: morphine-muffle=0 cutscene=0 spread-moving=1 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=3',
+            'global dual-weapon 21199C 88',
+            'bytes 98',
+            'after the host\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0 dual-weapon=0',
+            # the guest's movement and left hand stay theirs; outside a command the host's state is back
+            'after the guest\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0 dual-weapon=0',
+            'the guest\'s own command: morphine-muffle=0 cutscene=0 spread-moving=1 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=3 dual-weapon=8',
             'room_type owner: none -1, guest 1, host -1, host without the cvar 0, other cvar -1',
         ])
 
@@ -40,6 +41,8 @@ class GlobalsRuleTests(unittest.TestCase):
         self.assertEqual(file_bytes(HL_DLL, 0xEDF36, 7).hex(), '803d7764221000')
         self.assertEqual(file_bytes(HL_DLL, 0x11BBD0, 10).hex(), 'c7055c1f231003000000')
         self.assertEqual(file_bytes(HL_DLL, 0x11BBE7, 7).hex(), '803d0a1f231000')
+        # PostThink 100EED5E: mov ecx, offset gDualWeapon before HasDualWeapon
+        self.assertEqual(file_bytes(HL_DLL, 0xEED5E, 5).hex(), 'b9c0182110')
 
 
 class GlobalsWiringTests(unittest.TestCase):
@@ -54,6 +57,22 @@ class GlobalsWiringTests(unittest.TestCase):
         end, leave = body.index('svgame.dllFuncs.pfnCmdEnd( clent );'), body.index('SV_CoF_GlobalsLeave( cl );')
         self.assertLess(enter, start)
         self.assertLess(end, leave)
+
+    def test_around_the_other_calls_for_one_player(self):
+        # client.dll gets dualbody from UpdateClientData, and a command, a weapon switch or a deploy for one player
+        # may run the dual weapon's code outside a usercmd
+        frame = (SERVER / 'sv_frame.c').read_text(encoding='latin-1')
+        call = frame.index('svgame.dllFuncs.pfnUpdateClientData(')
+        self.assertIn('SV_CoF_GlobalsEnter( cl );', frame[call - 200:call])
+        self.assertIn('SV_CoF_GlobalsLeave( cl );', frame[call:call + 200])
+        client = body_of(SERVER / 'sv_client.c', 'static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )\n{')
+        call = client.index('svgame.dllFuncs.pfnClientCommand( cl->edict );')
+        self.assertIn('SV_CoF_GlobalsEnter( cl );', client[call - 300:call])
+        self.assertIn('SV_CoF_GlobalsLeave( cl );', client[call:call + 400]) # after the dual-wield deploy
+        for name in ('void SV_CoF_RetailGameCommand(', 'qboolean SV_CoF_RetailDualDeploy(', 'qboolean SV_CoF_RetailEquip('):
+            body = body_of(SERVER / 'sv_cof_retail.c', name)
+            assert_has(self, 'SV_CoF_GlobalsEnter( cl );', body)
+            assert_has(self, 'SV_CoF_GlobalsLeave( cl );', body)
 
     def test_the_games_room_type_goes_through_the_engine(self):
         source = (SERVER / 'sv_game.c').read_text(encoding='latin-1')

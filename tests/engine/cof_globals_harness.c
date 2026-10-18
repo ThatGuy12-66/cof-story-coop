@@ -3,6 +3,7 @@
 #include "globals_under_test.h"
 
 static unsigned char image[0x240000];
+#define DUAL_THINK_STATE ( 0x2119D8 ) /* gDualWeapon.m_iThinkState: the left hand's pending action */
 static unsigned char slots[3][COF_GLOBALS_BYTES];
 
 static void show( const char *what )
@@ -12,7 +13,8 @@ static void show( const char *what )
 	for( i = 0; i < COF_GLOBALS; off += cof_player_globals[i].size, i++ )
 	{
 		int value = 0;
-		memcpy( &value, image + cof_player_globals[i].rva, cof_player_globals[i].size );
+		if( cof_player_globals[i].size > 4 ) memcpy( &value, image + DUAL_THINK_STATE, 4 ); /* the object: its pending action */
+		else memcpy( &value, image + cof_player_globals[i].rva, cof_player_globals[i].size );
 		printf( " %s=%d", cof_player_globals[i].name, value );
 	}
 	printf( "\n" );
@@ -27,7 +29,7 @@ static void command( int player, void ( *game )( void ))
 }
 
 static void host_trips( void ) { image[0x226489] = 1; image[0x226477] = 1; }
-static void guest_moves( void ) { image[0x231F0A] = 1; image[0x231F5C] = 3; }
+static void guest_moves( void ) { image[0x231F0A] = 1; image[0x231F5C] = 3; image[DUAL_THINK_STATE] = 8; /* phone light on */ }
 static void guest_reads( void ) { show( "the guest's own command" ); }
 
 int main( void )
