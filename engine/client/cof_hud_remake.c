@@ -3,6 +3,7 @@
 // Optional presentation only: never changes client messages or weapon state.
 #include "common.h"
 #include "client.h"
+#include "cof_hud_health.h"
 
 static CVAR_DEFINE_AUTO( cof_hud_style, "0", FCVAR_ARCHIVE, "Cry of Fear HUD: 0 Classic, 1 Remake (health, stamina and supported ammunition)" );
 
@@ -113,7 +114,7 @@ void CL_CoF_HudRemakeReset( void )
  hud.clip = hud.stamina = hud.previous_health = -1;
  hud.dual_clip[0] = hud.dual_clip[1] = -1;
  hud.health_frame = hud.stamina_frame = -1;
- hud.health_cap = 100;
+ hud.health_cap = 0; // HealthCap's type: none (cof_hud_health.h)
 }
 
 void CL_CoF_HudRemakeInit( void )
@@ -132,7 +133,7 @@ void CL_CoF_HudRemakeMessage( const char *name, int size, const byte *data )
  else if( !Q_stricmp(name,"BossBar") ) HudBossMessage(size,data);
  else if( !data || size<1 ) return;
  else if( !Q_stricmp(name,"Stamina") && size==3 ) hud.stamina=bound(0,data[0],100);
- else if( !Q_stricmp(name,"HealthCap") && size==1 && data[0]>0 ) hud.health_cap=data[0];
+ else if( !Q_stricmp(name,"HealthCap") && size==1 ) hud.health_cap=data[0];
  else if( !Q_stricmp(name,"HideWeapon") && size==1 ) hud.hide=data[0];
  else if( !Q_stricmp(name,"WeaponList") )
  {
@@ -623,12 +624,15 @@ void CL_CoF_HudRemakeBars( void )
 	if(hud.health_frame==host.framecount)
 	{
 		byte color[4]={245,245,245,hud.health_alpha};
-		float fraction=bound(0.0f,(float)cl.local.health/Q_max(1,hud.health_cap),1.0f);
+		// out of 100, as the game's bar; what a HealthCap takes away is drawn darker
+		float fraction=CoF_HudHealthFill(cl.local.health,hud.health_cap);
+		float maximum=CoF_HudHealthMaximum(hud.health_cap)/100.0f;
 		if(fraction<=0.25f) { color[0]=255;color[1]=48;color[2]=48; }
 		else if(host.realtime<hud.damage_until) { color[0]=255;color[1]=160;color[2]=160; }
 		HudIcon(0,margin,bottom-28*scale,28*scale,color);
 		float x=margin+38*scale,y=bottom-15*scale,w=128*scale,h=3*scale;
-		ref.dllFuncs.FillRGBA(kRenderTransTexture,x,y,w,h,32,32,32,color[3]/2);
+		ref.dllFuncs.FillRGBA(kRenderTransTexture,x,y,w*maximum,h,32,32,32,color[3]/2);
+		if(maximum<1.0f) ref.dllFuncs.FillRGBA(kRenderTransTexture,x+w*maximum,y,w*(1.0f-maximum),h,8,8,8,color[3]/4);
 		ref.dllFuncs.FillRGBA(kRenderTransTexture,x,y,w*fraction,h,color[0],color[1],color[2],color[3]);
 	}
 	if(hud.stamina_frame==host.framecount && (hud.stamina<100 ||
