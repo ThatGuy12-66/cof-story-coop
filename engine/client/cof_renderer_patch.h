@@ -16,7 +16,10 @@
  * 256 pages (the engine's own MAX_LIGHTMAPS at 128 blocks), 2048 entities and
  * edict 8191; the three sets get GL names 0x03000000 + 256 * set (the engine
  * uses 1..8191, the client's counter starts at 0x02000000). 26 code edits, one
- * of them a jump to a 17-byte stub in int3 padding, and three data words.
+ * of them a jump to a 17-byte stub in int3 padding, and three data words; and
+ * four more bounds: a particle system's source entity and Cg water's water
+ * entities, up to edict 8191 (docs/research/2026-10-18-cof-decompilation-survey.md
+ * section 3, the launcher repo).
  * Inventory and checks: evidence/map-merge-spike-20261016/client-renderer-patch-plan.md.
  *
  * Every edit compares its stock bytes first (absolute operands relocated to the
@@ -36,7 +39,7 @@
 #define COF_RP_ENTITY_BYTES ( COF_RP_ENTITIES * 4 )
 #define COF_RP_LINKED      0x10000000u                  /* the image base the absolute operands were linked for */
 #define COF_RP_SET1        0x1CBF70                     /* RVA of the three set bases (GL names) */
-#define COF_RP_SITES       26
+#define COF_RP_SITES       30
 
 enum { COF_RP_NONE, COF_RP_PAGES, COF_RP_PAGES2, COF_RP_CHAINS, COF_RP_ENTLIST }; /* what a patched operand points at */
 
@@ -91,6 +94,13 @@ static const cof_rp_site_t cof_rp_sites[COF_RP_SITES] =
 	{ 0x5EFF0, 7, 3, 1, COF_RP_ENTLIST, { 0x8B, 0x3C, 0xB5, RP_ABS( RP_EL ) }, { 0x8B, 0x3C, 0xB5 } },
 	{ 0x60AE3, 7, 3, 1, COF_RP_ENTLIST, { 0x89, 0x34, 0xBD, RP_ABS( RP_EL ) }, { 0x89, 0x34, 0xBD } },
 	{ 0x60AF5, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFB, 0x84, 0x03, 0x00, 0x00 }, { 0x81, 0xFB, 0x00, 0x20, 0x00, 0x00 } },
+	/* a particle system's source entity (UTIL_GetClientEntityWithServerIndex 100831E0): edicts 1..899 -> 1..8191; the
+	 * scan still stops at the first index the engine has no entity for */
+	{ 0x83210, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x84, 0x03, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
+	/* Cg water's three loops over the water entities (CgWater_guess.cpp:240, 322, 507): edicts 0..1023 -> 0..8191 */
+	{ 0x87047, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x00, 0x04, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
+	{ 0x8718B, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x00, 0x04, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
+	{ 0x878FB, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x00, 0x04, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
 };
 
 /* GL names of the three lightmap sets, 256 apart */
