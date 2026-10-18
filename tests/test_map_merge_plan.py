@@ -93,6 +93,50 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertIn('hum.wav', found[0])
 
+    def test_play_everywhere_sound_that_does_not_loop_is_not_refused(self):
+        # an ambient_generic starts with the map only when it loops (no 32) and is not silent (no 16): sound.cpp:224-280
+        members = [('c_a', [ent(classname='ambient_generic', message='ambience/sob.wav', spawnflags='37')]),
+                   ('c_b', [ent(classname='ambient_generic', message='ambience/once.wav', spawnflags='33')])]
+        self.assertEqual(plan.everywhere_sound_problems(members), [])
+
+    def test_fog_field_origin_brush_is_harmless(self):
+        # func_fogfield uses only its origin and size (bmodels.cpp:1228-1386); a train still needs its geometry
+        # left in place (merge doc 4.2), which the merger does not do yet
+        members = [('c_a', []),
+                   ('c_b', [ent(classname='func_fogfield', model='*2', origin='0 0 64'),
+                            ent(classname='func_train', model='*3', origin='0 0 32')])]
+        found = plan.origin_brush_problems(members)
+        self.assertEqual(len(found), 1)
+        self.assertIn('func_train', found[0])
+
+    def test_a_class_the_game_takes_the_first_of_is_refused_in_two_members(self):
+        # the keypad, phone, computer... checks use the map's first entity of the class
+        members = [('c_a', [ent(classname='cof_keypad'), ent(classname='cof_computer')]),
+                   ('c_b', [ent(classname='cof_keypad'), ent(classname='cof_telephone')])]
+        found = plan.first_of_class_problems(members)
+        self.assertEqual(len(found), 1)
+        self.assertIn('cof_keypad', found[0])
+        self.assertEqual(plan.first_of_class_problems(members[:1]), [])
+
+    def test_more_than_16_transition_pairs_is_refused(self):
+        # CChangeLevel's ChangeList holds 16 (map, landmark) pairs (and overflows by one before it warns)
+        doors = [ent(classname='trigger_changelevel', map=f'c_x{k}', landmark=f'l{k}') for k in range(16)]
+        self.assertEqual(plan.transition_pair_problems([('c_a', doors[:8]), ('c_b', doors[8:] + doors[:2])]), [])
+        found = plan.transition_pair_problems([('c_a', doors), ('c_b', [ent(classname='trigger_changelevel', map='c_y', landmark='m')])])
+        self.assertEqual(len(found), 1)
+        self.assertIn('17', found[0])
+
+    def test_each_sections_rain_sky_and_fog_are_notes(self):
+        # the engine sends each section its own (sv_cof_weather.c, sv_cof_sky.c, sv_cof_fog.c); multiplayer draws the
+        # black sky whatever skyname says (client.dll CheckSky)
+        members = [('c_a', [ent(classname='worldspawn', skyname='night'), ent(classname='rain_settings'), ent(classname='env_fog', rendercolor='1 1 1')]),
+                   ('c_b', [ent(classname='worldspawn', skyname='day'), ent(classname='envpos_sky'), ent(classname='env_fog', rendercolor='2 2 2')])]
+        notes = plan.weather_notes(members)
+        self.assertTrue(any('rain' in n and 'c_a' in n for n in notes), notes)
+        self.assertTrue(any('3D sky' in n and 'c_b' in n for n in notes), notes)
+        self.assertTrue(any('skyname' in n for n in notes), notes)
+        self.assertTrue(any('env_fog' in n for n in notes), notes)
+
     def test_shared_globalname_is_refused(self):
         members = [('c_a', [ent(classname='func_door', globalname='lift')]),
                    ('c_b', [ent(classname='func_door', globalname='lift')])]

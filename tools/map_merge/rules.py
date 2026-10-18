@@ -14,11 +14,32 @@ import re
 from tools.map_merge.bsp import ent_get
 
 FORMAT = 'cof-sections 1'
-# Keys whose value names another entity (and targetname itself).
+# Keys whose value names another entity, whatever the class (and targetname itself). The engine's composer has the
+# same list (cof_sections.h cof_sect_ref_keys); hl.dll's keys from docs/research/2026-10-18-cof-decompilation-survey.md
+# 5.5 (evidence/decomp-survey-20261018/C1-effects-triggers.md 7.4).
 REF_KEYS = ('target', 'killtarget', 'targetname', 'landmark', 'changetarget', 'master', 'netname', 'parentname',
-            'LightningStart', 'LightningEnd', 'm_iszEntity', 'TriggerTarget')
-# Entities whose `message` is the target they fire on arrival.
-PATH_MESSAGE_CLASSES = ('path_corner', 'path_track')
+            'LightningStart', 'LightningEnd', 'm_iszEntity', 'TriggerTarget', 'movewith', 'moveto', 'm_iszAltTarget',
+            'm_iszBothTarget', 'm_iszThreadName', 'm_iszLocusThread', 'm_iszWatch', 'm_iszPath', 'm_iszNewTarget',
+            'm_iszViewEntity', 'skipmanager', 'm_sAttachedModel', 'trigger_one', 'trigger_two', 'trigger_three',
+            'trigger_four', 'triggerone', 'triggertwo', 'triggerthree', 'triggerfour', 'triggerfive', 'notrigger',
+            'cameraent', 'simonent', 'player1trigger', 'player2trigger', 'player3trigger', 'player4trigger')
+# Keys that name an entity only for some classes (for others a message, a sound or a map); cof_sect_class_keys.
+CLASS_REF_KEYS = {
+    'path_corner': ('message',), 'path_track': ('message',),  # the target fired on arrival
+    'trigger_teleport': ('message', 'noise'), 'trigger_onsight': ('message', 'noise', 'noise1'),
+    'trigger_camera': ('message',), 'trigger_playercheckarea': ('message',), 'trigger_booksimon': ('message',),
+    'scripted_startrush': ('message',), 'env_sprite': ('message',), 'watcher_count': ('message', 'noise', 'noise1', 'noise2'),
+    'cof_teleport': ('message',), 'cof_interdooronoff': ('message',), 'cof_updatekeypad': ('message',),
+    'cof_bosshealthbar': ('message',), 'cof_doctorweapontrigger': ('message',), 'cof_mdlcutscene': ('message',),
+    'cof_wheelchairmode': ('message',), 'cof_fatfuckingcunt': ('message',), 'cof_spawnpointonoff': ('message',),
+    'cof_lobby_start': ('message',), 'cof_survivalmode': ('message',), 'cof_randomtimedspawner': ('message',),
+    'cof_weapontrigger': ('noise',), 'cof_skipmanager': ('entity', 'teleport'),
+}
+
+
+def names_entity(cls: str, key: str) -> bool:
+    """The key's value names an entity (to rename with it)."""
+    return key in REF_KEYS or key in CLASS_REF_KEYS.get(cls, ())
 # multi_manager keys that are not targets.
 MM_RESERVED = ('classname', 'targetname', 'origin', 'angles', 'spawnflags', 'wait', 'delay', 'target', 'killtarget',
                'master', 'globalname', 'rendermode', 'renderamt', 'rendercolor', 'renderfx', 'model')
@@ -51,7 +72,7 @@ def referenced_names(ents: list) -> set:
     for e in ents:
         cls = ent_get(e, 'classname', '')
         for k, v in e:
-            if v and (k in REF_KEYS and k != 'targetname' or k == 'message' and cls in PATH_MESSAGE_CLASSES):
+            if v and k != 'targetname' and names_entity(cls, k):
                 out.add(v)
         if cls == 'multi_manager':
             out.update(t for t in multi_manager_targets(e) if t)
@@ -148,7 +169,7 @@ def compose_entity(e: list, s: Section) -> list:
             v = moved_origin(v, s.dz)
         elif k == 'model' and v.startswith('*') and v[1:].isdigit() and int(v[1:]) >= 1:
             v = f'*{int(v[1:]) - 1 + s.first_model}'
-        elif k in REF_KEYS or (k == 'message' and cls in PATH_MESSAGE_CLASSES):
+        elif names_entity(cls, k):
             v = s.renames.get(v, v)
         elif k == 'style' and cls.startswith('light') and v.lstrip('-').isdigit():
             v = str(s.styles.get(int(v), int(v)))

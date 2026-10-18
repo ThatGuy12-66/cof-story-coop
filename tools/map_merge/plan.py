@@ -30,6 +30,16 @@ WORLD_KEY_DEFAULTS = {'materialstxt': 'sound/materials.txt', 'WaveHeight': '0'}
 # cof_sections.h: COF_SECT_RENAMES, COF_SECT_STYLES, COF_SECT_LANDMARKS a section; COF_SECT_NAME with its 0.
 SECTION_LIMITS = {'renames': 512, 'styles': 32, 'landmarks': 64}
 SECTION_NAME_MAX = 63
+# hl.dll takes the map's first entity of these classes (FindEntityByClassname( NULL, ... )): the keypad, phone and
+# computer checks, the puzzles, the statues, the bosses that drive a scene. In two members the second member's would be
+# checked against, or driven by, the first's (docs/research/2026-10-18-cof-decompilation-survey.md 5.3).
+FIRST_OF_CLASS = ('cof_keypad', 'cof_phonecheck', 'cof_computer', 'cof_telephone', 'cof_puzzlebar', 'cof_puzzlebar2',
+                  'cof_puzzlebar3', 'cof_puzzlebar4', 'cof_puzzlebar5', 'cof_puzzlebarbutton', 'statue_owl', 'statue_lion',
+                  'statue_horse', 'statue_eagle', 'statue_puzzle_complete', 'cof_numeralplate_right', 'monster_doctorboss',
+                  'monster_booksimon', 'trigger_booksimon', 'wheelchair_hide_spot', 'boat_hide_spot', 'cof_clothesmenu')
+# Not here: subtitle_main, also taken first, only prints the line its caller sets from the one subtitles.txt.
+# CChangeLevel's ChangeList holds this many (map, landmark) pairs a map (and writes one past its array first).
+TRANSITION_PAIRS = 16
 LIMITS = {
     'planes': 65535, 'nodes': 32767, 'clipnodes': 32767, 'leafs': 32767, 'faces': 65535, 'marksurfaces': 65535,
     'vertexes': 65535, 'texinfo': 32767,
@@ -106,7 +116,7 @@ def reference_problems(members: list, sections: list) -> list:
             cls = ent_get(e, 'classname', '')
             mm = set(rules.multi_manager_targets(e)) if cls == 'multi_manager' else set()
             for k, v in e:
-                if k in rules.REF_KEYS or (k == 'message' and cls in rules.PATH_MESSAGE_CLASSES):
+                if rules.names_entity(cls, k):
                     continue
                 if k.split('#')[0] in mm or number(v) or v not in s.renames:
                     continue
@@ -121,6 +131,8 @@ def origin_brush_problems(members: list) -> list:
     for name, ents in members[1:]:
         for e in ents:
             model, origin = ent_get(e, 'model', ''), ent_get(e, 'origin')
+            if ent_get(e, 'classname') == 'func_fogfield':
+                continue  # it uses only its origin and size (bmodels.cpp:1228-1386): its geometry is never drawn
             if model.startswith('*') and origin and any(float(v) for v in origin.split()[:3] if number(v)):
                 out.append(f'{name}: {ent_get(e, "classname")} {model} has an origin brush ({origin}); not supported yet')
     return out
@@ -138,10 +150,47 @@ def everywhere_sound_problems(members: list) -> list:
                 flags = int(ent_get(e, 'spawnflags', '0') or 0)
             except ValueError:
                 continue
-            if flags & 1 and not flags & 16:
+            # it starts with the map only when it loops (no 32) and is not silent (no 16): sound.cpp:224-280
+            if flags & 1 and not flags & 16 and not flags & 32:
                 out.append(f'{name}: ambient_generic {ent_get(e, "message")} plays everywhere from the start: '
                            f'every section would hear it')
     return out
+
+
+def classes_in(members: list, cls: str) -> list:
+    return [name for name, ents in members if any(ent_get(e, 'classname') == cls for e in ents)]
+
+
+def first_of_class_problems(members: list) -> list:
+    return [f'{cls} is in {", ".join(having)}: the game uses the map\'s first one for all of them'
+            for cls in FIRST_OF_CLASS if len(having := classes_in(members, cls)) > 1]
+
+
+def transition_pair_problems(members: list) -> list:
+    pairs = {(ent_get(e, 'map'), ent_get(e, 'landmark')) for _, ents in members for e in ents
+             if ent_get(e, 'classname') == 'trigger_changelevel'}
+    if len(pairs) <= TRANSITION_PAIRS:
+        return []
+    return [f'{len(pairs)} (map, landmark) transition pairs: the game holds {TRANSITION_PAIRS} a map']
+
+
+def weather_notes(members: list) -> list:
+    """Rain, 3D skies and fog are each section's own in the engine (sv_cof_weather.c, sv_cof_sky.c, sv_cof_fog.c), and
+    multiplayer draws the black sky whatever skyname says (client.dll CheckSky): notes, not problems."""
+    notes = []
+    for classes, what in ((('rain_settings',), 'rain'), (('envpos_sky', 'envpos_world'), '3D sky')):
+        having = sorted({name for cls in classes for name in classes_in(members, cls)}, key=[n for n, _ in members].index)
+        if having:
+            notes.append(f'{what} in {", ".join(having)}: each section gets its own')
+    worlds = [next((dict(e) for e in ents if ent_get(e, 'classname') == 'worldspawn'), {}) for _, ents in members]
+    if len({w.get('skyname', '').lower() for w in worlds}) > 1:
+        notes.append('skyname differs (' + ', '.join(f'{name}={w.get("skyname")}' for (name, _), w in zip(members, worlds))
+                     + '): multiplayer draws the black sky')
+    fogs = [sorted(tuple(sorted((k, v) for k, v in e if k not in ('origin', 'targetname')))
+                   for e in ents if ent_get(e, 'classname') == 'env_fog') for _, ents in members]
+    if any(f != fogs[0] for f in fogs[1:]):
+        notes.append('env_fog differs between members: each section gets its own')
+    return notes
 
 
 def globalname_problems(members: list) -> list:
@@ -256,16 +305,13 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
             report.problems.append(f'{key}: {n[key]} over the limit {limit}')
 
     worlds = [dict((k, v) for k, v in x.ents[0]) for x in maps]
-    if len({w.get('skyname', '').lower() for w in worlds}) > 1:
-        report.problems.append('skyname differs: ' + ', '.join(f'{m}={w.get("skyname")}' for m, w in zip(members, worlds)))
     problems, notes = world_key_problems(members, worlds, accepted)
     report.problems += problems
     report.notes += notes
     report.problems += section_limit_problems(sections)
-    fogs =[sorted(tuple(sorted((k, v) for k, v in e if k not in ('origin', 'targetname')))
-                   for e in x.ents if ent_get(e, 'classname') == 'env_fog') for x in maps]
-    if any(f != fogs[0] for f in fogs[1:]):
-        report.problems.append('env_fog differs between members')
+    report.notes += weather_notes(named)
+    report.problems += first_of_class_problems(named)
+    report.problems += transition_pair_problems(named)
     report.problems += globalname_problems(named)
     report.problems += origin_brush_problems(named)
     report.problems += everywhere_sound_problems(named)

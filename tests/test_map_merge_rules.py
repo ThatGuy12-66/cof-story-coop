@@ -127,6 +127,39 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(len(ents), 9)
 
 
+    def test_every_key_the_game_reads_as_a_name_is_renamed(self):
+        # docs/research/2026-10-18-cof-decompilation-survey.md 5.5 (C1 section 7.4): keys outside the old list
+        m0 = [ent(classname='worldspawn'), ent(classname='info_target', targetname='spot')]
+        m1 = [ent(classname='worldspawn'), ent(classname='info_target', targetname='spot'),
+              ent(classname='func_wall', movewith='spot'),
+              ent(classname='trigger_camera', moveto='spot', message='spot', m_iszViewEntity='spot'),
+              ent(classname='trigger_changetarget', m_iszNewTarget='spot'),
+              ent(classname='cof_teleport', message='spot'), ent(classname='watcher_count', noise='spot', noise2='spot'),
+              ent(classname='cof_skipmanager', entity='spot'), ent(classname='cof_clothesmenu', cameraent='spot', simonent='spot'),
+              ent(classname='cof_changelevel', message='spot'),        # a map name, not an entity
+              ent(classname='trigger_changevalue', netname='spot'),    # netname is a name for every class
+              ent(classname='game_text', noise='spot')]                # noise is a sound here
+        s = rules.section_rules([('c_a', m0), ('c_b', m1)], [0.0, 1536.0], [1, 1], [(-1.0, 1.0), (1535.0, 1537.0)])
+        ents = bsp_parse(rules.compose_reference(ent(classname='worldspawn'), [m0, m1], s).decode('latin-1'))
+        moved = [e for e in ents[3:]]
+        self.assertEqual(moved[0], ent(classname='func_wall', movewith='spot_m1'))
+        self.assertEqual(moved[1], ent(classname='trigger_camera', moveto='spot_m1', message='spot_m1', m_iszViewEntity='spot_m1'))
+        self.assertEqual(moved[2], ent(classname='trigger_changetarget', m_iszNewTarget='spot_m1'))
+        self.assertEqual(moved[3], ent(classname='cof_teleport', message='spot_m1'))
+        self.assertEqual(moved[4], ent(classname='watcher_count', noise='spot_m1', noise2='spot_m1'))
+        self.assertEqual(moved[5], ent(classname='cof_skipmanager', entity='spot_m1'))
+        self.assertEqual(moved[6], ent(classname='cof_clothesmenu', cameraent='spot_m1', simonent='spot_m1'))
+        self.assertEqual(moved[7], ent(classname='cof_changelevel', message='spot'))
+        self.assertEqual(moved[8], ent(classname='trigger_changevalue', netname='spot_m1'))
+        self.assertEqual(moved[9], ent(classname='game_text', noise='spot'))
+
+    def test_a_reference_through_a_class_key_is_cut_too(self):
+        m0 = [ent(classname='info_target', targetname='spot')]
+        m1 = [ent(classname='cof_teleport', message='spot')]
+        s = rules.section_rules([('c_a', m0), ('c_b', m1)], [0.0, 512.0], [1, 1], [(-1.0, 1.0), (511.0, 513.0)])
+        self.assertEqual(s[1].renames, {'spot': 'spot_x1'})
+
+
 def bsp_parse(text):
     from tools.map_merge import bsp
     return bsp.parse_ents(text)

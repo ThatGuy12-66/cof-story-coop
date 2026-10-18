@@ -32,6 +32,18 @@ def wave1_group(name):
     return g, named, groups.plan_sections(named)
 
 
+class RenameKeyParityTests(unittest.TestCase):
+    def test_the_engine_renames_the_keys_the_merger_does(self):
+        import re
+        from tools.map_merge import rules
+        source = header()
+        keys = re.search(r'cof_sect_ref_keys\[\] = \{(.*?)\};', source, re.S).group(1)
+        self.assertEqual(tuple(re.findall(r'"([^"]+)"', keys)), rules.REF_KEYS)
+        pairs = re.search(r'cof_sect_class_keys\[\]\[2\] =\s*\{(.*?)\n\};', source, re.S).group(1)
+        found = re.findall(r'\{ "([^"]+)", "([^"]+)" \}', pairs)
+        self.assertEqual(sorted(found), sorted((c, k) for c, ks in rules.CLASS_REF_KEYS.items() for k in ks))
+
+
 class SectionsFileTests(unittest.TestCase):
     def test_parse_and_lookups_match_the_python_side(self):
         g, named, sections = wave1_group('cm_apartment3')
