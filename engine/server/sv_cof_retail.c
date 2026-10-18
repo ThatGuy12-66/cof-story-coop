@@ -683,6 +683,32 @@ qboolean SV_CoF_RetailRevive( sv_client_t *reviver, sv_client_t *body )
 	return SV_CoF_RetailReviving( reviver );
 }
 
+// A syringe heal holds healer and partner at fuser3 25, the view locked, until its BladeRetract 1.5 s later
+// (CSyringe::SecondaryAttack 1007B110); a healer killed in between left the partner held for good, and Spawn
+// keeps fuser3. Held longer than this: let go, as BladeRetract does.
+#define COF_RETAIL_SYRINGE_HOLD 25.0f
+#define COF_RETAIL_SYRINGE_MAX 3.0
+static double cof_retail_syringe_since[MAX_CLIENTS];
+
+static void CoF_RetailSyringeRepair( int i, sv_client_t *cl )
+{
+	static const byte unlock[3] = { 0, 0, 0 }; // ViewLock( byte 0, coord 0 )
+	if( i >= MAX_CLIENTS ) return;
+	if( cl->edict->v.fuser3 != COF_RETAIL_SYRINGE_HOLD || cof_retail_syringe_since[i] > sv.time )
+		cof_retail_syringe_since[i] = 0.0;
+	if( cl->edict->v.fuser3 != COF_RETAIL_SYRINGE_HOLD ) return;
+	if( !cof_retail_syringe_since[i] )
+	{
+		cof_retail_syringe_since[i] = sv.time;
+		return;
+	}
+	if( sv.time - cof_retail_syringe_since[i] <= COF_RETAIL_SYRINGE_MAX ) return;
+	cl->edict->v.fuser3 = 0.0f;
+	SV_CoF_SendUserMessage( cl->edict, "ViewLock", unlock, sizeof( unlock ), true );
+	cof_retail_syringe_since[i] = 0.0;
+	Con_Printf( "cofstory phase=syringe-unstuck userid=%d\n", cl->userid );
+}
+
 void SV_CoF_RetailCprRepair( void )
 {
 	int i;
@@ -691,6 +717,7 @@ void SV_CoF_RetailCprRepair( void )
 		sv_client_t *cl = &svs.clients[i];
 		byte *body = CoF_RetailStoryPlayer( cl ), *reviver;
 		edict_t *by;
+		if( body && CoF_RetailAlive( cl->edict )) CoF_RetailSyringeRepair( i, cl );
 		if( body && CoF_RetailAlive( cl->edict ))
 		{
 			// A CPR the game cancelled because its body came alive (a respawn)
