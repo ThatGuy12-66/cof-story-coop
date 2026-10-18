@@ -406,8 +406,19 @@ static void CoF_MomentCalls( void )
 	}
 }
 
-// Ladders being climbed: a manager whose owner is a frozen, god-moded client
-// (the climb sets both, its end clears both), and the use brushes that start it.
+// Mid-climb: the ladder froze the player and handed them its camera model (P+0x5AC); its end clears both
+// (LadderThink). The climb's FL_GODMODE is no sign: the game's PostThink clears it on every usercmd.
+static qboolean CoF_MomentClimbing( edict_t *player )
+{
+	byte *pv;
+	uint32_t model;
+	if( !SV_IsValidEdict( player ) || !( player->v.flags & FL_FROZEN ) || !( pv = SV_CoF_StoryEntityPrivate( player, COF_PL_SIZE )))
+		return false;
+	memcpy( &model, pv + COF_PL_CAMERA_MODEL, sizeof( model ));
+	return model != 0;
+}
+
+// Ladders being climbed: a manager whose owner is mid-climb, and the use brushes that start it.
 static void CoF_MomentLadders( void )
 {
 	int i, j;
@@ -418,7 +429,7 @@ static void CoF_MomentLadders( void )
 		sv_client_t *climber;
 		const char *name;
 		if( !CoF_MomentClass( manager, "cof_ladder_manager" ) || !( climber = CoF_MomentClient( manager->v.owner ))) continue;
-		if(( climber->edict->v.flags & ( FL_FROZEN | FL_GODMODE )) != ( FL_FROZEN | FL_GODMODE )) continue;
+		if( !CoF_MomentClimbing( climber->edict )) continue;
 		name = SV_GetString( manager->v.targetname );
 		if( !name[0] ) continue;
 		for( j = svs.maxclients + 1; j < svgame.numEntities && cof_moment_ladder_count < COF_MOMENT_LADDERS; j++ )
@@ -511,7 +522,7 @@ void SV_CoF_MomentsDrop( sv_client_t *cl )
 			// Mid-climb, the leaver's camera model would stay pointed to by their
 			// player data, and any player model makes later spawns wait in black
 			// (MP PlayerSpawn 100C948D walks every slot, a left one too).
-			if(( cl->edict->v.flags & ( FL_FROZEN | FL_GODMODE )) == ( FL_FROZEN | FL_GODMODE ))
+			if( CoF_MomentClimbing( cl->edict ))
 				CoF_MomentDropModel( cl->edict );
 			Con_Printf( "cofstory phase=ladder-released userid=%d\n", cl->userid );
 		}

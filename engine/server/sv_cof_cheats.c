@@ -14,9 +14,9 @@ GNU General Public License for more details.
 
 Cry of Fear 1.6 removed its developer cheats in its own engine (hw.dll), which
 Xash replaces, and it resets or ignores the stock engine ones in its game DLL:
-CBasePlayer::PostThink puts MOVETYPE_NOCLIP back to MOVETYPE_WALK every frame,
-thirteen places clear FL_NOTARGET, CBasePlayer::TakeDamage never looks at
-FL_GODMODE and there is no "give". What the game DLL still has are dead
+CBasePlayer::PostThink puts MOVETYPE_NOCLIP back to MOVETYPE_WALK and clears
+FL_GODMODE every frame (CBaseMonster::TakeDamage honours the flag, it just never
+lasts), thirteen places clear FL_NOTARGET and there is no "give". What the game DLL still has are dead
 developer switches and plain data in the player object that a runtime write
 turns on. See cof-fix/docs/cof-cheats.md for every command, the offsets and
 where they come from.
