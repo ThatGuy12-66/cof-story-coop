@@ -2303,9 +2303,12 @@ void GAME_EXPORT SV_StartSound( edict_t *ent, int chan, const char *sample, floa
 	qboolean	filter = false;
 	int	msg_dest;
 	vec3_t	origin;
+	char	cofvoice[MAX_QPATH];
 
 	if( !SV_IsValidEdict( ent ))
 		return;
+
+	sample = SV_CoF_VoiceSample( ent, sample, flags, cofvoice, sizeof( cofvoice )); // Cry of Fear: Simon's voice
 
 	VectorAverage( ent->v.mins, ent->v.maxs, origin );
 	VectorAdd( origin, ent->v.origin, origin );
@@ -5049,11 +5052,19 @@ static cvar_t* GAME_EXPORT SV_CvarGetPointer( const char *szVarName )
 	return result;
 }
 
+// Cry of Fear: Simon's voice is precached with the police officer's (sv_cof_voice.c)
+static int GAME_EXPORT pfnPrecacheSound( const char *name )
+{
+	int index = SV_SoundIndex( name );
+	SV_CoF_VoicePrecache( name );
+	return index;
+}
+
 // engine callbacks
 static enginefuncs_t gEngfuncs =
 {
 	pfnPrecacheModel,
-	SV_SoundIndex,
+	pfnPrecacheSound,
 	SV_SetModel,
 	pfnModelIndex,
 	pfnModelFrames,

@@ -305,6 +305,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_BonusInit();
 	SV_CoF_LightInit();
 	SV_CoF_GatesInit();
+	SV_CoF_VoiceInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )

@@ -30,6 +30,10 @@ qboolean SV_CoF_CoopFlashlightAllowed( void );
 qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
 // Small, verified changes to the retail hl.dll (sv_cof_gates.c), and whether players hurt each other.
 void SV_CoF_GatesInit( void );
+// Simon's voice (sv_cof_voice.c): the sample to send instead of a player's police sample (buf, or sample itself).
+void SV_CoF_VoiceInit( void );
+const char *SV_CoF_VoiceSample( edict_t *ent, const char *sample, int flags, char *buf, size_t size );
+void SV_CoF_VoicePrecache( const char *name );
 void SV_CoF_GatesFrame( void );
 void SV_CoF_GatesClose( void );
 qboolean SV_CoF_FriendlyFire( void );
