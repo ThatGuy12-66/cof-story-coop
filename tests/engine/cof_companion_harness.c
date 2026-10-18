@@ -70,7 +70,8 @@ static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
 static struct { int numEntities; struct { qboolean (*pfnClientConnect)( edict_t *, const char *, const char *, char * ); void (*pfnClientPutInServer)( edict_t * ); void (*pfnUse)( edict_t *, edict_t * ); } dllFuncs; } svgame;
 static edict_t entities[16];
 static sv_client_t clients[MAX_CLIENTS];
-static const char *strings[] = { "", "player", "monster_slower", "monster_friend", "monster_engaged", "trigger_once", "trigger_hurt", "killthemall", "func_door", "func_door_rotating", "*5" };
+static const char *strings[] = { "", "player", "monster_slower", "monster_friend", "monster_engaged", "trigger_once", "trigger_hurt", "killthemall", "func_door", "func_door_rotating", "*5",
+	"monster_taller" };
 static char log_text[32768];
 static size_t log_length;
 static int gate, connect_ok = 1, put_in, hud_marked, placed, ready, equips, runs, next_userid = 200, wall, inits;
@@ -198,6 +199,11 @@ static string_t SV_MakeString( const char *s ) { return 1; }
 static void SV_CoF_PartyPlayerReady( sv_client_t *cl, qboolean fresh ) { ready++; }
 /* The engine marks the new player object's HUD set up, after the game put it in (no "has joined" line). */
 static qboolean SV_CoF_RetailHudInitialized( edict_t *e ) { assert( in_game[e - entities] ); hud_marked++; return true; }
+/* players hurt each other (cof_coop_friendly_fire): off by default, so a bullet through a partner hurts nobody */
+static int friendly_fire;
+static qboolean SV_CoF_FriendlyFire( void ) { return friendly_fire; }
+static edict_t *monster_enemy[24];
+static edict_t *SV_CoF_RetailMonsterEnemy( edict_t *m ) { return monster_enemy[m - entities]; }
 static int place_ok = 1, place_rank, place_anywhere, place_had_near, in_door;
 static vec3_t place_near;
 static qboolean SV_CoF_PartyPlaceUnseen( sv_client_t *mover, edict_t *leader, const float *exit_at, int rank, qboolean anywhere )
@@ -796,8 +802,8 @@ int main( void )
 	assert( SV_CoF_CompanionClientCommand( &clients[0] ) && !strcmp( told[0], "Your companions wait here." ));
 	assert( SV_CoF_CompanionClientCommand( &clients[0] ) && !strcmp( told[0], "Your companions follow you." )); argv0 = "";
 
-	/* Line of fire: a bot holds fire while another player (another bot here) stands in it. */
-	setup(); svs.maxclients = 3; cvars[0].value = 2; settle(); frame( 1.0 );
+	/* Line of fire: with friendly fire on, a bot holds fire while another player (another bot here) stands in it. */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; friendly_fire = 1; settle(); frame( 1.0 );
 	arms_weapon = COF_ARMS_GUN; arms_has_gun = 1; arms_clip = 10; arms_reserve = 10;
 	entities[1].v.origin[1] = 300; /* the host aside */
 	entities[2].v.origin[0] = -100; entities[3].v.origin[0] = 100; monster( 6, 2, 300 );
@@ -811,6 +817,27 @@ int main( void )
 		}
 		assert( !first && second > 0 );
 	}
+	/* ...with it off (the default) the bullet passes the partner and hurts nobody: both fire */
+	setup(); svs.maxclients = 3; cvars[0].value = 2; friendly_fire = 0; settle(); frame( 1.0 );
+	arms_weapon = COF_ARMS_GUN; arms_has_gun = 1; arms_clip = 10; arms_reserve = 10;
+	entities[1].v.origin[1] = 300;
+	entities[2].v.origin[0] = -100; entities[3].v.origin[0] = 100; monster( 6, 2, 300 );
+	{
+		int first = 0, second = 0;
+		for( i = 0; i < 40; i++ )
+		{
+			entities[2].v.origin[0] = -100; entities[2].v.origin[1] = 0; entities[3].v.origin[0] = 100; entities[3].v.origin[1] = 0;
+			frame( 0.05 );
+			first += ( ran[1].buttons & COF_IN_ATTACK ) != 0; second += ( ran[2].buttons & COF_IN_ATTACK ) != 0;
+		}
+		assert( first > 0 && second > 0 );
+	}
+	/* A taller after someone close by (its stamp kills anyone in CPR): no CPR under it; gone after nobody, CPR */
+	setup(); cvars[0].value = 1; settle(); memset( monster_enemy, 0, sizeof( monster_enemy ));
+	entities[2].v.origin[0] = 40; entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+	monster( 6, 11, 120 ); monster_enemy[6] = &entities[2];
+	frame( 0.05 ); frame( 0.05 ); assert( revives == 0 );
+	monster_enemy[6] = NULL; frame( 0.05 ); assert( revives == 1 );
 
 	/* Two people and two bots: each bot looks after one of them (the far one is followed by
 	 * the second bot), and a downed person gets CPR from the nearest bot. */

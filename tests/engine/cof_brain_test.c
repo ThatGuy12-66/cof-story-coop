@@ -239,7 +239,10 @@ int main( void )
 	in.ready = 1;
 	/* not aimed yet, or the leader in the line of fire: no shot */
 	think( 1.0 ); set3( in.view, 0, 90, 0 ); think( 0.01 ); assert( !( out.buttons & COF_IN_ATTACK ));
+	/* the leader in the line: no shot while players hurt each other (friendly fire on)... */
 	set3( in.view, 0, 0, 0 ); in.line_clear = 0; think( 1.0 ); assert( !( out.buttons & COF_IN_ATTACK ));
+	/* ...but a bullet passes through players (FireBulletsPlayer) and, with friendly fire off, hurts none: it fires */
+	in.pass_through = 1; think( 1.0 ); assert( out.buttons & COF_IN_ATTACK ); in.pass_through = 0;
 	/* empty: one press of reload; during the reload nothing */
 	in.line_clear = 1; in.clip = 0; think( 1.0 ); assert( out.buttons == COF_IN_RELOAD );
 	think( 0.05 ); assert( !( out.buttons & COF_IN_RELOAD ));
@@ -256,6 +259,33 @@ int main( void )
 	threat( 40, 20 ); think( 1.0 ); assert( out.buttons & COF_IN_ATTACK );
 	think( 0.05 ); assert( out.buttons & COF_IN_ATTACK );
 	assert( !( out.buttons & COF_IN_ATTACK2 )); /* the second button would change the switchblade's stance */
+	/* a swing stops on the first body it meets: none with the leader in the way */
+	in.line_clear = 0; think( 0.05 ); assert( !( out.buttons & COF_IN_ATTACK )); in.line_clear = 1;
+
+	/* The chainsaw boss kills whoever its swing meets (and then leaves the fight for good): never in its reach. */
+	scene( 50, 0 ); threat( 200, 180 ); in.threat_keep = 150.0f;
+	think( 0.1 ); assert( out.mode == COF_BRAIN_FIGHT && out.forward == 0 && !( out.buttons & COF_IN_ATTACK )); /* knife only: no closing in */
+	threat( 100, 80 ); in.threat_keep = 150.0f; think( 0.1 ); assert( out.forward < 0 && !( out.buttons & COF_IN_ATTACK )); /* back away */
+	in.has_gun = 1; in.weapon = COF_WEAPON_GUN; in.clip = 5; in.reserve = 5; in.sights = 1;
+	threat( 130, 120 ); in.threat_keep = 150.0f; think( 1.0 );
+	assert( out.forward < 0 && ( out.buttons & COF_IN_ATTACK )); /* shoot it (it cowers) from out of reach */
+
+	/* A taller stamps anyone lying, ducking or busy near it: no CPR, no syringe while one is close. */
+	scene( 40, 0 ); in.leader_alive = 0; in.leader_down = 1; in.stamp = 1;
+	think( 0.1 ); assert( out.action != COF_BRAIN_ACT_REVIVE && out.mode != COF_BRAIN_REVIVE );
+	in.stamp = 0; think( 0.1 ); assert( out.action == COF_BRAIN_ACT_REVIVE );
+	in.cpr = 1; think( 0.1 ); assert( out.buttons & COF_IN_USE );
+	in.stamp = 1; think( 0.1 ); assert( !( out.buttons & COF_IN_USE )); /* let go: the CPR ends */
+	scene( 50, 0 ); in.health = 20; in.has_heal = 1; in.stamp = 1;
+	think( 0.1 ); assert( out.mode != COF_BRAIN_HEAL && out.action != COF_BRAIN_ACT_EQUIP_HEAL );
+	scene( 30, 0 ); in.leader_health = 30; in.has_heal = 1; in.stamp = 1;
+	think( 0.1 ); assert( out.mode != COF_BRAIN_MEDIC && out.action != COF_BRAIN_ACT_EQUIP_HEAL );
+
+	/* The game halves forwardmove whenever sidemove is set too (PM_CheckParamters): the usercmd doubles it first. */
+	assert( CoF_BrainUsercmdForward( 100.0f, 50.0f ) == 200.0f );
+	assert( CoF_BrainUsercmdForward( 100.0f, 0.0f ) == 100.0f );
+	assert( CoF_BrainUsercmdForward( 0.0f, 50.0f ) == 0.0f );
+	assert( CoF_BrainUsercmdForward( -80.0f, -10.0f ) == -160.0f );
 
 	/* Hurt, no threat, a syringe: take it in hand, one press once ready, stand still while it
 	 * goes in, then not again for a while. */
