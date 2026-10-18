@@ -97,6 +97,15 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   on that tree (`full-suite.log`, `build.log`, `package.log` beside it). The builder refuses an untracked file, so the
   other session's `docs/research/2026-10-17-uni-coop-notes.md` was hidden by a line in `.git/info/exclude` for the
   build only (removed after; the file itself untouched). Not installed in the smoke copy; not sent to anyone.
+- No-launch release checks on that zip (the user: "do all the offline stuff", 16:41-16:48): extracted zip = exe,
+  readme, `source-and-licences` only; exe `--self-test` 0; Windows Defender (`MpCmdRun -ScanType 3`) no threats in
+  the exe or the zip. Fresh `--install` from `smoke-source` → `evidence/decomp-fixes-20261018/fresh/` (195 s); the
+  previous package (`overnight-20261017`) installed → `update/`, marker saves and a config edit added, then the new
+  exe's `--update` (115 s): markers unchanged. Both copies (scratchpad `verify_copies.py`): `validate_runtime`, record
+  test1/1, payload binaries, retail hl/client.dll untouched, `max_edicts 4096`, story cfg, 24+4 models, 8 art files,
+  16/16 merged groups with identical hashes, no stray files. No shortcuts or copy pointer written. Finding:
+  `VERSION`/`BUILD` are still test1/1, so the app's GUI opens an existing Test 1 copy (the smoke copy) without
+  offering the update, and the host/guest check cannot tell this build from older Test 1 builds; bump before sending.
 - Cvars (all default on; 0 = the game's own behaviour): `cof_donator`, `cof_costumes`, `cof_coop_nightvision`,
   `cof_sp_carry` (11 hl.dll gates), `cof_simon_voice`, `cof_coop_weather` (a gate plus a per-player mirror),
   `cof_coop_player_state` (muffle, cutscene flag, spread statics, `gDualWeapon`, `room_type`), `cof_coop_heldlights`,
