@@ -1660,6 +1660,13 @@ static edict_t *cof_command_sender;
 static edict_t *cof_first_preference;
 // The player whose movement command (+use, touches, think) is running.
 static edict_t *cof_usercmd_sender;
+// The player who is first while one entity's think runs (sv_cof_rescue.c: an opened padlock's solver).
+static edict_t *cof_think_first;
+
+void SV_CoF_ThinkFirst( edict_t *player )
+{
+	cof_think_first = player;
+}
 
 void SV_CoF_CommandSender( edict_t *sender )
 {
@@ -1681,7 +1688,7 @@ static qboolean CoF_SenderFind( const char *pszField, const char *pszValue, int 
 {
 	byte present[MAX_CLIENTS + 1];
 	int i, sender;
-	edict_t *first = cof_command_sender ? cof_command_sender : cof_first_preference ? cof_first_preference : cof_usercmd_sender;
+	edict_t *first = cof_command_sender ? cof_command_sender : cof_think_first ? cof_think_first : cof_first_preference ? cof_first_preference : cof_usercmd_sender;
 
 	if( !first || *e > svs.maxclients || svs.maxclients > MAX_CLIENTS ||
 		Q_strcmp( pszField, "classname" ) || Q_strcmp( pszValue, "player" ) || !SV_CoF_StoryCoopEnabled() )

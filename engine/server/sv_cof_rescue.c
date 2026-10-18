@@ -5,7 +5,11 @@
  *   (third_person_interaction: victim EHANDLE +0x36C, the boss +0x374; HandleAnimEvent 10027B60) and the boss removes
  *   itself without dying, so its TriggerTarget (multikilled1: the wall and the teleport on) never fires. In single
  *   player the hit is game over; in co-op the survivors were left with no boss and no way on. Once the victim has
- *   died, while anyone lives, the animation goes and the map's own boss is spawned again where it stood. */
+ *   died, while anyone lives, the animation goes and the map's own boss is spawned again where it stood.
+ * - The c_start padlock (item_padlock): the dial turn that opens it runs in the solver's command, but the release 2 s
+ *   later (Finished 100B60B0, a think) frees "the first player": the host, while a guest who solved it stayed frozen,
+ *   black and in the padlock camera. Whoever's padlockrotate (their P+0x2350 EHANDLE m_pPadlock) last turned an open
+ *   padlock is the first player while its think runs. */
 #include "common.h"
 #include "server.h"
 #include "sv_cof_cheats.h"
@@ -15,8 +19,11 @@
 #define COF_TPI_SIZE 0x37C
 #define COF_TPI_VICTIM 0x36C // EHANDLE m_pPlayer
 #define COF_TPI_MONSTER 0x374 // EHANDLE m_pMonster
+#define COF_PL_SIZE 0x281C
+#define COF_PL_PADLOCK 0x2350 // EHANDLE m_pPadlock: the padlock this player is turning
 #define COF_RESCUE_BOSSES 4
 #define COF_RESCUE_KILLS 4
+#define COF_RESCUE_PADLOCKS 4
 #define COF_RESCUE_AFTER_DEATH 1.0 // seconds after the victim died
 #define COF_RESCUE_AT_MOST 15.0 // seconds after the grab, whatever the animation did
 
@@ -30,6 +37,8 @@ typedef struct
 static struct { int index, serial; vec3_t angles; char targetname[64]; } cof_rescue_bosses[COF_RESCUE_BOSSES];
 static int cof_rescue_boss_count;
 static struct { int index, serial; double seen, victim_dead; vec3_t angles; char targetname[64]; qboolean active, told; } cof_rescue_kills[COF_RESCUE_KILLS];
+// The last player to turn each padlock's dials.
+static struct { int index, serial, userid; } cof_rescue_padlocks[COF_RESCUE_PADLOCKS];
 static int cof_rescue_generation = -1;
 
 void SV_CoF_RescueReset( void )
@@ -38,6 +47,7 @@ void SV_CoF_RescueReset( void )
 	cof_rescue_boss_count = 0;
 	memset( cof_rescue_bosses, 0, sizeof( cof_rescue_bosses ));
 	memset( cof_rescue_kills, 0, sizeof( cof_rescue_kills ));
+	memset( cof_rescue_padlocks, 0, sizeof( cof_rescue_padlocks ));
 }
 
 static qboolean CoF_RescueClass( const edict_t *ent, const char *classname )
@@ -59,13 +69,61 @@ static qboolean CoF_RescueAnyoneAlive( void )
 	return false;
 }
 
-static cof_rescue_handle_t CoF_RescueHandle( edict_t *ent, int offset )
+static cof_rescue_handle_t CoF_RescueHandleIn( edict_t *ent, size_t size, int offset )
 {
 	cof_rescue_handle_t h = { NULL, 0 };
-	byte *pv = SV_CoF_StoryEntityPrivate( ent, COF_TPI_SIZE );
+	byte *pv = SV_CoF_StoryEntityPrivate( ent, size );
 	if( pv ) memcpy( &h, pv + offset, sizeof( h ));
 	if( h.edict && ( h.edict < svgame.edicts || h.edict >= svgame.edicts + svgame.numEntities )) h.edict = NULL;
 	return h;
+}
+
+static cof_rescue_handle_t CoF_RescueHandle( edict_t *ent, int offset )
+{
+	return CoF_RescueHandleIn( ent, COF_TPI_SIZE, offset );
+}
+
+static sv_client_t *CoF_RescueClientByUserid( int userid )
+{
+	int i;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+		if( svs.clients[i].state == cs_spawned && svs.clients[i].userid == userid && SV_IsValidEdict( svs.clients[i].edict ))
+			return &svs.clients[i];
+	return NULL;
+}
+
+// Observed before the game runs a client's command; never consumes it.
+qboolean SV_CoF_RescueClientCommand( sv_client_t *cl )
+{
+	cof_rescue_handle_t lock;
+	int i, slot = -1;
+	if( !SV_CoF_StoryCoopEnabled() || !cl || Q_strcmp( Cmd_Argv( 0 ), "padlockrotate" ) || !SV_IsValidEdict( cl->edict )) return false;
+	lock = CoF_RescueHandleIn( cl->edict, COF_PL_SIZE, COF_PL_PADLOCK );
+	if( !lock.edict || !CoF_RescueClass( lock.edict, "item_padlock" ) || lock.edict->serialnumber != lock.serial ) return false;
+	for( i = 0; i < COF_RESCUE_PADLOCKS; i++ )
+	{
+		if( cof_rescue_padlocks[i].index == NUM_FOR_EDICT( lock.edict ) && cof_rescue_padlocks[i].serial == lock.serial ) { slot = i; break; }
+		if( slot < 0 && !cof_rescue_padlocks[i].index ) slot = i;
+	}
+	if( slot < 0 ) slot = 0;
+	cof_rescue_padlocks[slot].index = NUM_FOR_EDICT( lock.edict );
+	cof_rescue_padlocks[slot].serial = lock.serial;
+	cof_rescue_padlocks[slot].userid = cl->userid;
+	return false;
+}
+
+edict_t *SV_CoF_RescueThinkFirst( edict_t *thinker )
+{
+	int i;
+	sv_client_t *solver;
+	if( !thinker || !SV_CoF_StoryCoopEnabled() || !CoF_RescueClass( thinker, "item_padlock" ) || thinker->v.body != 1 ) return NULL;
+	for( i = 0; i < COF_RESCUE_PADLOCKS; i++ )
+	{
+		if( cof_rescue_padlocks[i].index != NUM_FOR_EDICT( thinker ) || cof_rescue_padlocks[i].serial != thinker->serialnumber ) continue;
+		solver = CoF_RescueClientByUserid( cof_rescue_padlocks[i].userid );
+		return solver ? solver->edict : NULL;
+	}
+	return NULL;
 }
 
 // A new kill animation whose boss was a chainsaw boss alive last frame.

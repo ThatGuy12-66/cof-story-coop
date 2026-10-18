@@ -31,6 +31,7 @@ GNU General Public License for more details.
 #include "sv_cof_retail.h"
 #include "sv_cof_scene.h"
 #include "sv_cof_inventory12.h"
+#include "sv_cof_rescue.h"
 
 // challenges are valid for two consecutive windows of this size (max lifetime ~10s).
 #define CHALLENGE_WINDOW_SECONDS 5
@@ -3183,6 +3184,9 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	// Cry of Fear story co-op: no kick votes, no guest changing the host's server-wide settings
 	if( SV_CoF_GuardClientCommand( cl ))
 		return;
+
+	// Cry of Fear story co-op: seen, never taken (who turned a padlock's dials)
+	SV_CoF_RescueClientCommand( cl );
 
 	for( i = 0; i < ARRAYSIZE( ucmds ); i++ )
 	{
