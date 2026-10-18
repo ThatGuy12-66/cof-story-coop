@@ -43,7 +43,7 @@ static edict_t entities[ENTITIES];
 static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[ENTITIES][0x2900];
 static const char *strings[] = { "", "player", "monster_bosschainsaw", "theboss", "third_person_interaction", "monster_slower",
-	"item_padlock", "wheelchair" };
+	"item_padlock", "wheelchair", "monster_crazybitch" };
 static int kills[ENTITIES], controls_given[ENTITIES], messages_to[ENTITIES];
 static char message_name[32];
 static byte message[16];
@@ -63,6 +63,9 @@ static qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg 
 	return true;
 }
 static void SV_CoF_SetPhysicsKey( edict_t *e, const char *key, const char *value ) { strcpy( physics_key, key ); strcpy( physics_value, value ); }
+static edict_t *think_first, *think_slot_one;
+static void SV_CoF_ThinkFirst( edict_t *e ) { think_first = e; }
+static void SV_CoF_ThinkSlotOne( edict_t *e ) { think_slot_one = e; }
 static char log_text[8192];
 static size_t log_length;
 static int gate, spawned;
@@ -234,6 +237,22 @@ int main( void )
 		setup(); spawn( 8, 7, 0 ); memcpy( private_data[8] + 0x384, &rider, 4 ); frame( 0.1 ); assert( !kills[1] && !kills[2] );
 		setup(); spawn( 8, 7, 0 ); private_data[8][0x368] = 1; frame( 0.1 ); assert( !kills[1] && !kills[2] );
 	}
+
+	/* The crazybitch picks her moment from her enemy (m_hEnemy +0x184) but makes INDEXENT( 1 ), the host, turn his gun
+	 * on himself, wherever he is (MonsterThink 10055860): while she thinks, edict 1 is her enemy. */
+	setup(); spawn( 9, 8, 0 );
+	set_handle( 9, 0x184, &entities[2], 1 );
+	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == &entities[2] );  /* the guest she fights */
+	set_handle( 9, 0x184, &entities[1], 1 );
+	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );          /* the host: as retail */
+	set_handle( 9, 0x184, &entities[2], 1 ); entities[2].v.health = 0; entities[2].v.deadflag = DEAD_DEAD;
+	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );          /* a dead enemy: as retail */
+	entities[2].v.health = 100; entities[2].v.deadflag = DEAD_NO; set_handle( 9, 0x184, &entities[2], 7 );
+	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );          /* a stale handle */
+	spawn( 11, 5, 0 ); set_handle( 11, 0x184, &entities[2], 1 );
+	assert( SV_CoF_RescueThinkSlotOne( &entities[11] ) == NULL );         /* other monsters: as retail */
+	set_handle( 9, 0x184, &entities[2], 1 ); gate = 0;
+	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );          /* not story co-op */
 
 	printf( "rescue scenarios passed\n" );
 	return 0;

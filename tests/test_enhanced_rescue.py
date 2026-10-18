@@ -19,13 +19,18 @@ class RescueWiringTests(unittest.TestCase):
         assert_has(self, 'SV_CoF_RescueFrame();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame('))
         assert_has(self, 'SV_CoF_RescueReset();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryShutdown('))
 
-    def test_a_think_can_have_its_own_first_player(self):
+    def test_a_think_can_have_its_own_first_player_and_edict_one(self):
         game = body_of(SERVER / 'sv_game.c', 'static qboolean CoF_SenderFind(')
         assert_has(self, 'cof_command_sender ? cof_command_sender : cof_think_first ? cof_think_first : cof_first_preference', game)
+        for wrapper in ('static edict_t *pfnPEntityOfEntIndexBroken(', 'static edict_t *GAME_EXPORT pfnPEntityOfEntIndexAllEntities('):
+            assert_has(self, 'if( iEntIndex == 1 && cof_think_slot_one ) return cof_think_slot_one;', body_of(SERVER / 'sv_game.c', wrapper))
         physics = (SERVER / 'sv_phys.c').read_text(encoding='latin-1')
         self.assertEqual(physics.count('svgame.dllFuncs.pfnThink( ent );'), 2)
-        self.assertEqual(physics.count('SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( ent ));'), 2)
-        self.assertEqual(physics.count('SV_CoF_ThinkFirst( NULL );'), 2)
+        self.assertEqual(physics.count('SV_CoF_RescueThinkBegin( ent );\n'), 2)
+        self.assertEqual(physics.count('SV_CoF_RescueThinkEnd();'), 2)
+        begin = body_of(SERVER / 'sv_cof_rescue.c', 'void SV_CoF_RescueThinkBegin( edict_t *thinker )')
+        assert_has(self, 'SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( thinker ));', begin)
+        assert_has(self, 'SV_CoF_ThinkSlotOne( SV_CoF_RescueThinkSlotOne( thinker ));', begin)
 
     def test_padlock_turns_are_seen_before_the_game(self):
         body = body_of(SERVER / 'sv_client.c', 'static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )\n{')
