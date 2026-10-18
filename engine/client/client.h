@@ -1380,6 +1380,10 @@ void CL_CoF_Inventory12Load( void *module ); // cof_inventory12.c
 void CL_CoF_Inventory12Unload( void );
 void CL_CoF_RendererLimitsLoad( void *module ); // cof_renderer_limits.c
 void CL_CoF_RendererLimitsUnload( void );
+void CL_CoF_CoopHudInit( void ); // cof_coop_hud.c
+void CL_CoF_CoopHudLoad( void *module );
+void CL_CoF_CoopHudUnload( void );
+void CL_CoF_CoopHudFrame( void );
 void CL_CoF_Inventory12ClearState( void );
 qboolean CL_CoF_Inventory12Message( const char *name, int size, const byte *buf );
 qboolean CL_CoF_EnterKeyEvent( int key, int down );

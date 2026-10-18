@@ -3041,6 +3041,8 @@ static void CL_UpdateClientData( void )
 	// engine's hold emulation on top of it
 	CL_CoF_ADSSync();
 	CL_CoF_ADSHoldFrame();
+	// client.dll's co-op HUD on the story maps, in a multiplayer game (engine\client\cof_coop_hud.c)
+	CL_CoF_CoopHudFrame();
 
 	if( cls.state != ca_active )
 		return;
@@ -6221,6 +6223,7 @@ static void CL_InitLocal( void )
 	{ void V_CoF_RegisterFovCvars( void ); V_CoF_RegisterFovCvars(); } // cof_fov, cof_fov_zoom_knee; both live in engine\client\cl_view.c
 	{ void CL_CoF_QuickSaveInit( void ); CL_CoF_QuickSaveInit(); } // cof_quick_saves, cof_quicksave, cof_quickload; engine\client\cof_quicksave.c
 	{ void CL_CoF_Inventory12Init( void ); CL_CoF_Inventory12Init(); } // _cofinv, cof_inv_slots; engine\client\cof_inventory12.c
+	CL_CoF_CoopHudInit(); // cof_coop_hud; engine\client\cof_coop_hud.c
 
 	// server commands
 	Cmd_AddCommand ("noclip", NULL, "enable or disable no clipping mode" );

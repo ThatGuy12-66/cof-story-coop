@@ -4573,6 +4573,7 @@ void CL_UnloadProgs( void )
 
 	CL_CoF_Inventory12Unload();
 	CL_CoF_RendererLimitsUnload();
+	CL_CoF_CoopHudUnload();
 	COM_FreeLibrary( clgame.hInstance );
 	Mem_FreePool( &cls.mempool );
 	Mem_FreePool( &clgame.mempool );
@@ -4737,6 +4738,8 @@ qboolean CL_LoadProgs( const char *name )
 	// the Paranoia renderer's 64 lightmap pages and brush-entity bounds raised
 	// (engine/client/cof_renderer_limits.c)
 	CL_CoF_RendererLimitsLoad( clgame.hInstance );
+	// chat and the co-op HUD on the story maps (engine/client/cof_coop_hud.c)
+	CL_CoF_CoopHudLoad( clgame.hInstance );
 
 	// delayed vgui initialization for internal support
 	if( try_internal_vgui_support && VGui_LoadProgs( clgame.hInstance ))
