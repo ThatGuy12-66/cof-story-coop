@@ -18,5 +18,13 @@ int main( void )
 	ok = CoF_GateSet( image, g, 0, write_bytes ); printf( "off: %d bytes %02x %02x writes %d\n", ok, p[0], p[1], writes );
 	p[0] = 0x12; p[1] = 0x34; /* not the DLL this gate was made for */
 	ok = CoF_GateSet( image, g, 1, write_bytes ); printf( "foreign: %d bytes %02x %02x writes %d\n", ok, p[0], p[1], writes );
+	for( ok = 0; ok < COF_GATES; ok++ ) /* the whole table, for the check against the retail DLL */
+	{
+		int i;
+		printf( "gate %s %X", cof_gates[ok].name, cof_gates[ok].rva );
+		printf( " " ); for( i = 0; i < cof_gates[ok].size; i++ ) printf( "%02x", cof_gates[ok].original[i] );
+		printf( " " ); for( i = 0; i < cof_gates[ok].size; i++ ) printf( "%02x", cof_gates[ok].changed[i] );
+		printf( "\n" );
+	}
 	return 0;
 }

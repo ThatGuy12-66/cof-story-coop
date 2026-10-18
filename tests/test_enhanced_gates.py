@@ -1,10 +1,35 @@
 """Small, verified changes to the retail hl.dll in story co-op, each switched by a cvar (engine/server/sv_cof_gates.h,
 docs/research/2026-10-18-cof-decompilation-survey.md): the bytes are written only over exactly the retail ones or our
 own, and put back when story co-op ends."""
+import hashlib
 import unittest
 
 from tests.native import ENGINE_SERVER as SERVER, assert_has, run_native, strip_includes
+from tests.test_coop_engine import HL_DLL, HL_SHA, file_bytes
 from tests.test_enhanced_sections import body_of, program_output
+
+# The single-player carry limits (cof_sp_carry): CBasePlayerItem::iMaxAmmo1 (101202F0) and each ammo box's AddAmmo
+# (vtable +0x11C) take their multiplayer branch after g_pGameRules->IsMultiplayer(); the jump to the single-player
+# branch becomes unconditional.
+CARRY = [
+    ('carry-max-ammo', 0x120304, '7476', 'eb76'),
+    ('carry-ammo-g43', 0x43467, '7453', 'eb53'),
+    ('carry-ammo-glock', 0x45657, '7453', 'eb53'),
+    ('carry-ammo-m16', 0x50BB7, '7453', 'eb53'),
+    ('carry-ammo-mp5', 0x5A397, '7453', 'eb53'),
+    ('carry-ammo-p345', 0x5D927, '7453', 'eb53'),
+    ('carry-ammo-revolver', 0x63B57, '7453', 'eb53'),
+    ('carry-ammo-rifle', 0x65E87, '7453', 'eb53'),
+    ('carry-ammo-shells', 0x6CB36, '741f', 'eb1f'),
+    ('carry-ammo-tmp', 0x7E0C7, '7453', 'eb53'),
+    ('carry-ammo-vp70', 0x836D7, '7453', 'eb53'),
+]
+
+
+def gate_table(test):
+    header = strip_includes((SERVER / 'sv_cof_gates.h').read_text(encoding='latin-1'))
+    out = run_native(test, 'cof_gates_harness.c', {'gates_under_test.h': '#include <string.h>\ntypedef unsigned char byte;\n' + header})
+    return [line.split()[1:] for line in program_output(out) if line.startswith('gate ')]
 
 
 class GateTests(unittest.TestCase):
@@ -17,7 +42,14 @@ class GateTests(unittest.TestCase):
             'on again: 1 writes 1',
             'off: 1 bytes 75 06 writes 2',
             'foreign: 0 bytes 12 34 writes 2',
-        ])
+            'gate friendly-fire C8722 7506 9090',
+        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY])
+
+    def test_every_gate_was_made_from_the_retail_bytes(self):
+        if not HL_DLL.exists() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
+            self.skipTest('the retail hl.dll is not in runtimes/enhanced')
+        for name, rva, original, _ in gate_table(self):
+            self.assertEqual(file_bytes(HL_DLL, int(rva, 16), len(original) // 2).hex(), original, name)
 
 
 class GateWiringTests(unittest.TestCase):
@@ -25,6 +57,13 @@ class GateWiringTests(unittest.TestCase):
         assert_has(self, 'SV_CoF_GatesFrame();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame('))
         assert_has(self, 'SV_CoF_GatesInit();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryInit('))
         assert_has(self, 'SV_CoF_GatesClose();', body_of(SERVER / 'sv_cof_story.c', 'static void CoF_StoryCloseGate( void )'))
+
+    def test_single_player_carry_limits_by_default(self):
+        module = (SERVER / 'sv_cof_gates.c').read_text(encoding='latin-1')
+        assert_has(self, 'CVAR_DEFINE_AUTO( cof_sp_carry, "1",', module)
+        assert_has(self, 'Cvar_RegisterVariable( &cof_sp_carry );', body_of(SERVER / 'sv_cof_gates.c', 'void SV_CoF_GatesInit('))
+        wanted = body_of(SERVER / 'sv_cof_gates.c', 'static qboolean CoF_GateWanted(')
+        assert_has(self, 'cof_sp_carry.value != 0.0f', wanted)
 
     def test_friendly_fire_is_off_by_default(self):
         assert_has(self, 'CVAR_DEFINE_AUTO( cof_coop_friendly_fire, "0",', (SERVER / 'sv_cof_gates.c').read_text(encoding='latin-1'))
