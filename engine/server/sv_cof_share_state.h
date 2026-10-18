@@ -1,10 +1,11 @@
 /* Story item ledger for Cry of Fear story co-op. Pure state, no engine types,
  * so the offline harness drives it directly. GPL-3.0-or-later.
  * Rules: docs/superpowers/specs/2026-09-30-coop-split-play-design.md, part 2
- * (project repo). A player can never hold two copies of one descriptor
- * (retail AddInventoryItem 100DAD40 has an exact duplicate check), so the
- * party ledger is a set. Desired state: every player holds every party item
- * except those they set down, and nothing the party no longer has. */
+ * (project repo). The party ledger is a set. Retail AddItemToInventory (100DAD40)
+ * dedupes only weapon_* descriptors, so a story item can sit in two of one
+ * player's slots (a give again after the confirm window, a world copy picked
+ * up): the second copy is taken. Desired state: every player holds every party
+ * item once, except those they set down, and nothing the party no longer has. */
 #ifndef SV_COF_SHARE_STATE_H
 #define SV_COF_SHARE_STATE_H
 #include <string.h>
@@ -157,10 +158,25 @@ static void CoF_ShareUsed( cof_share_state_t *s, int slot, const char *name )
 // One player's inventory changed from p->held to held. ignore_losses: the
 // player is dead or was just respawned (the Spawn wipe is not a use).
 // loss: what the other losses mean (COF_SHARE_LOSS_*).
+static int CoF_ShareCount( char held[COF_SHARE_SLOTS][COF_SHARE_NAME], const char *name )
+{
+	int i, n = 0;
+	for( i = 0; i < COF_SHARE_SLOTS; i++ ) n += name[0] && !strcmp( held[i], name );
+	return n;
+}
+
 static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_SLOTS][COF_SHARE_NAME], int ignore_losses, int loss )
 {
 	cof_share_player_t *p = &s->players[slot];
-	int i, j, kept;
+	int i, j, kept, now_held;
+	// a second copy taken: one fewer, the item still held
+	if( p->pending == COF_SHARE_TAKE && ( now_held = CoF_ShareCount( held, p->pending_name )) > 0 &&
+		now_held < CoF_ShareCount( p->held, p->pending_name ))
+	{
+		p->pending = COF_SHARE_NONE;
+		CoF_ShareSetRemove( &p->stalled, p->pending_name );
+		CoF_ShareEvent( s, COF_SHARE_REMOVED, slot, p->pending_name );
+	}
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // losses
 	{
 		const char *name = p->held[i];
@@ -284,7 +300,7 @@ static void CoF_ShareBackoff( cof_share_player_t *p, const char *name, double un
 static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double now, char out[COF_SHARE_NAME] )
 {
 	cof_share_player_t *p;
-	int i;
+	int i, j;
 	out[0] = 0;
 	if( slot < 0 || slot >= COF_SHARE_PLAYERS ) return COF_SHARE_NONE;
 	p = &s->players[slot];
@@ -297,6 +313,13 @@ static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double
 		if( CoF_ShareSetAdd( &p->stalled, p->pending_name, 0 )) CoF_ShareEvent( s, COF_SHARE_STALLED, slot, p->pending_name );
 		p->pending = COF_SHARE_NONE;
 	}
+	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // a second copy of one item
+		for( j = i + 1; j < COF_SHARE_SLOTS; j++ )
+			if( p->held[i][0] && !strcmp( p->held[i], p->held[j] ) && !CoF_ShareBackingOff( p, p->held[j], now ))
+			{
+				CoF_ShareCopy( out, p->held[j] );
+				return COF_SHARE_TAKE;
+			}
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // copies of items the party used up
 		if( p->held[i][0] && CoF_ShareSetFind( &s->party, p->held[i] ) < 0 && !CoF_ShareBackingOff( p, p->held[i], now ))
 		{
