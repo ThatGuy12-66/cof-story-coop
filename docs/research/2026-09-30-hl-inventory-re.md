@@ -1,5 +1,10 @@
 # hl.dll inventory system: static RE (Cry of Fear 1.6)
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - §1: story items, not weapons, skip the duplicate check.
+> - The client's slot store is in `gHUD` (0x1018A0C0 + 0x2C64), not the viewport.
+> - The "world flag pev+0x24C" is worldspawn `iuser2`.
+
 Target: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (SHA-256 `0036B91C…0E63`), cross-checked against `client.dll`.
 This is static analysis only: a capstone linear sweep of `.text`, string and global xrefs, and vtables recovered from the exported entity factories.
 All VAs assume base 0x10000000. `string_t` is an offset from `gpGlobals->pStringBase` (`[[0x10223188]+0x98]`).

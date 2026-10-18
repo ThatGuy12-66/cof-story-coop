@@ -1,5 +1,9 @@
 # C: player-state, puzzle and vehicle entities (static RE of retail hl.dll)
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - FL_GODMODE does not protect a climber: it is cleared each usercmd (the engine's ladder test reads the owner's freeze, `P+0x5AC` and `P+0x388` now).
+> - A wheelchair death in multiplayer is a permanent hold; the engine restarts the party now (`sv_cof_rescue.c`).
+
 Binary: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (stock, base 0x10000000), with `client.dll` from the
 same folder checked for one UI path. Static only: capstone/pefile through `scratchpad/re/hlre.py`,
 plus helper scripts in `scratchpad/re/tmp-C/`. Story counts come from the 81 maps in `story_maps.json`,

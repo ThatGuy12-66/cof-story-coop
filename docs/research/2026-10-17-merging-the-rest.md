@@ -1,5 +1,11 @@
 # Merging the rest of the campaign: what merges, what blocks it, and the order to do it in
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - 4.1: c_subwaysick1 (`fog`) and c_trainscene (`foguknw`) have fog on from the start; fog, rain, 3D sky and view distance are per section in the engine now.
+> - 4.2: a non-first member's `func_train` lands correctly only once the merger leaves origin-brush geometry unmoved (its origin comes from its first `path_corner`); `func_fogfield` needs nothing (planner fixed).
+> - 4.3: an `ambient_generic` starts with the map only when it loops (no spawnflag 32) and is not silent; the planner no longer refuses the others.
+> - 4.6: the "sky differs" blocker is moot: multiplayer draws the black sky whatever `skyname` says.
+
 Date: 2026-10-17. The user: "read the map merge research that was done and start figuring out how we are gonna
 merge the rest". Builds on the merged-maps design (`docs/superpowers/specs/2026-10-16-merged-maps-design.md`),
 the spike (`evidence/map-merge-spike-20261016/`) and wave 1 (the apartments, live since 2026-10-16).

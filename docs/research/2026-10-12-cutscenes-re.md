@@ -1,5 +1,9 @@
 # A: cutscenes, cameras and screen/view effects (static RE of retail hl.dll)
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - `cof_mdlcutscene` never removes its camera models: it clears `pDeathScene` and then removes NULL (hl.dll 1009F56E/1009F5E9). The engine removes them now (`cof_coop_camera_models`, `sv_cof_camera_models.c`).
+> - `func_valve` fires from a think with itself as activator, so the c_ending1c-3c strangle chain reaches `cof_strangle` with FIRST = the host (settles a LIKELY).
+
 Binary: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (stock, base 0x10000000). Static only (capstone linear
 sweep + vtable/xref reads); nothing launched or modified. Engine-behaviour statements cite the local Xash
 source under `upstream/cof-enhanced/xash3d-fwgs-…/engine/server/`. Story-map counts are over the 81

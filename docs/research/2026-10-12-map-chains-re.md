@@ -1,5 +1,9 @@
 # D - Story-map entity-chain audit (81 story maps)
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - 1.6 and 2.6: `trigger_camera` already applies to every player (SET_VIEW, freeze, HUD bits); do not mirror it.
+> - 2.x: liblist's `-num_edicts` was most likely ignored by retail too (2048 + 15 per extra player).
+
 Static, read-only audit of the entity lumps of the 81 story maps (`scratchpad/story_maps.json`), read with `cofcoop/bsp.py` from `runtimes/enhanced/cryoffear/maps`, plus spot checks in the stock `hl.dll` (SHA-256 `0036B91C...0E63`, base 0x10000000). Scripts: `scratchpad/re/tmp-D/` (`chains.py` graph + backward walk, `doors.py`, `timeline.py`, `fwd.py`, `scan_classes.py`, `report.py`). Machine-readable data: `D-map-chains.json` next to this file (per map: every edge, every assigned instance with all root paths, hazard flags; plus the door list).
 
 Confidence tags: **CERTAIN** = read from machine code in this audit (VA given); **LIKELY** = HLSDK/SoHL parity or a heuristic code scan; **DATA** = read from the map entity lumps (exact, but intent is inferred).

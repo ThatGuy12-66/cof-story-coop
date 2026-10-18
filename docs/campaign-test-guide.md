@@ -127,6 +127,38 @@ always installed together.
 8. `c_nightmare`: the inventory still does not open (the game's own rule).
 9. A weapon in slot 9 survives a level change and a death/respawn, and can still be equipped afterwards.
 
+## Fixes from the decompilation (engine of 2026-10-18)
+
+Each fix has a cvar (default on; 0 gives the game's own behaviour) and, where it acts, a `cofstory phase=` line in the
+host log. Plan: `docs/superpowers/plans/2026-10-18-decomp-fixes.md`; research: `docs/research/2026-10-18-cof-decompilation-survey.md`.
+
+1. Joining and level changes: no "Companion has joined/left the game" lines; the TMP and MP5 can be picked up
+   (`cof_donator 1`); the health bar is out of 100 with the capped part dimmed (`HealthCap`).
+2. Chat on the story maps: `say` from either player shows on both screens, with the player list (name, health, ping)
+   on the right (`[cof-hud] coop-hud on` in the client console; `cof_coop_hud`).
+3. Voices: pain, death, melee swings and breathing are Simon's, not the police officer's (`cof_simon_voice`).
+4. Carry limits: up to 10 syringes; a second flare is taken and keeps flares in reserve; ammo boxes fill to the
+   single-player maximum (`phase=gate name=carry-... on`; `cof_sp_carry`).
+5. Phone and screens: while on a call or at the computer, a partner's hand-over still removes the item, and the
+   companion's flashlight still answers (`phase=...` of the share and light).
+6. Night vision (bonus room, unlocked): F switches it for its owner in co-op (`phase=nightvision`; `cof_coop_nightvision`).
+7. Morphine: one player's trip does not muffle the other's sounds; the host's DSP is not set by a guest's trip; a
+   strafing player next to a standing one keeps the normal spread (`cof_coop_player_state`).
+8. Dual wield by two players at once: each one's left hand swings, fires and lights only for them.
+9. Scripted rain: c_city, c_park and c_hamn rain starts and stops for every player (`phase=rain-mirror`; `cof_coop_weather`).
+10. Merged maps: each section shows its own rain (`phase=rain-sent`), 3D sky (`phase=sky-sent`) and view distance
+    (`phase=view-distance zmax=`; the forests stay dark); fog after a respawn (`phase=fog-sent`).
+11. A held lantern, a lit flare and the book laser light the room for the partner (`cof_coop_heldlights`).
+12. Cutscenes: a camera scene keeps the player frozen even after a video-mode change (`phase=cmd-refused ... reason=scene-holds`);
+    after a model cutscene (ladder, strangle, cof_mdlcutscene) no camera model stays behind (`phase=camera-model-removed`).
+13. Soft-locks: c_apartmentsick's chainsaw boss comes back after its kill animation while someone lives; a guest can
+    solve the c_start padlock; a wheelchair death restarts the party; the c_lake boat brings partners to the dock;
+    the crazybitch grabs the player she is after; the roof boss and the doctor go for a player they see.
+14. Tape saves: `savehack` works only after the player's own tape recorder; the single-player Load menu's slot labels
+    are unchanged after a co-op tape save (`cof_coop_sp_save_labels`).
+15. A companion's weapons do not pile up in a map visited again (c_start -> c_start2 -> c_start: no ownerless `weapon_*`).
+16. Costumes: the wardrobe offers the unlocked outfits (`cof_costumes`); every player sees the same fog from the start.
+
 ## If something goes wrong
 
 - Note the map, roughly what happened, and who was host or guest.

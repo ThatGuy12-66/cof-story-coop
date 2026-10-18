@@ -5,6 +5,10 @@ write and note any thing relevant to our development". This is the merged result
 slices, with every source line, retail address and confidence, are in `evidence/decomp-survey-20261018/` (git-ignored;
 `A-player.md` ... `I-meta-offsets.md`, the brief they worked from in `BRIEF.md`, helper tables in `helpers/`).
 
+> **Implemented (2026-10-18):** the user asked for all of it; plan `docs/superpowers/plans/2026-10-18-decomp-fixes.md`,
+> status and cvars in AGENT_NOTES "Fixes from the decompilation survey", live checks in `docs/campaign-test-guide.md`.
+> Section 6's corrections are applied to the docs it names.
+
 **Open question for the user, before anything here is committed or coded.** The untracked
 `docs/research/2026-10-17-uni-coop-notes.md` (written by another session) says of a decompilation: "We do not use it. Do
 not take code, offsets or names from it into this repo: the engine is GPL-3 and the decomp is the developers' code."

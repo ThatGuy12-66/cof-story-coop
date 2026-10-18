@@ -1,5 +1,8 @@
 # The AI companion
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - The monster spawnflag is 128. `FVisible` ignores FL_NOTARGET (only `Look` filters it), and in multiplayer a player being revived (`fuser3 == 3`) is invisible to monsters.
+
 For playing the story campaign with company but without a second person. The engine adds up to
 three AI players beside you: no second window, no second copy of the game. Each is a full player in
 the game's own rules: it walks, shoots, reloads, revives and uses syringes through the same player

@@ -1,5 +1,8 @@
 # hl.dll documents, codes and per-player story state (static RE), 2026-09-30
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - §5: the dialer does not need `weapon_mobile` for `cof_phonecheck`.
+
 Target: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (identical to `hl.dll.orig`, sha256 prefix `0036b91c01e92ed2`), image base 0x10000000. Cross-checked against `client.dll` in the same folder. This was a static-only pass: capstone linear disassembly, RTTI vtable scan and TYPEDESCRIPTION dumps. The game was not run.
 
 Tags: **STATIC-CERTAIN**: read directly from the code. **STATIC-LIKELY**: an inference from the code that was not traced end to end. **UNKNOWN**: not determined.

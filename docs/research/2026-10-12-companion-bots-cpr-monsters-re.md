@@ -1,5 +1,10 @@
 # F: AI companion as a fake client — bots, CPR, monster hostility, player damage (static RE), 2026-10-12
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - `0x100F2A50(1)` (line 225) is `SetAnimation(PLAYER_WALK)`, not a weapon redeploy.
+> - §3.3/§3.4: the monster spawnflag is 128.
+> - `FVisible` ignores FL_NOTARGET (only `Look` filters it), and in multiplayer a player being revived (`fuser3 == 3`) is invisible to monsters.
+
 Binary: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (stock, SHA-256 `0036B91C…0E63`, preferred base `0x10000000`;
 RVA = VA − `0x10000000`). Engine source: `upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/server`.
 Maps: the 81 story maps (the campaign map list), read with `cofcoop/bsp.py`. Static only: capstone/pefile,

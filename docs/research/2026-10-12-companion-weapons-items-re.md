@@ -1,5 +1,12 @@
 # E: how an AI companion fights, reloads, heals and lights the way (static RE)
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - §2: the limits listed are single player only. In multiplayer `iMaxAmmo1` allows one syringe, three magazines per gun and broken flares; the engine restores the single-player limits (`cof_sp_carry`).
+> - §3.2: a held flare's and lantern's light is drawn only by the holder's client; the engine sends it to the others now (`cof_coop_heldlights`).
+> - §3.3: the camera deals no damage; it freezes a monster until the monster dies.
+> - §4.1: the crazybitch grabs edict 1.
+> - `+0xC4` is `is_donator` (the usercmd field after the HL ones); reload timing, stamina rates and sights spread: `evidence/decomp-survey-20261018/D-weapons.md`.
+
 Binary: stock `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (SHA-256 `0036B91C…0E63`, base 0x10000000), cross-checked
 against `client.dll` (same folder) for the input bits and the coop-flashlight renderer. Static only (capstone sweep, the DLL's
 own save tables `CBasePlayerItem` 0x1021B188 / `CBasePlayerWeapon` 0x1021B328 / `PLAYER` 0x10217FE8, vtables from the

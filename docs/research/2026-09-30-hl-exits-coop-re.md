@@ -1,5 +1,9 @@
 # hl.dll level exits and built-in co-op machinery (static RE), 2026-09-30
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - §5: a player spawns at the startspot (the destination `info_landmark` + 1 z) or at `info_player_start`, one or the other.
+> - A respawn after a level change uses the startspot, never `info_player_start`.
+
 Binary: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll`, SHA-256 `0036B91C01E92ED205513F52563053A55A66A32D257EFB5F476B8F1F3DDE0E63` (stock), image base `0x10000000`. Cross-checks were made against `client.dll` in the same folder and entity lumps of the retail BSPs. The analysis was static only: capstone plus pefile linear sweep, reading vtables, TYPEDESCRIPTION save tables and string xrefs. Nothing was launched or modified. All addresses are preferred-base VAs.
 
 Confidence tags: **CERTAIN** means read directly from the machine code. **LIKELY** means the code was read but a name or meaning is inferred from HLSDK parity. **UNKNOWN** means not traced.

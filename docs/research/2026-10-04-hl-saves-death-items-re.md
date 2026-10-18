@@ -1,5 +1,11 @@
 # hl.dll saving, death, revive and item state (static RE), 2026-10-04
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - `0x100F2A50(1)` (line 217) is `SetAnimation(PLAYER_WALK)`, not a weapon redeploy.
+> - `P+0x501` (the engine's `COF_RETAIL_GIBBED`) is `m_bCantBeRevived`, the right byte to test; the real `m_bGibbed` is `P+0x1F29`.
+> - Addresses: `0x10223190` is `g_pWorld` (CWorld; `+0xE0..+0xEC` its `player1model..player4model`); `0x1005FC20` is `CPhoneCall::ChangeSubtitle`; `0x10226480` is `gSpecialItemGive`; LIKELY `0x10222F14` `g_iSurvivalMode`, `0x10222F20` `m_iSimonMode`, `0x10222E10` `g_pLevelChange`.
+> - Every co-op tape save used to overwrite that machine's single-player slot label `saveinfoN.cof`; the engine now stops it in multiplayer (`cof_coop_sp_save_labels`, `engine/client/cof_coop_hud.c`).
+
 Binary: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (stock, SHA-256 `0036B91C…0E63`), image base `0x10000000`. Cross-checked against `client.dll` in the same folder, the project's engine source (`upstream/cof-enhanced/xash3d-fwgs-…`) and the entity lumps of all 235 retail BSPs. The pass was static only: a capstone linear sweep, the DLL's exported symbol names (846 exports, including `?PreSave@CBasePlayer@@…` style think/use names), RTTI vtables, and every `CSave::WriteFields`/`CRestore::ReadFields` call site to recover the save tables. Nothing was launched or modified.
 
 Tags: **CERTAIN** = read from the machine code (or the engine source). **LIKELY** = the code was read, but a name, meaning or runtime consequence is inferred. **UNKNOWN** = not established.

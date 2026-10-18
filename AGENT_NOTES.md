@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
+Last updated: 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
@@ -72,13 +72,45 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - **Survey of `caixax/cof-decompiled`** (the user: "go through the entire ... decompiled thing and write and note any
   ... thing relevant to our development"): a matching decompilation whose hl.dll and client.dll are byte-identical to
   ours. Merged result `docs/research/2026-10-18-cof-decompilation-survey.md`, slice notes in
-  `evidence/decomp-survey-20261018/` (git-ignored). Both are uncommitted: the untracked uni notes (another session)
-  say not to take code, offsets or names from a decompilation into the repo; the user decides. Highlights: no engine
+  `evidence/decomp-survey-20261018/` (git-ignored). The untracked uni notes (another session) say not to take code,
+  offsets or names from a decompilation into the repo; the user decided to implement the findings. Highlights: no engine
   offset disagrees; our bugs (ladder busy test, missing `usercmd.is_donator`, far clip 1.73 x retail, `HealthCap`,
   story-item duplicates, model attachment 3); new soft-locks (c_apartmentsick chainsaw boss, c_start padlock for a
   guest, wheelchair death, c_lake boat, crazybitch grabs the host); open issues answered (join spam = InitHUD per new
   bot object, `P+0x24D0`; costumes = host's scriptsettings lines 51-62; client hides players while `P+0x2038`
-  ViewEntity is set; fog lost on respawn); merged-map rain and 3D-sky singletons.
+  ViewEntity is set; fog lost on respawn); merged-map rain and 3D-sky singletons. Since committed (`e00a3ec`) at the
+  user's request to implement it all (next section).
+
+## Fixes from the decompilation survey (2026-10-18, built and offline-tested; live checks pending)
+
+- The user: "I want you to implement all the ... things we learned from the decompile" (taken as their decision on the
+  uni notes' caution about decompilation-derived code). Plan `docs/superpowers/plans/2026-10-18-decomp-fixes.md`
+  (46 tasks), executed inline with TDD, one commit per task in each repo touched; every ruling is in the ledger
+  `.superpowers/sdd/2026-10-18-decomp-fixes/progress.md` (git-ignored). Launcher `6279028..` (40 commits), engine
+  `0e6e768d..7109ae0e` (39), both on `tester-package`: not merged, not pushed, no package built, nothing installed in
+  the smoke copy, no game launched. Full suite 451 OK (1 skipped); engine build `xash.dll` `7922C7EB...`
+  (`build-local-20260927`). Every retail fact was re-checked against the retail hl.dll/client.dll bytes
+  (`tools/hlre.py`); gates and client patches are verified against the stock bytes by tests.
+- Cvars (all default on; 0 = the game's own behaviour): `cof_donator`, `cof_costumes`, `cof_coop_nightvision`,
+  `cof_sp_carry` (11 hl.dll gates), `cof_simon_voice`, `cof_coop_weather` (a gate plus a per-player mirror),
+  `cof_coop_player_state` (muffle, cutscene flag, spread statics, `gDualWeapon`, `room_type`), `cof_coop_heldlights`,
+  `cof_coop_section_sky`, `cof_coop_section_view`, `cof_coop_camera_models`; client: `cof_coop_hud`,
+  `cof_coop_sp_save_labels`, `cof_farclip_scale` (1 = retail); and `cof_coop_friendly_fire` (default 0: nobody's
+  shots hurt another player, the AI companions included).
+- New engine modules: `sv_cof_gates.*` (byte gates on the verified hl.dll), `sv_cof_rescue.*` (soft-locks),
+  `sv_cof_guard.*`, `sv_cof_fog.*`, `sv_cof_voice.*`, `sv_cof_weather.*`, `sv_cof_globals.*`, `sv_cof_heldlight.h`,
+  `sv_cof_sky.*`, `sv_cof_view.c`, `sv_cof_camera_models.*`, `common/cof_strip.h`, `common/cof_abi.h`;
+  client: `cof_coop_hud.*` (two client.dll gates), `cof_hud_health.h`, `ref/gl/gl_cof_farclip.h`; the renderer patch
+  has 30 sites (particle sources, Cg water). Map merging: the engine's composer and `tools/map_merge/rules.py`
+  rename every key the game reads as a name (a test compares the lists); the planner refuses first-of-class
+  entities in two members and more than 16 transition pairs, and notes rain, 3D sky, fog and skyname.
+- Not done, by ruling (ledger): the 3D keypad (no story map has one), camera views (`P+0x2038` already set on every
+  path), `%` and index bounds (already safe), `func_train` origin brushes in a moved member (the merger must leave
+  that geometry unmoved first), `host_framerate` (no story `cof_slowmotion`), v_dark/difficulty/subtitle-language
+  globals. The research docs carry the survey's corrections in a block under their titles.
+- Live checks: `docs/campaign-test-guide.md`, "Fixes from the decompilation". Most uncertain: the held-light entity
+  reaching client.dll's hook, sky models on a section's band edge, per-client zmax deltas, the lake swim and the
+  companions in view during cutscenes.
 
 ## Merged maps wave 2 (2026-10-17)
 

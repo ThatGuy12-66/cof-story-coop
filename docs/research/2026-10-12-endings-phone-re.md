@@ -1,5 +1,9 @@
 # B: endings, P345 hand-over, phone calls, doctor weapon and branch logic (static RE)
 
+> **Corrections (2026-10-18, decompilation survey, `docs/research/2026-10-18-cof-decompilation-survey.md` section 6):**
+> - The call is answered after 0.1 s.
+> - The boss bar is lost only by a respawned player; joiners and restores get it.
+
 Binary: `runtimes/enhanced/cryoffear/cl_dlls/hl.dll` (stock, base 0x10000000). Client checks in
 `client.dll` from the same folder. Static only (capstone/pefile via `re/hlre.py`, entity lumps of the
 81 story maps via `cofcoop/bsp.py`). Nothing was launched, built or modified.
