@@ -710,6 +710,7 @@ void SV_CoF_UsercmdSender( edict_t *player );
 void SV_CoF_ThinkFirst( edict_t *player );
 void SV_CoF_ThinkSlotOne( edict_t *player );
 void SV_CoF_SetPhysicsKey( edict_t *pClient, const char *key, const char *value );
+qboolean SV_CoF_Sees( edict_t *from, edict_t *to );
 void SV_CoF_RescueThinkBegin( edict_t *thinker );
 void SV_CoF_RescueThinkEnd( void );
 // Spawn again the map's own entity of this class (and targetname, when given) at origin and angles; NULL when the map

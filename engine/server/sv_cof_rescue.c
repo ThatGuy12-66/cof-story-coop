@@ -17,7 +17,12 @@
  *   restarts the map.
  * - The crazybitch (monster_crazybitch MonsterThink 10055860) picks her moment from her enemy, then makes
  *   INDEXENT( 1 ), the host, turn his gun on himself wherever he is; an AI companion she fights set it off, and its
- *   own struggle never ran. While she thinks, edict 1 is her enemy when that is a living player. */
+ *   own struggle never ran. While she thinks, edict 1 is her enemy when that is a living player.
+ * - Bosses bound to "the first player": the c_roofs2 boss looks for it every think and attacks only while it is in
+ *   sight (CRoofBoss::MonsterThink 10068CD0); the c_attic doctor caches it (+0x368) and aims at, shoots and hurts
+ *   only that one (CoF_DoctorBoss.cpp). Both go for a living player they see, nearest first, and keep them while
+ *   they stay so. A player who leaves is taken out of every boss's raw pointer (the doctor's, the c_ending4b book
+ *   Simons' +0x38C/+0x388). */
 #include "common.h"
 #include "server.h"
 #include "sv_cof_cheats.h"
@@ -39,6 +44,12 @@
 #define COF_CHAIR_RIDER 0x384 // raw CBasePlayer *m_pPlayer
 #define COF_MONSTER_SIZE 0x368
 #define COF_MONSTER_ENEMY 0x184 // EHANDLE m_hEnemy
+#define COF_DOCTOR_SIZE 0x3A8
+#define COF_DOCTOR_PLAYER 0x368 // raw CBasePlayer *pPlayer (1002E853)
+#define COF_SIMON_SIZE 0x390
+#define COF_SIMON_KILLER 0x388 // raw CBasePlayer *pPlayerWhoKilledMe
+#define COF_SIMON_PLAYER 0x38C // raw CBasePlayer *pPlayer (1006F4EA)
+#define COF_RESCUE_ROOFBOSSES 2
 #define COF_RESCUE_BOSSES 4
 #define COF_RESCUE_KILLS 4
 #define COF_RESCUE_PADLOCKS 4
@@ -57,6 +68,8 @@ static int cof_rescue_boss_count;
 static struct { int index, serial; double seen, victim_dead; vec3_t angles; char targetname[64]; qboolean active, told; } cof_rescue_kills[COF_RESCUE_KILLS];
 // The last player to turn each padlock's dials.
 static struct { int index, serial, userid; } cof_rescue_padlocks[COF_RESCUE_PADLOCKS];
+// The player each roof boss goes for.
+static struct { int index, serial, userid; } cof_rescue_roof[COF_RESCUE_ROOFBOSSES];
 static int cof_rescue_generation = -1;
 
 void SV_CoF_RescueReset( void )
@@ -66,6 +79,7 @@ void SV_CoF_RescueReset( void )
 	memset( cof_rescue_bosses, 0, sizeof( cof_rescue_bosses ));
 	memset( cof_rescue_kills, 0, sizeof( cof_rescue_kills ));
 	memset( cof_rescue_padlocks, 0, sizeof( cof_rescue_padlocks ));
+	memset( cof_rescue_roof, 0, sizeof( cof_rescue_roof ));
 }
 
 static qboolean CoF_RescueClass( const edict_t *ent, const char *classname )
@@ -130,11 +144,81 @@ qboolean SV_CoF_RescueClientCommand( sv_client_t *cl )
 	return false;
 }
 
+// The participant a boss bound to "the first player" should fight: the one it has while alive and in its sight,
+// else a living player it sees (nearest), else the nearest living one; NULL when nobody lives.
+static sv_client_t *CoF_RescueBossTarget( edict_t *boss, sv_client_t *current )
+{
+	sv_client_t *seen = NULL, *any = NULL;
+	float seen_d = 0.0f, any_d = 0.0f;
+	int i;
+	if( current && CoF_RescueAlive( current->edict ) && SV_CoF_Sees( boss, current->edict )) return current;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		float d;
+		if( cl->state != cs_spawned || !SV_IsValidEdict( cl->edict ) || !CoF_RescueAlive( cl->edict )) continue;
+		d = VectorDistance( boss->v.origin, cl->edict->v.origin );
+		if( !any || d < any_d ) { any = cl; any_d = d; }
+		if( SV_CoF_Sees( boss, cl->edict ) && ( !seen || d < seen_d )) { seen = cl; seen_d = d; }
+	}
+	return seen ? seen : any;
+}
+
+static sv_client_t *CoF_RescueClientOfPrivate( uint32_t pv )
+{
+	int i;
+	for( i = 0; pv && i < svs.maxclients && i < MAX_CLIENTS; i++ )
+		if( svs.clients[i].state == cs_spawned && SV_IsValidEdict( svs.clients[i].edict ) &&
+			(uint32_t)(uintptr_t)svs.clients[i].edict->pvPrivateData == pv )
+			return &svs.clients[i];
+	return NULL;
+}
+
+static edict_t *CoF_RescueRoofBoss( edict_t *boss )
+{
+	int i, slot = -1;
+	sv_client_t *target;
+	for( i = 0; i < COF_RESCUE_ROOFBOSSES; i++ )
+	{
+		if( cof_rescue_roof[i].index == NUM_FOR_EDICT( boss ) && cof_rescue_roof[i].serial == boss->serialnumber ) { slot = i; break; }
+		if( slot < 0 && !cof_rescue_roof[i].index ) slot = i;
+	}
+	if( slot < 0 ) slot = 0;
+	if( cof_rescue_roof[slot].index != NUM_FOR_EDICT( boss ) || cof_rescue_roof[slot].serial != boss->serialnumber ) cof_rescue_roof[slot].userid = 0;
+	target = CoF_RescueBossTarget( boss, CoF_RescueClientByUserid( cof_rescue_roof[slot].userid ));
+	cof_rescue_roof[slot].index = NUM_FOR_EDICT( boss );
+	cof_rescue_roof[slot].serial = boss->serialnumber;
+	cof_rescue_roof[slot].userid = target ? target->userid : 0;
+	return target ? target->edict : NULL;
+}
+
+// The doctor's cached player becomes the one it should fight (written before its think reads it).
+static edict_t *CoF_RescueDoctor( edict_t *doctor )
+{
+	byte *pv = SV_CoF_StoryEntityPrivate( doctor, COF_DOCTOR_SIZE );
+	uint32_t cached, wanted;
+	sv_client_t *current, *target;
+	if( !pv ) return NULL;
+	memcpy( &cached, pv + COF_DOCTOR_PLAYER, sizeof( cached ));
+	current = CoF_RescueClientOfPrivate( cached );
+	if( !( target = CoF_RescueBossTarget( doctor, current ))) return NULL;
+	if( target != current )
+	{
+		wanted = (uint32_t)(uintptr_t)target->edict->pvPrivateData;
+		memcpy( pv + COF_DOCTOR_PLAYER, &wanted, sizeof( wanted ));
+		Con_Printf( "cofstory phase=boss-target class=monster_doctorboss userid=%d\n", target->userid );
+	}
+	return target->edict;
+}
+
 edict_t *SV_CoF_RescueThinkFirst( edict_t *thinker )
 {
 	int i;
 	sv_client_t *solver;
-	if( !thinker || !SV_CoF_StoryCoopEnabled() || !CoF_RescueClass( thinker, "item_padlock" ) || thinker->v.body != 1 ) return NULL;
+	if( !thinker || !SV_CoF_StoryCoopEnabled() ) return NULL;
+	if( CoF_RescueClass( thinker, "monster_roofboss" )) return CoF_RescueRoofBoss( thinker );
+	if( CoF_RescueClass( thinker, "monster_doctorboss" )) return CoF_RescueDoctor( thinker );
+	if( !CoF_RescueClass( thinker, "item_padlock" ) || thinker->v.body != 1 ) return NULL;
 	for( i = 0; i < COF_RESCUE_PADLOCKS; i++ )
 	{
 		if( cof_rescue_padlocks[i].index != NUM_FOR_EDICT( thinker ) || cof_rescue_padlocks[i].serial != thinker->serialnumber ) continue;
@@ -246,6 +330,31 @@ void SV_CoF_RescueThinkEnd( void )
 {
 	SV_CoF_ThinkFirst( NULL );
 	SV_CoF_ThinkSlotOne( NULL );
+}
+
+void SV_CoF_RescueDrop( sv_client_t *cl )
+{
+	static const struct { const char *classname; size_t size; int offset; } holders[] =
+	{
+		{ "monster_doctorboss", COF_DOCTOR_SIZE, COF_DOCTOR_PLAYER },
+		{ "monster_booksimon", COF_SIMON_SIZE, COF_SIMON_PLAYER },
+		{ "monster_booksimon", COF_SIMON_SIZE, COF_SIMON_KILLER },
+	};
+	uint32_t leaver, held, none = 0;
+	int i, k;
+	if( !cl || !SV_IsValidEdict( cl->edict ) || !cl->edict->pvPrivateData || !svgame.edicts || !SV_CoF_StoryCoopEnabled() ) return;
+	leaver = (uint32_t)(uintptr_t)cl->edict->pvPrivateData;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		for( k = 0; k < (int)( sizeof( holders ) / sizeof( holders[0] )); k++ )
+		{
+			byte *pv;
+			if( !CoF_RescueClass( ent, holders[k].classname ) || !( pv = SV_CoF_StoryEntityPrivate( ent, holders[k].size ))) continue;
+			memcpy( &held, pv + holders[k].offset, sizeof( held ));
+			if( held == leaver ) memcpy( pv + holders[k].offset, &none, sizeof( none ));
+		}
+	}
 }
 
 // A dead wheelchair still carrying its rider.

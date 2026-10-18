@@ -4284,6 +4284,18 @@ pfnSetPhysicsKeyValue
 
 =============
 */
+// Cry of Fear story co-op: a clear line through the world from one body's eyes to another's (sv_cof_rescue.c).
+qboolean SV_CoF_Sees( edict_t *from, edict_t *to )
+{
+	vec3_t start, end;
+	trace_t tr;
+	if( !SV_IsValidEdict( from ) || !SV_IsValidEdict( to )) return false;
+	VectorAdd( from->v.origin, from->v.view_ofs, start );
+	VectorAdd( to->v.origin, to->v.view_ofs, end );
+	tr = SV_Move( start, vec3_origin, vec3_origin, end, MOVE_NOMONSTERS, from, false );
+	return tr.fraction >= 1.0f || tr.ent == to;
+}
+
 // Cry of Fear story co-op: the game's own physics-key write, for the story layer (sv_cof_rescue.c).
 void SV_CoF_SetPhysicsKey( edict_t *pClient, const char *key, const char *value )
 {

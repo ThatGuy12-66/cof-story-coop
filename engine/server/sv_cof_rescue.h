@@ -12,4 +12,6 @@ edict_t *SV_CoF_RescueThinkFirst( edict_t *thinker );
 edict_t *SV_CoF_RescueThinkSlotOne( edict_t *thinker );
 void SV_CoF_RescueThinkBegin( edict_t *thinker );
 void SV_CoF_RescueThinkEnd( void );
+// SV_DropClient: no boss keeps a raw pointer to the player who leaves.
+void SV_CoF_RescueDrop( sv_client_t *cl );
 #endif

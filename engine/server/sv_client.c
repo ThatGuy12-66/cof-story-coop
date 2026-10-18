@@ -657,6 +657,7 @@ void SV_DropClient( sv_client_t *cl, qboolean crash )
 
 	SV_CoF_TransitionClientDrop( cl );
 	SV_CoF_MomentsDrop( cl );
+	SV_CoF_RescueDrop( cl );
 	SV_CoF_CompanionDrop( cl );
 	SV_CoF_RecoveryDrop( cl );
 
