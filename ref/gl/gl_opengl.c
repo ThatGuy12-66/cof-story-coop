@@ -28,6 +28,7 @@ CVAR_DEFINE_AUTO( cof_skyline_trace, "0", FCVAR_GLCONFIG, "trace Cry of Fear men
 CVAR_DEFINE_AUTO( cof_skip_client_transparent_triangles, "0", FCVAR_GLCONFIG, "skip client transparent-triangle callback (diagnostic)" );
 CVAR_DEFINE_AUTO( cof_skip_client_normal_triangles, "0", FCVAR_GLCONFIG, "skip client normal-triangle callback (diagnostic)" );
 CVAR_DEFINE_AUTO( cof_custom_renderfx_opaque, "1", FCVAR_GLCONFIG, "treat rendermode-normal entities with non-standard renderfx values as opaque, matching GoldSrc" );
+CVAR_DEFINE_AUTO( cof_client_texenv, "1", FCVAR_GLCONFIG, "end the engine's VBO pass with GL's initial texture environment on every unit, as GoldSrc leaves client.dll's renderer (0 = the lightmap pass's combine states stay: holes of solid brush entities drawn black)" );
 CVAR_DEFINE_AUTO( gl_litwater_force, "0", FCVAR_GLCONFIG, "force enable lightmapped water, even if support not declared in the map" );
 CVAR_DEFINE_AUTO( r_lighting_ambient, "0.3", FCVAR_GLCONFIG, "map ambient lighting scale" );
 CVAR_DEFINE_AUTO( r_detailtextures, "1", FCVAR_GLCONFIG, "enable detail textures support" );
@@ -1236,6 +1237,7 @@ static void GL_InitCommands( void )
 	gEngfuncs.Cvar_RegisterVariable( &cof_skip_client_transparent_triangles );
 	gEngfuncs.Cvar_RegisterVariable( &cof_skip_client_normal_triangles );
 	gEngfuncs.Cvar_RegisterVariable( &cof_custom_renderfx_opaque );
+	gEngfuncs.Cvar_RegisterVariable( &cof_client_texenv );
 	gEngfuncs.Cvar_RegisterVariable( &cof_viewmodel_fov );
 	gEngfuncs.Cvar_RegisterVariable( &cof_sprite_quiet_frames );
 	gEngfuncs.Cvar_RegisterVariable( &cof_sprite_trace );

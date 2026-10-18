@@ -17,6 +17,7 @@ GNU General Public License for more details.
 #include "xash3d_mathlib.h"
 #include "mod_local.h"
 #include "atlas.h"
+#include "gl_cof_texenv.h"
 
 #define TURBSCALE		( 256.0f / ( M_PI2 ))
 
@@ -3233,6 +3234,31 @@ static void R_DrawStaticDecals( vboarray_t *vbo, qboolean drawlightmap, int ilig
 		pglEnable( GL_ALPHA_TEST );
 }
 
+static void R_CoFTexEnvSelect( int unit )
+{
+	GL_SelectTexture( unit );
+}
+
+static void R_CoFTexEnvi( int pname, int value )
+{
+	pglTexEnvi( GL_TEXTURE_ENV, pname, value );
+}
+
+static void R_CoFTexEnvfv( int pname, const float *value )
+{
+	pglTexEnvfv( GL_TEXTURE_ENV, pname, value );
+}
+
+// every unit back to GL's initial texture environment, as client.dll's renderer finds it under GoldSrc
+// (gl_cof_texenv.h): R_SetLightmap and R_EnableDetail leave combine states behind
+static void R_CoFTexEnvInitial( void )
+{
+	static const cof_texenv_api_t api = { R_CoFTexEnvSelect, R_CoFTexEnvi, R_CoFTexEnvfv };
+
+	if( cof_client_texenv.value )
+		CoF_TexEnvDefaults( &api, GL_MaxTextureUnits( ));
+}
+
 static void R_ClearVBOState( qboolean drawlightmap, qboolean drawtextures )
 {
 	// restore states
@@ -3255,6 +3281,7 @@ static void R_ClearVBOState( qboolean drawlightmap, qboolean drawtextures )
 	if( drawtextures )
 		pglDisableClientState( GL_TEXTURE_COORD_ARRAY );
 
+	R_CoFTexEnvInitial();
 
 	pglDisableClientState( GL_VERTEX_ARRAY );
 	pglBindBufferARB( GL_ARRAY_BUFFER_ARB, 0 );
