@@ -8,6 +8,7 @@
 #include "sv_cof_story.h"
 #include "sv_cof_descriptor.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_light.h"
 #include "sv_cof_inventory12.h"
 
 #define COF_RETAIL_INVENTORY   0x21FC // string_t inventorySlot[], slots 1..12 in place (AddInventoryItem 100DAD40; sv_cof_inventory12_patch.h)
@@ -32,6 +33,12 @@
 // and 2026-10-12-companion-bots-cpr-monsters-re.md, project repo)
 #define COF_RETAIL_NEXT_ATTACK    0x0308 // float m_flNextAttack: a holster or deploy under way
 #define COF_RETAIL_WHEELCHAIR     0x0390 // EHANDLE m_hWheelchair: riding the c_ending4b chair (player-state RE)
+#define COF_RETAIL_ATTACHED_CAMERA 0x0388 // EHANDLE m_pAttachedCamera
+#define COF_RETAIL_NV_NEXT        0x03EC // float m_flNextNightVisionTime
+#define COF_RETAIL_HAS_NV         0x0434 // bool m_bHasNightVision: picked up the bonus room's item_nightvision
+#define COF_RETAIL_VIEW_ENT       0x2038 // int m_iViewEntIndex
+#define COF_RETAIL_HEADSHIELD     0x2300 // int m_iHeadShieldOn: the night vision (sv_cof_light.h)
+#define COF_RETAIL_CAMERA         0x2348 // EHANDLE m_hCurrentCamera
 #define COF_RETAIL_RESTART        0x04E8 // a team-wipe restart is pending
 #define COF_RETAIL_GETUP_END      0x04FC // float: when the CPR's get-up animation ends
 #define COF_RETAIL_GIBBED         0x0501
@@ -666,6 +673,25 @@ qboolean SV_CoF_RetailHudInitialized( edict_t *ent )
 	if( !pv ) return false;
 	*(int *)( pv + COF_RETAIL_HUD_INITIALIZED ) = 1;
 	return true;
+}
+
+// The game's single-player F (hl.dll 1001C1FB): refused in a cutscene (IsInCutscene 100E4E00: a camera holds the
+// view), on an attached camera or in the wheelchair; then the request in m_iHeadShieldOn.
+int SV_CoF_RetailNightVision( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	int view, state;
+	float next;
+	if( !player || !player[COF_RETAIL_HAS_NV] ) return -1;
+	memcpy( &view, player + COF_RETAIL_VIEW_ENT, sizeof( view ));
+	if( CoF_RetailHandle( player + COF_RETAIL_ATTACHED_CAMERA ) || CoF_RetailHandle( player + COF_RETAIL_WHEELCHAIR ) ||
+		( CoF_RetailHandle( player + COF_RETAIL_CAMERA ) && view && view != NUM_FOR_EDICT( cl->edict )))
+		return 0;
+	memcpy( &state, player + COF_RETAIL_HEADSHIELD, sizeof( state ));
+	memcpy( &next, player + COF_RETAIL_NV_NEXT, sizeof( next ));
+	if(( state = CoF_NightVisionRequest( state, next, sv.time )) < 0 ) return 0;
+	memcpy( player + COF_RETAIL_HEADSHIELD, &state, sizeof( state ));
+	return 1;
 }
 
 qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl )

@@ -69,6 +69,9 @@ int SV_CoF_RetailInfiniteAmmo( sv_client_t *cl, qboolean on );
 int SV_CoF_RetailCarrying( sv_client_t *cl, const char *classname );
 // Riding the c_ending4b wheelchair, which took every weapon and gave its own.
 qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl );
+// Night vision on F as in single player: 1 a switch asked for, 0 refused now (a scene, the wheelchair, the game's
+// delay), -1 the player does not own it (or no verified player).
+int SV_CoF_RetailNightVision( sv_client_t *cl );
 // On a phone call, which refuses every weapon switch.
 qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl );
 // A new player object whose HUD the game counts as set up: the multiplayer rules' InitHUD, which announces
