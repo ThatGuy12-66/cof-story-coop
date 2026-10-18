@@ -43,6 +43,12 @@ qboolean SV_CoF_RoomTypeSet( const char *name, float value );
 void SV_CoF_WeatherInit( void );
 void SV_CoF_WeatherFrame( void );
 void SV_CoF_WeatherReset( void );
+// A merged map's 3D skies, each section its own (sv_cof_sky.c).
+void SV_CoF_SkyInit( void );
+void SV_CoF_SkyFrame( void );
+void SV_CoF_SkyReset( void );
+qboolean SV_CoF_SkyMessage( edict_t *to, int dest, const char *name, const byte *payload, int size );
+qboolean SV_CoF_SkyHiddenFor( const edict_t *viewer, const edict_t *ent, int renderfx );
 // A merged map: the game's RainData to a player is held back for their section's own (true).
 qboolean SV_CoF_RainMessage( edict_t *to, int dest, const char *name, const byte *payload, int size );
 qboolean SV_CoF_WeatherOn( void );

@@ -3008,6 +3008,13 @@ static void GAME_EXPORT pfnMessageEnd( void )
 		return;
 	}
 
+	// Cry of Fear story co-op: in a merged map each section's own 3D sky marker is sent instead (sv_cof_sky.c)
+	if( svgame.msg_index > 0 && SV_CoF_SkyMessage( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize ))
+	{
+		MSG_Clear( &sv.multicast );
+		return;
+	}
+
 	// Cry of Fear story co-op: in a merged map each section's own rain is sent instead (sv_cof_weather.c)
 	if( svgame.msg_index > 0 && SV_CoF_RainMessage( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize ))
 	{

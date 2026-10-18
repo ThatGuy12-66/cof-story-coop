@@ -121,7 +121,8 @@ static void SV_AddEntitiesToPacket( edict_t *pViewEnt, edict_t *pClient, client_
 		state = &ents->entities[ents->num_entities];
 
 		// add entity to the net packet
-		if( svgame.dllFuncs.pfnAddToFullPack( state, e, ent, pClient, sv.hostflags, player, pset ))
+		// (Cry of Fear story co-op: another merged-map section's 3D sky models are not sent; sv_cof_sky.c)
+		if( svgame.dllFuncs.pfnAddToFullPack( state, e, ent, pClient, sv.hostflags, player, pset ) && !SV_CoF_SkyHiddenFor( pClient, ent, state->renderfx ))
 		{
 			// to prevent adds it twice through portals
 			SETVISBIT( ents->sended, e );
