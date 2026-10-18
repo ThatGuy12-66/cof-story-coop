@@ -61,6 +61,25 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - Decision left to the user: monster damage scales with every participant, bots included (1 AI ×1.68, 2 ×1.92, 3 ×2.16 vs alone ×1.44); left as retail.
 - Verification: full suite **241 OK** (`evidence/weapons-companions-20261015/full-suite-w2.log`), engine builds exit 0 (`build-*.log`). Commits: launcher `9d2790d..720e972`, engine `d887312d..715170e8` (branch `tester-package`). Live: not yet (next: package-fix4, smoke copy update, Play solo with three AIs).
 
+## Decompilation survey and the user's playthrough (2026-10-18)
+
+- **Playthrough 2026-10-18 00:05-01:54** (the user: "I'll play it"; the agent opened `CoF Story Co-op.exe` in the
+  smoke copy, after first opening the bare `CoFLaunchApp.exe` by mistake): Chapter 1 with merged maps on, 2 AIs, through
+  cm_apartment1/3, c_apartmentsick, c_basement, c_sewer, into cm_sewer3 (wave 2), tape save `tape1` there. The user
+  reported "Simon's phone can't be used to dial numbers": not a bug. The dial screen opens only with `weapontoggle`
+  (Z) while the phone is the active item; the log showed number keys (quick slots) and F but no Z until after the
+  agent said so; then `phonenumber 543214` worked (call, code 5247, door). Typed number-row digits and Enter also dial.
+- **Survey of `caixax/cof-decompiled`** (the user: "go through the entire ... decompiled thing and write and note any
+  ... thing relevant to our development"): a matching decompilation whose hl.dll and client.dll are byte-identical to
+  ours. Merged result `docs/research/2026-10-18-cof-decompilation-survey.md`, slice notes in
+  `evidence/decomp-survey-20261018/` (git-ignored). Both are uncommitted: the untracked uni notes (another session)
+  say not to take code, offsets or names from a decompilation into the repo; the user decides. Highlights: no engine
+  offset disagrees; our bugs (ladder busy test, missing `usercmd.is_donator`, far clip 1.73 x retail, `HealthCap`,
+  story-item duplicates, model attachment 3); new soft-locks (c_apartmentsick chainsaw boss, c_start padlock for a
+  guest, wheelchair death, c_lake boat, crazybitch grabs the host); open issues answered (join spam = InitHUD per new
+  bot object, `P+0x24D0`; costumes = host's scriptsettings lines 51-62; client hides players while `P+0x2038`
+  ViewEntity is set; fog lost on respawn); merged-map rain and 3D-sky singletons.
+
 ## Merged maps wave 2 (2026-10-17)
 
 The user asked which overlapping groups made most sense, then "Do it. What is it?". Choices and reasons:
@@ -92,6 +111,27 @@ cm_village1 (village1-3), cm_c_ending4b (ending4b+ending4).
   session wrote; not this agent's to commit or delete.
 - Live-check driver: `evidence/merged-maps-wave2/run_checks.py doors|walk|pictures|starts [GROUP ...]` (results and
   `summary.txt` beside it).
+- **Doors, live (the user: "Run the live checks")**: all 14 groups, every door between sections lands on its landmark
+  offset. cm_college2 first failed one door 88 units off: the check's fault, not the merge's. c_college1's door
+  trigger is 1 unit thick and the check stood the player with feet 36 units in the floor (the engine put them on
+  the landmark). Fixed in the check (launcher `2e658d7`); rerun 4 of 4.
+- **Black boxes round objects (the user, watching the door runs: "huge black squares around some objects", "the
+  car ... in the village")**: not the merge. The original c_village1 shows them too. They were c_village1's
+  `trigger_checkbrush` use-boxes round each car (rendermode 4, texture `{invisible`, embedded, every texel index 255)
+  drawn opaque black by client.dll's Paranoia renderer; house doors (`inter_door`, rendermode 4) black for the same
+  reason. Cause: the engine's VBO lightmap pass (`ref/gl/gl_rsurf.c` R_SetLightmap, `gl_overbright 1`) left the
+  lightmap unit's alpha combine at REPLACE from PREVIOUS; the client's texture modes (Paranoia `ENVSTATE_MUL_X2`)
+  set only the colour combine and take alpha from GL's initial state, so the alpha test passed every hole. GoldSrc
+  never sets those states. Found by elimination (scripts in `evidence/merged-maps-wave2/village_*.py`, shots in
+  `village-render/`): moving every env_sprite or env_model away left the boxes; `gl_brushents 0` (the engine
+  draws brush entities) or `gl_overbright 0`, even switched at runtime, took them away; skipping the client's
+  normal or transparent triangle callback did not (the client draws world and brush entities from elsewhere).
+  The 2026-10-16 note that the apartment hallway door is "solid black ... stock Cry of Fear" was this bug.
+  **Fix: engine `d97e180d`** (`ref/gl/gl_cof_texenv.h`; R_ClearVBOState ends with every unit at GL's initial
+  texture environment; `cof_client_texenv 0` brings the old behaviour back), tests launcher `96147d5`. Live A/B in
+  one game: on, the van and white doors; off, the black box; on again, the van. Only `ref_gl.dll` changes (no ref/gl
+  commits since 10-14 besides this). The smoke copy runs this `ref_gl.dll` (`dcc7cbb7`), the packaged one is kept
+  as `ref_gl.dll.7E32F815.bak`; `validate_runtime` checks only xash.dll. Testers get it with the next package.
 
 ## Overnight debug with automated live runs (2026-10-16 night → 10-17)
 
