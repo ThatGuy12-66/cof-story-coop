@@ -32,6 +32,10 @@ class RescueWiringTests(unittest.TestCase):
         assert_has(self, 'SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( thinker ));', begin)
         assert_has(self, 'SV_CoF_ThinkSlotOne( SV_CoF_RescueThinkSlotOne( thinker ));', begin)
 
+    def test_a_leaver_is_taken_out_of_the_bosses_pointers(self):
+        body = body_of(SERVER / 'sv_client.c', 'void SV_DropClient( sv_client_t *cl, qboolean crash )')
+        self.assertLess(body.index('SV_CoF_RescueDrop( cl );'), body.index('svgame.dllFuncs.pfnClientDisconnect( cl->edict );'))
+
     def test_padlock_turns_are_seen_before_the_game(self):
         body = body_of(SERVER / 'sv_client.c', 'static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )\n{')
         self.assertLess(body.index('SV_CoF_RescueClientCommand( cl )'), body.index('svgame.dllFuncs.pfnClientCommand( cl->edict )'))

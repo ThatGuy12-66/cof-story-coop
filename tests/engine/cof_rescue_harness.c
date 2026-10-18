@@ -25,6 +25,8 @@ typedef float vec3_t[3];
 #define SetBits(f,b) ((f)|=(b))
 #define FBitSet(f,b) ((f)&(b))
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
+#include <math.h>
+#define VectorDistance(a,b) ((float)sqrt(((a)[0]-(b)[0])*((a)[0]-(b)[0])+((a)[1]-(b)[1])*((a)[1]-(b)[1])+((a)[2]-(b)[2])*((a)[2]-(b)[2])))
 typedef struct edict_s edict_t;
 typedef struct {
 	string_t classname, targetname;
@@ -43,7 +45,10 @@ static edict_t entities[ENTITIES];
 static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[ENTITIES][0x2900];
 static const char *strings[] = { "", "player", "monster_bosschainsaw", "theboss", "third_person_interaction", "monster_slower",
-	"item_padlock", "wheelchair", "monster_crazybitch" };
+	"item_padlock", "wheelchair", "monster_crazybitch", "monster_roofboss", "monster_doctorboss", "monster_booksimon" };
+/* a clear line from one body's eyes to another's (the world only): unless hidden */
+static int hidden[ENTITIES];
+static qboolean SV_CoF_Sees( edict_t *from, edict_t *to ) { return !hidden[to - entities]; }
 static int kills[ENTITIES], controls_given[ENTITIES], messages_to[ENTITIES];
 static char message_name[32];
 static byte message[16];
@@ -119,6 +124,7 @@ static void setup( void )
 	sv.state = ss_active; sv.time = 100; svs.maxclients = 2; svs.clients = clients; svs.spawncount++;
 	svgame.edicts = entities; svgame.numEntities = ENTITIES; svgame.dllFuncs.pfnClientKill = client_kill;
 	memset( kills, 0, sizeof( kills )); memset( controls_given, 0, sizeof( controls_given )); memset( messages_to, 0, sizeof( messages_to ));
+	memset( hidden, 0, sizeof( hidden ));
 	message_name[0] = physics_key[0] = physics_value[0] = 0; message_size = 0;
 	for( i = 0; i < ENTITIES; i++ ) { entities[i].pvPrivateData = private_data[i]; entities[i].serialnumber = 1; }
 	for( i = 0; i < 2; i++ )
@@ -253,6 +259,41 @@ int main( void )
 	assert( SV_CoF_RescueThinkSlotOne( &entities[11] ) == NULL );         /* other monsters: as retail */
 	set_handle( 9, 0x184, &entities[2], 1 ); gate = 0;
 	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );          /* not story co-op */
+
+	/* The c_roofs2 boss looks for "the first player" every think and attacks only while that one is in sight: it goes
+	 * for a living player it sees (nearest), and keeps them while they stay so. */
+	setup(); spawn( 12, 9, 0 ); entities[12].v.origin[0] = 0;
+	entities[1].v.origin[0] = 100; entities[2].v.origin[0] = 300;
+	hidden[1] = 1; assert( SV_CoF_RescueThinkFirst( &entities[12] ) == &entities[2] );   /* the host behind cover */
+	hidden[1] = 0; assert( SV_CoF_RescueThinkFirst( &entities[12] ) == &entities[2] );   /* kept while still in sight */
+	entities[2].v.health = 0; entities[2].v.deadflag = DEAD_DEAD;
+	assert( SV_CoF_RescueThinkFirst( &entities[12] ) == &entities[1] );                  /* then the one who lives */
+	entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+	assert( SV_CoF_RescueThinkFirst( &entities[12] ) == NULL );                          /* nobody: as retail */
+
+	/* The c_attic doctor caches its player (+0x368) and shoots, aims and hurts only that one: a downed or hidden host
+	 * left it shooting at nobody. Its think takes the player it should fight. */
+	{
+		uint32_t host = (uint32_t)(uintptr_t)private_data[1], guest = (uint32_t)(uintptr_t)private_data[2], value;
+		setup(); spawn( 13, 10, 0 ); memcpy( private_data[13] + 0x368, &host, 4 );
+		entities[1].v.origin[0] = 100; entities[2].v.origin[0] = 300;
+		SV_CoF_RescueThinkBegin( &entities[13] ); memcpy( &value, private_data[13] + 0x368, 4 );
+		assert( value == host && think_first == &entities[1] ); SV_CoF_RescueThinkEnd();   /* the host in sight: kept */
+		entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+		SV_CoF_RescueThinkBegin( &entities[13] ); memcpy( &value, private_data[13] + 0x368, 4 );
+		assert( value == guest && think_first == &entities[2] && logged( "phase=boss-target class=monster_doctorboss userid=101" ) == 1 );
+		SV_CoF_RescueThinkEnd(); assert( think_first == NULL );
+
+		/* A player who leaves: no boss keeps a raw pointer to them (the book Simons +0x38C/+0x388, the doctor) */
+		setup(); spawn( 13, 10, 0 ); spawn( 14, 11, 0 );
+		memcpy( private_data[13] + 0x368, &guest, 4 ); memcpy( private_data[14] + 0x38C, &guest, 4 ); memcpy( private_data[14] + 0x388, &guest, 4 );
+		memcpy( private_data[14] + 0x380, &host, 4 ); /* not a pointer: the aim state */
+		SV_CoF_RescueDrop( &clients[1] );
+		memcpy( &value, private_data[13] + 0x368, 4 ); assert( !value );
+		memcpy( &value, private_data[14] + 0x38C, 4 ); assert( !value );
+		memcpy( &value, private_data[14] + 0x388, 4 ); assert( !value );
+		memcpy( &value, private_data[14] + 0x380, 4 ); assert( value == host );
+	}
 
 	printf( "rescue scenarios passed\n" );
 	return 0;
