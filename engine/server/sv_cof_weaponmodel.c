@@ -11,6 +11,9 @@
 #include "sv_cof_story.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_weaponmodel.h"
+#include "sv_cof_heldlight.h"
+
+static CVAR_DEFINE_AUTO( cof_coop_heldlights, "1", 0, "Cry of Fear story co-op: a held lantern, lit flare or book laser lights the room for the other players too; 0: only for its holder, as the game does" );
 
 static struct
 {
@@ -18,7 +21,28 @@ static struct
 	int model; // what to send instead (0: the game's)
 	int sequence; // the body sequence to send (-1: the game's)
 	int offhand; // the other hand's model (0: none)
+	int light, renderamt, rgb[3]; // a held light the others see (sv_cof_heldlight.h)
+	vec3_t light_origin;
 } cof_weaponmodel_players[MAX_CLIENTS];
+
+void SV_CoF_WeaponModelInit( void )
+{
+	Cvar_RegisterVariable( &cof_coop_heldlights );
+}
+
+// The light of what the player holds, for the others (sv_cof_heldlight.h).
+static void CoF_WeaponModelHeldLight( sv_client_t *cl, int slot, int id, int right, int left )
+{
+	edict_t *ent = cl->edict;
+	vec3_t forward, side, up;
+	int flags = SV_CoF_RetailFlashFlags( cl );
+	if( cof_coop_heldlights.value == 0.0f || flags < 0 || FBitSet( ent->v.effects, EF_NODRAW ) || ent->v.deadflag != DEAD_NO ) return;
+	if( !( cof_weaponmodel_players[slot].light = CoF_HeldLight( id, right, left, flags ))) return;
+	CoF_HeldLightLook( cof_weaponmodel_players[slot].light, COM_RandomLong( 0, 999 ), COM_RandomLong( 0, 999 ), COM_RandomLong( 0, 999 ),
+		&cof_weaponmodel_players[slot].renderamt, cof_weaponmodel_players[slot].rgb );
+	AngleVectors( ent->v.v_angle, forward, side, up );
+	CoF_HeldLightOrigin( ent->v.origin, ent->v.view_ofs, forward, side, cof_weaponmodel_players[slot].light_origin );
+}
 
 // A precached model's index; never registers one.
 static int CoF_WeaponModelIndex( const char *path )
@@ -66,6 +90,7 @@ void SV_CoF_WeaponModelFrame( void )
 		cof_weaponmodel_players[i].sequence = COF_WEAPONMODEL_KEEP;
 		if( cl->state != cs_spawned || !SV_IsValidEdict( cl->edict )) continue;
 		if( !SV_CoF_RetailHeld( cl, &id, &right, &left )) continue;
+		CoF_WeaponModelHeldLight( cl, i, id, right, left );
 		game = cl->edict->v.weaponmodel ? SV_GetString( cl->edict->v.weaponmodel ) : "";
 		if( !CoF_WeaponModelPick( game, id, right, left, CoF_WeaponModelPrecached, NULL, &pick )) continue;
 		cof_weaponmodel_players[i].game = CoF_WeaponModelIndex( game );
@@ -111,6 +136,36 @@ int SV_CoF_WeaponModelFollower( const sv_client_t *viewer, int e, entity_state_t
 	out->rendermode = kRenderNormal;
 	out->renderamt = 255;
 	out->scale = 1.0f;
+	out->animtime = (float)sv.time;
+	return 1;
+}
+
+// The light of a held lantern, flare or book laser of player entity e, for every viewer but its holder (whose client
+// draws its own); a model-less renderfx 71 entity at the top of the edict range, below the followers. 0: none.
+int SV_CoF_WeaponModelLight( const sv_client_t *viewer, int e, entity_state_t *out )
+{
+	int slot = e - 1, number;
+	edict_t *player;
+	if( !viewer || !out || slot < 0 || slot >= svs.maxclients || slot >= MAX_CLIENTS || !SV_CoF_StoryCoopEnabled( )) return 0;
+	if( !cof_weaponmodel_players[slot].light || viewer == &svs.clients[slot] ) return 0;
+	if( viewer->pViewEntity && viewer->pViewEntity != viewer->edict ) return 0; // as the followers: hidden in a camera
+	player = svs.clients[slot].edict;
+	if( !SV_IsValidEdict( player ) || !player->v.modelindex ) return 0;
+	number = svgame.globals->maxEntities - 1 - svs.maxclients - slot;
+	if( number < svgame.numEntities || number <= svs.maxclients ) return 0;
+	memset( out, 0, sizeof( *out ));
+	out->number = number;
+	out->entityType = ENTITY_NORMAL;
+	out->modelindex = player->v.modelindex; // never drawn: renderfx 71 is light only
+	out->solid = SOLID_NOT;
+	VectorCopy( cof_weaponmodel_players[slot].light_origin, out->origin );
+	out->rendermode = kRenderNormal;
+	out->renderfx = COF_HELDLIGHT_RENDERFX;
+	out->renderamt = cof_weaponmodel_players[slot].renderamt;
+	out->rendercolor.r = (byte)cof_weaponmodel_players[slot].rgb[0];
+	out->rendercolor.g = (byte)cof_weaponmodel_players[slot].rgb[1];
+	out->rendercolor.b = (byte)cof_weaponmodel_players[slot].rgb[2];
+	out->scale = 0.0f; // not a spotlight
 	out->animtime = (float)sv.time;
 	return 1;
 }

@@ -308,6 +308,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_VoiceInit();
 	SV_CoF_WeatherInit();
 	SV_CoF_GlobalsInit();
+	SV_CoF_WeaponModelInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )

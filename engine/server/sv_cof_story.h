@@ -62,4 +62,7 @@ void SV_CoF_WeaponModelFrame( void );
 void SV_CoF_WeaponModelState( entity_state_t *state, int e );
 // The other hand of player entity e's dual pair as a follow entity for viewer; 0: none.
 int SV_CoF_WeaponModelFollower( const sv_client_t *viewer, int e, entity_state_t *out );
+// The light of what player entity e holds (lantern, lit flare, book laser) for viewer; 0: none.
+int SV_CoF_WeaponModelLight( const sv_client_t *viewer, int e, entity_state_t *out );
+void SV_CoF_WeaponModelInit( void );
 #endif

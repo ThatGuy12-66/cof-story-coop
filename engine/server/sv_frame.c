@@ -619,6 +619,8 @@ static void SV_CoF_WeaponModelFollowers( sv_client_t *cl, sv_ents_t *ents )
 			continue;
 		if( SV_CoF_WeaponModelFollower( cl, e, &ents->entities[ents->num_entities] ))
 			ents->num_entities++;
+		if( ents->num_entities < ( MAX_VISIBLE_PACKET - 1 ) && SV_CoF_WeaponModelLight( cl, e, &ents->entities[ents->num_entities] ))
+			ents->num_entities++;
 	}
 }
 

@@ -35,6 +35,7 @@
 #define COF_RETAIL_NEXT_ATTACK    0x0308 // float m_flNextAttack: a holster or deploy under way
 #define COF_RETAIL_WHEELCHAIR     0x0390 // EHANDLE m_hWheelchair: riding the c_ending4b chair (player-state RE)
 #define COF_RETAIL_ATTACHED_CAMERA 0x0388 // EHANDLE m_pAttachedCamera
+#define COF_RETAIL_FLASH_FLAGS    0x05D0 // int m_iFlashlightFlags: 1 phone light, 8 flashlight, 16 lit flare/book laser...
 #define COF_RETAIL_NV_NEXT        0x03EC // float m_flNextNightVisionTime
 #define COF_RETAIL_HAS_NV         0x0434 // bool m_bHasNightVision: picked up the bonus room's item_nightvision
 #define COF_RETAIL_VIEW_ENT       0x2038 // int m_iViewEntIndex
@@ -681,6 +682,15 @@ qboolean SV_CoF_RetailHudInitialized( edict_t *ent )
 	if( !pv ) return false;
 	*(int *)( pv + COF_RETAIL_HUD_INITIALIZED ) = 1;
 	return true;
+}
+
+int SV_CoF_RetailFlashFlags( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	int flags;
+	if( !player ) return -1;
+	memcpy( &flags, player + COF_RETAIL_FLASH_FLAGS, sizeof( flags ));
+	return flags;
 }
 
 // A trigger_camera holds the player's view: the first half of the game's IsInCutscene (100E4E00).

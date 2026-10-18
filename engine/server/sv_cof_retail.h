@@ -69,6 +69,8 @@ int SV_CoF_RetailInfiniteAmmo( sv_client_t *cl, qboolean on );
 int SV_CoF_RetailCarrying( sv_client_t *cl, const char *classname );
 // Riding the c_ending4b wheelchair, which took every weapon and gave its own.
 qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl );
+// The player's m_iFlashlightFlags (which lights are on), or -1 without a verified player.
+int SV_CoF_RetailFlashFlags( sv_client_t *cl );
 // A trigger_camera holds the player's view (m_hCurrentCamera, and the view is not the player's own).
 qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl );
 // Night vision on F as in single player: 1 a switch asked for, 0 refused now (a scene, the wheelchair, the game's
