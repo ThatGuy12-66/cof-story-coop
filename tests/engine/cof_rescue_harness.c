@@ -37,13 +37,32 @@ struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; };
 typedef struct { int state, userid; unsigned int flags; edict_t *edict; } sv_client_t;
 static struct { int state; double time; } sv;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
-static struct { edict_t *edicts; int numEntities; } svgame;
+static struct { edict_t *edicts; int numEntities; struct { void (*pfnClientKill)( edict_t * ); } dllFuncs; } svgame;
 #define ENTITIES 24
 static edict_t entities[ENTITIES];
 static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[ENTITIES][0x2900];
 static const char *strings[] = { "", "player", "monster_bosschainsaw", "theboss", "third_person_interaction", "monster_slower",
-	"item_padlock" };
+	"item_padlock", "wheelchair" };
+static int kills[ENTITIES], controls_given[ENTITIES], messages_to[ENTITIES];
+static char message_name[32];
+static byte message[16];
+static int message_size;
+static char physics_key[32], physics_value[32];
+static void client_kill( edict_t *e ) { kills[e - entities]++; e->v.health = 0; e->v.deadflag = DEAD_DEAD; }
+static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable )
+{
+	messages_to[to - entities]++; strcpy( message_name, name ); memcpy( message, payload, size ); message_size = size; return true;
+}
+/* CBasePlayer::EnableControl( TRUE ), thiscall 100DEFF0 */
+static qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg )
+{
+	int i;
+	assert( rva == 0xDEFF0 && arg == (void *)1 );
+	for( i = 0; i < ENTITIES; i++ ) if( private_data[i] == self ) controls_given[i]++;
+	return true;
+}
+static void SV_CoF_SetPhysicsKey( edict_t *e, const char *key, const char *value ) { strcpy( physics_key, key ); strcpy( physics_value, value ); }
 static char log_text[8192];
 static size_t log_length;
 static int gate, spawned;
@@ -95,7 +114,9 @@ static void setup( void )
 	memset( log_text, 0, sizeof( log_text )); log_length = 0;
 	gate = 1; spawned = 0; spawned_class[0] = spawned_name[0] = 0;
 	sv.state = ss_active; sv.time = 100; svs.maxclients = 2; svs.clients = clients; svs.spawncount++;
-	svgame.edicts = entities; svgame.numEntities = ENTITIES;
+	svgame.edicts = entities; svgame.numEntities = ENTITIES; svgame.dllFuncs.pfnClientKill = client_kill;
+	memset( kills, 0, sizeof( kills )); memset( controls_given, 0, sizeof( controls_given )); memset( messages_to, 0, sizeof( messages_to ));
+	message_name[0] = physics_key[0] = physics_value[0] = 0; message_size = 0;
 	for( i = 0; i < ENTITIES; i++ ) { entities[i].pvPrivateData = private_data[i]; entities[i].serialnumber = 1; }
 	for( i = 0; i < 2; i++ )
 	{
@@ -187,6 +208,32 @@ int main( void )
 	setup(); spawn( 7, 6, 0 ); entities[7].v.body = 1; gate = 0;
 	strcpy( argv0, "padlockrotate" ); set_handle( 2, 0x2350, &entities[7], 1 ); SV_CoF_RescueClientCommand( &clients[1] );
 	assert( SV_CoF_RescueThinkFirst( &entities[7] ) == NULL );            /* not story co-op */
+
+	/* c_ending4b's wheelchair dies under its rider (m_bDead chair+0x368, rider chair+0x384): retail keeps the rider at
+	 * 1 hp, frozen in the dead chair for good (game over only in single player). Like single player's game over, the
+	 * party starts the checkpoint again: the rider is let out of the chair and everyone alive dies (the game's team
+	 * wipe restarts the map). */
+	{
+		uint32_t rider = (uint32_t)(uintptr_t)private_data[2], value;
+		int hud = 8 | 1;
+		setup(); spawn( 8, 7, 0 );
+		private_data[8][0x368] = 1; memcpy( private_data[8] + 0x384, &rider, 4 );
+		set_handle( 2, 0x390, &entities[8], 1 ); memcpy( private_data[2] + 0x2500, &hud, 4 );
+		entities[1].v.health = 100; entities[2].v.health = 1; entities[2].v.flags = FL_FROZEN;
+		frame( 0.1 );
+		assert( messages_to[2] == 1 && !strcmp( message_name, "Wheelchair" ) && message_size == 3 &&
+			message[0] == 0xFF && message[1] == 0xFF && message[2] == 0 );                /* Wheelchair( -1, 0 ) */
+		assert( controls_given[2] == 1 );                                                /* EnableControl( TRUE ) */
+		memcpy( &hud, private_data[2] + 0x2500, 4 ); assert( hud == 1 );                 /* HIDEHUD_HEALTH off */
+		memcpy( &value, private_data[8] + 0x384, 4 ); assert( !value );                  /* the chair lets go */
+		memcpy( &value, private_data[2] + 0x390, 4 ); assert( !value );                  /* the rider too */
+		assert( !strcmp( physics_key, "chr" ) && !strcmp( physics_value, "1" ));          /* walking again */
+		assert( kills[1] == 1 && kills[2] == 1 && logged( "phase=wheelchair-death-restart userid=101" ) == 1 );
+		frame( 0.1 ); assert( kills[1] == 1 && kills[2] == 1 && messages_to[2] == 1 );    /* once */
+		/* a living chair, or a dead one nobody rides, is left alone */
+		setup(); spawn( 8, 7, 0 ); memcpy( private_data[8] + 0x384, &rider, 4 ); frame( 0.1 ); assert( !kills[1] && !kills[2] );
+		setup(); spawn( 8, 7, 0 ); private_data[8][0x368] = 1; frame( 0.1 ); assert( !kills[1] && !kills[2] );
+	}
 
 	printf( "rescue scenarios passed\n" );
 	return 0;
