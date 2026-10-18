@@ -88,6 +88,9 @@ void SV_CoF_RetailCprRepair( void );
 qboolean SV_CoF_RetailFallen( sv_client_t *cl );
 // One of the game's client commands, as if the player sent it ("flashlight", "tapgetup").
 qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command );
+// The game's ClientCommand for the command already tokenized, as cl, even in a phone call or on a computer/phone
+// screen (where the game drops every command).
+void SV_CoF_RetailGameCommand( sv_client_t *cl );
 // 0: leave it be (a friend, a scripted actor, a boss before its entrance);
 // 1: a monster the companion may attack; 2: one already after a player.
 int SV_CoF_RetailHostile( edict_t *monster );

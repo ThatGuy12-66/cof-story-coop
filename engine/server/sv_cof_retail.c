@@ -231,6 +231,30 @@ qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *descriptor )
 	return SV_CoF_StoryGiveItemEx( cl, item->classname, descriptor );
 }
 
+// The game's ClientCommand for the tokenized command, as this player even in a phone call or on the computer or
+// phone screen, where the game drops every command (100190BE: m_bInPhoneCall +0x1EE8, m_iUsingComputerOrPhone
+// +0x1EA0): both are let go around the call and put back unless the command changed them.
+#define COF_RETAIL_SCREEN 0x1EA0
+void SV_CoF_RetailGameCommand( sv_client_t *cl )
+{
+	byte *pv = CoF_RetailStoryPlayer( cl );
+	byte call = 0;
+	int screen = 0, none = 0, after;
+	if( !svgame.dllFuncs.pfnClientCommand || !cl || !SV_IsValidEdict( cl->edict )) return;
+	if( pv )
+	{
+		call = pv[COF_RETAIL_IN_CALL];
+		memcpy( &screen, pv + COF_RETAIL_SCREEN, sizeof( screen ));
+		pv[COF_RETAIL_IN_CALL] = 0;
+		memcpy( pv + COF_RETAIL_SCREEN, &none, sizeof( none ));
+	}
+	svgame.dllFuncs.pfnClientCommand( cl->edict );
+	if( !pv ) return;
+	if( !pv[COF_RETAIL_IN_CALL] ) pv[COF_RETAIL_IN_CALL] = call;
+	memcpy( &after, pv + COF_RETAIL_SCREEN, sizeof( after ));
+	if( !after ) memcpy( pv + COF_RETAIL_SCREEN, &screen, sizeof( screen ));
+}
+
 qboolean SV_CoF_RetailRemoveItem( sv_client_t *cl, const char *descriptor )
 {
 	char text[COF_RETAIL_ITEM + 32];
@@ -240,7 +264,7 @@ qboolean SV_CoF_RetailRemoveItem( sv_client_t *cl, const char *descriptor )
 	// client's copy of the slot stays in sync. A direct slot write would not.
 	Q_snprintf( text, sizeof( text ), "inventorydeletenamed \"%s\" 0", descriptor );
 	Cmd_TokenizeString( text );
-	svgame.dllFuncs.pfnClientCommand( cl->edict );
+	SV_CoF_RetailGameCommand( cl );
 	return true;
 }
 
@@ -753,7 +777,7 @@ qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command )
 {
 	if( !CoF_RetailPlayer( cl ) || !command || !svgame.dllFuncs.pfnClientCommand ) return false;
 	Cmd_TokenizeString( command );
-	svgame.dllFuncs.pfnClientCommand( cl->edict );
+	SV_CoF_RetailGameCommand( cl );
 	return true;
 }
 

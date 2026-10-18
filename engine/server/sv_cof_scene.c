@@ -173,7 +173,7 @@ static void CoF_SceneTelescope( sv_client_t *cl, byte *pv )
 	telescope->v.health = 1.0f;
 	Cmd_TokenizeString( "telescopecancel" );
 	SV_CoF_CommandSender( cl->edict );
-	svgame.dllFuncs.pfnClientCommand( cl->edict );
+	SV_CoF_RetailGameCommand( cl );
 	SV_CoF_CommandSender( NULL );
 }
 
