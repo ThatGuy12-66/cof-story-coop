@@ -24,6 +24,8 @@ CARRY = [
     ('carry-ammo-tmp', 0x7E0C7, '7453', 'eb53'),
     ('carry-ammo-vp70', 0x836D7, '7453', 'eb53'),
 ]
+# CRainModify::Use (100A99A0): the jump past the deathmatch refusal becomes unconditional (cof_coop_weather).
+RAIN = [('rain-modify', 0xA99C7, '7b14', 'eb14')]
 
 
 def gate_table(test):
@@ -43,7 +45,7 @@ class GateTests(unittest.TestCase):
             'off: 1 bytes 75 06 writes 2',
             'foreign: 0 bytes 12 34 writes 2',
             'gate friendly-fire C8722 7506 9090',
-        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY])
+        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY + RAIN])
 
     def test_every_gate_was_made_from_the_retail_bytes(self):
         if not HL_DLL.exists() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
