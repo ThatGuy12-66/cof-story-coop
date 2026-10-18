@@ -21,6 +21,9 @@
 #define COF_RETAIL_DOC_SLOTS   0x0688 // documentsstruct: entry i (1..16) at +0x688 + 0x120 * i
 #define COF_RETAIL_DOC_SIZE    0x120
 #define COF_RETAIL_DOC_COUNT   16
+// The last slot the engine fills itself: client.dll's notes array (gHUD) holds slots 1-15, and an AddNote for 16
+// overwrites the members after it (iron-sight offset, fade, clothes; the game's own 16th document does it too).
+#define COF_RETAIL_DOC_SAFE    15
 #define COF_RETAIL_DOC_NOTE1   0x40 // entry + 0x40: note1; non-empty marks a used slot
 #define COF_RETAIL_DOC_ENTITY  0x210 // sizeof( CCoFDocument )
 #define COF_RETAIL_ADDDOCUMENT 0xDA6D0 // CBasePlayer::AddDocument( CCoFDocument * ), thiscall, ret 4
@@ -314,12 +317,12 @@ qboolean SV_CoF_RetailCodeNote( sv_client_t *cl, int code, int style )
 	byte payload[32], *pv = CoF_RetailStoryPlayer( cl ), *entry = NULL;
 	int i, n = 0;
 	if( !pv || code < 0 || code > 0xFFFF || style < 0 || style > 0xFF ) return false;
-	for( i = 1; i <= COF_RETAIL_DOC_COUNT; i++ )
+	for( i = 1; i <= COF_RETAIL_DOC_SAFE; i++ )
 	{
 		entry = pv + COF_RETAIL_DOC_SLOTS + COF_RETAIL_DOC_SIZE * i;
 		if( !entry[COF_RETAIL_DOC_NOTE1] ) break;
 	}
-	if( i > COF_RETAIL_DOC_COUNT ) return false; // every document slot is used
+	if( i > COF_RETAIL_DOC_SAFE ) return false; // every slot the engine may fill is used
 	memcpy( entry + COF_RETAIL_DOC_NOTE1, "nerds", 6 );
 	payload[n++] = (byte)i;
 	payload[n++] = 1;
@@ -776,7 +779,8 @@ int SV_CoF_RetailNoteSlot( sv_client_t *cl, const char *note, int start )
 	byte *player = CoF_RetailStoryPlayer( cl );
 	int slot;
 	if( !player || !note ) return 0;
-	for( slot = start < 1 ? 1 : start; slot <= COF_RETAIL_DOC_COUNT; slot++ )
+	// a free slot (an empty note) only where the engine may write one
+	for( slot = start < 1 ? 1 : start; slot <= ( note[0] ? COF_RETAIL_DOC_COUNT : COF_RETAIL_DOC_SAFE ); slot++ )
 	{
 		const char *key = (const char *)player + COF_RETAIL_DOC_SLOTS + COF_RETAIL_DOC_SIZE * slot + COF_RETAIL_DOC_NOTE1;
 		if( memchr( key, 0, 16 ) && !Q_strcmp( key, note )) return slot;
@@ -790,7 +794,7 @@ qboolean SV_CoF_RetailArchiveNote( sv_client_t *cl, int slot, const byte *payloa
 	byte message[COF_STATE_MESSAGE], storage[COF_RETAIL_DOC_SIZE], *entry;
 	byte *player = CoF_RetailStoryPlayer( cl );
 	int field, position = 5;
-	if( !player || slot < 1 || slot > COF_RETAIL_DOC_COUNT || !CoF_StateNoteValid( payload, size )) return false;
+	if( !player || slot < 1 || slot > COF_RETAIL_DOC_SAFE || !CoF_StateNoteValid( payload, size )) return false;
 	entry = player + COF_RETAIL_DOC_SLOTS + COF_RETAIL_DOC_SIZE * slot;
 	if( entry[COF_RETAIL_DOC_NOTE1] && ( !memchr( entry + COF_RETAIL_DOC_NOTE1, 0, 16 ) ||
 		Q_strcmp( (const char *)entry + COF_RETAIL_DOC_NOTE1, (const char *)payload + 5 ))) return false;
