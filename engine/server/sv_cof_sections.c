@@ -79,6 +79,13 @@ int SV_CoF_PlayerSection( const edict_t *ent )
 	return s && ent ? CoF_SectionsAt( s, ent->v.origin[2] ) : -1;
 }
 
+// The section of the loaded merged map at this point (-1: the map is not merged).
+int SV_CoF_PointSection( const vec3_t origin )
+{
+	const cof_sections_t *s = CoF_SectLoaded();
+	return s && origin ? CoF_SectionsAt( s, origin[2] ) : -1;
+}
+
 // A "play everywhere" sound (no attenuation) of a merged map is for its own section's players only: in the
 // original game nobody in another map heard it. -1: everyone as usual (attenuated, stops, sign-on, not merged).
 int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin )

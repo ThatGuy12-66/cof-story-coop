@@ -2788,6 +2788,8 @@ pfnMessageBegin
 
 =============
 */
+static int cof_msg_payload; // the byte where the game's own data of the message being built starts
+
 static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float *pOrigin, edict_t *ed )
 {
 	int	iSize;
@@ -2857,6 +2859,7 @@ static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float 
 		MSG_WriteWord( &sv.multicast, 0 ); // reserve space for now
 	}
 	else svgame.msg_size_index = -1; // message has constant size
+	cof_msg_payload = MSG_GetNumBytesWritten( &sv.multicast ); // Cry of Fear story co-op: where the game's bytes start
 
 	svgame.msg_realsize = 0;
 	svgame.msg_dest = msg_dest;
@@ -2990,6 +2993,13 @@ static void GAME_EXPORT pfnMessageEnd( void )
 	svgame.msg_dest = bound( MSG_BROADCAST, svgame.msg_dest, MSG_SPEC );
 
 	if( SV_CoF_GameMessagesQuiet( ))
+	{
+		MSG_Clear( &sv.multicast );
+		return;
+	}
+
+	// Cry of Fear story co-op: a section's fog kept from another section's players (sv_cof_fog.c)
+	if( svgame.msg_index > 0 && SV_CoF_FogMessage( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize ))
 	{
 		MSG_Clear( &sv.multicast );
 		return;

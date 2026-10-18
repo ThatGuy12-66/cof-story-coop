@@ -374,6 +374,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_RescueFrame();
 	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
 	SV_CoF_SectionsFrame(); // merged maps: respawns, companions and gone exits, before the AI decides
+	SV_CoF_FogFrame(); // after the section moves
 	SV_CoF_CompanionFrame();
 	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
 	SV_CoF_TestGunFrame();
@@ -394,6 +395,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_SceneReset();
 	SV_CoF_MomentsReset();
 	SV_CoF_RescueReset();
+	SV_CoF_FogReset();
 	SV_CoF_CompanionReset();
 	SV_CoF_TestGunReset();
 	SV_CoF_ExitReset();

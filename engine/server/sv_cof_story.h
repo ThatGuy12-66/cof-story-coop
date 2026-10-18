@@ -33,6 +33,11 @@ void SV_CoF_GatesInit( void );
 void SV_CoF_GatesFrame( void );
 void SV_CoF_GatesClose( void );
 qboolean SV_CoF_FriendlyFire( void );
+// Fog for every player, and per section in merged maps (sv_cof_fog.c): the game's message checked before it goes
+// (true: held back), the replays after a reset or a section move.
+qboolean SV_CoF_FogMessage( edict_t *to, int dest, const char *name, const byte *payload, int size );
+void SV_CoF_FogFrame( void );
+void SV_CoF_FogReset( void );
 // Client commands the retail game trusts too much (sv_cof_guard.c): true when refused.
 qboolean SV_CoF_GuardClientCommand( sv_client_t *cl );
 // What the others see in a player's hands (sv_cof_weaponmodel.c): the generated

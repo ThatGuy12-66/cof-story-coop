@@ -24,4 +24,6 @@ void SV_CoF_SectionsSessionRestore( const byte *record, size_t length );
 int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin );
 // The section of the loaded merged map at this player (-1: the map is not merged).
 int SV_CoF_PlayerSection( const edict_t *ent );
+// The section of the loaded merged map at this point (-1: the map is not merged).
+int SV_CoF_PointSection( const vec3_t origin );
 #endif
