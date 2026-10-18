@@ -22,6 +22,8 @@ class CoopHudTests(unittest.TestCase):
     def test_the_gate_and_when_it_is_wanted(self):
         self.assertEqual(hud_output(self), [
             'coop-hud rva 3C682 0f8417040000 909090909090',
+            # CSaveLoad::WriteSaveInfo (10032340, thiscall, ret 4): the slot label written before a tape save
+            'save-labels rva 32340 558bec c20400',
             'wanted on=1 maxclients=4: 1',
             'wanted on=1 maxclients=1: 0',
             'wanted on=0 maxclients=4: 0',
@@ -33,6 +35,8 @@ class CoopHudTests(unittest.TestCase):
         if not retail(CLIENT_DLL, CLIENT_SHA):
             self.skipTest('the retail client.dll is not in runtimes/enhanced')
         self.assertEqual(file_bytes(CLIENT_DLL, 0x3C682, 6).hex(), '0f8417040000')
+        self.assertEqual(file_bytes(CLIENT_DLL, 0x32340, 3).hex(), '558bec')
+        self.assertEqual(file_bytes(CLIENT_DLL, 0x3277E, 3).hex(), 'c20400')  # its own return: one argument
 
 
 class CoopHudWiringTests(unittest.TestCase):
@@ -40,6 +44,11 @@ class CoopHudWiringTests(unittest.TestCase):
         module = (ENGINE_CLIENT / 'cof_coop_hud.c').read_text(encoding='latin-1')
         assert_has(self, 'CVAR_DEFINE_AUTO( cof_coop_hud, "1",', module)
         assert_has(self, f'"{CLIENT_SHA}"', module)
+
+    def test_single_player_save_labels_kept_by_default(self):
+        module = (ENGINE_CLIENT / 'cof_coop_hud.c').read_text(encoding='latin-1')
+        assert_has(self, 'CVAR_DEFINE_AUTO( cof_coop_sp_save_labels, "1",', module)
+        assert_has(self, 'Cvar_RegisterVariable( &cof_coop_sp_save_labels );', body_of(ENGINE_CLIENT / 'cof_coop_hud.c', 'void CL_CoF_CoopHudInit('))
 
     def test_found_at_load_forgotten_before_unload_and_set_every_frame(self):
         cl_game = (ENGINE_CLIENT / 'dll_int/cl_game.c').read_text(encoding='latin-1')

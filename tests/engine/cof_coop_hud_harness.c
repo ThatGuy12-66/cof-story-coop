@@ -6,15 +6,21 @@ static byte image[0x100000];
 static int writes;
 static int write_bytes( byte *p, const byte *value, int size ) { memcpy( p, value, size ); writes++; return 1; }
 
-int main( void )
+static void show( const cof_gate_t *g )
 {
-	const cof_gate_t *g = &cof_coop_hud_gate;
-	byte *p = image + g->rva;
 	int i;
 	printf( "%s rva %X", g->name, g->rva );
 	printf( " " ); for( i = 0; i < g->size; i++ ) printf( "%02x", g->original[i] );
 	printf( " " ); for( i = 0; i < g->size; i++ ) printf( "%02x", g->changed[i] );
 	printf( "\n" );
+}
+
+int main( void )
+{
+	const cof_gate_t *g = &cof_coop_hud_gate;
+	byte *p = image + g->rva;
+	int i;
+	for( i = 0; i < COF_CLIENT_GATES; i++ ) show( cof_client_gates[i] );
 	printf( "wanted on=1 maxclients=4: %d\n", CoF_CoopHudWanted( 1, 4 ));
 	printf( "wanted on=1 maxclients=1: %d\n", CoF_CoopHudWanted( 1, 1 )); /* single player keeps client.dll's own HUD */
 	printf( "wanted on=0 maxclients=4: %d\n", CoF_CoopHudWanted( 0, 4 ));
