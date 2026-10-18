@@ -5052,6 +5052,21 @@ static cvar_t* GAME_EXPORT SV_CvarGetPointer( const char *szVarName )
 	return result;
 }
 
+// Cry of Fear: the game's room_type is the DSP of the machine the server runs on; a guest's goes to that guest
+// (sv_cof_globals.c)
+static float GAME_EXPORT pfnCVarGetFloat( const char *name )
+{
+	float value;
+	if( SV_CoF_RoomTypeGet( name, &value )) return value;
+	return Cvar_VariableValue( name );
+}
+
+static void GAME_EXPORT pfnCVarSetFloat( const char *name, float value )
+{
+	if( SV_CoF_RoomTypeSet( name, value )) return;
+	Cvar_SetValue( name, value );
+}
+
 // Cry of Fear: Simon's voice is precached with the police officer's (sv_cof_voice.c)
 static int GAME_EXPORT pfnPrecacheSound( const char *name )
 {
@@ -5120,9 +5135,9 @@ static enginefuncs_t gEngfuncs =
 	pfnWriteString,
 	pfnWriteEntity,
 	pfnCvar_RegisterServerVariable,
-	Cvar_VariableValue,
+	pfnCVarGetFloat,
 	Cvar_VariableString,
-	Cvar_SetValue,
+	pfnCVarSetFloat,
 	Cvar_Set,
 	pfnAlertMessage,
 	pfnEngineFprintf,

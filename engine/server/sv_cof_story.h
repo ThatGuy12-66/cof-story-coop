@@ -32,6 +32,13 @@ qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
 void SV_CoF_GatesInit( void );
 // Simon's voice (sv_cof_voice.c): the sample to send instead of a player's police sample (buf, or sample itself).
 void SV_CoF_VoiceInit( void );
+// hl.dll's one-player globals kept per player (sv_cof_globals.c).
+void SV_CoF_GlobalsInit( void );
+void SV_CoF_GlobalsEnter( sv_client_t *cl );
+void SV_CoF_GlobalsLeave( sv_client_t *cl );
+void SV_CoF_GlobalsFrame( void );
+qboolean SV_CoF_RoomTypeGet( const char *name, float *value );
+qboolean SV_CoF_RoomTypeSet( const char *name, float value );
 // Scripted weather for every player (sv_cof_weather.c).
 void SV_CoF_WeatherInit( void );
 void SV_CoF_WeatherFrame( void );

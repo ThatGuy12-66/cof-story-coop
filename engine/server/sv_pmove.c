@@ -1067,6 +1067,9 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 		SV_CoF_UsercmdSender( cl->edict );
 	}
 
+	// Cry of Fear story co-op: hl.dll's one-player globals hold this player's copy while the command runs
+	SV_CoF_GlobalsEnter( cl );
+
 	// Cry of Fear's usercmd_t carries the donator level after the HL fields (cof_abi.h)
 	CoF_DonatorCommand( &cofcmd, ucmd, SV_CoF_DonatorLevel( ));
 	svgame.dllFuncs.pfnCmdStart( cl->edict, &cofcmd.cmd, random_seed );
@@ -1161,6 +1164,7 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	svgame.dllFuncs.pfnPlayerPostThink( clent );
 	SV_CoF_CheatsPostThink( cl ); // Cry of Fear: re-assert what PostThink reset
 	svgame.dllFuncs.pfnCmdEnd( clent );
+	SV_CoF_GlobalsLeave( cl );
 	if( cof_scoped ) SV_CoF_UsercmdSender( NULL );
 
 	if( !FBitSet( cl->flags, FCL_FAKECLIENT ))
