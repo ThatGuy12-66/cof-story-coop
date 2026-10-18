@@ -91,7 +91,9 @@ def section_exits(named: list, sections: list) -> list:
             model = x.models[int(ent_get(source, "model")[1:])]
             lo = (model[0], model[1], model[2] + dz)
             hi = (model[3], model[4], model[5] + dz)
-            stand = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, min(lo[2] + 37.0, hi[2]))
+            # feet 1 above the trigger's bottom, or for a trigger flat on the floor (c_college1's) its top: the
+            # engine counts a player whose box touches the trigger, and feet sunk in the floor land in a wall
+            stand = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, min(lo[2] + 37.0, hi[2] + 36.0))
             src, dst = marks[k].get(landmark), marks[d].get(landmark)
             expected = None
             if src and dst:

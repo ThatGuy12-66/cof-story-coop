@@ -38,6 +38,16 @@ class ExitTests(unittest.TestCase):
         # landing = stand + (destination landmark - source landmark), the destination 1536 up
         self.assertGreater(door.expected[2] - door.stand[2], 1000)
 
+    def test_a_door_in_the_floor_is_stood_on(self):
+        retail('c_college1')
+        _, named, sections = group('cm_college2')
+        door = next(e for e in mc.section_exits(named, sections) if (e.src, e.dst) == ('c_college1', 'c_college2'))
+        lo, hi = door.box
+        self.assertLess(hi[2] - lo[2], 2)                  # c_college1's door is a trigger 1 unit thick
+        feet = door.stand[2] - 36
+        self.assertGreaterEqual(feet, lo[2])               # not sunk into the floor (that lands in a wall)
+        self.assertLessEqual(feet, hi[2])                  # and still touching the trigger (the engine's box test)
+
     def test_door_without_landmarks_expects_the_start(self):
         _, named, sections = group('cm_apartment1')
         exits = mc.section_exits(named, sections)
