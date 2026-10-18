@@ -20,7 +20,7 @@
 typedef struct { int line; const char *locked, *unlocked; } cof_bonus_line_t;
 
 /* The door (the five endings) and the room's items. Not here: the developer
- * commentary (line 73), the outfits and the menus keep the file's own state. */
+ * commentary (line 73) and the menus keep the file's own state; the outfits have their own switch. */
 static const cof_bonus_line_t cof_bonus_lines[] =
 {
 	{ 15, "v9agjak+p)(,o3qb)aq4", "v9agjak+p)(,03qb)aq4" }, /* 0x1: ending 1 (door) */
@@ -38,12 +38,37 @@ static const cof_bonus_line_t cof_bonus_lines[] =
 #define COF_BONUS_LINES ( (int)( sizeof( cof_bonus_lines ) / sizeof( cof_bonus_lines[0] )))
 #define COF_BONUS_FILE_LINES 83 /* the highest line any bit uses */
 
-static const cof_bonus_line_t *CoF_BonusLine( int line )
+/* The wardrobe's twelve outfits (cof_costumes): CBasePlayer::UpdateClientData builds the Clothes mask from
+ * these on the server, so the host's file decided every player's wardrobe (player.cpp:9567-9651, the tokens
+ * player.cpp:15559-15724 in the decompilation; docs/research/2026-10-18-cof-decompilation-survey.md section 3). */
+static const cof_bonus_line_t cof_costume_lines[] =
+{
+	{ 51, "olt0\243s^\243rn(aki!9eqkh", "olt0\243s^\243rn(aki!9eqkj" }, /* 0x80: David Leatherhoff suit */
+	{ 52, "h*wchks\243n&%!\243bf%jtew", "h*wchks\243n&%!\243bf%jtei" }, /* 0x100: ModDB hoodie */
+	{ 53, "%xn%i)jhxmfnbgjsr^if", "\243xn%i)jhxmfnbgjsr^if" },       /* 0x200: Hello Kitty suit */
+	{ 54, "fy^xix&&vkz)vcdn!wtv", "fy^xix&&vkz)vcrn!wtv" },         /* 0x400: Afraid of Monsters suit */
+	{ 55, "jwsyv**yb&(qtqlg)moj", "jwtyv**yb&(qtqlg)moj" },         /* 0x800: Camouflage hoodie */
+	{ 56, "henp(cm$at!n%\243f(c$jp", "henp(cm$at!m%\243f(c$jp" },     /* 0x1000: Half-Life Creations hoodie */
+	{ 57, "yef!xkyzw*^vd*tj)zkc", "yef!&kyzw*^vd*tj)zkc" },         /* 0x2000: Black Metal suit */
+	{ 58, "z(*mbwy(talqlrqf$lmw", "z(*mbwy(tolqlrqf$lmw" },         /* 0x4000: Team Psykskallar hoodie */
+	{ 59, "zgpwg\243vyqlzensuauwat", "zwpwg\243vyqlzensuauwat" },     /* 0x8000: Awesome suit */
+	{ 60, "dzpy)*iiy$oj!akyfbn%", "dzpy)*iiy$0j!akyfbn%" },         /* 0x10000: Sick Simon suit */
+	{ 61, "pe%%*\243\243rxa(%(bog)l^j", "pe%%*\243\243rxr(%(bog)l^j" },   /* 0x20000: AoM Twitcher suit */
+	{ 62, "efq%)x)mk\243*odxsdocb)", "efq%)u)mk\243*odxsdocb)" },     /* 0x40000: Custom hoodie */
+};
+#define COF_COSTUME_LINES ( (int)( sizeof( cof_costume_lines ) / sizeof( cof_costume_lines[0] )))
+
+static const cof_bonus_line_t *CoF_BonusLineIn( const cof_bonus_line_t *table, int count, int line )
 {
 	int i;
-	for( i = 0; i < COF_BONUS_LINES; i++ )
-		if( cof_bonus_lines[i].line == line ) return &cof_bonus_lines[i];
+	for( i = 0; i < count; i++ )
+		if( table[i].line == line ) return &table[i];
 	return NULL;
+}
+
+static const cof_bonus_line_t *CoF_BonusLine( int line )
+{
+	return CoF_BonusLineIn( cof_bonus_lines, COF_BONUS_LINES, line );
 }
 
 static const unsigned char *CoF_BonusFind( const unsigned char *at, size_t size, const char *text )
@@ -54,10 +79,10 @@ static const unsigned char *CoF_BonusFind( const unsigned char *at, size_t size,
 	return NULL;
 }
 
-/* In place: the gated lines say `unlocked` (1) or locked (0). Lines are counted as
+/* In place: the table's lines say `unlocked` (1) or locked (0). Lines are counted as
  * the game counts them. A line holding neither text is left alone (it reads
  * locked). Returns how many lines changed. */
-static int CoF_BonusRewrite( unsigned char *text, size_t size, int unlocked )
+static int CoF_BonusRewriteTable( unsigned char *text, size_t size, const cof_bonus_line_t *table, int count, int unlocked )
 {
 	size_t i = 0;
 	int line = 0, changed = 0;
@@ -69,7 +94,7 @@ static int CoF_BonusRewrite( unsigned char *text, size_t size, int unlocked )
 		if( i >= size || !text[i] ) break; /* strtok ends at the terminator */
 		start = i; line++;
 		while( i < size && text[i] != '\n' && text[i] ) i++;
-		if(( gate = CoF_BonusLine( line )) != NULL )
+		if(( gate = CoF_BonusLineIn( table, count, line )) != NULL )
 		{
 			const char *from = unlocked ? gate->locked : gate->unlocked, *to = unlocked ? gate->unlocked : gate->locked;
 			unsigned char *at = (unsigned char *)CoF_BonusFind( text + start, i - start, from );
@@ -79,17 +104,28 @@ static int CoF_BonusRewrite( unsigned char *text, size_t size, int unlocked )
 	return changed;
 }
 
-/* For a game folder without the file: COF_BONUS_FILE_LINES lines, the gated ones
- * in the asked state and every other one "-" (read as locked). Returns the length
- * written (no terminator counted), or 0 when `size` is too small. */
-static size_t CoF_BonusSynthesize( unsigned char *out, size_t size, int unlocked )
+static int CoF_BonusRewrite( unsigned char *text, size_t size, int unlocked )
+{
+	return CoF_BonusRewriteTable( text, size, cof_bonus_lines, COF_BONUS_LINES, unlocked );
+}
+
+static int CoF_CostumeRewrite( unsigned char *text, size_t size, int unlocked )
+{
+	return CoF_BonusRewriteTable( text, size, cof_costume_lines, COF_COSTUME_LINES, unlocked );
+}
+
+/* For a game folder without the file: COF_BONUS_FILE_LINES lines, each switch's lines in its asked state (1 open,
+ * 0 or -1 shut) and every other one "-" (read as locked). Returns the length written (no terminator counted), or 0
+ * when `size` is too small. */
+static size_t CoF_BonusSynthesize( unsigned char *out, size_t size, int bonus, int costumes )
 {
 	size_t used = 0;
 	int line;
 	for( line = 1; line <= COF_BONUS_FILE_LINES; line++ )
 	{
-		const cof_bonus_line_t *gate = CoF_BonusLine( line );
-		const char *text = gate ? ( unlocked ? gate->unlocked : gate->locked ) : "-";
+		const cof_bonus_line_t *gate = CoF_BonusLine( line ), *outfit = CoF_BonusLineIn( cof_costume_lines, COF_COSTUME_LINES, line );
+		const char *text = gate ? ( bonus > 0 ? gate->unlocked : gate->locked ) :
+			outfit ? ( costumes > 0 ? outfit->unlocked : outfit->locked ) : "-";
 		size_t n = strlen( text );
 		if( used + n + 2 > size ) return 0;
 		memcpy( out + used, text, n ); used += n;
