@@ -39,6 +39,7 @@ GNU General Public License for more details.
 #include "sound.h"		// SND_STOP_LOOPING
 #include "platform/platform.h"
 #include "cof_language.h"
+#include "cof_strip.h"
 
 #define MAX_LINELENGTH	80
 #define TEXT_MSGNAME	"TextMessage"
@@ -4402,6 +4403,25 @@ static IVoiceTweak gVoiceApi =
 };
 
 // engine callbacks
+// Cry of Fear story co-op: client.dll draws its message strip only while cl_subtitles is on; the engine's own lines
+// show although the player turned subtitles off (engine/common/cof_strip.h)
+static double cof_strip_until;
+
+void CL_CoF_StripOwn( void )
+{
+	cof_strip_until = cl.time + COF_STRIP_HOLD;
+}
+
+void CL_CoF_StripMessage( const char *name, int size, const void *payload )
+{
+	if( !Q_strcmp( name, "ProFont" ) && CoF_StripOwnLine( (const byte *)payload, size )) CL_CoF_StripOwn();
+}
+
+static float GAME_EXPORT pfnGetCvarFloat( const char *name )
+{
+	return CoF_StripSubtitles( name, Cvar_VariableValue( name ), cl.time, cof_strip_until );
+}
+
 static cl_enginefunc_t gEngfuncs =
 {
 	pfnSPR_Load,
@@ -4419,7 +4439,7 @@ static cl_enginefunc_t gEngfuncs =
 	CL_GetScreenInfo,
 	pfnSetCrosshair,
 	pfnCvar_RegisterClientVariable,
-	Cvar_VariableValue,
+	pfnGetCvarFloat,
 	Cvar_VariableString,
 	Cmd_AddClientCommand,
 	pfnHookUserMsg,

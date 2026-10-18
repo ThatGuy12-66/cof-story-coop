@@ -89,6 +89,7 @@ static void CL_CoF_QuickShow( const char *text, int colour )
 	Q_strncpy( (char *)buf + 1, text, sizeof( buf ) - 1 );
 	len = 1 + Q_strlen( (char *)buf + 1 ) + 1;
 
+	CL_CoF_StripOwn(); // shown although subtitles are off (cof_strip.h)
 	if( !CL_DispatchUserMessage( "ProFont", len, buf ))
 		Con_Printf( "%s\n", text ); // no strip (another client): at least the console
 }

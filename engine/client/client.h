@@ -1380,6 +1380,8 @@ void CL_CoF_Inventory12Load( void *module ); // cof_inventory12.c
 void CL_CoF_Inventory12Unload( void );
 void CL_CoF_RendererLimitsLoad( void *module ); // cof_renderer_limits.c
 void CL_CoF_RendererLimitsUnload( void );
+void CL_CoF_StripOwn( void ); // cl_game.c: one of the engine's own lines goes on the message strip
+void CL_CoF_StripMessage( const char *name, int size, const void *payload );
 void CL_CoF_CoopHudInit( void ); // cof_coop_hud.c
 void CL_CoF_CoopHudLoad( void *module );
 void CL_CoF_CoopHudUnload( void );

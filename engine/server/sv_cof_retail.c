@@ -9,6 +9,7 @@
 #include "sv_cof_descriptor.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_light.h"
+#include "cof_strip.h"
 #include "sv_cof_inventory12.h"
 
 #define COF_RETAIL_INVENTORY   0x21FC // string_t inventorySlot[], slots 1..12 in place (AddInventoryItem 100DAD40; sv_cof_inventory12_patch.h)
@@ -285,15 +286,13 @@ qboolean SV_CoF_RetailItemName( const char *descriptor, char *out, size_t size )
 qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable )
 {
 	byte payload[192]; // the largest GoldSrc user message
-	size_t length;
+	int length;
 	if( !cl || cl->state != cs_spawned || !text || colour < 0 || colour > 6 ) return false;
 	// The client's ProFont hook replaces any line containing DEADNOTIFY with its respawn prompt.
 	if( Q_strstr( text, "DEADNOTIFY" )) return false;
-	length = Q_strlen( text );
-	if( length + 2 > sizeof( payload )) return false;
-	payload[0] = (byte)colour;
-	memcpy( payload + 1, text, length + 1 );
-	return SV_CoF_SendUserMessage( cl->edict, "ProFont", payload, (int)length + 2, reliable );
+	// marked as the engine's own: shown although the player turned subtitles off (cof_strip.h)
+	if( !( length = CoF_StripPayload( payload, sizeof( payload ), colour, text ))) return false;
+	return SV_CoF_SendUserMessage( cl->edict, "ProFont", payload, length, reliable );
 }
 
 qboolean SV_CoF_RetailScreenFade( sv_client_t *cl, float duration, float hold, int flags, int r, int g, int b, int a )
