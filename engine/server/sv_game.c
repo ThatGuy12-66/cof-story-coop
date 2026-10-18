@@ -4274,6 +4274,13 @@ pfnSetPhysicsKeyValue
 
 =============
 */
+// Cry of Fear story co-op: the game's own physics-key write, for the story layer (sv_cof_rescue.c).
+void SV_CoF_SetPhysicsKey( edict_t *pClient, const char *key, const char *value )
+{
+	sv_client_t *cl = SV_ClientFromEdict( pClient, false );
+	if( cl ) Info_SetValueForKey( cl->physinfo, key, value, MAX_INFO_STRING );
+}
+
 static void GAME_EXPORT pfnSetPhysicsKeyValue( const edict_t *pClient, const char *key, const char *value )
 {
 	sv_client_t	*cl;

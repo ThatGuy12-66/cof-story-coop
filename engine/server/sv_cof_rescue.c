@@ -9,7 +9,12 @@
  * - The c_start padlock (item_padlock): the dial turn that opens it runs in the solver's command, but the release 2 s
  *   later (Finished 100B60B0, a think) frees "the first player": the host, while a guest who solved it stayed frozen,
  *   black and in the padlock camera. Whoever's padlockrotate (their P+0x2350 EHANDLE m_pPadlock) last turned an open
- *   padlock is the first player while its think runs. */
+ *   padlock is the first player while its think runs.
+ * - The c_ending4b wheelchair (CWheelchair::TakeDamage 10086EB0): a lethal hit keeps the rider at 1 hp, frozen and
+ *   unarmed in a dead chair, and its death think opens the game over only in single player; the chair's own exit and
+ *   cof_stopwheelchair both refuse a dead chair. As single player's game over, the party starts the checkpoint again:
+ *   the rider is let out as the chair's Disembark would (10086200) and everyone alive dies, so the game's team wipe
+ *   restarts the map. */
 #include "common.h"
 #include "server.h"
 #include "sv_cof_cheats.h"
@@ -21,6 +26,14 @@
 #define COF_TPI_MONSTER 0x374 // EHANDLE m_pMonster
 #define COF_PL_SIZE 0x281C
 #define COF_PL_PADLOCK 0x2350 // EHANDLE m_pPadlock: the padlock this player is turning
+#define COF_PL_WHEELCHAIR 0x0390 // EHANDLE m_pWheelchair
+#define COF_PL_HIDEHUD 0x2500 // int m_iHideHUD
+#define COF_PL_SUICIDE 0x22E8 // float m_fNextSuicideTime (ClientKill)
+#define COF_PL_ENABLE_CONTROL 0xDEFF0 // CBasePlayer::EnableControl( BOOL ), thiscall
+#define COF_HIDEHUD_HEALTH 8
+#define COF_CHAIR_SIZE 0x388
+#define COF_CHAIR_DEAD 0x368 // bool m_bDead
+#define COF_CHAIR_RIDER 0x384 // raw CBasePlayer *m_pPlayer
 #define COF_RESCUE_BOSSES 4
 #define COF_RESCUE_KILLS 4
 #define COF_RESCUE_PADLOCKS 4
@@ -204,6 +217,49 @@ static void CoF_RescueBossBack( void )
 	}
 }
 
+// A dead wheelchair still carrying its rider.
+static void CoF_RescueWheelchair( void )
+{
+	int i, j;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *chair = SV_EdictNum( i ), *rider_ent = NULL;
+		sv_client_t *rider = NULL;
+		byte *chair_pv, *rider_pv;
+		uint32_t carried, none = 0;
+		static const byte out[3] = { 0xFF, 0xFF, 0 }; // Wheelchair( short -1, byte 0 ), as Disembark
+		int hud;
+		float never = 0.0f;
+		if( !CoF_RescueClass( chair, "wheelchair" ) || !( chair_pv = SV_CoF_StoryEntityPrivate( chair, COF_CHAIR_SIZE ))) continue;
+		memcpy( &carried, chair_pv + COF_CHAIR_RIDER, sizeof( carried ));
+		if( !chair_pv[COF_CHAIR_DEAD] || !carried ) continue;
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS && !rider; j++ )
+			if( svs.clients[j].state == cs_spawned && SV_IsValidEdict( svs.clients[j].edict ) &&
+				(uint32_t)(uintptr_t)svs.clients[j].edict->pvPrivateData == carried )
+				rider = &svs.clients[j];
+		memcpy( chair_pv + COF_CHAIR_RIDER, &none, sizeof( none ));
+		if( !rider || !( rider_pv = SV_CoF_StoryEntityPrivate( rider_ent = rider->edict, COF_PL_SIZE ))) continue;
+		SV_CoF_SendUserMessage( rider_ent, "Wheelchair", out, sizeof( out ), true );
+		SV_CoF_StoryCallMember( COF_PL_ENABLE_CONTROL, rider_pv, (void *)1 );
+		memcpy( &hud, rider_pv + COF_PL_HIDEHUD, sizeof( hud ));
+		hud &= ~COF_HIDEHUD_HEALTH;
+		memcpy( rider_pv + COF_PL_HIDEHUD, &hud, sizeof( hud ));
+		memset( rider_pv + COF_PL_WHEELCHAIR, 0, sizeof( cof_rescue_handle_t ));
+		SV_CoF_SetPhysicsKey( rider_ent, "chr", "1" );
+		Con_Printf( "cofstory phase=wheelchair-death-restart userid=%d\n", rider->userid );
+		// everyone alive dies: the game's team wipe restarts the map
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+		{
+			edict_t *player = svs.clients[j].edict;
+			byte *pv;
+			if( svs.clients[j].state != cs_spawned || !SV_IsValidEdict( player ) || !CoF_RescueAlive( player ) || !svgame.dllFuncs.pfnClientKill ) continue;
+			if(( pv = SV_CoF_StoryEntityPrivate( player, COF_PL_SIZE )) != NULL )
+				memcpy( pv + COF_PL_SUICIDE, &never, sizeof( never ));
+			svgame.dllFuncs.pfnClientKill( player );
+		}
+	}
+}
+
 void SV_CoF_RescueFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
@@ -215,4 +271,5 @@ void SV_CoF_RescueFrame( void )
 	CoF_RescueNewKills();
 	CoF_RescueRememberBosses();
 	CoF_RescueBossBack();
+	CoF_RescueWheelchair();
 }
