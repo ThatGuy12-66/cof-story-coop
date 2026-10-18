@@ -12,6 +12,7 @@ typedef long long fs_offset_t;
 #define true 1
 #define false 0
 #define cs_spawned 4
+#define MAX_CLIENTS 32
 #define FL_KILLME ( 1 << 30 )
 #define FL_ONGROUND ( 1 << 9 )
 #define DEAD_NO 0
@@ -470,6 +471,20 @@ int main( void )
 		edicts[1].v.fuser3 = 2.0f; handle( private_data[0] + 0x2698, &edicts[2] );
 		SV_CoF_RetailCprRepair(); assert( edicts[1].v.fuser3 == 2.0f );
 		edicts[1].v.fuser3 = 0.0f; handle( private_data[0] + 0x2698, NULL );
+		/* A syringe heal holds both players at fuser3 25 with the view locked until its BladeRetract 1.5 s later;
+		 * a healer killed in between leaves the partner held for good. After 3 s it is let go, view unlocked. */
+		edicts[2].v.health = 100; edicts[2].v.deadflag = DEAD_NO; handle( private_data[1] + 0x26A0, NULL );
+		edicts[2].v.fuser3 = 25.0f; console_length = 0; console[0] = 0; last_msg_name[0] = 0;
+		SV_CoF_RetailCprRepair(); assert( edicts[2].v.fuser3 == 25.0f );           /* a heal under way */
+		sv.time += 2.0; SV_CoF_RetailCprRepair(); assert( edicts[2].v.fuser3 == 25.0f );
+		sv.time += 1.5; SV_CoF_RetailCprRepair();
+		assert( edicts[2].v.fuser3 == 0.0f && strstr( console, "cofstory phase=syringe-unstuck userid=2" ));
+		assert( !strcmp( last_msg_name, "ViewLock" ) && last_msg_size == 3 && !last_msg[0] && !last_msg[1] && !last_msg[2] );
+		/* a heal that ends on time is not touched */
+		edicts[2].v.fuser3 = 25.0f; SV_CoF_RetailCprRepair(); sv.time += 1.5; edicts[2].v.fuser3 = 0.0f; SV_CoF_RetailCprRepair();
+		edicts[2].v.fuser3 = 25.0f; last_msg_name[0] = 0; SV_CoF_RetailCprRepair(); sv.time += 2.0; SV_CoF_RetailCprRepair();
+		assert( edicts[2].v.fuser3 == 25.0f && !last_msg_name[0] );             /* a new heal: its own 3 s */
+		edicts[2].v.fuser3 = 0.0f; SV_CoF_RetailCprRepair();
 		/* the dead never revive anyone */
 		edicts[1].v.health = 0; assert( !SV_CoF_RetailRevive( &clients[0], &clients[1] ) && uses == 1 );
 		edicts[1].v.health = 100;
