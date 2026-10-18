@@ -166,6 +166,15 @@ int main( void )
 	start(); put( 0, 0, "inventoryitems/bad;name.txt" ); look();
 	assert( s.party.count == 0 );
 
+	/* The game dedupes only weapons (AddItemToInventory 100DAD40): a story item can sit in two slots (a give again
+	 * after the confirm window, a world copy picked up). The second copy is taken; the item stays the party's. */
+	start(); put( 0, 0, KEY ); put( 1, 0, KEY ); look(); put( 1, 3, KEY ); look(); s.event_count = 0;
+	assert( plan( 1, 4, 1, item ) == COF_SHARE_TAKE && !strcmp( item, KEY ));
+	CoF_ShareIssued( &s, 1, COF_SHARE_TAKE, KEY, 1 );
+	inv[1][3][0] = 0; look(); /* the game clears the first match: one copy is left either way */
+	assert( has_event( COF_SHARE_REMOVED, 1, KEY ) && !has_event( COF_SHARE_USED, 1, KEY ) && s.party.count == 1 );
+	assert( plan( 1, 5, 2, item ) == COF_SHARE_NONE && !has_event( COF_SHARE_STALLED, 1, KEY ));
+
 	/* A new session starts with an empty ledger. */
 	CoF_ShareReset( &s );
 	assert( s.party.count == 0 && !s.players[0].userid );
