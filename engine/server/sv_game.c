@@ -5365,6 +5365,48 @@ static qboolean SV_ParseEdict( char **pfile, edict_t *ent )
 	return true;
 }
 
+edict_t *SV_CoF_SpawnMapEntity( const char *classname, const char *targetname, const vec3_t origin, const vec3_t angles )
+{
+	char *cursor = sv.worldmodel ? sv.worldmodel->entities : NULL, *block;
+	char key[256], value[2048];
+
+	while( cursor && classname )
+	{
+		qboolean is_class = false, is_name = !targetname || !targetname[0];
+
+		block = cursor;
+		if(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) == NULL || key[0] != '{' )
+			return NULL;
+		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && key[0] != '}' )
+		{
+			if(( cursor = COM_ParseFile( cursor, value, sizeof( value ))) == NULL )
+				return NULL;
+			if( !Q_strcmp( key, "classname" ) && !Q_strcmp( value, classname )) is_class = true;
+			if( !is_name && !Q_strcmp( key, "targetname" ) && !Q_strcmp( value, targetname )) is_name = true;
+		}
+		if( is_class && is_name )
+		{
+			edict_t *ent = SV_AllocEdict();
+			cursor = COM_ParseFile( block, key, sizeof( key )); // past the '{'
+			if( !SV_ParseEdict( &cursor, ent ))
+			{
+				if( !ent->free ) SV_FreeEdict( ent );
+				return NULL;
+			}
+			VectorCopy( origin, ent->v.origin );
+			VectorCopy( angles, ent->v.angles );
+			if( svgame.dllFuncs.pfnSpawn( ent ) == -1 || ent->free || FBitSet( ent->v.flags, FL_KILLME ))
+			{
+				if( !ent->free ) SV_FreeEdict( ent );
+				return NULL;
+			}
+			SV_LinkEdict( ent, false );
+			return ent;
+		}
+	}
+	return NULL;
+}
+
 /*
 ================
 SV_LoadFromFile

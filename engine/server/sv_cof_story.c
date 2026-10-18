@@ -18,6 +18,7 @@
 #include "sv_cof_session.h"
 #include "sv_cof_scene.h"
 #include "sv_cof_moments.h"
+#include "sv_cof_rescue.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_sections.h"
 #include "sv_cof_testgun.h"
@@ -367,6 +368,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_RecoveryFrame();
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
+	SV_CoF_RescueFrame();
 	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
 	SV_CoF_SectionsFrame(); // merged maps: respawns, companions and gone exits, before the AI decides
 	SV_CoF_CompanionFrame();
@@ -388,6 +390,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_PartyShutdown();
 	SV_CoF_SceneReset();
 	SV_CoF_MomentsReset();
+	SV_CoF_RescueReset();
 	SV_CoF_CompanionReset();
 	SV_CoF_TestGunReset();
 	SV_CoF_ExitReset();
