@@ -514,8 +514,37 @@ COF_SECT_FN int CoF_SectInList( const char *s, size_t n, const char *const *list
 	return 0;
 }
 
-static const char *const cof_sect_ref_keys[] = { "target", "killtarget", "targetname", "landmark", "changetarget", "master",
-	"netname", "parentname", "LightningStart", "LightningEnd", "m_iszEntity", "TriggerTarget" };
+// Keys whose value names an entity, whatever the class, and those that do only for a class: the merger's rules
+// (tools/map_merge/rules.py REF_KEYS, CLASS_REF_KEYS in the launcher repo; a test compares them).
+static const char *const cof_sect_ref_keys[] = {
+	"target", "killtarget", "targetname", "landmark", "changetarget", "master", "netname", "parentname",
+	"LightningStart", "LightningEnd", "m_iszEntity", "TriggerTarget", "movewith", "moveto", "m_iszAltTarget",
+	"m_iszBothTarget", "m_iszThreadName", "m_iszLocusThread", "m_iszWatch", "m_iszPath", "m_iszNewTarget",
+	"m_iszViewEntity", "skipmanager", "m_sAttachedModel", "trigger_one", "trigger_two", "trigger_three", "trigger_four",
+	"triggerone", "triggertwo", "triggerthree", "triggerfour", "triggerfive", "notrigger", "cameraent", "simonent",
+	"player1trigger", "player2trigger", "player3trigger", "player4trigger" };
+static const char *const cof_sect_class_keys[][2] =
+{
+	{ "path_corner", "message" }, { "path_track", "message" }, { "trigger_teleport", "message" },
+	{ "trigger_teleport", "noise" }, { "trigger_onsight", "message" }, { "trigger_onsight", "noise" },
+	{ "trigger_onsight", "noise1" }, { "trigger_camera", "message" }, { "trigger_playercheckarea", "message" },
+	{ "trigger_booksimon", "message" }, { "scripted_startrush", "message" }, { "env_sprite", "message" },
+	{ "watcher_count", "message" }, { "watcher_count", "noise" }, { "watcher_count", "noise1" },
+	{ "watcher_count", "noise2" }, { "cof_teleport", "message" }, { "cof_interdooronoff", "message" },
+	{ "cof_updatekeypad", "message" }, { "cof_bosshealthbar", "message" }, { "cof_doctorweapontrigger", "message" },
+	{ "cof_mdlcutscene", "message" }, { "cof_wheelchairmode", "message" }, { "cof_fatfuckingcunt", "message" },
+	{ "cof_spawnpointonoff", "message" }, { "cof_lobby_start", "message" }, { "cof_survivalmode", "message" },
+	{ "cof_randomtimedspawner", "message" }, { "cof_weapontrigger", "noise" }, { "cof_skipmanager", "entity" },
+	{ "cof_skipmanager", "teleport" }
+};
+
+COF_SECT_FN int CoF_SectClassKey( const char *cls, size_t cls_len, const char *k, size_t kl )
+{
+	size_t i;
+	for( i = 0; i < sizeof( cof_sect_class_keys ) / sizeof( cof_sect_class_keys[0] ); i++ )
+		if( CoF_SectIs( cls, cls_len, cof_sect_class_keys[i][0] ) && CoF_SectIs( k, kl, cof_sect_class_keys[i][1] )) return 1;
+	return 0;
+}
 static const char *const cof_sect_mm_reserved[] = { "classname", "targetname", "origin", "angles", "spawnflags", "wait",
 	"delay", "target", "killtarget", "master", "globalname", "rendermode", "renderamt", "rendercolor", "renderfx", "model" };
 
@@ -615,7 +644,7 @@ COF_SECT_FN void CoF_SectEntity( cof_sect_buf_t *b, const cof_sect_pair_t *pairs
 			vl = strlen( value );
 		}
 		else if( CoF_SectInList( k, kl, cof_sect_ref_keys, sizeof( cof_sect_ref_keys ) / sizeof( cof_sect_ref_keys[0] ))
-			|| ( CoF_SectIs( k, kl, "message" ) && ( CoF_SectIs( cls, cls_len, "path_corner" ) || CoF_SectIs( cls, cls_len, "path_track" ))))
+			|| CoF_SectClassKey( cls, cls_len, k, kl ))
 		{
 			if(( renamed = CoF_SectRenameN( x, v, vl )) != NULL )
 			{
