@@ -299,6 +299,11 @@ int main( void )
 		assert( SV_CoF_RetailDocumentCount( &clients[1] ) == 2 );
 		for( i = 1; i <= 16; i++ ) private_data[1][0x688 + 0x120 * i + 0x40] = 'x';
 		assert( !SV_CoF_RetailCodeNote( &clients[1], 1234, 3 )); /* all sixteen slots are used */
+		/* slot 16 is never filled by the engine: client.dll's notes array holds 1-15 (16 overwrites the next members) */
+		private_data[1][0x688 + 0x120 * 16 + 0x40] = 0;
+		assert( !SV_CoF_RetailCodeNote( &clients[1], 1234, 3 ) && !private_data[1][0x688 + 0x120 * 16 + 0x40] );
+		assert( !SV_CoF_RetailArchiveNote( &clients[1], 16, note, sizeof( note )));
+		assert( SV_CoF_RetailNoteSlot( &clients[1], "", 1 ) == 0 ); /* no free slot the engine may use */
 		assert( !SV_CoF_RetailCodeNote( &clients[1], 70000, 3 )); /* the code travels as a short */
 		memset( private_data[1] + 0x688, 0, 0x120 * 17 );
 		clients[1].state = 2;
