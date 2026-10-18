@@ -110,6 +110,10 @@ def validate_model(data):
                     covered += total
                     cursor += 2 * (valid + 1)
                 animations += 1
+    attachments, attachment_offset = struct.unpack_from("<ii", data, 212)
+    if not 0 <= attachments <= 4:
+        raise ValueError("client.dll refuses a model with more than 4 attachments")
+    _range(data, attachment_offset, attachments * 88, "attachments")
     textures = texture_info(data)
     skinrefs, families, skin_offset = struct.unpack_from("<iii", data, 192)
     _range(data, skin_offset, skinrefs * families * 2, "skin families")
@@ -160,6 +164,26 @@ def copy_controller(model: bytearray, donor: bytes, index):
     _count, controller_offset = struct.unpack_from("<ii", model, 148)
     struct.pack_into("<iiffii", model, controller_offset + 24 * slots[0], *(controller[key] for key in
                      ("bone", "type", "start", "end", "rest", "index")))
+
+
+def add_attachment(model: bytearray, donor: bytes, index):
+    """Give `model` the donor's attachment `index` as its next one (a new table at the end), bone matched by name.
+
+    client.dll draws another player's phone light, flashlight and co-op torch from attachment 3 and exits the game
+    for a model with more than 4; police1's 4th is on Bip01 Spine3, Simon's model has 3 (all on the right hand)."""
+    count, offset = struct.unpack_from("<ii", model, 212)
+    donor_count, donor_offset = struct.unpack_from("<ii", donor, 212)
+    if count != index or donor_count <= index or count + 1 > 4:
+        raise ValueError(f"Expected {index} attachments and a donor attachment {index}")
+    _range(model, offset, count * 88, "attachments")
+    _range(donor, donor_offset, donor_count * 88, "donor attachments")
+    record = bytearray(donor[donor_offset + 88 * index:donor_offset + 88 * (index + 1)])
+    bone = struct.unpack_from("<i", record, 36)[0]
+    struct.pack_into("<i", record, 36, bone_names(model).index(bone_names(donor)[bone]))
+    model.extend(b"\0" * (-len(model) % 4))
+    table = len(model)
+    model.extend(model[offset:offset + count * 88] + record)
+    struct.pack_into("<ii", model, 212, count + 1, table)
 
 
 def mapped_animation(name):
@@ -221,6 +245,7 @@ def adapt_sequences(simon: bytes, police: bytes, name=MODEL_NAMES[0]):
         raise ValueError("Model name too long")
     output[8:72] = encoded_name + b"\0" * (64 - len(encoded_name))
     copy_controller(output, police, 3)
+    add_attachment(output, police, 3)
     struct.pack_into("<i", output, 72, len(output))
     struct.pack_into("<ii", output, 164, 85, table)
     struct.pack_into("<ii", output, 236, 0, 0)

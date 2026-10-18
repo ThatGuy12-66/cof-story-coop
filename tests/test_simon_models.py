@@ -95,8 +95,26 @@ class SimonModelTests(unittest.TestCase):
                 self.assertEqual([c for c in models.bone_controllers(data) if c["index"] == index],
                                  [c for c in models.bone_controllers(self.simon) if c["index"] == index])
 
+    def test_other_players_lights_start_at_the_chest_like_police(self):
+        # client.dll draws another player's phone light, flashlight and co-op torch from attachment 3 (and exits
+        # the game for a model with more than 4); police1's is on Bip01 Spine3, Simon's model had only 3.
+        police_names = models.bone_names(self.police)
+        police_count, police_at = struct.unpack_from("<ii", self.police, 212)
+        police = self.police[police_at + 88 * 3:police_at + 88 * 4]
+        simon_count, simon_at = struct.unpack_from("<ii", self.simon, 212)
+        self.assertEqual((police_count, simon_count), (4, 3))
+        for data in (self.standard, self.alternate, self.third, self.fourth):
+            count, at = struct.unpack_from("<ii", data, 212)
+            self.assertEqual(count, 4)
+            self.assertEqual(data[at:at + 88 * 3], self.simon[simon_at:simon_at + 88 * 3])
+            chest = data[at + 88 * 3:at + 88 * 4]
+            bone = struct.unpack_from("<i", chest, 36)[0]
+            self.assertEqual(models.bone_names(data)[bone], police_names[struct.unpack_from("<i", police, 36)[0]])
+            self.assertEqual(models.bone_names(data)[bone], "Bip01 Spine3")
+            self.assertEqual(chest[:36] + chest[40:], police[:36] + police[40:])
+
     def test_original_skeleton_meshes_and_animation_payload_are_byte_exact(self):
-        allowed = set(range(8, 76)) | set(range(164, 172)) | set(range(236, 244))
+        allowed = set(range(8, 76)) | set(range(164, 172)) | set(range(212, 220)) | set(range(236, 244))
         bones, bone_offset = struct.unpack_from("<ii", self.simon, 140)
         controllers, controller_offset = struct.unpack_from("<ii", self.simon, 148)
         names = models.bone_names(self.simon)
@@ -106,7 +124,7 @@ class SimonModelTests(unittest.TestCase):
         changed = {i for i, (a, b) in enumerate(zip(self.simon, self.standard)) if a != b}
         self.assertLessEqual(changed, allowed)
         self.assertEqual(hashlib.sha256(self.simon).hexdigest(), models.SIMON_SHA)
-        self.assertEqual(len(self.standard), len(self.simon) + 85 * 176)
+        self.assertEqual(len(self.standard), len(self.simon) + 85 * 176 + 4 * 88)
 
     def test_alternate_changes_only_name_and_compatible_costume_pixels(self):
         allowed = set(range(8, 72))
