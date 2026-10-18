@@ -54,8 +54,8 @@ int main( int argc, char **argv )
 	ents = (unsigned char *)VirtualAlloc( NULL, COF_RP_ENTITY_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 	assert( pages && chains && ents );
 
-	/* the table: 26 code edits and three data words */
-	assert( COF_RP_SITES == 26 );
+	/* the table: 30 code edits and three data words */
+	assert( COF_RP_SITES == 30 );
 
 	/* applied: every site holds its new code, with the real addresses of the new storage */
 	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents ));
@@ -84,6 +84,10 @@ int main( int argc, char **argv )
 	assert( !memcmp( base + 0x62FBF, "\x81\xFF\x00\x01\x00\x00\x0F\x8C\x85\xF7\xFF\xFF\xE9\xB6\xF7\xFF\xFF", 17 ));
 	assert( !memcmp( base + 0x60AF5, "\x81\xFB\x00\x20\x00\x00", 6 ));       /* entity indices up to 8191 */
 	assert( !memcmp( base + 0x60ACE, "\x81\xFF\x00\x08\x00\x00", 6 ));       /* 2048 brush entities */
+	assert( !memcmp( base + 0x83210, "\x81\xFE\x00\x20\x00\x00", 6 ));       /* particle sources up to 8191 */
+	assert( !memcmp( base + 0x87047, "\x81\xFE\x00\x20\x00\x00", 6 ));       /* Cg water: its three loops */
+	assert( !memcmp( base + 0x8718B, "\x81\xFE\x00\x20\x00\x00", 6 ));
+	assert( !memcmp( base + 0x878FB, "\x81\xFE\x00\x20\x00\x00", 6 ));
 
 	/* removed: the whole image is back byte for byte */
 	CoF_RenderPatchRemove( &patch );
