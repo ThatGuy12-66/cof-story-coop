@@ -22,6 +22,12 @@ class GuardRuleTests(unittest.TestCase):
             'hinttoggle story=1 host=0: host-setting',
             'say story=1 host=0: -',
             'Vote story=1 host=0: -',
+            'unfreeze 1024 held=1: scene-holds',
+            'unfreeze 1024 held=0: -',
+            'unfreeze 512 held=1: -',
+            'unfreeze 666 held=1: -',
+            'stopcomputer  held=1: -',
+            'freeze 1024 held=1: -',
         ])
 
 
@@ -29,6 +35,12 @@ class GuardWiringTests(unittest.TestCase):
     def test_refused_before_the_game_sees_it(self):
         body = body_of(SERVER / 'sv_client.c', 'static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )\n{')
         self.assertLess(body.index('SV_CoF_GuardClientCommand( cl )'), body.index('svgame.dllFuncs.pfnClientCommand( cl->edict )'))
+
+    def test_a_camera_hold_is_asked_of_the_game_state(self):
+        # every viewport reset (map load, HUD_VidInit) sends "unfreeze 1024": while a trigger_camera holds the view
+        # the camera's own end gives control back (CTriggerCamera, triggers.cpp:5565-5583, 5890-5905)
+        body = body_of(SERVER / 'sv_cof_guard.c', 'qboolean SV_CoF_GuardClientCommand( sv_client_t *cl )')
+        assert_has(self, 'CoF_GuardSceneRefusal( Cmd_Argv( 0 ), Cmd_Argv( 1 ), SV_CoF_RetailCameraHolds( cl ))', body)
 
     def test_the_host_is_the_local_human(self):
         body = body_of(SERVER / 'sv_cof_guard.c', 'qboolean SV_CoF_GuardClientCommand( sv_client_t *cl )')

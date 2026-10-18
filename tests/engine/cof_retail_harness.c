@@ -451,6 +451,19 @@ int main( void )
 		edicts[8].serialnumber++; assert( !SV_CoF_RetailInWheelchair( &clients[0] )); /* the chair is gone */
 		handle( private_data[0] + 0x390, NULL ); edicts[8].free = 1;
 	}
+	/* A trigger_camera holds the view: m_hCurrentCamera names a live entity and the view is not the player's own. */
+	{
+		int view = 8;
+		assert( !SV_CoF_RetailCameraHolds( &clients[0] ));
+		edicts[8].free = 0; edicts[8].serialnumber = 4;
+		handle( private_data[0] + 0x2348, &edicts[8] ); memcpy( private_data[0] + 0x2038, &view, 4 );
+		assert( SV_CoF_RetailCameraHolds( &clients[0] ) && !SV_CoF_RetailCameraHolds( &clients[1] ));
+		view = NUM_FOR_EDICT( clients[0].edict ); memcpy( private_data[0] + 0x2038, &view, 4 );
+		assert( !SV_CoF_RetailCameraHolds( &clients[0] )); /* back to the player's own view */
+		view = 8; memcpy( private_data[0] + 0x2038, &view, 4 ); edicts[8].serialnumber++;
+		assert( !SV_CoF_RetailCameraHolds( &clients[0] )); /* the camera is gone */
+		view = 0; memcpy( private_data[0] + 0x2038, &view, 4 ); handle( private_data[0] + 0x2348, NULL ); edicts[8].free = 1;
+	}
 	/* Night vision on F: only for its owner (m_bHasNightVision), with the game's own gates (1001C1FB): a scene's
 	 * camera that holds the view, an attached camera, the wheelchair. The request goes in m_iHeadShieldOn. */
 	{
