@@ -15,6 +15,8 @@ Log: phase=gate name on|off (once per change), phase=gate-refused name (bytes of
 
 static CVAR_DEFINE_AUTO( cof_coop_friendly_fire, "0", 0, "Cry of Fear story co-op: players' shots and blows hurt other players, the AI companions included (0: nobody's, as the game does for humans)" );
 
+static CVAR_DEFINE_AUTO( cof_sp_carry, "1", 0, "Cry of Fear story co-op: the single-player carry limits (10 syringes, flares, full ammo); 0: the game's multiplayer limits (one syringe, a third of the ammo, no flares)" );
+
 static byte *cof_gates_base; // where the gates were written, and for which DLL instance
 static void *cof_gates_instance;
 static signed char cof_gates_state[COF_GATES]; // -1 unknown, 0 retail, 1 ours
@@ -39,6 +41,17 @@ static qboolean CoF_GateWanted( int gate )
 	switch( gate )
 	{
 	case COF_GATE_FRIENDLY_FIRE: return cof_coop_friendly_fire.value == 0.0f;
+	case COF_GATE_CARRY_MAX_AMMO:
+	case COF_GATE_CARRY_AMMO_G43:
+	case COF_GATE_CARRY_AMMO_GLOCK:
+	case COF_GATE_CARRY_AMMO_M16:
+	case COF_GATE_CARRY_AMMO_MP5:
+	case COF_GATE_CARRY_AMMO_P345:
+	case COF_GATE_CARRY_AMMO_REVOLVER:
+	case COF_GATE_CARRY_AMMO_RIFLE:
+	case COF_GATE_CARRY_AMMO_SHELLS:
+	case COF_GATE_CARRY_AMMO_TMP:
+	case COF_GATE_CARRY_AMMO_VP70: return cof_sp_carry.value != 0.0f;
 	}
 	return false;
 }
@@ -51,6 +64,7 @@ qboolean SV_CoF_FriendlyFire( void )
 void SV_CoF_GatesInit( void )
 {
 	Cvar_RegisterVariable( &cof_coop_friendly_fire );
+	Cvar_RegisterVariable( &cof_sp_carry );
 	memset( cof_gates_state, -1, sizeof( cof_gates_state ));
 }
 

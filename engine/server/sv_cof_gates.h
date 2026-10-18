@@ -34,12 +34,39 @@ enum
 	// FL_FAKECLIENT: humans hurt the AI companions, and the companions each other. Without the jne after the flag
 	// test, a player's damage is refused to any player (cof_coop_friendly_fire 0).
 	COF_GATE_FRIENDLY_FIRE,
+	// The single-player carry limits (cof_sp_carry). In multiplayer CBasePlayerItem::iMaxAmmo1 (101202F0) gives one
+	// syringe (single player 10), three magazines of each gun, and -3 flares (WEAPON_NOCLIP * 3), so a flare comes
+	// with none in reserve and every later one is refused; and each ammo box's AddAmmo (vtable +0x11C) has its own
+	// multiplayer cap (glock 45, single player 150). The jump to the single-player branch after
+	// g_pGameRules->IsMultiplayer() becomes unconditional.
+	COF_GATE_CARRY_MAX_AMMO,
+	COF_GATE_CARRY_AMMO_G43,
+	COF_GATE_CARRY_AMMO_GLOCK,
+	COF_GATE_CARRY_AMMO_M16,
+	COF_GATE_CARRY_AMMO_MP5,
+	COF_GATE_CARRY_AMMO_P345,
+	COF_GATE_CARRY_AMMO_REVOLVER,
+	COF_GATE_CARRY_AMMO_RIFLE,
+	COF_GATE_CARRY_AMMO_SHELLS,
+	COF_GATE_CARRY_AMMO_TMP,
+	COF_GATE_CARRY_AMMO_VP70,
 	COF_GATES
 };
 
 static const cof_gate_t cof_gates[COF_GATES] =
 {
 	{ "friendly-fire", 0xC8722, 2, { 0x75, 0x06 }, { 0x90, 0x90 } },
+	{ "carry-max-ammo", 0x120304, 2, { 0x74, 0x76 }, { 0xEB, 0x76 } },
+	{ "carry-ammo-g43", 0x43467, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-glock", 0x45657, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-m16", 0x50BB7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-mp5", 0x5A397, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-p345", 0x5D927, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-revolver", 0x63B57, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-rifle", 0x65E87, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-shells", 0x6CB36, 2, { 0x74, 0x1F }, { 0xEB, 0x1F } },
+	{ "carry-ammo-tmp", 0x7E0C7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "carry-ammo-vp70", 0x836D7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
 };
 
 // Brings one gate to the wanted state through write (which changes executable bytes); 1 when it is in that state now,
