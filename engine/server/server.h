@@ -708,8 +708,10 @@ void SV_CoF_CommandSender( edict_t *sender );
 void SV_CoF_PreferFirst( edict_t *player );
 void SV_CoF_UsercmdSender( edict_t *player );
 void SV_CoF_ThinkFirst( edict_t *player );
+void SV_CoF_ThinkSlotOne( edict_t *player );
 void SV_CoF_SetPhysicsKey( edict_t *pClient, const char *key, const char *value );
-edict_t *SV_CoF_RescueThinkFirst( edict_t *thinker );
+void SV_CoF_RescueThinkBegin( edict_t *thinker );
+void SV_CoF_RescueThinkEnd( void );
 // Spawn again the map's own entity of this class (and targetname, when given) at origin and angles; NULL when the map
 // has none or the game refused it (sv_cof_rescue.c: a way back from a retail co-op soft-lock).
 edict_t *SV_CoF_SpawnMapEntity( const char *classname, const char *targetname, const vec3_t origin, const vec3_t angles );

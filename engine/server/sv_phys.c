@@ -217,9 +217,9 @@ static qboolean SV_TryThink( edict_t *ent, double frametime, double time )
 
 	ent->v.nextthink = 0.0f;
 	svgame.globals->time = thinktime;
-	SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( ent ));
+	SV_CoF_RescueThinkBegin( ent );
 	svgame.dllFuncs.pfnThink( ent );
-	SV_CoF_ThinkFirst( NULL );
+	SV_CoF_RescueThinkEnd();
 
 	return true;
 }
@@ -1184,9 +1184,9 @@ static void SV_Physics_Pusher( edict_t *ent )
 	{
 		ent->v.nextthink = 0.0f;
 		svgame.globals->time = sv.time;
-		SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( ent ));
+		SV_CoF_RescueThinkBegin( ent );
 		svgame.dllFuncs.pfnThink( ent );
-		SV_CoF_ThinkFirst( NULL );
+		SV_CoF_RescueThinkEnd();
 	}
 }
 

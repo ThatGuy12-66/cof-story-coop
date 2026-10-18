@@ -14,7 +14,10 @@
  *   unarmed in a dead chair, and its death think opens the game over only in single player; the chair's own exit and
  *   cof_stopwheelchair both refuse a dead chair. As single player's game over, the party starts the checkpoint again:
  *   the rider is let out as the chair's Disembark would (10086200) and everyone alive dies, so the game's team wipe
- *   restarts the map. */
+ *   restarts the map.
+ * - The crazybitch (monster_crazybitch MonsterThink 10055860) picks her moment from her enemy, then makes
+ *   INDEXENT( 1 ), the host, turn his gun on himself wherever he is; an AI companion she fights set it off, and its
+ *   own struggle never ran. While she thinks, edict 1 is her enemy when that is a living player. */
 #include "common.h"
 #include "server.h"
 #include "sv_cof_cheats.h"
@@ -34,6 +37,8 @@
 #define COF_CHAIR_SIZE 0x388
 #define COF_CHAIR_DEAD 0x368 // bool m_bDead
 #define COF_CHAIR_RIDER 0x384 // raw CBasePlayer *m_pPlayer
+#define COF_MONSTER_SIZE 0x368
+#define COF_MONSTER_ENEMY 0x184 // EHANDLE m_hEnemy
 #define COF_RESCUE_BOSSES 4
 #define COF_RESCUE_KILLS 4
 #define COF_RESCUE_PADLOCKS 4
@@ -215,6 +220,32 @@ static void CoF_RescueBossBack( void )
 		Con_Printf( "cofstory phase=boss-respawned class=monster_bosschainsaw name=%s ok=%d\n", cof_rescue_kills[k].targetname, boss != NULL );
 		cof_rescue_kills[k].active = false;
 	}
+}
+
+edict_t *SV_CoF_RescueThinkSlotOne( edict_t *thinker )
+{
+	cof_rescue_handle_t enemy;
+	int index;
+	if( !thinker || !SV_CoF_StoryCoopEnabled() || !CoF_RescueClass( thinker, "monster_crazybitch" )) return NULL;
+	enemy = CoF_RescueHandleIn( thinker, COF_MONSTER_SIZE, COF_MONSTER_ENEMY );
+	if( !enemy.edict || !SV_IsValidEdict( enemy.edict ) || enemy.edict->serialnumber != enemy.serial ) return NULL;
+	index = NUM_FOR_EDICT( enemy.edict );
+	if( index <= 1 || index > svs.maxclients || index > MAX_CLIENTS ) return NULL; // the host is edict 1 already
+	if( svs.clients[index - 1].state != cs_spawned || svs.clients[index - 1].edict != enemy.edict || !CoF_RescueAlive( enemy.edict ))
+		return NULL;
+	return enemy.edict;
+}
+
+void SV_CoF_RescueThinkBegin( edict_t *thinker )
+{
+	SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( thinker ));
+	SV_CoF_ThinkSlotOne( SV_CoF_RescueThinkSlotOne( thinker ));
+}
+
+void SV_CoF_RescueThinkEnd( void )
+{
+	SV_CoF_ThinkFirst( NULL );
+	SV_CoF_ThinkSlotOne( NULL );
 }
 
 // A dead wheelchair still carrying its rider.

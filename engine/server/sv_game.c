@@ -1662,10 +1662,18 @@ static edict_t *cof_first_preference;
 static edict_t *cof_usercmd_sender;
 // The player who is first while one entity's think runs (sv_cof_rescue.c: an opened padlock's solver).
 static edict_t *cof_think_first;
+// The edict that answers the game's INDEXENT( 1 ) while one entity's think runs (sv_cof_rescue.c: the
+// crazybitch's enemy), or NULL.
+static edict_t *cof_think_slot_one;
 
 void SV_CoF_ThinkFirst( edict_t *player )
 {
 	cof_think_first = player;
+}
+
+void SV_CoF_ThinkSlotOne( edict_t *player )
+{
+	cof_think_slot_one = player;
 }
 
 void SV_CoF_CommandSender( edict_t *sender )
@@ -3711,6 +3719,7 @@ pfnPEntityOfEntIndex
 */
 static edict_t *pfnPEntityOfEntIndexBroken( int iEntIndex )
 {
+	if( iEntIndex == 1 && cof_think_slot_one ) return cof_think_slot_one; // Cry of Fear story co-op (sv_cof_rescue.c)
 	// have to be bug-compatible with GoldSrc in this function
 	return SV_PEntityOfEntIndex( iEntIndex, false );
 }
@@ -3723,6 +3732,7 @@ pfnPEntityOfEntIndexAllEntities
 */
 static edict_t *GAME_EXPORT pfnPEntityOfEntIndexAllEntities( int iEntIndex )
 {
+	if( iEntIndex == 1 && cof_think_slot_one ) return cof_think_slot_one; // Cry of Fear story co-op (sv_cof_rescue.c)
 	return SV_PEntityOfEntIndex( iEntIndex, true );
 }
 
