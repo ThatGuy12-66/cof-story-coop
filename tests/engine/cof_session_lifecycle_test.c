@@ -13,6 +13,8 @@ typedef int qboolean;
 #define DEAD_NO 0
 #define FBitSet(value,bits) ((value)&(bits))
 #define Q_stricmp _stricmp
+#define Q_strcmp strcmp
+#define MAX_CLIENTS 32
 #define Q_strncmp strncmp
 #define Q_strlen strlen
 #define Q_snprintf snprintf
@@ -77,8 +79,23 @@ int main( void )
 	argc = 2; argv[0] = "cof_load"; argv[1] = "manual";
 	assert( SV_CoF_SessionClientCommand( &clients[1] ) && loads == 2 );
 	assert( SV_CoF_SessionClientCommand( &clients[0] ) && loads == 3 );
+	/* A tape save only after the game's own save point: its SaveLoad screen (byte 0 = save), then the player's
+	 * unfreezesave for that slot (the game's PreSave), then savehack 3.25 s later. */
 	argv[0] = "savehack"; argv[1] = "cofsave5";
+	assert( SV_CoF_SessionClientCommand( &clients[1] ) && saves == 2 ); /* no save point: refused */
+	{
+		static const unsigned char menu[] = { 0, 'B', 'a', 's', 'e', 'm', 'e', 'n', 't', 0 };
+		SV_CoF_SessionMessage( clients[1].edict, "SaveLoad", menu, sizeof( menu ));
+	}
+	argc = 3; argv[0] = "unfreezesave"; argv[1] = "1024"; argv[2] = "4";
+	assert( !SV_CoF_SessionClientCommand( &clients[1] )); /* the game's own command, seen */
+	argc = 2; argv[0] = "savehack"; argv[1] = "cofsave5";
+	assert( SV_CoF_SessionClientCommand( &clients[1] ) && saves == 2 ); /* another slot than chosen: refused */
+	argc = 3; argv[0] = "unfreezesave"; argv[1] = "1024"; argv[2] = "5"; SV_CoF_SessionClientCommand( &clients[1] );
+	argc = 2; argv[0] = "savehack"; argv[1] = "cofsave5";
+	assert( SV_CoF_SessionClientCommand( &clients[0] ) && saves == 2 ); /* someone else's save point */
 	assert( SV_CoF_SessionClientCommand( &clients[1] ) && saves == 3 && !strcmp( last_slot, "tape5" ));
+	assert( SV_CoF_SessionClientCommand( &clients[1] ) && saves == 3 ); /* once per save point */
 	gate = 0; assert( !SV_CoF_SessionClientCommand( &clients[1] ));
 	assert( !SV_CoF_SessionWipe( "c_start", NULL ));
 	gate = 1; edicts[0].v.health = edicts[1].v.health = 100;

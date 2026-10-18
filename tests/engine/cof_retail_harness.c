@@ -50,7 +50,7 @@ static sv_client_t clients[2];
 static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x210], monster_private[3][0x360];
 static const char *strings[] = { "", "inventoryitems/hallkey.txt", "inventoryitems/weapons/weapon_mobile.txt", "inventoryitems/fuse.txt", "cof_document",
 	"weapon_glock", "weapon_switchblade", "weapon_syringe", "weapon_shotgun", "monster_slower", "monster_generic", "monster_sawrunner", "monster_nerd",
-	"weapon_dualweapon" };
+	"weapon_dualweapon", "findthekey", "txtfiles/custom_objectives.txt", "txtfiles/hints.txt" };
 #define STRINGS ( (int)ARRAYSIZE( strings ))
 static byte dll_image[0x217118 + 19 * 19 * 4]; /* the relationship table sits at +0x217118 */
 static int private_lookups, uses;

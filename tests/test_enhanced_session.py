@@ -43,5 +43,13 @@ class SessionTests(unittest.TestCase):
         self.assertIn('session staging scenarios passed', output)
 
 
+class SessionWiringTests(unittest.TestCase):
+    def test_the_save_screen_is_seen(self):
+        from tests.native import assert_has
+        from tests.test_enhanced_sections import body_of
+        body = body_of(ENGINE_SERVER / 'sv_game.c', 'static void GAME_EXPORT pfnMessageEnd( void )')
+        assert_has(self, 'SV_CoF_SessionMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );', body)
+
+
 if __name__ == '__main__':
     unittest.main()
