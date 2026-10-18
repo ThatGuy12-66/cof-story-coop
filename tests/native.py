@@ -16,6 +16,11 @@ ENGINE_SERVER = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa6858
 VCVARS = Path(r'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat')
 
 
+def assert_has(case: unittest.TestCase, needle: str, text: str) -> None:
+    """A wiring check that names only the missing line (not the whole source file) when it fails."""
+    case.assertTrue(needle in text, f'missing: {needle}')
+
+
 def strip_includes(text: str) -> str:
     return '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('#include'))
 
