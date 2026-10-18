@@ -184,6 +184,7 @@ static void Cmd_AddCommand( const char *name, xcommand_t f, const char *desc ) {
 #include "sv_cof_descriptor.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_light.h"
+#include "cof_strip.h"
 static int inventory_slots = 6;
 static int SV_CoF_InventorySlots( void ) { return inventory_slots; }
 #include "retail_under_test.c"
@@ -268,9 +269,9 @@ int main( void )
 	assert( SV_CoF_RetailItemName( "inventoryitems/hallkey.txt", nice, sizeof( nice )) && !strcmp( nice, "Hall key" ));
 	assert( !SV_CoF_RetailItemName( "inventoryitems/fuse.txt", nice, sizeof( nice )) && !strcmp( nice, "item" ));
 
-	/* ProFont: a colour byte, then the text with its terminator */
+	/* ProFont: a colour byte, then the text with its terminator, then the engine's mark (cof_strip.h) */
 	assert( SV_CoF_RetailProFont( &clients[0], 2, "hi", false ));
-	assert( !strcmp( last_msg_name, "ProFont" ) && last_msg_size == 4 && !memcmp( last_msg, "\x02hi", 4 ) && !last_msg_reliable );
+	assert( !strcmp( last_msg_name, "ProFont" ) && last_msg_size == 6 && !memcmp( last_msg, "\x02hi\0\xC0\xF5", 6 ) && !last_msg_reliable );
 	assert( !SV_CoF_RetailProFont( &clients[0], 2, "a DEADNOTIFY line", true )); /* the client would swap in its respawn prompt */
 	assert( !SV_CoF_RetailProFont( &clients[0], 9, "hi", true ));
 

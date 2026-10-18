@@ -11,6 +11,7 @@ class RetailTests(unittest.TestCase):
             'sv_cof_retail.h': (ENGINE_SERVER / 'sv_cof_retail.h').read_text(),
             'sv_cof_state_data.h': (ENGINE_SERVER / 'sv_cof_state_data.h').read_text(),
             'sv_cof_light.h': (ENGINE_SERVER / 'sv_cof_light.h').read_text(),
+            'cof_strip.h': (ENGINE_SERVER.parent / 'common/cof_strip.h').read_text(),
             'retail_under_test.c': strip_includes((ENGINE_SERVER / 'sv_cof_retail.c').read_text()),
         })
         self.assertIn('retail scenarios passed', out)
@@ -22,6 +23,7 @@ class RetailTests(unittest.TestCase):
             'sv_cof_retail.h': (ENGINE_SERVER / 'sv_cof_retail.h').read_text(),
             'sv_cof_state_data.h': (ENGINE_SERVER / 'sv_cof_state_data.h').read_text(),
             'sv_cof_light.h': (ENGINE_SERVER / 'sv_cof_light.h').read_text(),
+            'cof_strip.h': (ENGINE_SERVER.parent / 'common/cof_strip.h').read_text(),
             'retail_under_test.c': strip_includes((ENGINE_SERVER / 'sv_cof_retail.c').read_text()),
         })
         self.assertIn('retail state scenarios passed', out)
