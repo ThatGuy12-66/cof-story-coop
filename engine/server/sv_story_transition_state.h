@@ -76,8 +76,14 @@ static int CoF_TransitionInventoryOwner(const cof_transition_state_t *s, int own
 	}
 	return 0;
 }
-static int CoF_TransitionSkipSavedEntity(int world, int incoming, int player, int inventory)
+/* A weapon or item an AI companion (a fake client, never captured) holds or carries. The snapshot is written before the
+ * companions are dropped, so it has their items; on a revisit they would come back with no owner, more each visit. */
+static int CoF_TransitionCompanionItem(int owner_companion, int attached_companion)
 {
-	return (world || !incoming) && (player || inventory);
+	return owner_companion || attached_companion;
+}
+static int CoF_TransitionSkipSavedEntity(int world, int incoming, int player, int inventory, int companion)
+{
+	return ((world || !incoming) && (player || inventory)) || (world && companion);
 }
 #endif

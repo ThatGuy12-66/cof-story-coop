@@ -62,11 +62,12 @@ static void inventory_owner_and_hub_policy(void)
 	assert(CoF_TransitionInventoryOwner(&s, 0, 0) == 0);
 	assert(CoF_TransitionDrop(&s, 1, 22));
 	assert(CoF_TransitionInventoryOwner(&s, 2, 0) == 0);
-	assert(CoF_TransitionSkipSavedEntity(1, 0, 1, 0)); /* stale hub player */
-	assert(CoF_TransitionSkipSavedEntity(1, 0, 0, 1)); /* stale hub inventory */
-	assert(CoF_TransitionSkipSavedEntity(0, 0, 1, 0)); /* other adjacent map */
-	assert(!CoF_TransitionSkipSavedEntity(0, 1, 1, 0)); /* current party */
-	assert(!CoF_TransitionSkipSavedEntity(1, 0, 0, 0)); /* hub world */
+	assert(CoF_TransitionSkipSavedEntity(1, 0, 1, 0, 0)); /* stale hub player */
+	assert(CoF_TransitionSkipSavedEntity(1, 0, 0, 1, 0)); /* stale hub inventory */
+	assert(CoF_TransitionSkipSavedEntity(0, 0, 1, 0, 0)); /* other adjacent map */
+	assert(!CoF_TransitionSkipSavedEntity(0, 1, 1, 0, 0)); /* current party */
+	assert(!CoF_TransitionSkipSavedEntity(1, 0, 0, 0, 0)); /* hub world */
+	assert(CoF_TransitionSkipSavedEntity(1, 0, 0, 0, 1)); /* a companion's item in the hub */
 }
 
 int main(void)

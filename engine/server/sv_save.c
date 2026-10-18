@@ -34,13 +34,14 @@ GNU General Public License for more details.
 // Reserved outside the SDK's low 16 landmark bits and high four entity bits.
 // Only our session snapshots use it; destination world loads skip old inventory.
 #define FENTTABLE_COF_INVENTORY 0x08000000
+#define FENTTABLE_COF_COMPANION 0x04000000 // a weapon or item an AI companion had: not restored on a revisit
 #define COF_STORY_MAP_HISTORY 256
 static struct
 {
 	cof_transition_state_t tickets;
 	char source[MAX_QPATH], destination[MAX_QPATH], landmark[MAX_QPATH];
 	vec3_t source_origin, destination_origin;
-	int *inventory_owner; // source entity id -> captured player's one-based slot
+	int *inventory_owner; // source entity id -> captured player's one-based slot, or -1: an AI companion's
 	int entity_count, connection;
 	qboolean incoming;
 } cof_transition;
@@ -188,6 +189,10 @@ static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark 
 		cof_transition.inventory_owner[i] = CoF_TransitionInventoryOwner( &cof_transition.tickets,
 			SV_IsValidEdict( ent->v.owner ) ? NUM_FOR_EDICT( ent->v.owner ) : 0,
 			SV_IsValidEdict( ent->v.aiment ) ? NUM_FOR_EDICT( ent->v.aiment ) : 0 );
+		if( !cof_transition.inventory_owner[i] && CoF_TransitionCompanionItem(
+			SV_IsValidEdict( ent->v.owner ) && FBitSet( ent->v.owner->v.flags, FL_FAKECLIENT ),
+			SV_IsValidEdict( ent->v.aiment ) && FBitSet( ent->v.aiment->v.flags, FL_FAKECLIENT )))
+			cof_transition.inventory_owner[i] = -1;
 	}
 	{
 		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, SV_CoF_TransitionRequestedLevel( map, landmark ),
@@ -1792,7 +1797,8 @@ static void CreateEntitiesInRestoreList( SAVERESTOREDATA *pSaveData, int levelMa
 				qboolean player = FBitSet( pTable->flags, FENTTABLE_PLAYER ) || (pTable->id > 0 && pTable->id <= svs.maxclients);
 				// A hub snapshot owns its world, never another connection's player
 				// or the inventory that player carried away on a previous visit.
-				if( CoF_TransitionSkipSavedEntity( create_world, cof_transition.incoming, player, FBitSet( pTable->flags, FENTTABLE_COF_INVENTORY )))
+				if( CoF_TransitionSkipSavedEntity( create_world, cof_transition.incoming, player,
+					FBitSet( pTable->flags, FENTTABLE_COF_INVENTORY ), FBitSet( pTable->flags, FENTTABLE_COF_COMPANION )))
 				{
 					pTable->pent = NULL;
 					continue;
@@ -1967,7 +1973,8 @@ static SAVERESTOREDATA *SaveGameState( int changelevel )
 		if( SV_CoF_TransitionActive() && i < cof_transition.entity_count )
 		{
 			qboolean player = i > 0 && i <= svs.maxclients && CoF_TransitionMatches( &cof_transition.tickets, cof_transition.tickets.epoch, i - 1, svs.clients[i - 1].userid );
-			if( player || cof_transition.inventory_owner[i] )
+			if( cof_transition.inventory_owner[i] < 0 ) SetBits( pTable->flags, FENTTABLE_COF_COMPANION );
+			if( player || cof_transition.inventory_owner[i] > 0 )
 			{
 				if( !pTable->size )
 				{
@@ -1976,7 +1983,7 @@ static SAVERESTOREDATA *SaveGameState( int changelevel )
 					return NULL;
 				}
 				SetBits( pTable->flags, BIT( cof_transition.connection ));
-				if( cof_transition.inventory_owner[i] ) SetBits( pTable->flags, FENTTABLE_COF_INVENTORY );
+				if( cof_transition.inventory_owner[i] > 0 ) SetBits( pTable->flags, FENTTABLE_COF_INVENTORY );
 			}
 		}
 	}
