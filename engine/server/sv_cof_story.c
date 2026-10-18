@@ -118,6 +118,7 @@ static qboolean CoF_StoryZeroRules( byte *base )
 static void CoF_StoryCloseGate( void )
 {
 	SV_CoF_Inventory12Close();
+	SV_CoF_GatesClose();
 	if( cof_gate && cof_gate_instance == svgame.hInstance )
 	{
 		CoF_StoryWriteGate( cof_gate, cof_gate_open, cof_gate_original );
@@ -303,6 +304,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_SectionsInit();
 	SV_CoF_BonusInit();
 	SV_CoF_LightInit();
+	SV_CoF_GatesInit();
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -365,6 +367,7 @@ void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
 void SV_CoF_StoryFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
+	SV_CoF_GatesFrame(); // first: the game's own rules as this frame wants them
 	SV_CoF_RecoveryFrame();
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
