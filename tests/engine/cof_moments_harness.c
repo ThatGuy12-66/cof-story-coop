@@ -245,8 +245,10 @@ int main( void )
 	assert( !private_data[2][COF_PL_IN_CALL] && logged( "call-flags-cleared entity=2" ) == 1 );
 	setup(); private_data[2][COF_PL_IN_CALL] = 1; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] ); /* alive: their call */
 
-	/* Ladders: while the host climbs, nobody near its use brushes can start it. */
-	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN | FL_GODMODE;
+	/* Ladders: while the host climbs, nobody near its use brushes can start it. The climb freezes the climber and
+	 * hands them the ladder's camera model (P+0x5AC); its FL_GODMODE lasts one frame (PostThink clears it). */
+	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN;
+	value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
 	use = spawn( 16, 9, 0, 10 ); use->v.absmin[0] = 480; use->v.absmax[0] = 520; use->v.absmax[1] = use->v.absmax[2] = 10;
 	SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE | 1; SV_CoF_MomentsCommand( &clients[1], &cmd );
@@ -256,8 +258,12 @@ int main( void )
 	guest->v.origin[0] = 900; cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
 	guest->v.origin[0] = 500; host->v.flags = 0; SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
+	/* frozen for something else (no ladder camera): not a climb */
+	host->v.flags = FL_FROZEN; value = 0; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 ); SV_CoF_MomentsFrame();
+	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
 	/* another ladder's brush is not this one's */
-	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN | FL_GODMODE;
+	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN;
+	value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
 	use = spawn( 16, 9, 0, 17 ); use->v.absmin[0] = 480; use->v.absmax[0] = 520; SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
 
@@ -279,7 +285,7 @@ int main( void )
 
 	/* Review I-2: the climber leaves mid-climb: their camera model is let go and removed,
 	 * so later spawns are not held in the model cutscene wait for it. */
-	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = guest; guest->v.flags = FL_FROZEN | FL_GODMODE;
+	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = guest; guest->v.flags = FL_FROZEN;
 	value = 0x5678; memcpy( private_data[15] + COF_LADDER_CLIMBER, &value, 4 ); memcpy( private_data[2] + COF_PL_CAMERA_MODEL, &value, 4 );
 	set_handle( 2, COF_PL_CAMERA_HANDLE, &entities[18] ); spawn( 18, 12, 0, 0 )->v.owner = guest;
 	SV_CoF_MomentsDrop( &clients[1] );
