@@ -14,6 +14,7 @@ GNU General Public License for more details.
 */
 
 #include "gl_local.h"
+#include "gl_cof_farclip.h"
 #include "xash3d_mathlib.h"
 #include "library.h"
 #include "beamdef.h"
@@ -341,7 +342,7 @@ R_GetFarClip
 static float R_GetFarClip( void )
 {
 	if( WORLDMODEL && FBitSet( RI.rvp.flags, RF_DRAW_WORLD ))
-		return gp_movevars->zmax * 1.73f;
+		return CoF_FarClip( gp_movevars->zmax, cof_farclip_scale.value );
 	return 2048.0f;
 }
 

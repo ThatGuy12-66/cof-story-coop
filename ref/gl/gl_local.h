@@ -731,6 +731,7 @@ extern convar_t cof_skip_client_transparent_triangles;
 extern convar_t cof_skip_client_normal_triangles;
 extern convar_t cof_custom_renderfx_opaque;
 extern convar_t cof_client_texenv;
+extern convar_t cof_farclip_scale;
 extern convar_t cof_viewmodel_fov;
 extern convar_t cof_sprite_quiet_frames;
 extern convar_t cof_sprite_trace;
