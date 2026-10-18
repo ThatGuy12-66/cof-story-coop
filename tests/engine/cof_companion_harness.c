@@ -73,7 +73,7 @@ static sv_client_t clients[MAX_CLIENTS];
 static const char *strings[] = { "", "player", "monster_slower", "monster_friend", "monster_engaged", "trigger_once", "trigger_hurt", "killthemall", "func_door", "func_door_rotating", "*5" };
 static char log_text[32768];
 static size_t log_length;
-static int gate, connect_ok = 1, put_in, placed, ready, equips, runs, next_userid = 200, wall, inits;
+static int gate, connect_ok = 1, put_in, hud_marked, placed, ready, equips, runs, next_userid = 200, wall, inits;
 /* a door (entity 9) across x = door_x at the feet; a low box from x = ledge_x on, ledge_top over the floor */
 static int door_x, ledge_x, uses;
 static float ledge_top;
@@ -196,6 +196,8 @@ static void game_put_in( edict_t *e )
 static void SV_InitEdict( edict_t *e ) { inits++; memset( &e->v, 0, sizeof( e->v )); in_game[e - entities] = 0; }
 static string_t SV_MakeString( const char *s ) { return 1; }
 static void SV_CoF_PartyPlayerReady( sv_client_t *cl, qboolean fresh ) { ready++; }
+/* The engine marks the new player object's HUD set up, after the game put it in (no "has joined" line). */
+static qboolean SV_CoF_RetailHudInitialized( edict_t *e ) { assert( in_game[e - entities] ); hud_marked++; return true; }
 static int place_ok = 1, place_rank, place_anywhere, place_had_near, in_door;
 static vec3_t place_near;
 static qboolean SV_CoF_PartyPlaceUnseen( sv_client_t *mover, edict_t *leader, const float *exit_at, int rank, qboolean anywhere )
@@ -347,7 +349,7 @@ static void setup( void )
 	int i;
 	memset( entities, 0, sizeof( entities )); memset( clients, 0, sizeof( clients ));
 	memset( log_text, 0, sizeof( log_text )); log_length = 0;
-	gate = 1; connect_ok = 1; put_in = placed = ready = equips = runs = wall = inits = 0; next_userid = 200;
+	gate = 1; connect_ok = 1; put_in = hud_marked = placed = ready = equips = runs = wall = inits = 0; next_userid = 200;
 	supplies = revives = reviving = repairs = fallen = gives = command_count = body_flicker = 0; revive_ok = 1; free_slots = 4;
 	memset( commands, 0, sizeof( commands )); last_equip[0] = 0;
 	arms_weapon = COF_ARMS_MELEE; arms_has_gun = arms_has_heal = arms_sights = 0; arms_clip = arms_reserve = 0; arms_has_melee = 1;
@@ -394,7 +396,7 @@ int main( void )
 	/* it is driven every frame through the player code */
 	runs = 0; frame( 0.05 ); assert( runs == 1 && last_run.msec == 50 );
 	/* never more than asked */
-	frame( 2.0 ); frame( 2.0 ); assert( put_in == 1 );
+	frame( 2.0 ); frame( 2.0 ); assert( put_in == 1 && hud_marked == 1 );
 	/* turned off: it leaves */
 	cvars[0].value = 0; frame( 0.1 ); assert( clients[1].state == cs_free && logged( "companion-removed" ) == 1 );
 	/* the game refuses the connection: the slot is freed again */
