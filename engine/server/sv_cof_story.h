@@ -43,6 +43,9 @@ qboolean SV_CoF_RoomTypeSet( const char *name, float value );
 void SV_CoF_WeatherInit( void );
 void SV_CoF_WeatherFrame( void );
 void SV_CoF_WeatherReset( void );
+// A merged map's view distance, each section its own (sv_cof_view.c).
+void SV_CoF_ViewInit( void );
+void SV_CoF_ViewFrame( void );
 // A merged map's 3D skies, each section its own (sv_cof_sky.c).
 void SV_CoF_SkyInit( void );
 void SV_CoF_SkyFrame( void );

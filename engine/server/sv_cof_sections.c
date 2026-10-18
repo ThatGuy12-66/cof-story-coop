@@ -73,6 +73,22 @@ static const cof_sections_t *CoF_SectLoaded( void )
 	return cof_sect_loaded_ok ? &cof_sect_loaded : NULL;
 }
 
+// The view distance of section's own map (its MaxRange), or 0 when the map is not merged.
+float SV_CoF_SectionMaxRange( int section )
+{
+	static float ranges[COF_SECT_MAX];
+	static int generation = -1;
+	const cof_sections_t *s = CoF_SectLoaded();
+	int i;
+	if( !s || section < 0 || section >= s->count || section >= COF_SECT_MAX ) return 0.0f;
+	if( generation != svs.spawncount )
+	{
+		generation = svs.spawncount;
+		for( i = 0; i < s->count && i < COF_SECT_MAX; i++ ) ranges[i] = (float)COM_CoF_MemberMaxRange( s->sec[i].map );
+	}
+	return ranges[section];
+}
+
 int SV_CoF_PlayerSection( const edict_t *ent )
 {
 	const cof_sections_t *s = CoF_SectLoaded();

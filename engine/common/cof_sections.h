@@ -739,4 +739,27 @@ COF_SECT_FN char *CoF_ComposeEntities( const char *world_lump, const char *const
 	return b.data;
 }
 
+// The view distance a member map's own worldspawn gives: hl.dll's CWorld takes MaxRange with atof and sets sv_zmax to
+// it, or to 4096 when it is not above 0 (world.cpp:1004-1008, 923-926 in the decompilation).
+#define COF_SECT_DEFAULT_RANGE 4096.0
+COF_SECT_FN double CoF_SectMaxRange( const char *ents )
+{
+	static cof_sect_pair_t pairs[COF_SECT_PAIRS];
+	const char *cursor = ents, *start, *stop;
+	char text[64];
+	int n, k;
+	if( !ents || !CoF_SectNextBlock( &cursor, &start, &stop ) || ( n = CoF_SectPairs( start, stop, pairs, COF_SECT_PAIRS )) < 0 )
+		return COF_SECT_DEFAULT_RANGE;
+	for( k = 0; k < n; k++ )
+	{
+		double value;
+		if( !CoF_SectIs( pairs[k].k, pairs[k].kl, "MaxRange" ) || pairs[k].vl >= sizeof( text )) continue;
+		memcpy( text, pairs[k].v, pairs[k].vl );
+		text[pairs[k].vl] = 0;
+		value = atof( text );
+		return value > 0.0 ? value : COF_SECT_DEFAULT_RANGE;
+	}
+	return COF_SECT_DEFAULT_RANGE;
+}
+
 #endif // COF_SECTIONS_H

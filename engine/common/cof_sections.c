@@ -89,6 +89,14 @@ static char *COM_CoF_MemberEntities( const char *map )
 	return ents;
 }
 
+double COM_CoF_MemberMaxRange( const char *map )
+{
+	char *ents = COM_CoF_MemberEntities( map );
+	double range = CoF_SectMaxRange( ents );
+	if( ents ) Mem_Free( ents );
+	return range;
+}
+
 /*
 The entity string of a merged map: world is the merged file's own entity lump (its worldspawn), worldsize its size.
 NULL when map is not merged (or on an error, logged); otherwise a Z_Malloc'd NUL-terminated string.
