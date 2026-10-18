@@ -87,10 +87,16 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   uni notes' caution about decompilation-derived code). Plan `docs/superpowers/plans/2026-10-18-decomp-fixes.md`
   (46 tasks), executed inline with TDD, one commit per task in each repo touched; every ruling is in the ledger
   `.superpowers/sdd/2026-10-18-decomp-fixes/progress.md` (git-ignored). Launcher `6279028..` (40 commits), engine
-  `0e6e768d..7109ae0e` (39), both on `tester-package`: not merged, not pushed, no package built, nothing installed in
+  `0e6e768d..7109ae0e` (39), both on `tester-package`: not merged, not pushed, package built (below), nothing installed in
   the smoke copy, no game launched. Full suite 451 OK (1 skipped); engine build `xash.dll` `7922C7EB...`
   (`build-local-20260927`). Every retail fact was re-checked against the retail hl.dll/client.dll bytes
   (`tools/hlre.py`); gates and client patches are verified against the stock bytes by tests.
+- Package (the user: "build it", 2026-10-18 15:28): `evidence/decomp-fixes-20261018/package/CoF-Story-Coop-Test1.zip`,
+  SHA-256 `2019996E...`, 110,765,705 bytes; exe `678BFAF7...` (`--self-test` passed); payload `xash.dll` `7922C7EB...`,
+  `vgui.dll` `40642512...`; from launcher `350e346`, engine `7109ae0e`, FreeVGUI `66eca8d`; suite 451 OK (1 skipped)
+  on that tree (`full-suite.log`, `build.log`, `package.log` beside it). The builder refuses an untracked file, so the
+  other session's `docs/research/2026-10-17-uni-coop-notes.md` was hidden by a line in `.git/info/exclude` for the
+  build only (removed after; the file itself untouched). Not installed in the smoke copy; not sent to anyone.
 - Cvars (all default on; 0 = the game's own behaviour): `cof_donator`, `cof_costumes`, `cof_coop_nightvision`,
   `cof_sp_carry` (11 hl.dll gates), `cof_simon_voice`, `cof_coop_weather` (a gate plus a per-player mirror),
   `cof_coop_player_state` (muffle, cutscene flag, spread statics, `gDualWeapon`, `room_type`), `cof_coop_heldlights`,
