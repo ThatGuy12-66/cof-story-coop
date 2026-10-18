@@ -50,6 +50,10 @@ enum
 	COF_GATE_CARRY_AMMO_SHELLS,
 	COF_GATE_CARRY_AMMO_TMP,
 	COF_GATE_CARRY_AMMO_VP70,
+	// CRainModify::Use (100A99A0) returns at once in deathmatch ("Rain error: only static rain in multiplayer"): the
+	// jump past that refusal becomes unconditional, and the named rain_modify changes player 1's rain as in single
+	// player (cof_coop_weather; sv_cof_weather.c gives it to everyone).
+	COF_GATE_RAIN_MODIFY,
 	COF_GATES
 };
 
@@ -67,6 +71,7 @@ static const cof_gate_t cof_gates[COF_GATES] =
 	{ "carry-ammo-shells", 0x6CB36, 2, { 0x74, 0x1F }, { 0xEB, 0x1F } },
 	{ "carry-ammo-tmp", 0x7E0C7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
 	{ "carry-ammo-vp70", 0x836D7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
+	{ "rain-modify", 0xA99C7, 2, { 0x7B, 0x14 }, { 0xEB, 0x14 } },
 };
 
 // Brings one gate to the wanted state through write (which changes executable bytes); 1 when it is in that state now,

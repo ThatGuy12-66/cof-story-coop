@@ -32,6 +32,10 @@ qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
 void SV_CoF_GatesInit( void );
 // Simon's voice (sv_cof_voice.c): the sample to send instead of a player's police sample (buf, or sample itself).
 void SV_CoF_VoiceInit( void );
+// Scripted weather for every player (sv_cof_weather.c).
+void SV_CoF_WeatherInit( void );
+void SV_CoF_WeatherFrame( void );
+qboolean SV_CoF_WeatherOn( void );
 const char *SV_CoF_VoiceSample( edict_t *ent, const char *sample, int flags, char *buf, size_t size );
 void SV_CoF_VoicePrecache( const char *name );
 void SV_CoF_GatesFrame( void );
