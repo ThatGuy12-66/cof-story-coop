@@ -402,6 +402,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_MomentsReset();
 	SV_CoF_RescueReset();
 	SV_CoF_FogReset();
+	SV_CoF_WeatherReset();
 	SV_CoF_CompanionReset();
 	SV_CoF_TestGunReset();
 	SV_CoF_ExitReset();

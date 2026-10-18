@@ -42,6 +42,9 @@ qboolean SV_CoF_RoomTypeSet( const char *name, float value );
 // Scripted weather for every player (sv_cof_weather.c).
 void SV_CoF_WeatherInit( void );
 void SV_CoF_WeatherFrame( void );
+void SV_CoF_WeatherReset( void );
+// A merged map: the game's RainData to a player is held back for their section's own (true).
+qboolean SV_CoF_RainMessage( edict_t *to, int dest, const char *name, const byte *payload, int size );
 qboolean SV_CoF_WeatherOn( void );
 const char *SV_CoF_VoiceSample( edict_t *ent, const char *sample, int flags, char *buf, size_t size );
 void SV_CoF_VoicePrecache( const char *name );

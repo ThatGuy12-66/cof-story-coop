@@ -3008,6 +3008,13 @@ static void GAME_EXPORT pfnMessageEnd( void )
 		return;
 	}
 
+	// Cry of Fear story co-op: in a merged map each section's own rain is sent instead (sv_cof_weather.c)
+	if( svgame.msg_index > 0 && SV_CoF_RainMessage( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize ))
+	{
+		MSG_Clear( &sv.multicast );
+		return;
+	}
+
 	if( svgame.msg_index > 0 && svgame.msg_size_index >= 0 )
 	{
 		SV_CoF_StateMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
