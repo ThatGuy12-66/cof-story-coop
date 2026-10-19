@@ -89,20 +89,12 @@ class RefusalTests(unittest.TestCase):
         report = plan.plan_group(MAPS, ['c_ending1', 'c_ending1b'])
         self.assertTrue(report.ok, report.problems)
 
-    def test_play_everywhere_sound_that_starts_with_the_map_is_refused(self):
-        # it would go to every section's players in the sign-on data
-        members = [('c_a', [ent(classname='ambient_generic', message='ambience/hum.wav', spawnflags='1')]),
-                   ('c_b', [ent(classname='ambient_generic', message='ambience/x.wav', spawnflags='17'),
-                            ent(classname='ambient_generic', message='ambience/y.wav', spawnflags='4')])]
-        found = plan.everywhere_sound_problems(members)
-        self.assertEqual(len(found), 1)
-        self.assertIn('hum.wav', found[0])
-
-    def test_play_everywhere_sound_that_does_not_loop_is_not_refused(self):
-        # an ambient_generic starts with the map only when it loops (no 32) and is not silent (no 16): sound.cpp:224-280
-        members = [('c_a', [ent(classname='ambient_generic', message='ambience/sob.wav', spawnflags='37')]),
-                   ('c_b', [ent(classname='ambient_generic', message='ambience/once.wav', spawnflags='33')])]
-        self.assertEqual(plan.everywhere_sound_problems(members), [])
+    def test_a_play_everywhere_loop_that_starts_with_the_map_plans_clean(self):
+        # the engine keeps every ambient loop of a merged map to its own section's players, from the start
+        # (sv_cof_loops.c); c_arvuti's crickets and wind
+        retail('c_arvuti')
+        report = plan.plan_group(MAPS, ['c_arvuti', 'c_drean'])
+        self.assertTrue(report.ok, report.problems)
 
     def test_a_class_the_game_takes_the_first_of_is_refused_in_two_members(self):
         # the keypad, phone, computer... checks use the map's first entity of the class
@@ -196,9 +188,15 @@ class WorldKeyTests(unittest.TestCase):
         self.assertEqual(self.check({'WaveHeight': '0.0'}, {})[0], [])
         self.assertTrue(self.check({'WaveHeight': '0.0'}, {'WaveHeight': '2'})[0])
 
+    def test_cd_track_absent_plays_as_track_one(self):
+        # hl.dll's CD track: 0 sends nothing, 1 is "blank" in the engine's default playlist (cl_game.c; Cry of Fear
+        # has no media/cdaudio.txt): neither plays a track. c_bridge has none, the other 80 story maps 1
+        self.assertEqual(self.check({'sounds': '1'}, {})[0], [])
+        self.assertTrue(self.check({'sounds': '1'}, {'sounds': '2'})[0])
+
     def test_other_differences_block_until_accepted(self):
-        self.assertTrue(self.check({'sounds': '1'}, {})[0])
-        self.assertEqual(self.check({'sounds': '1'}, {}, accepted={'sounds': 'a reason'})[0], [])
+        self.assertTrue(self.check({'sounds': '2'}, {})[0])
+        self.assertEqual(self.check({'sounds': '2'}, {}, accepted={'sounds': 'a reason'})[0], [])
 
 
 class NameTests(unittest.TestCase):

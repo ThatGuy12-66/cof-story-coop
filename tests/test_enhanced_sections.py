@@ -157,12 +157,16 @@ class ServerWiringTests(unittest.TestCase):
 
     def test_play_everywhere_sounds_reach_only_their_section(self):
         multicast = body_of(SERVER / 'sv_game.c', 'static int SV_Multicast(')
-        skip = multicast.index('cof_multicast_section >= 0 && SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section')
+        # a player still connecting has no section yet: their section's loops come with their first frame
+        skip = multicast.index('cof_multicast_section >= 0 && ( cl->state != cs_spawned || '
+                               'SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section )')
         self.assertLess(skip, multicast.index('SV_CheckClientVisiblity( cl, mask )'))
-        for signature, origin in (('void GAME_EXPORT SV_StartSound(', 'origin'), ('static void GAME_EXPORT pfnEmitAmbientSound(', 'pos')):
+        for signature, set_line in (
+                ('void GAME_EXPORT SV_StartSound(', 'cof_multicast_section = SV_CoF_SoundSection( attn, flags, origin );'),
+                ('static void GAME_EXPORT pfnEmitAmbientSound(',  # an ambient loop's own section (test_enhanced_loops)
+                 'cof_multicast_section = section >= 0 ? section : SV_CoF_SoundSection( attn, flags, pos );')):
             body = body_of(SERVER / 'sv_game.c', signature)
-            set_at = body.index(f'cof_multicast_section = SV_CoF_SoundSection( attn, flags, {origin} );')
-            self.assertLess(set_at, body.index('SV_Multicast('))
+            self.assertLess(body.index(set_line), body.index('SV_Multicast('))
             self.assertLess(body.index('SV_Multicast('), body.index('cof_multicast_section = -1;'))
         module = (SERVER / 'sv_cof_sections.c').read_text(encoding='latin-1')
         sound = module[module.index('int SV_CoF_SoundSection('):]

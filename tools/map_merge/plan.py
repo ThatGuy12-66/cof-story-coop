@@ -25,8 +25,10 @@ HL_WORLD_KEYS = ('player1', 'player2', 'player3', 'player4', 'materialstxt', 'Ma
 WORLD_KEYS_IGNORED = {
     key: 'story co-op sets every player model in the engine (sv_cof_story.c SV_CoF_StoryUserinfo); '
          'worldspawn models are not shown' for key in ('player1', 'player2', 'player3', 'player4')}
-# Keys whose absence means a value: equal once the absent value is filled in.
-WORLD_KEY_DEFAULTS = {'materialstxt': 'sound/materials.txt', 'WaveHeight': '0'}
+# Keys whose absence means a value: equal once the absent value is filled in. sounds is hl.dll's CD track: none sends
+# nothing, 1 is "blank" in the engine's default playlist (cl_game.c CL_CreatePlaylist; Cry of Fear has no
+# media/cdaudio.txt), so neither plays a track.
+WORLD_KEY_DEFAULTS = {'materialstxt': 'sound/materials.txt', 'WaveHeight': '0', 'sounds': '1'}
 # cof_sections.h: COF_SECT_RENAMES, COF_SECT_STYLES, COF_SECT_LANDMARKS a section; COF_SECT_NAME with its 0.
 SECTION_LIMITS = {'renames': 512, 'styles': 32, 'landmarks': 64}
 SECTION_NAME_MAX = 63
@@ -126,25 +128,6 @@ def reference_problems(members: list, sections: list) -> list:
                 if k.split('#')[0] in mm or number(v) or v not in s.renames:
                     continue
                 out.append(f'{name}: {cls} key {k}={v} names a renamed entity but is not renamed')
-    return out
-
-
-def everywhere_sound_problems(members: list) -> list:
-    """ambient_generic sounds that play everywhere (spawnflags 1) and start with the map (no 16, start silent): the
-    engine sends those in the sign-on data, to every section's players; it filters only sounds started later."""
-    out = []
-    for name, ents in members:
-        for e in ents:
-            if ent_get(e, 'classname') != 'ambient_generic':
-                continue
-            try:
-                flags = int(ent_get(e, 'spawnflags', '0') or 0)
-            except ValueError:
-                continue
-            # it starts with the map only when it loops (no 32) and is not silent (no 16): sound.cpp:224-280
-            if flags & 1 and not flags & 16 and not flags & 32:
-                out.append(f'{name}: ambient_generic {ent_get(e, "message")} plays everywhere from the start: '
-                           f'every section would hear it')
     return out
 
 
@@ -315,7 +298,6 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     report.problems += transition_pair_problems(named)
     report.problems += globalname_problems(named)
     report.problems += fixed_name_problems(named, sections)
-    report.problems += everywhere_sound_problems(named)
     report.problems += reference_problems(named, sections)
 
     landmarks = [[ent_get(e, 'targetname') for e in x.ents if ent_get(e, 'classname') == 'info_landmark'] for x in maps]
