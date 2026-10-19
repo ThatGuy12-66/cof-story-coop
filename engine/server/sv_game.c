@@ -452,8 +452,9 @@ static int SV_Multicast( int dest, const vec3_t origin, const edict_t *ent, qboo
 		if( SV_IsValidEdict( ent ) && !SV_CheckGroupTrace( ent, cl->edict ))
 			continue;
 
-		// Cry of Fear merged story maps: a "play everywhere" sound is for its own section
-		if( cof_multicast_section >= 0 && SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section )
+		// Cry of Fear merged story maps: a "play everywhere" sound or an ambient loop is for its own section
+		// (a player still connecting gets their section's loops with their first frame, sv_cof_loops.c)
+		if( cof_multicast_section >= 0 && ( cl->state != cs_spawned || SV_CoF_PlayerSection( cl->edict ) != cof_multicast_section ))
 			continue;
 
 		if( !SV_CheckClientVisiblity( cl, mask ))
@@ -2192,7 +2193,19 @@ SV_BuildSoundMsg
 */
 int SV_BuildSoundMsg( sizebuf_t *msg, edict_t *ent, int chan, const char *sample, int vol, float attn, int flags, int pitch, const vec3_t pos )
 {
-	int	entityIndex;
+	return SV_BuildSoundMsgNum( msg, SV_IsValidEdict( ent ) ? NUM_FOR_EDICT( ent ) : 0, chan, sample, vol, attn, flags, pitch, pos );
+}
+
+/*
+=================
+SV_BuildSoundMsgNum
+
+Cry of Fear: the same by entity number, which a removed entity's sound
+still has on the clients (sv_cof_loops.c stops a removed ambient's loop)
+=================
+*/
+int SV_BuildSoundMsgNum( sizebuf_t *msg, int entityIndex, int chan, const char *sample, int vol, float attn, int flags, int pitch, const vec3_t pos )
+{
 	int	sound_idx;
 	qboolean	spawn;
 
@@ -2262,10 +2275,6 @@ int SV_BuildSoundMsg( sizebuf_t *msg, edict_t *ent, int chan, const char *sample
 	}
 
 	spawn = FBitSet( flags, SND_RESTORE_POSITION ) ? false : true;
-
-	if( SV_IsValidEdict( ent ))
-		entityIndex = NUM_FOR_EDICT( ent );
-	else entityIndex = 0; // assume world
 
 	if( vol != 255 ) SetBits( flags, SND_VOLUME );
 	if( attn != ATTN_NONE ) SetBits( flags, SND_ATTENUATION );
@@ -2342,10 +2351,14 @@ pfnEmitAmbientSound
 */
 static void GAME_EXPORT pfnEmitAmbientSound( edict_t *ent, float *pos, const char *sample, float vol, float attn, int flags, int pitch )
 {
-	int	msg_dest;
+	int	msg_dest, section;
 
 	if( sv.state == ss_loading )
 		SetBits( flags, SND_SPAWNING );
+
+	// Cry of Fear merged story maps: an ambient loop is its section's players' (sv_cof_loops.c)
+	section = SV_CoF_LoopSound( ent, pos, sample, vol, attn, flags, pitch );
+	if( section == COF_LOOP_HELD ) return;
 
 	if( FBitSet( flags, SND_SPAWNING ))
 		msg_dest = MSG_INIT;
@@ -2355,7 +2368,7 @@ static void GAME_EXPORT pfnEmitAmbientSound( edict_t *ent, float *pos, const cha
 	if( FBitSet( flags, SND_STOP ))
 		msg_dest = MSG_ALL;
 
-	cof_multicast_section = SV_CoF_SoundSection( attn, flags, pos );
+	cof_multicast_section = section >= 0 ? section : SV_CoF_SoundSection( attn, flags, pos );
 	if( SV_BuildSoundMsg( &sv.multicast, ent, CHAN_STATIC, sample, vol * 255, attn, flags, pitch, pos ))
 		SV_Multicast( msg_dest, pos, NULL, false, false );
 	cof_multicast_section = -1;

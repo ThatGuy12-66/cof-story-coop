@@ -1532,6 +1532,9 @@ static void RestoreSound( SAVERESTOREDATA *pSaveData, soundlist_t *snd )
 	if( MSG_GetNumBytesLeft( &sv.signon ) < 36 )
 		return;
 
+	// Cry of Fear merged story maps: the restored ambient_generic plays its loop again, for its own section
+	if( SV_CoF_LoopRestored( ent, snd->channel )) return;
+
 	if( !snd->looping )
 		SetBits( flags, SND_STOP_LOOPING );
 

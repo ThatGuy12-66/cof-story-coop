@@ -382,6 +382,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
 	SV_CoF_SectionsFrame(); // merged maps: respawns, companions and gone exits, before the AI decides
 	SV_CoF_FogFrame(); // after the section moves
+	SV_CoF_LoopsFrame();
 	SV_CoF_WeatherFrame();
 	SV_CoF_GlobalsFrame();
 	SV_CoF_SkyFrame();

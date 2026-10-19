@@ -68,6 +68,13 @@ qboolean SV_CoF_FriendlyFire( void );
 qboolean SV_CoF_FogMessage( edict_t *to, int dest, const char *name, const byte *payload, int size );
 void SV_CoF_FogFrame( void );
 void SV_CoF_FogReset( void );
+// A merged map's ambient loops for its own section's players (sv_cof_loops.c): the game's ambient sound before it
+// goes (the section it is for; -1: as the engine sends it; COF_LOOP_HELD: not now, the sign-on), a save's copy of a
+// loop the restored game plays again (true: left out), and the players' moves between sections.
+#define COF_LOOP_HELD -2
+int SV_CoF_LoopSound( edict_t *ent, const float *pos, const char *sample, float vol, float attn, int flags, int pitch );
+qboolean SV_CoF_LoopRestored( edict_t *ent, int channel );
+void SV_CoF_LoopsFrame( void );
 // Client commands the retail game trusts too much (sv_cof_guard.c): true when refused.
 qboolean SV_CoF_GuardClientCommand( sv_client_t *cl );
 // What the others see in a player's hands (sv_cof_weaponmodel.c): the generated
