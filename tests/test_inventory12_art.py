@@ -1,7 +1,6 @@
 """The 12-slot inventory's left-half art (tools/make_inventory12_art.py)."""
 import re
 import struct
-import sys
 import tempfile
 import io
 from contextlib import redirect_stderr

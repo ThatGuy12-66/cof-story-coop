@@ -54,7 +54,7 @@ class SectionsFileTests(unittest.TestCase):
             expected.append(f'section {i} {s.map} dz {s.dz:g} first {s.first_model} models {s.models} '
                             f'zmin {s.bounds[0]:g} zmax {s.bounds[1]:g} renames {len(s.renames)} styles {len(s.styles)} '
                             f'landmarks {len(s.landmarks)}')
-        expected += [f'find c_apartment4 1', f'find C_APARTMENT5 2', f'find c_apartment1 -1',
+        expected += ['find c_apartment4 1', 'find C_APARTMENT5 2', 'find c_apartment1 -1',
                      f'rename 1 land1 {sections[1].renames["land1"]}', 'rename 1 nothere nothere', 'rename 0 land1 land1',
                      f'style 1 32 {sections[1].styles[32]}', 'style 1 5 5',
                      'at 0 0', f'at {sections[1].bounds[0] + 10:g} 1', f'at {sections[2].bounds[1] - 10:g} 2',

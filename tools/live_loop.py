@@ -23,7 +23,7 @@ outlives the scenario, or at once if one of its audio sessions will not mute.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
+from collections import Counter
 import contextlib
 from dataclasses import dataclass, field
 from datetime import datetime
