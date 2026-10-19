@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
+Last updated: 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
@@ -60,6 +60,64 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - App minors fixed: hosting status keeps the last state on a missed query; setup notes the copy (`%LOCALAPPDATA%\CoF-Story-Coop.txt`) so a newer package finds a copy elsewhere; `--copy` resolves.
 - Decision left to the user: monster damage scales with every participant, bots included (1 AI ×1.68, 2 ×1.92, 3 ×2.16 vs alone ×1.44); left as retail.
 - Verification: full suite **241 OK** (`evidence/weapons-companions-20261015/full-suite-w2.log`), engine builds exit 0 (`build-*.log`). Commits: launcher `9d2790d..720e972`, engine `d887312d..715170e8` (branch `tester-package`). Live: not yet (next: package-fix4, smoke copy update, Play solo with three AIs).
+
+## Test 2 without launching: wave 3 merged maps, ambient loops, campaign check (2026-10-19; built and offline-tested; nothing played)
+
+- The user: "Without ... launching a bunch of fucking instances, all without launching the game, get the game as done
+  as you can ... merge the maps so someone could feasibly run through the whole game." No game, live check or
+  instance was launched for any of this. Ledger `.superpowers/sdd/2026-10-19-finish-offline/progress.md`
+  (git-ignored) carries the rulings.
+- Changes, all on `tester-package` (launcher `e2f083a..`, engine `e5fed43e..b0edceee`), not merged, not pushed:
+  - **Ambient loops per section** (engine `19497c42`, `sv_cof_loops.*`; launcher `b3862c2`): every looping
+    `ambient_generic` (no spawnflag 32, any attenuation) of a merged map belongs to its section: one that starts
+    with the map is held out of the sign-on, a player moving between sections gets the stops of the section left
+    and the starts of the section entered (`cofstory phase=loops-moved` in the log), a restore does not resend them
+    (hl.dll's own `CAmbientGeneric::Precache` re-emits the active ones). The planner's play-everywhere refusal is gone.
+  - Planner: the worldspawn `sounds` key (CD track) absent = 1 (`b3862c2`).
+  - **Campaign exit check** `python -m tools.map_merge.campaign MAPS` (`8751fa2`): routes all 197 story exits as
+    `CoF_SectionsRoute` does and flags any exit that works unmerged but not merged.
+  - **Wave 3: 13 more groups** (`c04fba9`; table and choices in `docs/research/2026-10-17-merging-the-rest.md`'s
+    status block): c_start + c_start2; c_apartment3sick + 4sick + c_down; c_basement + c_sewer; c_park2 + c_stad;
+    c_park3 + c_roofs + c_roofs2; c_subway1st1 + c_subtunnel1 + c_subtunnel2; c_subway2st1 + c_subwaysick2;
+    c_trainscene + c_trainride + c_trainride2; c_bridge + c_forest1; c_ending1/2/3 + their b maps; c_ending5b + 5c.
+    29 groups: 99 section moves, 75 merged loads, 23 plain loads of the 197 exits (16 groups: 59/44/94), no
+    problem. Still plain: c_intro, c_nightmare, c_city, c_avlopp, c_apartmentsick, c_subwaysick1, c_asylum1,
+    c_broscene, c_ending1c-3c, c_ending5.
+  - Setup reserves the merged maps' room: the members' size of every enabled group (`11784b9`); the 29 groups take
+    570 MB (members 664 MB) and about 2.5 min of setup (`sizes.txt`). The readme's "About 6 GB" still holds.
+  - **Test 2, build 2** (`fa82fda`): `cof_build test2`; a Test 1 host and a Test 2 joiner are refused. The readme says
+    what "Merged maps" does, that the host can untick it and restart the chapter, and asks reports whether it was on.
+  - **A companion's weapons no longer come back on a revisit** (the live runs' open c_start revisit, 13 weapon_*
+    against 7): the first companion's syringe, phone and knife were restored at its old spot, and the second
+    companion's three arrived with the level change (the game's change list carries what is near the exit) and stayed
+    at its spot. The mark from `48d8a60` asked the owner's `FL_FAKECLIENT` edict flag, which the game's player Spawn
+    clears on a bot (every logged `phase=player` line reads `fakeclient=0`); `sv_save.c` `CoF_TransitionFakeClient`
+    now asks the client's `FCL_FAKECLIENT`, and `CoF_TransitionSkipSavedEntity` leaves a companion's items out of the
+    arriving transition too (the engine adds the companions again with their own kit; a companion never picks
+    anything up). Tests `test_a_companion_is_known_by_its_client_flag` and the arriving case (each RED, then GREEN).
+    Expected live (merged maps off, since c_start + c_start2 is now one file): a `c_start -> c_start2 -> c_start`
+    revisit with one companion counts 7 `weapon_*` again (`run_live.py fixes revisit`).
+  - Lint (`c2ddaf0`, `21600c0`); docs (`787c186`: research status block, the spec's sound and fog bullets as built).
+- Commands and evidence (`evidence/map-merge-wave3-20261019/`, git-ignored): candidates `try3.txt`,
+  `try4-trains.txt`; `record3.sh` -> `runs/record3.log`; `campaign-wave3.txt` (before: `campaign-wave2.txt`);
+  `exits.txt` (every story map's exits); `renames3.txt`; `autos.txt` (no later section of any group has a
+  `trigger_auto`, so nothing fires early at the file's load); `sizes.txt`; tests `runs/merge-tests-wave3.log`
+  (62 OK, 1 skipped), `runs/sections-wave3.log` (29 OK); engine `runs/build-wave3.log`.
+- Also checked offline: no wave 3 rename touches a fixed name (`ryesno` etc.) or the bonus door (`unlockablesdoor`:
+  c_start and c_bridge are first sections); every credits map's file keeps `c_ending`; the engine finds merged
+  files by `FS_Search("maps/cm_*.sections")` (no count limit); a save is ~230-290 bytes an entity (smoke copy
+  `.HL1` files), so cm_park3's 1808 entities are far inside `SAVE_HEAPSIZE` (4 MB).
+- **Verification states.** Offline: full suite `python -m unittest discover -s tests` 484 OK, 1 skipped before the
+  companion fix (`runs/full-suite-wave3.log`), 485 OK, 1 skipped on the final tree (`runs/full-suite-final.log`). Build:
+  engine `b0edceee`, `tools\build_enhanced.cmd` exit 0, no warnings (`runs/build-companion-items.log`), `xash.dll`
+  `533ABC47…`. Live: **none**. Wave 3's 13 groups, the per-section
+  loops and the Test 2 package have never been played; before these changes wave 1 was played and wave 2's doors
+  were checked live by script (section "Merged maps wave 2").
+- Known gaps: `SV_RestartAmbientSounds` (demo recording's full update only) resends the host's loops to everyone;
+  client.dll lights models by map name (`forest1`-`forest6`), and c_forest1 now plays inside `cm_bridge`
+  (cosmetic, unchecked); monsters chasing through a door do not follow in a section move (all merged groups).
+- Open for the user: where "Report a bug" goes (`coop_play.ISSUES_URL` is the private repo: a tester without an
+  invite gets a 404); merge/push of `tester-package`; sending the zip.
 
 ## Decompilation survey and the user's playthrough (2026-10-18)
 
@@ -121,7 +179,8 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   13 gates toggled live, cutscene hold, rain mirror, attic camera models, levels, checkpoint, death/CPR, both
   flashlight modes, follow (22 changes/min, 12 door teleports) and 15/17 chapter starts pass (the only errors: SDL's
   gamepad gyro "Calibration failed", a controller on the PC). Open: on a c_start revisit 13 weapon_* vs 7 (three at
-  the first visit's start spot; positions to be checked), the ladder fired by name left the player frozen (to rerun
+  the first visit's start spot; cause found and fixed offline 2026-10-19: the dropped companion's items, section
+  "Test 2 without launching"), the ladder fired by name left the player frozen (to rerun
   with use), night vision check needs the item used. Paused by the user before the merged groups, two-client run and
   the 197-exit sweep (`exits` in the driver); the session log drops the server lines of the first map's load.
 - Cvars (all default on; 0 = the game's own behaviour): `cof_donator`, `cof_costumes`, `cof_coop_nightvision`,
@@ -511,7 +570,8 @@ For native inspection, use the installed computer-use skill and `node_repl` / `@
 
 ## Next steps, in order
 
-0. (2026-10-15 midday) Tester package Test 1: with the user's go-ahead, the live check from the smoke copy (`evidence/tester-package-20261015/smoke/CoF-Story-Coop/CoF Story Co-op.exe`: Play solo → New game; then Host and `network.query_info` on 127.0.0.1:27015 shows `cofbuild test1`); then the user decides merge/push of `tester-package` and sends the zip. Building the next package: `python -m tools.build_tester_package --out evidence\<new folder>` after bumping `VERSION`/`VERSION_LABEL`/`BUILD` in `tools/coop_play.py`. Then the companion: the teleport rate on `c_apartment1`, the ledge jumps on entering `c_apartment2`, the bot standing in the player's view after the `c_start` opening. Live check still open: the objectives text on its paper (B) at 1280x720.
+0. (2026-10-19) Test 2 (section "Test 2 without launching"): the user decides where "Report a bug" goes, merge/push of `tester-package`, and sending the zip. When the user allows a launch: one playthrough of a wave 3 chapter with merged maps on (the loops are heard only in their own section; doors land on their landmarks), the two-player join (`cofbuild test2`), and the paused runs (merged groups, two clients, the 197-exit sweep).
+   (2026-10-15 midday) Tester package Test 1: with the user's go-ahead, the live check from the smoke copy (`evidence/tester-package-20261015/smoke/CoF-Story-Coop/CoF Story Co-op.exe`: Play solo → New game; then Host and `network.query_info` on 127.0.0.1:27015 shows `cofbuild test1`); then the user decides merge/push of `tester-package` and sends the zip. Building the next package: `python -m tools.build_tester_package --out evidence\<new folder>` after bumping `VERSION`/`VERSION_LABEL`/`BUILD` in `tools/coop_play.py`. Then the companion: the teleport rate on `c_apartment1`, the ledge jumps on entering `c_apartment2`, the bot standing in the player's view after the `c_start` opening. Live check still open: the objectives text on its paper (B) at 1280x720.
 1. The user runs (or authorizes) the campaign test with the disposable pair: `tools\Start-CampaignTest.ps1`, checklist in `docs/campaign-test-guide.md`. Do not launch it without the user's go-ahead; say before launching any window.
 2. After the session: `python tools\story_run_report.py <host log>` and record exact passing/failing cases here (redact RCON passwords).
 3. Most valuable live questions (details at the end of each `docs/research/2026-10-12-*.md`):
