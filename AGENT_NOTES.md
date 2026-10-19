@@ -106,6 +106,24 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   16/16 merged groups with identical hashes, no stray files. No shortcuts or copy pointer written. Finding:
   `VERSION`/`BUILD` are still test1/1, so the app's GUI opens an existing Test 1 copy (the smoke copy) without
   offering the update, and the host/guest check cannot tell this build from older Test 1 builds; bump before sending.
+- **Crash fixed (the user's playtest 2026-10-19 07:42, smoke copy on this package: "companion died during chainsaw
+  fight and crashed")**: c_apartmentsick, the chainsaw boss's grab killed the AI companion; `Crash: 6F9C7E8D` =
+  hl.dll 100C7E8D in CHalfLifeMultiplay::DeathNotice, reading the NULL inflictor's classname (killer not a client).
+  PlayerKilled (100C9160) passes g_pevLastInflictor (102266FC), which the game clears after each TakeDamage
+  (1008C0E2/C10A/C128); the boss's grab think (1007D93A) calls the victim's Killed itself, so in multiplayer any
+  monster kill outside TakeDamage crashed (retail behaviour; single player has no DeathNotice). Fix: gate
+  `death-notice` (0xC916B `FF 75 10` -> `53 90 90`, push the killer), always on (no cvar). Reproduced live first in
+  the fresh copy (`run_live.py fixes boss-kill`: open the arena door, player notarget; same stack), then with the fix:
+  two grabs, "Companion died.", `boss-respawned ok=1` twice, no crash. Tests: `test_enhanced_gates` (bytes against
+  the retail hl.dll, always wanted).
+- Live release checks (the user: "I'm ready to do the runs"; `evidence/decomp-fixes-20261018/run_live.py`, fresh copy,
+  silent, windowed 960x540, `m_ignore 1` after the user moved the camera by accident, launcher `08a4c32`): smoke, the
+  13 gates toggled live, cutscene hold, rain mirror, attic camera models, levels, checkpoint, death/CPR, both
+  flashlight modes, follow (22 changes/min, 12 door teleports) and 15/17 chapter starts pass (the only errors: SDL's
+  gamepad gyro "Calibration failed", a controller on the PC). Open: on a c_start revisit 13 weapon_* vs 7 (three at
+  the first visit's start spot; positions to be checked), the ladder fired by name left the player frozen (to rerun
+  with use), night vision check needs the item used. Paused by the user before the merged groups, two-client run and
+  the 197-exit sweep (`exits` in the driver); the session log drops the server lines of the first map's load.
 - Cvars (all default on; 0 = the game's own behaviour): `cof_donator`, `cof_costumes`, `cof_coop_nightvision`,
   `cof_sp_carry` (11 hl.dll gates), `cof_simon_voice`, `cof_coop_weather` (a gate plus a per-player mirror),
   `cof_coop_player_state` (muffle, cutscene flag, spread statics, `gDualWeapon`, `room_type`), `cof_coop_heldlights`,

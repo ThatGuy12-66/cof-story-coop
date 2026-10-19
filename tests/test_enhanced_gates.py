@@ -26,6 +26,10 @@ CARRY = [
 ]
 # CRainModify::Use (100A99A0): the jump past the deathmatch refusal becomes unconditional (cof_coop_weather).
 RAIN = [('rain-modify', 0xA99C7, '7b14', 'eb14')]
+# CHalfLifeMultiplay::PlayerKilled (100C9160) hands DeathNotice g_pevLastInflictor, which the game clears after each
+# TakeDamage: a player killed outside it by a monster (the chainsaw boss's grab, the user's crash of 2026-10-19)
+# made DeathNotice read the NULL inflictor's classname (100C7E8D). It is handed the killer instead (push ebx).
+DEATH = [('death-notice', 0xC916B, 'ff7510', '539090')]
 
 
 def gate_table(test):
@@ -45,7 +49,7 @@ class GateTests(unittest.TestCase):
             'off: 1 bytes 75 06 writes 2',
             'foreign: 0 bytes 12 34 writes 2',
             'gate friendly-fire C8722 7506 9090',
-        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY + RAIN])
+        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY + RAIN + DEATH])
 
     def test_every_gate_was_made_from_the_retail_bytes(self):
         if not HL_DLL.exists() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
@@ -69,6 +73,11 @@ class GateWiringTests(unittest.TestCase):
 
     def test_friendly_fire_is_off_by_default(self):
         assert_has(self, 'CVAR_DEFINE_AUTO( cof_coop_friendly_fire, "0",', (SERVER / 'sv_cof_gates.c').read_text(encoding='latin-1'))
+
+    def test_a_monster_s_kill_never_crashes_the_death_notice(self):
+        # a crash fix, not a choice: always on while story co-op runs (no cvar)
+        wanted = body_of(SERVER / 'sv_cof_gates.c', 'static qboolean CoF_GateWanted(')
+        assert_has(self, 'case COF_GATE_DEATH_NOTICE: return true;', wanted)
 
 
 if __name__ == '__main__':
