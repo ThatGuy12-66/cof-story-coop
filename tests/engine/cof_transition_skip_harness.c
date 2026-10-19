@@ -13,7 +13,7 @@ int main( void )
 	skip( "a player row, revisit", 1, 0, 1, 0, 0 );
 	skip( "a captured player's item, revisit", 1, 0, 0, 1, 0 );
 	skip( "a companion's item, revisit", 1, 0, 0, 0, 1 );       /* it would come back with no owner */
-	skip( "a companion's item, the arriving transition", 0, 1, 0, 0, 1 );
+	skip( "a companion's item, the arriving transition", 0, 1, 0, 0, 1 );  /* the engine adds the companions again with their own kit */
 	skip( "a map entity, revisit", 1, 0, 0, 0, 0 );
 	skip( "a captured player's item, arriving", 0, 1, 0, 1, 0 );  /* travels with its player */
 	printf( "companion item: owner %d, attached %d, neither %d\n", CoF_TransitionCompanionItem( 1, 0 ),
