@@ -6,6 +6,35 @@
 > - 4.3: an `ambient_generic` starts with the map only when it loops (no spawnflag 32) and is not silent; the planner no longer refuses the others.
 > - 4.6: the "sky differs" blocker is moot: multiplayer draws the black sky whatever `skyname` says.
 
+> **Status (2026-10-19, wave 3, offline only: planned, built and checked, not played):** 4.1 (fog per section),
+> 4.2 (origin-brush models and doors, `8ce3e65`), 4.3 (looping ambient sounds per section, `b3862c2`) and rule 4
+> (the c_start easter egg, `8ce3e65`) are done; the worldspawn `sounds` key (the CD track) defaults to 1. Wave 3
+> records 13 more groups (`c04fba9`), every story chain that now plans clean with no map in two groups:
+>
+> | Group | Doors inside |
+> |---|---|
+> | c_start + c_start2 | 2 |
+> | c_apartment3sick + c_apartment4sick + c_down | 8 |
+> | c_basement + c_sewer | 2 |
+> | c_park2 + c_stad | 2 |
+> | c_park3 + c_roofs + c_roofs2 | 6 |
+> | c_subway1st1 + c_subtunnel1 + c_subtunnel2 | 4 |
+> | c_subway2st1 + c_subwaysick2 | 2 |
+> | c_trainscene + c_trainride + c_trainride2 | 4 |
+> | c_bridge + c_forest1 | 2 |
+> | c_ending1 + c_ending1b, c_ending2 + c_ending2b, c_ending3 + c_ending3b (files `cm_c_ending1`-`3`) | 2 each |
+> | c_ending5b + c_ending5c (file `cm_c_ending5b`) | 2 |
+>
+> `python -m tools.map_merge.campaign MAPS` routes all 197 story exits as the engine does: 99 section moves, 75
+> loads of a merged file, 23 of a plain map (16 groups: 59, 44, 94), no problem. Chosen where two groups overlapped:
+> c_park2 + c_stad with c_subway1st1 + c_subtunnel1 + c_subtunnel2 and c_subway2st1 + c_subwaysick2 (4 doors saved,
+> against 3 the other way); c_apartment3sick with c_apartment4sick (three doors) rather than c_avlopp; the train
+> pair with c_trainscene (c_broscene stays, as no four of the train maps stack in +-4096). Still plain: c_intro,
+> c_nightmare, c_city (too tall), c_avlopp, c_apartmentsick and c_subwaysick1 (clipnodes), c_asylum1 (its
+> neighbours are in wave 2 groups), c_broscene, the c endings 1c-3c (too tall) and c_ending5; c_park2 + c_park3
+> cannot join a leaf. The 29 groups take 570 MB and about 2.5 minutes of setup
+> (`evidence/map-merge-wave3-20261019/sizes.txt`); setup now counts that room (`friend_setup.merged_maps_room`).
+
 Date: 2026-10-17. The user: "read the map merge research that was done and start figuring out how we are gonna
 merge the rest". Builds on the merged-maps design (`docs/superpowers/specs/2026-10-16-merged-maps-design.md`),
 the spike (`evidence/map-merge-spike-20261016/`) and wave 1 (the apartments, live since 2026-10-16).

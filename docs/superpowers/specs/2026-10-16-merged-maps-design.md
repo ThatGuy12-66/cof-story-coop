@@ -119,11 +119,17 @@ section's start and logs why; it never falls into an impossible level change.
 - **Sound:** a "play everywhere" sound (`ATTN_NONE`) from an entity in one section is sent only to players in
   that section; attenuated sounds are already culled by the potentially-audible set (the sections' vis is
   block-diagonal). A player entering a section is sent that section's looping sounds that are playing.
+  *As built (2026-10-19, `sv_cof_loops.c`):* every looping `ambient_generic` (no spawnflag 32, any attenuation)
+  belongs to its section's players: one that starts with the map is held out of the sign-on data, a player who
+  moves between sections is sent the stops of the section left and the starts of the section entered, and a
+  restored save does not resend them (as hl.dll's own restore re-emits the active ones).
 - **Story systems** that reset on a new map (party, share, recovery, companion re-add, moments, scene skip)
   keep doing so on a map load only; a section move is not a new map.
 - **Companions** follow their owner through section moves; the node graph covers every section.
 - **Fog and music** are shared across sections: the planner requires equal fog per group; music is Cry of
   Fear's own shared co-op music (`sv_coop_music`), as in its co-op mode. Revisit after playtests.
+  *Since 2026-10-18:* fog, rain, 3D sky and view distance are each section's own (`sv_cof_fog.c`,
+  `sv_cof_weather.c`, `sv_cof_sky.c`, `sv_cof_view.c`); the planner notes them instead of refusing.
 - **Monsters** of every section are live at once; vis keeps sections apart. Revisit after playtests.
 
 ## 5. Sessions, Continue and the launcher
