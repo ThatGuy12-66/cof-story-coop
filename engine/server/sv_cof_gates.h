@@ -54,6 +54,11 @@ enum
 	// jump past that refusal becomes unconditional, and the named rain_modify changes player 1's rain as in single
 	// player (cof_coop_weather; sv_cof_weather.c gives it to everyone).
 	COF_GATE_RAIN_MODIFY,
+	// CHalfLifeMultiplay::PlayerKilled (100C9160) hands DeathNotice g_pevLastInflictor (102266FC), which the game
+	// clears after each TakeDamage; a player killed outside it by a monster (the chainsaw boss's grab calls Killed
+	// itself) made DeathNotice read the NULL inflictor's classname (100C7E8D) and crash the game. PlayerKilled uses the
+	// inflictor for nothing else: DeathNotice is handed the killer instead (push ebx). Always on: a crash fix.
+	COF_GATE_DEATH_NOTICE,
 	COF_GATES
 };
 
@@ -72,6 +77,7 @@ static const cof_gate_t cof_gates[COF_GATES] =
 	{ "carry-ammo-tmp", 0x7E0C7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
 	{ "carry-ammo-vp70", 0x836D7, 2, { 0x74, 0x53 }, { 0xEB, 0x53 } },
 	{ "rain-modify", 0xA99C7, 2, { 0x7B, 0x14 }, { 0xEB, 0x14 } },
+	{ "death-notice", 0xC916B, 3, { 0xFF, 0x75, 0x10 }, { 0x53, 0x90, 0x90 } },
 };
 
 // Brings one gate to the wanted state through write (which changes executable bytes); 1 when it is in that state now,

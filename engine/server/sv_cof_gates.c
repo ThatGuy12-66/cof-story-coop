@@ -53,6 +53,7 @@ static qboolean CoF_GateWanted( int gate )
 	case COF_GATE_CARRY_AMMO_TMP:
 	case COF_GATE_CARRY_AMMO_VP70: return cof_sp_carry.value != 0.0f;
 	case COF_GATE_RAIN_MODIFY: return SV_CoF_WeatherOn();
+	case COF_GATE_DEATH_NOTICE: return true;
 	}
 	return false;
 }
