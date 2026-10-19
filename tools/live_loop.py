@@ -251,17 +251,22 @@ def recover(copy: Path | None = None) -> bool:
     return True
 
 
+VIDEO = ["-windowed", "-width", "960", "-height", "540"]   # a small window, not the whole desktop
+
+
 def launch_config(copy: Path, map_name: str, *, companions: int, password: str, merged: bool = True,
                   bonus_room: bool = False, coop_flashlight: bool = False) -> tuple[list[str], str]:
-    """A test run's command line and session cfg, with RCON for the scenario; companions 0 turns the bots off."""
+    """A test run's command line and session cfg, with RCON for the scenario; companions 0 turns the bots off.
+    The game ignores the mouse (m_ignore: no mouse look, the cursor stays free; it locks once the player has
+    joined, so it is set in the session cfg) so that someone using the PC during a run does not turn the camera."""
     from tools import coop_play as play
     bots = max(companions, 1)   # a solo game keeps a place for one at least
     args, config = play.host_launch(copy, solo=True, name="Tester", map_name=map_name, players=bots + 1,
-                                    password="", companions=bots, port=PORT, cont=False, video=[],
+                                    password="", companions=bots, port=PORT, cont=False, video=VIDEO,
                                     bonus_room=bonus_room, merged=merged, coop_flashlight=coop_flashlight)
     if not companions:
         config = config.replace("cof_companion 1\n", "cof_companion 0\n")
-    return args, config + f'rcon_password "{password}"\nrcon_enable 1\n'
+    return args, config + f'rcon_password "{password}"\nrcon_enable 1\nm_ignore 1\n'
 
 
 @contextlib.contextmanager

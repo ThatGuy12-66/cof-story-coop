@@ -121,6 +121,15 @@ class LaunchTests(unittest.TestCase):
         self.assertIn("maxplayers 3\n", config)
         self.assertIn("cof_merged_maps 0\n", config)
 
+    def test_a_run_leaves_the_mouse_alone(self):
+        # the user, during a run: "make it so I don't accidentally move the camera around": the game ignores the
+        # mouse (no mouse look, cursor free; locked before the player joins, so it goes in the session cfg) and
+        # opens in a small window instead of filling the desktop
+        args, config = live_loop.launch_config(Path("C:/copy"), "c_start2", companions=1, password="pw")
+        self.assertIn("m_ignore 1\n", config)
+        self.assertEqual(args[1:6], ["-windowed", "-width", "960", "-height", "540"])
+        self.assertNotIn("-borderless", args)
+
 
 if __name__ == "__main__":
     unittest.main()
