@@ -16,9 +16,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "test1"
-VERSION_LABEL = "Test 1"
-BUILD = 1
+VERSION = "test2"
+VERSION_LABEL = "Test 2"
+BUILD = 2
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"

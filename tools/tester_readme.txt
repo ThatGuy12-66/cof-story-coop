@@ -1,4 +1,4 @@
-Cry of Fear story co-op - Test 1
+Cry of Fear story co-op - Test 2
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 This is an early test build: expect bugs, and please report them.
@@ -30,6 +30,9 @@ Start a new game (the intro), any chapter, or Continue from the last co-op check
 The game makes a co-op checkpoint by itself after every level change.
 Tick "Bonus room unlocked" to open the bonus room (FAMAS, axe and more) for everyone.
 Dual wield (two pistols, or a pistol and a light) works from the inventory menu.
+"Merged maps" (on by default) loads neighbouring levels as one map, so there are fewer
+loading screens. If a merged level misbehaves, the host can untick it and start that
+chapter again.
 
 CO-OP KEYS
 J      join your partner (when the screen says "Press J to join")
@@ -47,9 +50,9 @@ another place) and the two "Cry of Fear Co-op" shortcuts.
 
 REPORTING BUGS
 Click "Report a bug" in the app, or send the details to whoever gave you this package:
-what happened, the map or the place, roughly when, and the log ("Open logs folder" in
-the app; the log may show your Windows user name). Never post your password or join
-code publicly.
+what happened, the map or the place, roughly when, whether "Merged maps" was on, and
+the log ("Open logs folder" in the app; the log may show your Windows user name).
+Never post your password or join code publicly.
 
 The engine is free software (GPL); its source is in the source-and-licences folder.
 Cry of Fear itself is not included: the app uses your own Steam copy.
