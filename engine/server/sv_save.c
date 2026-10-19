@@ -144,6 +144,14 @@ qboolean SV_CoF_TransitionValidate( const char *map, const char *landmark )
 	return true;
 }
 
+// An AI companion's edict: the game's player Spawn clears a bot's FL_FAKECLIENT edict flag (sv_cof_companion.c);
+// its client's FCL_FAKECLIENT stays.
+static qboolean CoF_TransitionFakeClient( edict_t *ent )
+{
+	sv_client_t *cl = SV_ClientFromEdict( ent, false );
+	return cl && FBitSet( cl->flags, FCL_FAKECLIENT );
+}
+
 static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark )
 {
 	if( !SV_CoF_TransitionValidate( map, landmark )) return false;
@@ -189,9 +197,8 @@ static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark 
 		cof_transition.inventory_owner[i] = CoF_TransitionInventoryOwner( &cof_transition.tickets,
 			SV_IsValidEdict( ent->v.owner ) ? NUM_FOR_EDICT( ent->v.owner ) : 0,
 			SV_IsValidEdict( ent->v.aiment ) ? NUM_FOR_EDICT( ent->v.aiment ) : 0 );
-		if( !cof_transition.inventory_owner[i] && CoF_TransitionCompanionItem(
-			SV_IsValidEdict( ent->v.owner ) && FBitSet( ent->v.owner->v.flags, FL_FAKECLIENT ),
-			SV_IsValidEdict( ent->v.aiment ) && FBitSet( ent->v.aiment->v.flags, FL_FAKECLIENT )))
+		if( !cof_transition.inventory_owner[i] &&
+			CoF_TransitionCompanionItem( CoF_TransitionFakeClient( ent->v.owner ), CoF_TransitionFakeClient( ent->v.aiment )))
 			cof_transition.inventory_owner[i] = -1;
 	}
 	{
