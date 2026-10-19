@@ -38,6 +38,11 @@ FIRST_OF_CLASS = ('cof_keypad', 'cof_phonecheck', 'cof_computer', 'cof_telephone
                   'statue_horse', 'statue_eagle', 'statue_puzzle_complete', 'cof_numeralplate_right', 'monster_doctorboss',
                   'monster_booksimon', 'trigger_booksimon', 'wheelchair_hide_spot', 'boat_hide_spot', 'cof_clothesmenu')
 # Not here: subtitle_main, also taken first, only prints the line its caller sets from the one subtitles.txt.
+# Names found by a fixed string: hl.dll fires the player events (FireTargets in multiplay_gamerules.cpp and player.cpp
+# of the decompilation) and looks up the stress effects' entities (effects.cpp); the engine finds c_roofs2's yes/no
+# question (sv_cof_moments.c). A renamed copy is never found, and a player event fires on every section's players.
+FIXED_NAMES = ('ryesno', 'stressbump', 'stresswater', 'stresslight', 'stressweather')
+PLAYER_EVENT_NAMES = ('game_playerjoin', 'game_playerspawn', 'game_playerdie', 'game_playerkill', 'game_playerleave')
 # CChangeLevel's ChangeList holds this many (map, landmark) pairs a map (and writes one past its array first).
 TRANSITION_PAIRS = 16
 LIMITS = {
@@ -124,20 +129,6 @@ def reference_problems(members: list, sections: list) -> list:
     return out
 
 
-def origin_brush_problems(members: list) -> list:
-    """Brush entities whose geometry is local to their origin (origin brushes), in a member that moves: the merger
-    moves every vertex of a moved member and the engine moves every origin, so they would move twice."""
-    out = []
-    for name, ents in members[1:]:
-        for e in ents:
-            model, origin = ent_get(e, 'model', ''), ent_get(e, 'origin')
-            if ent_get(e, 'classname') == 'func_fogfield':
-                continue  # it uses only its origin and size (bmodels.cpp:1228-1386): its geometry is never drawn
-            if model.startswith('*') and origin and any(float(v) for v in origin.split()[:3] if number(v)):
-                out.append(f'{name}: {ent_get(e, "classname")} {model} has an origin brush ({origin}); not supported yet')
-    return out
-
-
 def everywhere_sound_problems(members: list) -> list:
     """ambient_generic sounds that play everywhere (spawnflags 1) and start with the map (no 16, start silent): the
     engine sends those in the sign-on data, to every section's players; it filters only sounds started later."""
@@ -191,6 +182,16 @@ def weather_notes(members: list) -> list:
     if any(f != fogs[0] for f in fogs[1:]):
         notes.append('env_fog differs between members: each section gets its own')
     return notes
+
+
+def fixed_name_problems(members: list, sections: list) -> list:
+    out = [f'{s.map}: {name} would be renamed, but it is found by that name'
+           for s in sections for name in (*FIXED_NAMES, *PLAYER_EVENT_NAMES) if name in s.renames]
+    if len(members) > 1:
+        out += [f'{name}: {", ".join(having)} define it, and every section\'s players would fire it'
+                for name in PLAYER_EVENT_NAMES
+                if (having := [m for m, ents in members if name in rules.defined_names(ents)])]
+    return out
 
 
 def globalname_problems(members: list) -> list:
@@ -296,7 +297,7 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     for key in ('planes', 'nodes', 'clipnodes', 'leafs', 'faces', 'marksurfaces', 'vertexes', 'texinfo'):
         n[key] = len(getattr(merged, key))
     n['lightmap pages'] = lightmap_pages(merged)
-    n['entities'] = sum(len(x.ents) for x in maps) - (len(maps) - 1)
+    n['entities'] = sum(len(x.ents) for x in maps) - (len(maps) - 1) + len(merged.ents) - 1
     n['models'] = len(merged.models) + len(precaches([e for x in maps for e in x.ents], ('.mdl', '.spr')))
     n['sounds'] = len(precaches([e for x in maps for e in x.ents], ('.wav',)))
     n['info_node'] = sum(1 for x in maps for e in x.ents if ent_get(e, 'classname', '').startswith('info_node'))
@@ -313,7 +314,7 @@ def plan_group(maps_dir: Path, members: list, accepted: dict | None = None) -> P
     report.problems += first_of_class_problems(named)
     report.problems += transition_pair_problems(named)
     report.problems += globalname_problems(named)
-    report.problems += origin_brush_problems(named)
+    report.problems += fixed_name_problems(named, sections)
     report.problems += everywhere_sound_problems(named)
     report.problems += reference_problems(named, sections)
 

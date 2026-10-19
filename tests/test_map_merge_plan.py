@@ -61,11 +61,17 @@ class LandmarkTests(unittest.TestCase):
 
 
 class RefusalTests(unittest.TestCase):
-    def test_map_named_by_the_game_dll_is_refused(self):
+    def test_map_named_by_the_client_dll_is_refused(self):
+        retail('c_nightmare')
+        report = plan.plan_group(MAPS, ['c_nightmare', 'c_start'])
+        self.assertFalse(report.ok)
+        self.assertTrue(any('c_nightmare' in p and 'client.dll' in p for p in report.problems), report.problems)
+
+    def test_chapter_ones_start_and_its_twin_plan_clean(self):
+        # c_start was refused for its easter egg until the merger placed the egg itself (rules.named_map_entities)
         retail('c_start')
         report = plan.plan_group(MAPS, ['c_start', 'c_start2'])
-        self.assertFalse(report.ok)
-        self.assertTrue(any('c_start' in p and 'game DLL' in p for p in report.problems), report.problems)
+        self.assertTrue(report.ok, report.problems)
 
     def test_unlisted_reference_reported(self):
         members = [('c_a', [ent(classname='func_door', targetname='door1')]),
@@ -76,13 +82,12 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertIn('enemyname', found[0])
 
-    def test_origin_brush_entity_in_a_moved_member_is_refused(self):
-        # its geometry is local to its origin: moving the section's geometry and its origin would move it twice
-        members = [('c_a', [ent(classname='func_door_rotating', model='*1', origin='10 20 30')]),
-                   ('c_b', [ent(classname='func_rotating', model='*2', origin='0 0 64'), ent(classname='func_wall', model='*3')])]
-        found = plan.origin_brush_problems(members)
-        self.assertEqual(len(found), 1)
-        self.assertIn('c_b', found[0])
+    def test_an_origin_brush_entity_in_a_moved_member_plans_clean(self):
+        # its geometry lies around its origin, which the composer moves: the merger leaves that geometry unmoved
+        # (merge.origin_models); c_ending1b's rotating door *20
+        retail('c_ending1')
+        report = plan.plan_group(MAPS, ['c_ending1', 'c_ending1b'])
+        self.assertTrue(report.ok, report.problems)
 
     def test_play_everywhere_sound_that_starts_with_the_map_is_refused(self):
         # it would go to every section's players in the sign-on data
@@ -98,16 +103,6 @@ class RefusalTests(unittest.TestCase):
         members = [('c_a', [ent(classname='ambient_generic', message='ambience/sob.wav', spawnflags='37')]),
                    ('c_b', [ent(classname='ambient_generic', message='ambience/once.wav', spawnflags='33')])]
         self.assertEqual(plan.everywhere_sound_problems(members), [])
-
-    def test_fog_field_origin_brush_is_harmless(self):
-        # func_fogfield uses only its origin and size (bmodels.cpp:1228-1386); a train still needs its geometry
-        # left in place (merge doc 4.2), which the merger does not do yet
-        members = [('c_a', []),
-                   ('c_b', [ent(classname='func_fogfield', model='*2', origin='0 0 64'),
-                            ent(classname='func_train', model='*3', origin='0 0 32')])]
-        found = plan.origin_brush_problems(members)
-        self.assertEqual(len(found), 1)
-        self.assertIn('func_train', found[0])
 
     def test_a_class_the_game_takes_the_first_of_is_refused_in_two_members(self):
         # the keypad, phone, computer... checks use the map's first entity of the class
@@ -136,6 +131,26 @@ class RefusalTests(unittest.TestCase):
         self.assertTrue(any('3D sky' in n and 'c_b' in n for n in notes), notes)
         self.assertTrue(any('skyname' in n for n in notes), notes)
         self.assertTrue(any('env_fog' in n for n in notes), notes)
+
+    def test_a_name_the_game_or_engine_finds_by_itself_is_never_renamed(self):
+        # hl.dll fires game_playerspawn & co. by name and looks up stressbump & co.; the engine finds c_roofs2's ryesno:
+        # a later member's renamed copy would never be found
+        def section(m, renames):
+            return rules.Section(map=m, dz=0.0, first_model=1, models=1, bounds=(0.0, 1.0), renames=renames)
+        members = [('c_a', [ent(classname='cof_yesno', targetname='ryesno')]),
+                   ('c_b', [ent(classname='cof_yesno', targetname='ryesno')])]
+        found = plan.fixed_name_problems(members, [section('c_a', {}), section('c_b', {'ryesno': 'ryesno_m1'})])
+        self.assertEqual(len(found), 1)
+        self.assertIn('ryesno', found[0])
+        self.assertEqual(plan.fixed_name_problems(members[:1], [section('c_a', {})]), [])
+
+    def test_a_player_event_name_reaches_every_section(self):
+        # FireTargets("game_playerspawn") fires every entity of that name: in a merged map, on every section's spawns
+        members = [('c_a', [ent(classname='trigger_relay', targetname='game_playerspawn')]), ('c_b', [])]
+        found = plan.fixed_name_problems(members, [rules.Section('c_a', 0.0, 1, 1, (0.0, 1.0)),
+                                                   rules.Section('c_b', 0.0, 1, 1, (0.0, 1.0))])
+        self.assertEqual(len(found), 1)
+        self.assertIn('game_playerspawn', found[0])
 
     def test_shared_globalname_is_refused(self):
         members = [('c_a', [ent(classname='func_door', globalname='lift')]),
@@ -193,9 +208,10 @@ class NameTests(unittest.TestCase):
         for m in ('c_city', 'c_forest3', 'c_subwaysick1', 'c_intro', 'c_ending1b', 'c_ending5c'):
             with self.subTest(m):
                 self.assertFalse(plan.groups.hl_named(m))
-        for m in ('c_nightmare', 'c_game_menu1', 'c_start'):
+        for m in ('c_nightmare', 'c_game_menu1'):
             with self.subTest(m):
                 self.assertTrue(plan.groups.hl_named(m))
+        self.assertFalse(plan.groups.hl_named('c_start'))   # its easter egg goes into the section
 
 
 class RecordTests(unittest.TestCase):
@@ -219,9 +235,9 @@ class RecordTests(unittest.TestCase):
         self.assertEqual((group.wave, group.enabled), (2, True))
 
     def test_record_refuses_a_group_the_planner_refuses(self):
-        retail('c_start')
+        retail('c_nightmare')
         with self.assertRaises(ValueError):
-            plan.record_group(MAPS, ['c_start', 'c_start2'], wave=2, path=self.path)
+            plan.record_group(MAPS, ['c_nightmare', 'c_start'], wave=2, path=self.path)
         self.assertEqual(plan.groups.load_groups(self.path), [])
 
     def test_record_replaces_a_group_of_the_same_name(self):

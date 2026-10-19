@@ -153,11 +153,57 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(moved[8], ent(classname='trigger_changevalue', netname='spot_m1'))
         self.assertEqual(moved[9], ent(classname='game_text', noise='spot'))
 
+    def test_the_ladder_and_door_keys_the_game_looks_up_by_name_are_renamed(self):
+        # CoF_Ladder.cpp: the climb ends at the entities topent/bottoment name; CoF_InterDoor.cpp: propertarget and
+        # useunlock name entities (UTIL_FindEntityByTargetname); c_roofs2's and c_subtunnel2's ladders use them
+        m0 = [ent(classname='worldspawn'), ent(classname='info_target', targetname='spot')]
+        m1 = [ent(classname='worldspawn'), ent(classname='info_target', targetname='spot'),
+              ent(classname='cof_ladder_manager', topent='spot', bottoment='spot'),
+              ent(classname='inter_door', propertarget='spot', useunlock='spot'),
+              ent(classname='inter_door_coop', propertarget='spot', useunlock='spot')]
+        s = rules.section_rules([('c_a', m0), ('c_b', m1)], [0.0, 1536.0], [1, 1], [(-1.0, 1.0), (1535.0, 1537.0)])
+        ents = bsp_parse(rules.compose_reference(ent(classname='worldspawn'), [m0, m1], s).decode('latin-1'))
+        self.assertEqual(ents[3:], [ent(classname='cof_ladder_manager', topent='spot_m1', bottoment='spot_m1'),
+                                    ent(classname='inter_door', propertarget='spot_m1', useunlock='spot_m1'),
+                                    ent(classname='inter_door_coop', propertarget='spot_m1', useunlock='spot_m1')])
+
     def test_a_reference_through_a_class_key_is_cut_too(self):
         m0 = [ent(classname='info_target', targetname='spot')]
         m1 = [ent(classname='cof_teleport', message='spot')]
         s = rules.section_rules([('c_a', m0), ('c_b', m1)], [0.0, 512.0], [1, 1], [(-1.0, 1.0), (511.0, 513.0)])
         self.assertEqual(s[1].renames, {'spot': 'spot_x1'})
+
+    def test_the_merged_files_own_entities_come_last_unchanged(self):
+        # the entities the merger itself adds (named_map_entities): after every member's, so no member entity's
+        # number changes
+        m0 = [ent(classname='worldspawn'), ent(classname='info_target', targetname='spot', origin='1 2 3')]
+        s = rules.section_rules([('c_a', m0)], [0.0], [1], [(-1.0, 1.0)])
+        egg = ent(classname='dave_benson_phillips', origin='613 -3156 -702')
+        ents = bsp_parse(rules.compose_reference(ent(classname='worldspawn'), [m0], s, extras=[egg]).decode('latin-1'))
+        self.assertEqual(ents, [ent(classname='worldspawn'), m0[1], egg])
+
+
+class NamedMapEntityTests(unittest.TestCase):
+    """hl.dll's worldspawn spawns entities of its own only in a map of an exact name; a merged map has another name, so
+    the merger puts them into that member's section (evidence/map-merge-plan-20261017/hl-names/hl-map-names-re.md 2.4)."""
+
+    def sections(self, members, dzs):
+        return rules.section_rules(members, dzs, [1] * len(members), [(-1.0 + dz, 1.0 + dz) for dz in dzs])
+
+    def test_a_merged_c_start_gets_the_easter_egg_in_its_section(self):
+        members = [('c_start2', [ent(classname='worldspawn')]), ('c_start', [ent(classname='worldspawn')])]
+        s = self.sections(members, [0.0, -2048.0])
+        self.assertEqual(rules.named_map_entities(members, s),
+                         [ent(classname='dave_benson_phillips', origin='613 -3156 -2750')])
+
+    def test_a_c_start_that_already_has_the_egg_gets_no_second(self):
+        members = [('c_start', [ent(classname='worldspawn'), ent(classname='dave_benson_phillips', origin='1 2 3')]),
+                   ('c_start2', [ent(classname='worldspawn')])]
+        self.assertEqual(rules.named_map_entities(members, self.sections(members, [0.0, 2048.0])), [])
+
+    def test_other_maps_get_nothing(self):
+        members = [('c_apartment3', [ent(classname='worldspawn')]), ('c_apartment4', [ent(classname='worldspawn')])]
+        self.assertEqual(rules.named_map_entities(members, self.sections(members, [0.0, 1536.0])), [])
 
 
 def bsp_parse(text):

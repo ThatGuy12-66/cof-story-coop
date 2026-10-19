@@ -296,6 +296,22 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(lines[0], f'{len(expected)} {fnv64(expected):016x}')
         self.assertIn('"origin" "1 2 3"\n"texture" "{ding10"\n"classname" "infodecal"', out)
 
+    def test_the_merged_files_own_entities_follow_every_members(self):
+        # c_start's easter egg (rules.named_map_entities): written by the merger after the merged worldspawn, composed
+        # after the members' entities so no member entity's number changes
+        member = '{\n"classname" "worldspawn"\n}\n{\n"targetname" "spot"\n"classname" "info_target"\n}\n'
+        section = rules.Section('c_start', 0.0, 1, 1, (0.0, 100.0))
+        world = [['classname', 'worldspawn']]
+        egg = [['classname', 'dave_benson_phillips'], ['origin', '613 -3156 -702']]
+        expected = rules.compose_reference(world, [bsp.parse_ents(member)], [section], extras=[egg])[:-1]
+        out = run_native(self, 'cof_sections_compose_harness.c', {
+            'sections_under_test.h': header(), 'sections.txt': rules.to_text('cm_start', [section]),
+            'world.ent': bsp.serialize_ents([world, egg])[:-1].decode('latin-1'), 'member0.ent': member,
+            'members.h': '#define MEMBERS 1\n#define PRINT_TEXT\n'})
+        lines = program_output(out)
+        self.assertEqual(lines[0], f'{len(expected)} {fnv64(expected):016x}')
+        self.assertTrue(out.rstrip().endswith('"classname" "dave_benson_phillips"\n"origin" "613 -3156 -702"\n}'), out)
+
     def test_apartment3_4_5_compose_like_the_reference(self):
         self.check_group('cm_apartment3')
 

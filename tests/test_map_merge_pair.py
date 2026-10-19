@@ -64,6 +64,63 @@ class PairTests(unittest.TestCase):
         self.assertEqual(m.ents[0], merge.merged_worldspawn([self.a.ents[0], self.b.ents[0]]))
 
 
+class OriginModelTests(unittest.TestCase):
+    """A brush entity with an origin key (an origin brush: a rotating door, most trains) keeps its geometry around
+    that origin, and the engine's composer moves the origin key itself: the merger leaves its geometry unmoved, or it
+    would move twice. c_ending1b's door *20 (origin -3418 -1650 -267) in c_ending1 + c_ending1b."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.a, cls.b = retail('c_ending1'), retail('c_ending1b')
+        cls.dz = merge.choose_dz((cls.a.models[0][2], cls.a.models[0][5]), (cls.b.models[0][2], cls.b.models[0][5]))
+        lumps, cls.info = merge.merge_pair(cls.a, cls.b, cls.dz, {})
+        cls.m = bsp.Bsp.from_bytes(bsp.write_bytes(lumps))
+        cls.door = len(cls.a.models) - 1 + 20
+
+    def vertexes(self, x, model):
+        out = []
+        for f in range(x.models[model][14], x.models[model][14] + x.models[model][15]):
+            face = x.faces[f]
+            for s in range(face[2], face[2] + face[3]):
+                se = x.surfedges[s][0]
+                out.append(x.vertexes[x.edges[se][0] if se >= 0 else x.edges[-se][1]])
+        return out
+
+    def test_the_models_with_an_origin_key_are_found(self):
+        self.assertIn(20, merge.origin_models(self.b))
+        self.assertNotIn(0, merge.origin_models(self.b))
+
+    def test_an_origin_brush_model_keeps_its_own_coordinates(self):
+        self.assertEqual(self.vertexes(self.m, self.door), self.vertexes(self.b, 20))
+        self.assertEqual(self.m.models[self.door][0:6], self.b.models[20][0:6])
+
+    def test_its_planes_and_texture_alignment_are_unmoved(self):
+        for f in range(self.b.models[20][14], self.b.models[20][14] + self.b.models[20][15]):
+            g = self.m.faces[self.m.models[self.door][14] + f - self.b.models[20][14]]
+            self.assertEqual(self.m.planes[g[0]][:4], self.b.planes[self.b.faces[f][0]][:4])
+            self.assertEqual(self.m.texinfo[g[4]][:8], self.b.texinfo[self.b.faces[f][4]][:8])
+
+    def test_the_rest_of_the_moved_map_still_moves(self):
+        world = self.vertexes(self.b, 0)[:50]
+        moved = self.vertexes(self.m, 0)[len(self.vertexes(self.a, 0)):][:50]   # the merged world: a's faces, then b's
+        self.assertEqual(moved, [[v[0], v[1], bsp.f32(v[2] + self.dz)] for v in world])
+        other = next(k for k in range(1, len(self.b.models)) if k not in merge.origin_models(self.b) and self.b.models[k][15])
+        self.assertEqual(self.m.models[len(self.a.models) - 1 + other][2], self.b.models[other][2] + self.dz)
+
+    def test_the_merge_checks_clean(self):
+        from tools.map_merge import check
+        self.assertEqual(check.check_pair(self.a, self.b, self.m, self.info, {}, points=800), [])
+
+    def test_the_check_finds_an_origin_brush_model_moved_with_the_map(self):
+        from tools.map_merge import check
+        broken = bsp.Bsp.from_bytes(bsp.write_bytes(bsp.to_lumps(self.m)))
+        face = broken.faces[broken.models[self.door][14]]
+        e = broken.surfedges[face[2]][0]
+        v = broken.edges[abs(e)][0 if e >= 0 else 1]
+        broken.vertexes[v] = [broken.vertexes[v][0], broken.vertexes[v][1], bsp.f32(broken.vertexes[v][2] + self.dz)]
+        self.assertTrue(any('model 20' in p for p in check.check_pair(self.a, self.b, broken, self.info, {}, points=200)))
+
+
 class WorldspawnTests(unittest.TestCase):
     """The merged worldspawn: hl.dll reads MaxRange (the view distance) from it, so it takes the largest."""
 

@@ -9,7 +9,7 @@ import math
 import random
 
 from tools.map_merge.bsp import Bsp, bits_of, decompress_vis, ent_get, f32, relay
-from tools.map_merge.merge import PairInfo
+from tools.map_merge.merge import PairInfo, origin_models
 
 LIMIT = 60
 
@@ -117,6 +117,39 @@ def tex(x: Bsp, f):
     return mip[:16].split(b'\0')[0].lower() if mip else None
 
 
+def face_vertexes(x: Bsp, f) -> list:
+    out = []
+    for i in range(f[3]):
+        se = x.surfedges[f[2] + i][0]
+        out.append(x.vertexes[x.edges[se][0] if se >= 0 else x.edges[-se][1]])
+    return out
+
+
+def submodels(b: Bsp, m: Bsp, info: PairInfo, rng, bad, points: int = 8) -> None:
+    """Every brush model of b in m: moved by dz with its map, or, with an origin brush (merge.origin_models), in its
+    own coordinates: its faces' vertexes and what is at points in its bounds in all four hulls."""
+    fixed = origin_models(b)
+    for k in range(1, len(b.models)):
+        bm, mm = b.models[k], m.models[info.a_models - 1 + k]
+        dz = 0.0 if k in fixed else info.dz
+        if bm[15] != mm[15]:
+            bad(f'B model {k}: {mm[15]} faces, {bm[15]} expected')
+            continue
+        for j in range(bm[15]):
+            want = [[v[0], v[1], f32(v[2] + dz)] for v in face_vertexes(b, b.faces[bm[14] + j])]
+            if face_vertexes(m, m.faces[mm[14] + j]) != want:
+                bad(f'B model {k} face {j} geometry')
+                break
+        lo, hi = bm[0:3], bm[3:6]
+        for _ in range(points):
+            p = [rng.uniform(lo[i], hi[i]) for i in range(3)]
+            q = [p[0], p[1], p[2] + dz]
+            if b.leafs[leaf_at(b, bm[9], p)][0] != m.leafs[leaf_at(m, mm[9], q)][0]: bad(f'B model {k} contents at {p}')
+            for h in (1, 2, 3):
+                if 0 <= bm[9 + h] < len(b.clipnodes) and hull_at(b, bm[9 + h], p) != hull_at(m, mm[9 + h], q):
+                    bad(f'B model {k} hull {h} at {p}')
+
+
 def check_pair(a: Bsp, b: Bsp, m: Bsp, info: PairInfo, style_map: dict | None = None, points: int = 4000,
                seed: int = 1) -> list:
     """Problems found in m, the merge of a and b (b moved by info.dz, its face styles through style_map);
@@ -187,6 +220,7 @@ def check_pair(a: Bsp, b: Bsp, m: Bsp, info: PairInfo, style_map: dict | None = 
                         bad(f'{tag} face {i} re-laid light data')
                 elif src.lighting[f[9]:f[9] + size0] != m.lighting[g[9]:g[9] + size0]:
                     bad(f'{tag} face {i} light data')
+        submodels(b, m, info, rng, bad)
     except StopIteration:
         pass
     return problems

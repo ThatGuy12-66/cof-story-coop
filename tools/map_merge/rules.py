@@ -34,6 +34,10 @@ CLASS_REF_KEYS = {
     'cof_wheelchairmode': ('message',), 'cof_fatfuckingcunt': ('message',), 'cof_spawnpointonoff': ('message',),
     'cof_lobby_start': ('message',), 'cof_survivalmode': ('message',), 'cof_randomtimedspawner': ('message',),
     'cof_weapontrigger': ('noise',), 'cof_skipmanager': ('entity', 'teleport'),
+    # the climb's end spots, and the doors' unlocker and right target (UTIL_FindEntityByTargetname in CoF_Ladder.cpp,
+    # CoF_InterDoor.cpp, CoF_InterDoorCoop.cpp of the decompilation)
+    'cof_ladder_manager': ('topent', 'bottoment'), 'inter_door': ('propertarget', 'useunlock'),
+    'inter_door_coop': ('propertarget', 'useunlock'),
 }
 
 
@@ -45,6 +49,11 @@ MM_RESERVED = ('classname', 'targetname', 'origin', 'angles', 'spawnflags', 'wai
                'master', 'globalname', 'rendermode', 'renderamt', 'rendercolor', 'renderfx', 'model')
 SWITCHABLE = range(32, 61)          # 61-63 are the Paranoia renderer's bump-map styles
 SAFE_NAME = re.compile(r'^[^\s"]+$')
+# Entities hl.dll's worldspawn spawns only in a map of this exact name, which a merged map does not have: the merger
+# puts them into that member's section (evidence/map-merge-plan-20261017/hl-names/hl-map-names-re.md 2.4).
+NAMED_MAP_ENTITIES = {
+    'c_start': [['classname', 'dave_benson_phillips'], ['origin', '613 -3156 -702']],   # the easter egg
+}
 
 
 @dataclass
@@ -180,14 +189,26 @@ def compose_entity(e: list, s: Section) -> list:
     return out
 
 
-def compose_reference(world: list, members: list, sections: list) -> bytes:
+def named_map_entities(members: list, sections: list) -> list:
+    """The entities the merger adds to the merged file after its worldspawn (NAMED_MAP_ENTITIES), moved with their
+    member; none for a member that already holds one of that class (hl.dll spawns none then either)."""
+    out = []
+    for (name, ents), s in zip(members, sections):
+        extra = NAMED_MAP_ENTITIES.get(name)
+        if extra and not any(ent_get(e, 'classname') == ent_get(extra, 'classname') for e in ents):
+            out.append([[k, moved_origin(v, s.dz) if k == 'origin' else v] for k, v in extra])
+    return out
+
+
+def compose_reference(world: list, members: list, sections: list, extras: tuple = ()) -> bytes:
     """The merged map's entity lump the engine composes at load (the reference its tests compare with): the merged
-    file's worldspawn, then every member's entities but its worldspawn, through that member's rules."""
+    file's worldspawn, then every member's entities but its worldspawn, through that member's rules, then the merged
+    file's own other entities (named_map_entities) unchanged."""
     from tools.map_merge.bsp import serialize_ents
     ents = [world]
     for member, s in zip(members, sections):
         ents += [compose_entity(e, s) for e in member if ent_get(e, 'classname') != 'worldspawn']
-    return serialize_ents(ents)
+    return serialize_ents(ents + list(extras))
 
 
 def number(x: float) -> str:

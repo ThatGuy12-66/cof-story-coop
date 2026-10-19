@@ -18,10 +18,10 @@ from tools.map_merge import bsp, check, merge, rules
 HEX64 = re.compile(r'^[0-9a-f]{64}$')
 MAP_NAME = re.compile(r'^[a-z0-9_]{1,32}$')
 # Maps never merged, and why (evidence/map-merge-plan-20261017/hl-names/hl-map-names-re.md). hl.dll names c_city,
-# c_forest3, c_subwaysick1 and c_intro only as level destinations, which the engine's name routing covers.
+# c_forest3, c_subwaysick1 and c_intro only as level destinations, which the engine's name routing covers; c_start's
+# easter egg goes into its section (rules.named_map_entities).
 NEVER_MERGED = {
     'c_nightmare': 'client.dll hides the HUD and turns off sprint and the inventory by this name',
-    'c_start': 'the game DLL spawns its easter egg by this name (until the merger adds the egg to the section)',
     'c_game_menu1': 'the menu map',
 }
 # hl.dll's cof_credits counts the ending, the rank and the unlocks only in a map whose name contains this.
@@ -145,6 +145,7 @@ def merge_members(name: str, named: list) -> tuple:
         if problems:
             raise MergeCheckFailed(f'{name}: adding {names[k]}: ' + '; '.join(problems[:5]))
         current = merged
+    current.ents = current.ents[:1] + rules.named_map_entities([(m, x.ents) for m, x in named], sections)
     return current, sections
 
 

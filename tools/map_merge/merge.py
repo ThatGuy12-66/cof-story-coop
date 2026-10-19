@@ -99,6 +99,52 @@ def merged_worldspawn(worlds: list) -> list:
     return world
 
 
+def origin_models(x: Bsp) -> set:
+    """The submodels whose entity has an origin key. An origin-brush entity's geometry lies around that origin (a
+    rotating door's hinge, most trains) and the engine's composer moves the origin key with the member
+    (cof_sections.h CoF_SectMovedOrigin): the merger leaves that geometry unmoved."""
+    with_origin, without = set(), set()
+    for e in x.ents:
+        model = ent_get(e, 'model', '')
+        if model.startswith('*') and model[1:].isdigit() and 1 <= int(model[1:]) < len(x.models):
+            (with_origin if ent_get(e, 'origin') is not None else without).add(int(model[1:]))
+    if with_origin & without:
+        raise ValueError(f'model *{min(with_origin & without)} is used with and without an origin')
+    return with_origin
+
+
+def model_parts(x: Bsp, k: int) -> tuple:
+    """(nodes, clipnodes, leafs) model k's hull trees reach; leaf 0, the solid leaf every tree shares, left out."""
+    m = x.models[k]
+    nodes, leafs, stack = set(), set(), [m[9]]
+    while stack:
+        n = stack.pop()
+        if n < 0:
+            if n != -1:
+                leafs.add(-n - 1)
+        elif n not in nodes:
+            nodes.add(n)
+            stack.extend(x.nodes[n][1:3])
+    clips, stack = set(), [m[h] for h in (10, 11, 12) if 0 <= m[h] < len(x.clipnodes)]
+    while stack:
+        c = stack.pop()
+        if c >= 0 and c not in clips:
+            clips.add(c)
+            stack.extend(x.clipnodes[c][1:3])
+    return nodes, clips, leafs
+
+
+def fixed_parts(b: Bsp, fixed: set) -> tuple:
+    """(faces, nodes, clipnodes, leafs) of b's models in fixed; refused when the moved geometry shares any of them."""
+    parts = {k: model_parts(b, k) for k in range(len(b.models))}
+    mine = [set().union(*(parts[k][i] for k in fixed)) for i in range(3)]
+    others = [set().union(*(parts[k][i] for k in parts if k not in fixed)) for i in range(3)]
+    if any(m & o for m, o in zip(mine, others)):
+        raise ValueError('an origin-brush model shares its hull tree with moved geometry')
+    faces = {f for k in fixed for f in range(b.models[k][14], b.models[k][14] + b.models[k][15])}
+    return (faces, *mine)
+
+
 def world_nodes(x: Bsp) -> int:
     """How many nodes the world's tree has; they must be nodes 0..count-1."""
     seen, stack = set(), [x.models[0][9]]
@@ -168,6 +214,11 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
     def childA(c): return nodeA(c) if c >= 0 else -(leafA(-c - 1) + 1)
     def childB(c): return nodeB(c) if c >= 0 else -(leafB(-c - 1) + 1)
 
+    # b's origin-brush models stay in their own coordinates: copies of their planes, vertexes, edges and texture
+    # alignment, unmoved, after everything else (a merge without such models comes out as before)
+    fixed = origin_models(b)
+    fixed_faces, fixed_nodes, fixed_clips, fixed_leafs = fixed_parts(b, fixed) if fixed else (set(), set(), set(), set())
+
     out = {}
     planes = [list(p) for p in a.planes]
     for p in b.planes:
@@ -177,6 +228,13 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
     split_plane = len(planes)
     planes.append([0.0, 0.0, 1.0, split, 2])
     out['planes'] = planes
+    plane_copy = {}
+
+    def unmoved_plane(p):
+        if p not in plane_copy:
+            plane_copy[p] = len(planes)
+            planes.append(list(b.planes[p]))
+        return plane_copy[p]
 
     # textures: a's list, plus b's that differ by name or bytes
     mips = list(a.textures)
@@ -211,19 +269,53 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
         texinfo.append(q)
     out['texinfo'] = texinfo
     AT, AS, AL = len(a.texinfo), len(a.surfedges), len(a.lighting)
+    tex_copy, vertex_copy, edge_copy = {}, {}, {}
+
+    def unmoved_texinfo(t):
+        if t not in tex_copy:
+            q = list(b.texinfo[t])
+            q[8] = texmap[q[8]]
+            tex_copy[t] = len(texinfo)
+            texinfo.append(q)
+        return tex_copy[t]
+
+    def unmoved_vertex(v):
+        if v not in vertex_copy:
+            vertex_copy[v] = len(out['vertexes'])
+            out['vertexes'].append(list(b.vertexes[v]))
+        return vertex_copy[v]
+
+    def unmoved_surfedge(se):
+        # the face's edge from s to t (a negative surfedge walks its edge backwards), between unmoved vertexes
+        e = b.edges[abs(se)]
+        s, t = (unmoved_vertex(e[0]), unmoved_vertex(e[1])) if se >= 0 else (unmoved_vertex(e[1]), unmoved_vertex(e[0]))
+        if (t, s) in edge_copy:
+            return [-edge_copy[(t, s)]]
+        if (s, t) not in edge_copy:
+            edge_copy[(s, t)] = len(out['edges'])
+            out['edges'].append([s, t])
+        return [edge_copy[(s, t)]]
 
     faces = [None] * (Af + Bf)
     for i, f in enumerate(a.faces):
         faces[faceA(i)] = list(f)
     for i, f in enumerate(b.faces):
         q = remap_styles(f, style_map)
-        q[0] += AP
-        q[2] += AS
-        q[4] += AT
+        if i in fixed_faces:
+            q[0] = unmoved_plane(f[0])
+            q[2] = len(out['surfedges'])
+            out['surfedges'] += [unmoved_surfedge(b.surfedges[s][0]) for s in range(f[2], f[2] + f[3])]
+            q[4] = unmoved_texinfo(f[4])
+        else:
+            q[0] += AP
+            q[2] += AS
+            q[4] += AT
         if q[9] >= 0:
             q[9] += AL
         faces[faceB(i)] = q
     out['faces'] = faces
+    if len(out['vertexes']) > 65535:
+        raise ValueError('too many vertexes')
     out['lighting'] = a.lighting + b.lighting
 
     out['marksurfaces'] = [[faceA(m[0])] for m in a.marksurfaces] + [[faceB(m[0])] for m in b.marksurfaces]
@@ -257,8 +349,9 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
         if i == 0:
             continue
         q = list(l)
-        q[4] = int(l[4] + d[2])
-        q[7] = int(l[7] + d[2])
+        if i not in fixed_leafs:
+            q[4] = int(l[4] + d[2])
+            q[7] = int(l[7] + d[2])
         q[8] += AM
         if 1 <= i <= Bv and l[1] >= 0:
             row = bytearray(rowV)
@@ -284,10 +377,13 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
         nodes[nodeA(i)] = q
     for i, n in enumerate(b.nodes):
         q = list(n)
-        q[0] += AP
         q[1], q[2] = childB(n[1]), childB(n[2])
-        for k in (5, 8):
-            q[k] = int(n[k] + d[2])
+        if i in fixed_nodes:
+            q[0] = unmoved_plane(n[0])
+        else:
+            q[0] += AP
+            for k in (5, 8):
+                q[k] = int(n[k] + d[2])
         q[9] = faceB(n[9]) if n[10] else 0
         nodes[nodeB(i)] = q
     if len(nodes) > 32767:
@@ -311,8 +407,8 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
         clip.append([split_plane, f, bk])
     for c in a.clipnodes:
         clip.append([c[0], clipA(c[1]), clipA(c[2])])
-    for c in b.clipnodes:
-        clip.append([c[0] + AP, clipB(c[1]), clipB(c[2])])
+    for i, c in enumerate(b.clipnodes):
+        clip.append([unmoved_plane(c[0]) if i in fixed_clips else c[0] + AP, clipB(c[1]), clipB(c[2])])
     if total > 32767:
         raise ValueError('too many clipnodes')
     out['clipnodes'] = clip
@@ -325,10 +421,11 @@ def merge_pair(a: Bsp, b: Bsp, dz: float, style_map: dict) -> tuple[dict, PairIn
             q[h] = clipA(m[h])
         q[14] = faceA(m[14]) if m[15] else 0
         models.append(q)
-    for m in b.models[1:]:
+    for k_model, m in enumerate(b.models[1:], 1):
         q = list(m)
-        for k in (2, 5):
-            q[k] = m[k] + d[2]
+        if k_model not in fixed:
+            for k in (2, 5):
+                q[k] = m[k] + d[2]
         q[9] = nodeB(m[9])
         for h in (10, 11, 12):
             q[h] = clipB(m[h])

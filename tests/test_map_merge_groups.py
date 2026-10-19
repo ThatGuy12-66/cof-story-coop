@@ -45,8 +45,8 @@ class LoadTests(unittest.TestCase):
 
     def test_rejects_bad_names_and_members(self):
         for bad in (self.item(name='CM_X'), self.item(name='cm_' + 'a' * 30), self.item(name='cm_other'),
-                    self.item(members=['c_start', 'c_start2'], name='cm_start',
-                              inputs={'c_start': 'a' * 64, 'c_start2': 'b' * 64}),
+                    self.item(members=['c_nightmare', 'c_start'], name='cm_nightmare',
+                              inputs={'c_nightmare': 'a' * 64, 'c_start': 'b' * 64}),
                     self.item(members=['c_apartment3']), self.item(inputs={'c_apartment3': 'a' * 64}),
                     self.item(bsp_sha256='xyz')):
             with self.assertRaises(ValueError, msg=str(bad)):
@@ -59,8 +59,17 @@ class LoadTests(unittest.TestCase):
         groups.load_groups(self.write([self.item(members=['c_city2', 'c_city'], name='cm_city2',
                                                  inputs={'c_city2': 'a' * 64, 'c_city': 'b' * 64})]))
 
-    def test_nightmare_start_and_the_menu_are_never_members(self):
-        for m in ('c_nightmare', 'c_start', 'c_game_menu1'):
+    def test_c_start_can_be_a_member_now_the_merger_adds_its_easter_egg(self):
+        groups.load_groups(self.write([self.item(members=['c_start', 'c_start2'], name='cm_start',
+                                                 inputs={'c_start': 'a' * 64, 'c_start2': 'b' * 64})]))
+
+    def test_a_merged_c_start_holds_the_easter_egg_after_its_worldspawn(self):
+        named = [('c_start', retail('c_start')), ('c_start2', retail('c_start2'))]
+        merged, _ = groups.merge_members('cm_start', named)
+        self.assertEqual(merged.ents[1:], [[['classname', 'dave_benson_phillips'], ['origin', '613 -3156 -702']]])
+
+    def test_nightmare_and_the_menu_are_never_members(self):
+        for m in ('c_nightmare', 'c_game_menu1'):
             bad = self.item(members=['c_apartment3', m], inputs={'c_apartment3': 'a' * 64, m: 'b' * 64})
             with self.assertRaises(ValueError, msg=m):
                 groups.load_groups(self.write([bad]))
