@@ -110,7 +110,11 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - **Verification states.** Offline: full suite `python -m unittest discover -s tests` 484 OK, 1 skipped before the
   companion fix (`runs/full-suite-wave3.log`), 485 OK, 1 skipped on the final tree (`runs/full-suite-final.log`). Build:
   engine `b0edceee`, `tools\build_enhanced.cmd` exit 0, no warnings (`runs/build-companion-items.log`), `xash.dll`
-  `533ABC47…`. Live: **none**. Wave 3's 13 groups, the per-section
+  `533ABC47…`. Package: `evidence/test2-20261019/package/CoF-Story-Coop-Test2.zip` (`A119A0CD…`, 110.8 MB; exe
+  `7165F943…`; payload `test2` build 2, `xash.dll` `533ABC47…`; commits launcher `97a80ab`, engine `b0edceee`,
+  FreeVGUI `66eca8dc`; `package-report.json`), built with the uni notes hidden by `.git/info/exclude` and the line
+  removed afterwards; the exe's bundled `tools\map_groups.json` holds the 29 groups (read with PyInstaller's
+  `CArchiveReader`, nothing run). Not smoke-installed: setup runs the app, and nothing was run. Live: **none**. Wave 3's 13 groups, the per-section
   loops and the Test 2 package have never been played; before these changes wave 1 was played and wave 2's doors
   were checked live by script (section "Merged maps wave 2").
 - Known gaps: `SV_RestartAmbientSounds` (demo recording's full update only) resends the host's loops to everyone;
@@ -534,6 +538,7 @@ cmd /d /c tools\build_enhanced.cmd
 
 | Artifact | SHA-256 | Status |
 | --- | --- | --- |
+| `build-local-20260927/engine/xash.dll` (2026-10-19), in the Test 2 package's payload (`evidence/test2-20261019/package/`) | `533ABC475CED0ED0D061B79786C7E050EC8C7D08B4BA2C3F5AE1F76256E085B4` | Test 2: the decompilation fixes, the death-notice fix, per-section ambient loops, companion items left behind; engine `b0edceee`; built and offline-tested, never played |
 | `build-local-20260927/engine/xash.dll` (2026-10-15 11:42), in the tester package's payload (`evidence/tester-package-20261015/package/`) | `6C5DAB9BA7A13567EA96C2E307B8614B47496D58300A811B62E1C43F70A43D7A` | Tester package Test 1: everything below plus `cof_build` and `cof_continue`; committed (engine `d16d01f3`); not installed in the disposable copies |
 | `build-local-20260927/engine/xash.dll`, staged `evidence/menu-text-20261015/ui-pass2/xash.dll`; installed in `{host,guest}` (2026-10-15 04:45) | `BD39CF728B69D221BC65447AC11FE716FA3CEB17EAAEB5906932039E67540E52` | 12-slot inventory + companion routes + the RCON echo fix; live in the host copy (2026-10-15 early morning) |
 | `build-local-20260927/3rdparty/freevgui/vgui.dll`, staged `evidence/menu-text-20261015/ui-pass2/vgui.dll`; installed in `{host,guest}` (2026-10-15 04:45) | `40642512C3C2418B15B677701578A56BD30EA7A812108E2007022F464054E0AA` | Same build: the UI pass (text placement, grid alignment, full background art) |
