@@ -7,7 +7,7 @@ import queue
 import secrets
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 
 from . import core, network
 
