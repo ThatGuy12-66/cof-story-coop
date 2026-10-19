@@ -309,6 +309,13 @@ def ensure_entity_limit(root: Path) -> None:
     path.write_text("\r\n".join(lines) + "\r\n", encoding="ascii", newline="")
 
 
+def merged_maps_room(source: Path) -> int:
+    """The room the merged story maps take: no merged map is larger than its members."""
+    maps = Path(source) / "cryoffear/maps"
+    return sum((maps / f"{m}.bsp").stat().st_size for g in merge_groups.load_groups() if g.enabled
+               for m in g.members if (maps / f"{m}.bsp").is_file())
+
+
 def make_merged_maps(root: Path) -> dict[str, str]:
     """(Re)make the merged story maps from this copy's own retail maps (tools/map_groups.json). A group whose maps
     are not the retail files it was made from plays unmerged; merged files of older builds are removed."""
@@ -388,7 +395,7 @@ def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress
     ancestor = destination.parent
     while not ancestor.exists():
         ancestor = ancestor.parent
-    needed = sum(size for _, size in plan) + 600 * 1024 * 1024
+    needed = sum(size for _, size in plan) + 600 * 1024 * 1024 + merged_maps_room(source)
     if shutil.disk_usage(ancestor).free < needed:
         raise ValueError(f"The destination needs at least {needed / (1024 ** 3):.1f} GB free.")
     destination.mkdir(parents=True, exist_ok=False)

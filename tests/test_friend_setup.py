@@ -234,6 +234,18 @@ class FriendSetupTests(unittest.TestCase):
             self.assertIn("cm_apartment1: merged", log)
             self.assertIn("cm_apartment3: not merged", log)
 
+    def test_setup_makes_room_for_the_merged_maps(self):
+        # a merged map is never larger than its members; a disabled group is not made
+        from tools.map_merge import groups
+        with tempfile.TemporaryDirectory() as temp:
+            maps = Path(temp) / "cryoffear/maps"; maps.mkdir(parents=True)
+            for name, size in (("c_apartment1", 10), ("c_apartment2", 20), ("c_park", 40)):
+                (maps / f"{name}.bsp").write_bytes(b"x" * size)
+            on = groups.Group("cm_apartment1", ["c_apartment1", "c_apartment2"], {}, "1" * 64, "2" * 64, 1, True)
+            off = groups.Group("cm_park", ["c_park", "c_park2"], {}, "5" * 64, "6" * 64, 2, False)
+            with mock.patch.object(friend.merge_groups, "load_groups", return_value=[on, off]):
+                self.assertEqual(friend.merged_maps_room(Path(temp)), 30)
+
     def test_merged_maps_from_the_retail_maps(self):
         from tools.map_merge import groups
         retail_maps = Path(__file__).resolve().parents[1] / "baseline/Cry of Fear/cryoffear/maps"
