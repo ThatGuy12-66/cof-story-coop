@@ -98,7 +98,8 @@ double COM_CoF_MemberMaxRange( const char *map )
 }
 
 /*
-The entity string of a merged map: world is the merged file's own entity lump (its worldspawn), worldsize its size.
+The entity string of a merged map: world is the merged file's own entity lump (its worldspawn and the entities the
+merger adds), worldsize its size.
 NULL when map is not merged (or on an error, logged); otherwise a Z_Malloc'd NUL-terminated string.
 */
 char *COM_CoF_MergedEntities( const char *map, const char *world, size_t worldsize, size_t *outsize )

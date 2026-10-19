@@ -535,7 +535,9 @@ static const char *const cof_sect_class_keys[][2] =
 	{ "cof_mdlcutscene", "message" }, { "cof_wheelchairmode", "message" }, { "cof_fatfuckingcunt", "message" },
 	{ "cof_spawnpointonoff", "message" }, { "cof_lobby_start", "message" }, { "cof_survivalmode", "message" },
 	{ "cof_randomtimedspawner", "message" }, { "cof_weapontrigger", "noise" }, { "cof_skipmanager", "entity" },
-	{ "cof_skipmanager", "teleport" }
+	{ "cof_skipmanager", "teleport" }, { "cof_ladder_manager", "topent" }, { "cof_ladder_manager", "bottoment" },
+	{ "inter_door", "propertarget" }, { "inter_door", "useunlock" }, { "inter_door_coop", "propertarget" },
+	{ "inter_door_coop", "useunlock" }
 };
 
 COF_SECT_FN int CoF_SectClassKey( const char *cls, size_t cls_len, const char *k, size_t kl )
@@ -690,25 +692,26 @@ COF_SECT_FN void CoF_SectEntity( cof_sect_buf_t *b, const cof_sect_pair_t *pairs
 
 /*
 The merged map's entity string: the merged file's own worldspawn (world_lump's first entity), then every member's
-entities but its worldspawn, through that member's rules. members[i] is member i's entity string as the engine
-would load it for the original map. Returns a malloc'd string (its length in *outlen), or NULL.
+entities but its worldspawn, through that member's rules, then the merged file's own other entities unchanged (those
+the merger adds, such as c_start's easter egg, which hl.dll spawns only in a map of that name). members[i] is member
+i's entity string as the engine would load it for the original map. Returns a malloc'd string (its length in
+*outlen), or NULL.
 */
 COF_SECT_FN char *CoF_ComposeEntities( const char *world_lump, const char *const *members, int count, const cof_sections_t *s,
 	size_t *outlen )
 {
 	static cof_sect_pair_t pairs[COF_SECT_PAIRS];
+	static cof_section_t none;   // no move, no renames: the merged file's own entities as written
 	cof_sect_buf_t b = { NULL, 0, 0, 0 };
-	const char *cursor = world_lump, *start, *stop;
+	const char *cursor = world_lump, *start, *stop, *own;
 	int i, n;
 	if( !world_lump || count != s->count ) return NULL;
 	if( !CoF_SectNextBlock( &cursor, &start, &stop ) || ( n = CoF_SectPairs( start, stop, pairs, COF_SECT_PAIRS )) < 0 )
 		return NULL;
-	{
-		cof_section_t none;
-		memset( &none, 0, sizeof( none ));
-		none.first_model = 1;
-		CoF_SectEntity( &b, pairs, n, &none );
-	}
+	own = cursor;
+	memset( &none, 0, sizeof( none ));
+	none.first_model = 1;
+	CoF_SectEntity( &b, pairs, n, &none );
 	for( i = 0; i < count; i++ )
 	{
 		cursor = members[i];
@@ -730,6 +733,16 @@ COF_SECT_FN char *CoF_ComposeEntities( const char *world_lump, const char *const
 			if( !world ) CoF_SectEntity( &b, pairs, n, &s->sec[i] );
 		}
 	}
+	if( i == count )
+		while( CoF_SectNextBlock( &own, &start, &stop ))
+		{
+			if(( n = CoF_SectPairs( start, stop, pairs, COF_SECT_PAIRS )) < 0 )
+			{
+				b.failed = 1;
+				break;
+			}
+			CoF_SectEntity( &b, pairs, n, &none );
+		}
 	if( i < count || b.failed || !b.data )
 	{
 		free( b.data );
