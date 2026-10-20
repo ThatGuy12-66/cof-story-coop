@@ -780,5 +780,37 @@ int main(void) {
         assert(entities[1].v.origin[0]==0);
     }
     solid_probe=0; front_only_x=0; blocked=0;
+    /* The game respawns a player on the landmark the map was entered by, and nearly every story landmark stands in
+     * the trigger of its exit back (live 2026-10-19, cm_sewer3: the level change it fired crashed the game). After
+     * the PreThink that respawned them, before their move touches anything: back where they came into the map. */
+    {
+        vec3_t landmark={0,0,0}, landing={500,0,0};
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        arrive(1000,4000); assert(entities[2].v.origin[0]==1035); /* the partner came in beside the leader */
+        clients[0].state=clients[1].state=cs_spawned; tick(0.1);
+        entities[2].v.health=0; entities[2].v.deadflag=2; tick(0.1);
+        assert(SV_CoF_PartyDead(&entities[2]) && !SV_CoF_PartyDead(&entities[1]));
+        entities[2].v.health=100; entities[2].v.deadflag=DEAD_NO; entities[2].v.origin[0]=3000; /* on the landmark */
+        SV_CoF_PartyRespawned(&clients[1]);
+        assert(entities[2].v.origin[0]==1035 && strstr(status_log,"respawn-moved userid=101"));
+        /* a merged map's section move is the latest way in */
+        assert(SV_CoF_PartySectionMove(&clients[1],landing,NULL,NULL));
+        entities[2].v.origin[0]=3000; SV_CoF_PartyRespawned(&clients[1]); assert(entities[2].v.origin[0]==500);
+        /* no way in recorded in this map (a new game, a loaded save): the game's own spot */
+        svs.spawncount++; entities[2].v.origin[0]=3000; SV_CoF_PartyRespawned(&clients[1]);
+        assert(entities[2].v.origin[0]==3000 && strstr(status_log,"respawn-kept userid=101 reason=no-entry"));
+        /* the story layer off: nothing moves */
+        svs.spawncount--; gate=false; SV_CoF_PartyRespawned(&clients[1]); assert(entities[2].v.origin[0]==3000); gate=true;
+        /* carried in dead, so no way in of their own: the leader's */
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        entities[2].v.health=0; arrive(1000,4000); clients[0].state=clients[1].state=cs_spawned; tick(0.1);
+        entities[2].v.health=100; entities[2].v.origin[0]=3000; SV_CoF_PartyRespawned(&clients[1]);
+        assert(entities[2].v.origin[0]==1000);
+        /* came in through a door, its flag still up on arrival */
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        private_data[0][0x1EA4]=1; arrive(1000,4000); private_data[0][0x1EA4]=0;
+        clients[0].state=clients[1].state=cs_spawned; tick(0.1);
+        entities[1].v.origin[0]=3000; SV_CoF_PartyRespawned(&clients[0]); assert(entities[1].v.origin[0]==1000);
+    }
     puts("party scenarios passed"); return 0;
 }
