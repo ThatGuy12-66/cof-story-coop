@@ -2,6 +2,7 @@
 import dataclasses
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -9,6 +10,11 @@ from pathlib import Path
 
 from tests.test_map_merge_bsp import MAPS, retail
 from tools.map_merge import groups
+
+# "i/n" (1 <= i <= n): the every-group test builds only the i-th of n parts of the committed groups; "0/n": none.
+# tools/run_tests.py runs this module once with "0/n" and that test n times, one part each, side by side.
+# Unset (a plain unittest run): every group.
+SHARD = os.environ.get('COF_TEST_SHARD', '')
 
 
 def sha(path):
@@ -91,7 +97,11 @@ class CommittedGroupTests(unittest.TestCase):
     def test_every_group_builds_as_recorded_and_passes_the_planner(self):
         from tools.map_merge import plan
         retail('c_apartment3')
-        for g in groups.load_groups():
+        chosen = groups.load_groups()
+        if SHARD:
+            part, count = (int(value) for value in SHARD.split('/'))
+            chosen = chosen[part - 1::count] if part else []
+        for g in chosen:
             with self.subTest(g.name):
                 data, text = groups.build_group(MAPS, g)
                 self.assertEqual(hashlib.sha256(data).hexdigest(), g.bsp_sha256)

@@ -144,11 +144,15 @@ and ends with `'build' finished successfully`. The outputs, under
 From the checkout root:
 
 ```powershell
-python -m unittest discover -s tests
+python -m tools.run_tests                         # everything, in parallel (about 2 minutes)
+python -m unittest discover -s tests              # everything, one module after another (about 12 minutes)
 python -m unittest tests.test_enhanced_party -v   # one module
 ```
 
-The full suite is 156 tests and takes about 80 seconds. It needs no game, no network (protocol
+`tools/run_tests.py` runs each module in its own process, several at once, slowest first (times kept in
+`evidence/test-times.json`), and splits `test_map_merge_groups`' every-group test into 8 shards
+(`COF_TEST_SHARD`). Same tests, same verdict; the last lines read like unittest's. The full suite was 545
+tests on 2026-10-20. It needs no game, no network (protocol
 tests use loopback) and no engine build. It does need:
 
 - **The engine checkout at the path above.** Many tests read `engine/server/sv_cof_*` sources and

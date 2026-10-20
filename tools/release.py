@@ -217,10 +217,10 @@ def preflight(log: Log):
 
 
 def run_tests(log: Log, out: Path) -> None:
-    log.say("Running the full test suite (BelowNormal priority)...")
+    log.say("Running the full test suite in parallel (tools/run_tests.py, BelowNormal priority)...")
     started = time.time()
     with (out / "full-suite.log").open("w", encoding="utf-8") as handle:
-        result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=ROOT,
+        result = subprocess.run([sys.executable, "-m", "tools.run_tests"], cwd=ROOT,
                                 stdout=handle, stderr=subprocess.STDOUT, text=True)
     tail = (out / "full-suite.log").read_text(encoding="utf-8", errors="replace").strip().splitlines()[-3:]
     log.check(result.returncode == 0, f"full suite in {time.time() - started:.0f} s: {' | '.join(tail)}")

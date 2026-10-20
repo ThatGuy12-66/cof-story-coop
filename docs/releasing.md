@@ -5,7 +5,7 @@ One version goes out in four steps. Only the last two are public.
 | Step | Who | Public? |
 | --- | --- | --- |
 | 1. Prepare the version and commit it | an agent or the owner | no |
-| 2. `python -m tools.release build` | the script (about 20–25 minutes, no game launched) | no |
+| 2. `python -m tools.release build` | the script (about 15 minutes, no game launched) | no |
 | 3. Add the file on ModDB | in the owner's browser, the owner confirms before saving | yes |
 | 4. `python -m tools.release publish` | the script | yes |
 
@@ -57,7 +57,7 @@ It stops at the first group of problems and says which. In order:
 
 1. **Preflight**: the readme names X and has its what's-new, the notes file exists and is
    committed, and X is newer (label and build) than the latest version on the releases page.
-2. **The full test suite** (`full-suite.log`).
+2. **The full test suite**, in parallel (`tools/run_tests.py`, about 2 minutes; `full-suite.log`).
 3. **The package** (`tools/build_tester_package.py`) into `evidence/release-X/package/`.
    Untracked files outside `tools/`, `cofcoop/` and `tests/` (research notes) are kept out of the
    builder's dirty check for the build and `.git/info/exclude` is put back afterwards.
