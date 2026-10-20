@@ -76,5 +76,45 @@ class ReleaseTests(unittest.TestCase):
         browser.assert_called_once_with("https://discord.gg/4uwV6jmmY7")
 
 
+class ProgressPanelTests(unittest.TestCase):
+    """Setup's and update's live status: the step, the bar, a line for each thing done and the time taken
+    (the user, 2026-10-20: "so people can see what it's actually doing in real time")."""
+
+    def setUp(self):
+        import tkinter as tk
+        try:
+            self.window = tk.Tk()
+        except tk.TclError:
+            self.skipTest("no display for the window")
+        self.window.withdraw()
+        self.addCleanup(self.window.destroy)
+        self.app = app.App(self.window, None, Path("app.exe"))
+
+    def test_the_time_taken_reads_like_a_clock(self):
+        self.assertEqual([app.elapsed_text(s) for s in (0, 9.9, 65, 3725)], ["0:00", "0:09", "1:05", "1:02:05"])
+
+    def test_it_shows_the_step_the_bar_each_line_and_the_time_taken(self):
+        clock = iter([100.0, 165.0])
+        panel = self.app.progress_panel(self.app.body, clock=lambda: next(clock))
+        panel.start()
+        panel.show("Step 2 of 6: Copying game files, 12 of 4000 MB", .25, "05:00:01  Step 2 of 6: Copying game files")
+        panel.show("Step 2 of 6: Copying game files, 40 of 4000 MB", .3, None)
+        panel.show("Step 2 of 6: Copying game files", .3, "05:00:09  Copied cryoffear/sound: 2 files, 1 KB")
+        self.assertEqual(panel.status.get(), "Step 2 of 6: Copying game files")
+        self.assertEqual(float(panel.bar["value"]), 30.0)
+        self.assertEqual(panel.box.get("1.0", "end-1c"), "05:00:01  Step 2 of 6: Copying game files\n"
+                                                         "05:00:09  Copied cryoffear/sound: 2 files, 1 KB")
+        self.assertEqual(str(panel.box["state"]), "disabled")   # read-only for the player
+        panel.tick()
+        self.assertEqual(panel.elapsed.get(), "1:05 so far")
+        panel.stop()
+
+    def test_setup_and_update_both_show_it(self):
+        self.app.show_setup()
+        self.assertIsNotNone(self.app.panel)
+        self.app.show_update(Path("copy"))
+        self.assertIsNotNone(self.app.panel.box)
+
+
 if __name__ == "__main__":
     unittest.main()

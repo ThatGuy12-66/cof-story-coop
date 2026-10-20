@@ -1,6 +1,9 @@
+from datetime import datetime
 import hashlib
+import io
 import json
 from pathlib import Path
+import re
 import tempfile
 import subprocess
 import unittest
@@ -22,12 +25,29 @@ def make_payload(folder: Path, engine=b"engine", build=1):
     return folder
 
 
-def fake_installer(args, cwd, **kwargs):
-    """Stands in for install.ps1: it puts files\\xash.dll in the game folder and writes gameinfo.txt, as the real one does."""
-    (Path(cwd) / "xash.dll").write_bytes((Path(cwd) / "cof-enhanced/files/xash.dll").read_bytes())
-    (Path(cwd) / "cryoffear").mkdir(exist_ok=True)
-    (Path(cwd) / "cryoffear/gameinfo.txt").write_bytes(b'gamedir "cryoffear"\r\n')
-    return subprocess.CompletedProcess(args, 0)
+class FakeInstaller:
+    """Stands in for install.ps1 under subprocess.Popen: it puts files\\xash.dll in the game folder and writes
+    gameinfo.txt, as the real one does, and prints what the real one printed in the 1.0 install."""
+    output = (b"Cry of Fear: Enhanced 0.4.0-test3 - installer\r\nFolder: C:\\copy\r\n\r\n"
+              b"Checking the 665 files in the download...\r\nInstalling 667 files...\r\n"
+              b"  wrote cryoffear\\gameinfo.txt (made from your own game files)\r\n\r\n"
+              b"Cry of Fear: Enhanced 0.4.0-test3 is installed.\r\n"
+              b"Start Cry of Fear from Steam as usual. The version is shown in the top-right corner of the main menu.\r\n"
+              b"To remove it again, run Uninstall.cmd in this folder.\r\n")
+    code = 0
+
+    def __init__(self, args, cwd, **kwargs):
+        self.args, self.kwargs, self.returncode = args, kwargs, None
+        (Path(cwd) / "xash.dll").write_bytes((Path(cwd) / "cof-enhanced/files/xash.dll").read_bytes())
+        (Path(cwd) / "cryoffear").mkdir(exist_ok=True)
+        (Path(cwd) / "cryoffear/gameinfo.txt").write_bytes(b'gamedir "cryoffear"\r\n')
+        self.stdout = io.BytesIO(self.output)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.returncode = self.code
 
 
 class FriendSetupTests(unittest.TestCase):
@@ -189,15 +209,15 @@ class FriendSetupTests(unittest.TestCase):
             payload = make_payload(Path(temp) / "payload", b"new engine", build=2)
             remade = {"models/player/cof_s1/cof_s1.mdl": "1" * 64, "models/coop/p_axe.mdl": "2" * 64}
             with mock.patch.object(friend, "game_is_running", return_value=False), \
-                 mock.patch.object(friend.subprocess, "run", side_effect=fake_installer), \
+                 mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
                  mock.patch.object(friend, "make_models", return_value=remade) as make, \
                  mock.patch.object(friend, "make_merged_maps", return_value={"maps/cm_x.bsp": "3" * 64}) as merge, \
                  mock.patch.object(friend.art, "generate", return_value=[]) as art:
                 friend.update(root, payload, exe=exe, shortcuts=False)
             self.assertEqual((root / "xash.dll").read_bytes(), b"new engine")
             art.assert_called_once_with(root.resolve())
-            make.assert_called_once_with(root.resolve())
-            merge.assert_called_once_with(root.resolve())
+            self.assertEqual(make.call_args.args, (root.resolve(),))
+            self.assertEqual(merge.call_args.args, (root.resolve(),))
             self.assertEqual(friend.installed_state(root)["merged_maps"], {"maps/cm_x.bsp": "3" * 64})
             for rel, data in {"SAVE/cofcoop/autosave.cof": b"save", "cryoffear/config.cfg": b"my binds"}.items():
                 self.assertEqual((root / rel).read_bytes(), data, rel)
@@ -306,7 +326,7 @@ class FriendSetupTests(unittest.TestCase):
                 "xash_sha256": hashlib.sha256(b"old").hexdigest(), "models": {}, "source_game": "src"}))
             payload = make_payload(Path(temp) / "payload", b"new engine", build=4)
             with mock.patch.object(friend, "game_is_running", return_value=False), \
-                 mock.patch.object(friend.subprocess, "run", side_effect=fake_installer), \
+                 mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
                  mock.patch.object(friend, "make_models", return_value={}), \
                  mock.patch.object(friend, "make_merged_maps", return_value={}), \
                  mock.patch.object(friend.art, "generate", return_value=[]):
@@ -349,6 +369,132 @@ class FriendSetupTests(unittest.TestCase):
             (root / "steamapps/libraryfolders.vdf").write_text(f'"libraryfolders" {{ "1" {{ "path" "{escaped}" }} }}')
             (library / "steamapps/appmanifest_223710.acf").write_text('"AppState" { "installdir" "Cry of Fear" }')
             self.assertEqual(friend.steam_candidates([root]), [library / "steamapps/common/Cry of Fear"])
+
+
+STAMP = re.compile(r"^\d\d:\d\d:\d\d  ")
+
+
+def make_source(folder: Path) -> Path:
+    """A retail game folder in miniature: what validate_source looks for, and two sounds."""
+    for rel, data in {"CoFLaunchApp.exe": b"launcher", "cryoffear/liblist.gam": b"game",
+                      "cryoffear/maps/c_game_menu1.bsp": b"menu", "cryoffear/cl_dlls/hl.dll": b"stock dll",
+                      "cryoffear/sound/a.wav": b"a", "cryoffear/sound/b.wav": b"bb"}.items():
+        path = folder / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+    return folder
+
+
+def made_copy(temp: Path, installer=FakeInstaller, seen=None):
+    """friend.setup from make_source into a new copy, with the generators stood in for; returns the copy."""
+    from tools.map_merge import groups
+    group = groups.Group("cm_apartment1", ["c_apartment1", "c_apartment2"], {}, "1" * 64, "2" * 64, 1, True)
+    source, copy, exe = make_source(temp / "retail"), temp / "CoF-Story-Coop", temp / "app.exe"
+    exe.write_bytes(b"app")
+    models = {"models/player/cof_s1/cof_s1.mdl": b"s1", "models/coop/p_axe.mdl": b"axe"}
+    with mock.patch.object(friend, "STOCK_DLL_SHA", hashlib.sha256(b"stock dll").hexdigest()), \
+         mock.patch.object(friend.subprocess, "Popen", installer), \
+         mock.patch.object(friend, "generated_models", return_value=models), \
+         mock.patch.object(friend, "validate_model"), \
+         mock.patch.object(friend.art, "generate", side_effect=lambda root: [Path(root) / "cryoffear/gfx/vgui/inventory12_left.tga"]), \
+         mock.patch.object(friend.merge_groups, "load_groups", return_value=[group]), \
+         mock.patch.object(friend.merge_groups, "install_group", return_value={"maps/cm_apartment1.bsp": "1" * 64}):
+        friend.setup(source, copy, make_payload(temp / "payload"), exe=exe, shortcuts=False,
+                     progress=lambda *report: seen.append(report) if seen is not None else None)
+    return copy
+
+
+class SetupProgressTests(unittest.TestCase):
+    """What the window shows while setup works: the step, a bar for the whole job and a line for each thing done,
+    which also goes into the copy's setup log (the user, 2026-10-20: "so people can see what it's actually doing")."""
+
+    def test_steps_report_the_step_the_whole_bar_and_each_line(self):
+        seen, ticks = [], iter(range(60))
+        steps = friend.Steps([("Checking your game", .2), ("Copying game files", .8)],
+                             lambda status, part, line: seen.append((status, round(part, 3), line)),
+                             clock=lambda: datetime(2026, 10, 20, 5, 0, next(ticks)))
+        steps.start("Checking your game")
+        steps.note("6 files to copy")
+        steps.start("Copying game files")
+        steps.part(.5, "2 of 4 MB")
+        steps.part(2.0)   # never past its own share
+        steps.done("Done.")
+        self.assertEqual(seen, [
+            ("Step 1 of 2: Checking your game", 0.0, "05:00:00  Step 1 of 2: Checking your game"),
+            ("Step 1 of 2: Checking your game", 0.0, "05:00:01  6 files to copy"),
+            ("Step 2 of 2: Copying game files", 0.2, "05:00:02  Step 2 of 2: Copying game files"),
+            ("Step 2 of 2: Copying game files, 2 of 4 MB", 0.6, None),
+            ("Step 2 of 2: Copying game files", 1.0, None),
+            ("Done.", 1.0, "05:00:03  Done."),
+        ])
+
+    def test_the_setup_log_keeps_the_lines_from_before_the_copy_existed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            steps = friend.Steps([("Checking your game", 1)])
+            steps.start("Checking your game")
+            steps.note("6 files to copy")
+            log = Path(temp) / friend.SETUP_LOG
+            steps.log_to(log)
+            steps.note("after")
+            lines = log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(all(STAMP.match(line) for line in lines))
+        self.assertEqual([STAMP.sub("", line) for line in lines], ["Step 1 of 1: Checking your game", "6 files to copy", "after"])
+
+    def test_setup_shows_each_step_and_what_it_does(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as temp:
+            copy = made_copy(Path(temp), seen=seen)
+            log = (copy / friend.SETUP_LOG).read_text(encoding="utf-8").splitlines()
+        statuses = [status for status, _, _ in seen]
+        parts = [part for _, part, _ in seen]
+        lines = [line for _, _, line in seen if line]
+        heads = [status.split(":")[0] for status in statuses if status.startswith("Step ")]
+        self.assertEqual(list(dict.fromkeys(heads)), [f"Step {n} of 6" for n in range(1, 7)])
+        self.assertEqual(parts, sorted(parts))   # the bar only moves forward
+        self.assertEqual((parts[-1], statuses[-1].split(".")[0]), (1, "Done"))
+        self.assertTrue(any(s.startswith("Step 2 of 6: Copying game files, ") and "cryoffear/sound/" in s for s in statuses))
+        self.assertIn("Step 6 of 6: Joining story maps (fewer loading screens), 1 of 1: cm_apartment1", statuses)
+        text = [STAMP.sub("", line) for line in lines]
+        for expected in ("Copied cryoffear/sound: 2 files, 1 KB", "Installing 667 files...",
+                         "wrote cryoffear\\gameinfo.txt (made from your own game files)",
+                         "Made models/player/cof_s1/cof_s1.mdl", "Made cryoffear/gfx/vgui/inventory12_left.tga",
+                         "1 of 1: cm_apartment1: merged c_apartment1 + c_apartment2"):
+            self.assertIn(expected, text)
+        # upstream's words for an install into the Steam folder do not fit a copy
+        self.assertFalse([line for line in text if "Uninstall.cmd" in line or "from Steam" in line])
+        self.assertTrue(all(STAMP.match(line) for line in lines))
+        self.assertEqual(log, lines)   # the copy's setup log: every line the window showed, the first step's too
+
+    def test_a_stopped_setup_says_why_in_its_log(self):
+        class Failing(FakeInstaller):
+            code = 1
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(RuntimeError, "engine could not be installed"):
+                made_copy(Path(temp), installer=Failing)
+            log = (Path(temp) / "CoF-Story-Coop" / friend.SETUP_LOG).read_text(encoding="utf-8")
+        self.assertIn("Stopped: The engine could not be installed.", log)
+
+    def test_update_shows_its_steps_and_adds_to_the_setup_log(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = Path(temp) / "CoF-Story-Coop", Path(temp) / "new.exe"
+            exe.write_bytes(b"new app")
+            root.mkdir()
+            (root / "xash.dll").write_bytes(b"old")
+            (root / friend.SETUP_LOG).write_text("05:00:00  the first setup\n", encoding="utf-8")
+            (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "1.0", "build": 4,
+                "xash_sha256": hashlib.sha256(b"old").hexdigest(), "models": {}, "source_game": "src"}))
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                 mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
+                 mock.patch.object(friend, "make_models", return_value={}), \
+                 mock.patch.object(friend, "make_merged_maps", return_value={}), \
+                 mock.patch.object(friend.art, "generate", return_value=[]):
+                friend.update(root, make_payload(Path(temp) / "payload", b"new engine", build=5), exe=exe,
+                              progress=lambda *report: seen.append(report), shortcuts=False)
+            log = (root / friend.SETUP_LOG).read_text(encoding="utf-8").splitlines()
+        heads = [status.split(":")[0] for status, _, _ in seen if status.startswith("Step ")]
+        self.assertEqual(list(dict.fromkeys(heads)), [f"Step {n} of 4" for n in range(1, 5)])
+        self.assertEqual(seen[-1][1], 1)
+        self.assertEqual(log[0], "05:00:00  the first setup")
+        self.assertIn("Installing 667 files...", [STAMP.sub("", line) for line in log])
 
 
 if __name__ == "__main__":

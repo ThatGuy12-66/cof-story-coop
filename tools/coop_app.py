@@ -81,6 +81,61 @@ def remembered_copy(pointer: Path) -> Path | None:
         return None
 
 
+def elapsed_text(seconds: float) -> str:
+    minutes, second = divmod(int(seconds), 60)
+    hours, minute = divmod(minutes, 60)
+    return f"{hours}:{minute:02}:{second:02}" if hours else f"{minute}:{second:02}"
+
+
+class ProgressPanel:
+    """Setup's and update's live status: the bar, the step it is on, the time taken and a read-only box with a
+    line for each thing done (the lines of the copy's setup log)."""
+
+    def __init__(self, tk, ttk, parent, clock=time.monotonic):
+        self.clock, self.started, self.job = clock, None, None
+        self.bar = ttk.Progressbar(parent, maximum=100)
+        self.bar.pack(fill="x")
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(8, 6))
+        self.status, self.elapsed = tk.StringVar(), tk.StringVar()
+        ttk.Label(row, textvariable=self.elapsed).pack(side="right")
+        ttk.Label(row, textvariable=self.status, wraplength=580).pack(side="left", anchor="w")
+        frame = ttk.Frame(parent)
+        frame.pack(fill="both", expand=True)
+        self.box = tk.Text(frame, height=9, wrap="word", font=("Consolas", 9), state="disabled")
+        scroll = ttk.Scrollbar(frame, command=self.box.yview)
+        self.box.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.box.pack(side="left", fill="both", expand=True)
+
+    def start(self):
+        self.started = self.clock()
+        self.elapsed.set(f"{elapsed_text(0)} so far")
+        self.job = self.box.after(1000, self.tick)
+
+    def tick(self):
+        if self.job:
+            self.box.after_cancel(self.job)
+        self.elapsed.set(f"{elapsed_text(self.clock() - self.started)} so far")
+        self.job = self.box.after(1000, self.tick)
+
+    def stop(self):
+        if self.job:
+            self.box.after_cancel(self.job)
+        self.job = None
+
+    def show(self, status, part, line):
+        self.status.set(status)
+        self.bar.configure(value=part * 100)
+        if line:
+            self.box.configure(state="normal")
+            if self.box.index("end-1c") != "1.0":
+                self.box.insert("end", "\n")
+            self.box.insert("end", line)
+            self.box.configure(state="disabled")
+            self.box.see("end")
+
+
 def where_to_start(exe_dir: Path, default_copy: Path, build: int, pointer: Path | None = COPY_POINTER):
     """'main' (a copy to play from), 'update' (an older copy), 'newer' (a copy newer than this app) or 'setup'."""
     if setup_lib.installed_state(exe_dir):
@@ -107,6 +162,7 @@ class App:
         self.root = None
         self.settings = {}
         self.watch = None
+        self.panel = None
         self.messages = queue.Queue()
         window.title("Cry of Fear Co-op")
         window.geometry("760x560")
@@ -197,35 +253,32 @@ class App:
             ttk.Button(holder, text="Browse…", command=lambda v=var, p=pick: p(v)).pack(side="left", padx=4)
         button = ttk.Button(body, text="Set up")
         button.pack(anchor="w", pady=14)
-        bar = ttk.Progressbar(body, maximum=100)
-        bar.pack(fill="x")
-        status = tk.StringVar(value="Looking for Cry of Fear in Steam…")
-        ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w", pady=8)
+        panel = self.progress_panel(body)
+        panel.status.set("Looking for Cry of Fear in Steam…")
 
         def found(candidates):
             if candidates and not source.get():
                 source.set(str(candidates[0]))
-            status.set("Ready: click Set up." if source.get() else
-                       "Pick your Cry of Fear folder (the one with CoFLaunchApp.exe).")
-
-        def show_progress(value):
-            status.set(value[0])
-            bar.configure(value=value[1] * 100)
+            if panel.started is None:   # not once setup has begun
+                panel.status.set("Ready: click Set up." if source.get() else
+                                 "Pick your Cry of Fear folder (the one with CoFLaunchApp.exe).")
 
         def stopped(error):
+            panel.stop()
             button.configure(state="normal")
-            status.set("Setup stopped. Your Steam game is unchanged.")
+            panel.status.set("Setup stopped. Your Steam game is unchanged.")
             self.error(error)
 
         def made(copy):
+            panel.stop()
             remember_copy(copy)
             self.show_main(copy)
 
         def start():
             button.configure(state="disabled")
+            panel.start()
             src, dst = Path(source.get()), Path(destination.get())
-            self.work(lambda: setup_lib.setup(src, dst, self.payload, exe=self.exe,
-                                              progress=lambda text, part: self.messages.put((show_progress, (text, part)))),
+            self.work(lambda: setup_lib.setup(src, dst, self.payload, exe=self.exe, progress=self.reporter(panel)),
                       made, stopped)
         button.configure(command=start)
         self.work(setup_lib.steam_candidates, found, lambda _: found([]))
@@ -246,21 +299,33 @@ class App:
         ttk = self.ttk
         body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
                           f"in {copy}. Your saves and settings are kept.")
-        status = self.tk.StringVar()
         button = ttk.Button(body, text="Update")
         button.pack(anchor="w", pady=14)
-        ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w")
+        panel = self.progress_panel(body)
 
         def stopped(error):
+            panel.stop()
             button.configure(state="normal")
             self.error(error)
 
+        def updated(root):
+            panel.stop()
+            self.show_main(root)
+
         def start():
             button.configure(state="disabled")
-            self.work(lambda: setup_lib.update(copy, self.payload, exe=self.exe,
-                                               progress=lambda text, _: self.messages.put((status.set, text))),
-                      self.show_main, stopped)
+            panel.start()
+            self.work(lambda: setup_lib.update(copy, self.payload, exe=self.exe, progress=self.reporter(panel)),
+                      updated, stopped)
         button.configure(command=start)
+
+    def progress_panel(self, parent, clock=time.monotonic):
+        self.panel = ProgressPanel(self.tk, self.ttk, parent, clock)
+        return self.panel
+
+    def reporter(self, panel):
+        """setup's progress(status, fraction, line), from its worker thread to the panel on the UI thread."""
+        return lambda *report: self.messages.put((lambda value: panel.show(*value), report))
 
     # main
     def show_main(self, copy):

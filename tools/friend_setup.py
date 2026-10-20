@@ -43,6 +43,79 @@ RETIRED_FILES = ("README.txt", "Install.cmd", "Uninstall.cmd", "EXPERIMENTAL-STO
 ENTITY_LIMIT = 4096   # liblist.gam's commandargs "-num_edicts 4096": the limit Cry of Fear was made for
 # The name in the first config.cfg, before anyone has typed one in the app.
 DEFAULT_NAME = "Player"
+SETUP_LOG = "cof-story-setup.log"   # every line the setup and update windows showed
+# Each step's share of the bar: about its share of the time (the 1.0 install: copy 93 s, engine 13 s, models 13 s,
+# art under a second, story maps 156 s).
+SETUP_STEPS = (("Checking your game", .01), ("Copying game files", .33), ("Installing the co-op engine", .05),
+               ("Making the Simon and weapon models", .05), ("Making the inventory art", .01),
+               ("Joining story maps (fewer loading screens)", .55))
+UPDATE_STEPS = (("Installing the new engine", .07), ("Making the Simon and weapon models", .07),
+                ("Making the inventory art", .01), ("Joining story maps (fewer loading screens)", .85))
+# Upstream's installer was written for an install into the Steam folder; these of its lines do not fit a copy.
+INSTALLER_HIDDEN = ("Start Cry of Fear from Steam", "Uninstall.cmd")
+
+
+class Steps:
+    """What setup is doing, for the window as it happens: report(status, fraction, line) with the step ("Step 2 of 6:
+    Copying game files"), the bar for the whole job (each step has its share) and, for each thing done, a line. The
+    lines also go into the copy's setup log once there is a copy, the ones from before it existed too."""
+
+    def __init__(self, steps, report=lambda *_: None, clock=datetime.now):
+        self.names = [name for name, _ in steps]
+        self.shares = [share for _, share in steps]
+        self.report, self.clock = report, clock
+        self.at, self.share, self.detail, self.finished = -1, 0.0, "", None
+        self.kept, self.log = [], None
+
+    def status(self) -> str:
+        if self.finished is not None:
+            return self.finished
+        if self.at < 0:
+            return ""
+        text = f"Step {self.at + 1} of {len(self.names)}: {self.names[self.at]}"
+        return f"{text}, {self.detail}" if self.detail else text
+
+    def fraction(self) -> float:
+        if self.finished is not None:
+            return 1.0
+        if self.at < 0:
+            return 0.0
+        return min(1.0, sum(self.shares[:self.at]) + self.shares[self.at] * min(max(self.share, 0.0), 1.0))
+
+    def start(self, name: str) -> None:
+        self.at, self.share, self.detail = self.names.index(name), 0.0, ""
+        self.note(self.status())
+
+    def part(self, share: float, detail: str = "") -> None:
+        """How far into the current step (0 to 1), and what it is on."""
+        self.share, self.detail = share, detail
+        self.report(self.status(), self.fraction(), None)
+
+    def note(self, line: str) -> None:
+        line = f"{self.clock():%H:%M:%S}  {line}"
+        if self.log is None:
+            self.kept.append(line)
+        else:
+            try:
+                with self.log.open("a", encoding="utf-8") as log:
+                    log.write(line + "\n")
+            except OSError:
+                pass   # a lost log line never stops setup
+        self.report(self.status(), self.fraction(), line)
+
+    def log_to(self, path: Path) -> None:
+        self.log = Path(path)
+        with self.log.open("a", encoding="utf-8") as log:
+            log.writelines(line + "\n" for line in self.kept)
+        self.kept = []
+
+    def done(self, text: str) -> None:
+        self.finished = text
+        self.note(text)
+
+
+def size_text(size: int) -> str:
+    return f"{size // (1024 * 1024)} MB" if size >= 1024 * 1024 else f"{(size + 1023) // 1024} KB"
 
 
 def digest_file(path: Path) -> str:
@@ -125,9 +198,20 @@ def copy_plan(source: Path) -> list[tuple[Path, int]]:
     return result
 
 
-def copy_assets(source: Path, destination: Path, plan, progress=lambda *_: None) -> None:
+def copy_assets(source: Path, destination: Path, plan, steps=None) -> None:
+    """Copy and verify each planned file: the bar moves with each file, and each folder done gets a line."""
+    steps = steps or Steps(())
     done, total = 0, sum(size for _, size in plan)
+    folder, count, size = None, 0, 0
+
+    def folder_done():
+        if folder is not None:
+            name = folder.as_posix() if folder.parts else "the game folder"
+            steps.note(f"Copied {name}: {count} file{'' if count == 1 else 's'}, {size_text(size)}")
     for relative, expected_size in plan:
+        if relative.parent != folder:
+            folder_done()
+            folder, count, size = relative.parent, 0, 0
         src, dst = source / relative, destination / relative
         reject_links(src)
         reject_links(dst)
@@ -140,7 +224,9 @@ def copy_assets(source: Path, destination: Path, plan, progress=lambda *_: None)
         if dst.stat().st_size != expected_size or digest_file(dst) != source_hash.hexdigest():
             raise RuntimeError(f"Copy verification failed: {relative}")
         done += expected_size
-        progress(f"Copying game files: {done // (1024 * 1024)} / {total // (1024 * 1024)} MB", .85 * done / max(total, 1))
+        count, size = count + 1, size + expected_size
+        steps.part(done / max(total, 1), f"{done // (1024 * 1024)} of {total // (1024 * 1024)} MB, {relative.as_posix()}")
+    folder_done()
 
 
 def steam_candidates(roots=None) -> list[Path]:
@@ -224,26 +310,39 @@ def extract_payload(payload: Path, destination: Path, *, overwrite: bool = False
                     shutil.copyfileobj(reader, writer)
 
 
-def run_installer(destination: Path) -> None:
-    """The Enhanced installer from the payload; it upgrades an earlier install in place."""
+def run_installer(destination: Path, steps=None) -> None:
+    """The Enhanced installer from the payload; it upgrades an earlier install in place. Its output goes into
+    friend-setup-install.log as it comes, and to the window line by line."""
+    steps = steps or Steps(())
     shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
     env = os.environ.copy()
     env["PSModulePath"] = str(shell.parent / "Modules")
-    with (destination / "friend-setup-install.log").open("wb") as log:
-        result = subprocess.run([str(shell), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
-                                 str(destination / "cof-enhanced/install.ps1"), "-GameDir", str(destination)],
-                                cwd=destination, env=env, stdout=log, stderr=subprocess.STDOUT,
-                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False)
-    if result.returncode:
+    with (destination / "friend-setup-install.log").open("wb") as log, \
+         subprocess.Popen([str(shell), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                           str(destination / "cof-enhanced/install.ps1"), "-GameDir", str(destination)],
+                          cwd=destination, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as process:
+        for raw in process.stdout:
+            log.write(raw)
+            line = raw.decode("oem" if os.name == "nt" else "utf-8", "replace").strip()   # the console's code page
+            if line and not any(words in line for words in INSTALLER_HIDDEN):
+                steps.note(line)
+    if process.returncode:
         raise RuntimeError("The engine could not be installed. See friend-setup-install.log in the copy.")
 
 
-def make_art(root: Path) -> None:
+def make_art(root: Path, steps=None) -> None:
     """The 12-slot inventory's background art, from this copy's own retail images."""
+    steps = steps or Steps(())
     try:
-        art.generate(root)
+        written = art.generate(root)
     except SystemExit as error:
         raise RuntimeError(f"The inventory art could not be made: {error}") from None
+    for path in written:
+        try:
+            steps.note(f"Made {Path(path).relative_to(root).as_posix()}")
+        except ValueError:
+            steps.note(f"Made {path}")
 
 
 def generated_models(models: Path) -> dict[str, bytes]:
@@ -255,12 +354,15 @@ def generated_models(models: Path) -> dict[str, bytes]:
     return files
 
 
-def make_models(root: Path) -> dict[str, str]:
+def make_models(root: Path, steps=None) -> dict[str, str]:
     """(Re)make the generated models in a copy from its own files; an update replaces older generator output."""
+    steps = steps or Steps(())
     hashes = {}
-    for rel, data in generated_models(root / "cryoffear/models").items():
-        if not rel.endswith(".mdl"):
-            continue
+    steps.part(0, "reading your game's models")
+    files = generated_models(root / "cryoffear/models")
+    models = [rel for rel in files if rel.endswith(".mdl")]
+    for number, rel in enumerate(models, 1):
+        data = files[rel]
         validate_model(data)
         target = root / "cryoffear" / rel
         reject_links(target)
@@ -272,6 +374,8 @@ def make_models(root: Path) -> dict[str, str]:
         if digest_file(target) != expected:
             raise RuntimeError("Generated model verification failed.")
         hashes[rel] = expected
+        steps.part(number / len(models), rel)
+        steps.note(f"Made {rel}")
     return hashes
 
 
@@ -321,20 +425,22 @@ def merged_maps_room(source: Path) -> int:
                for m in g.members if (maps / f"{m}.bsp").is_file())
 
 
-def make_merged_maps(root: Path) -> dict[str, str]:
+def make_merged_maps(root: Path, steps=None) -> dict[str, str]:
     """(Re)make the merged story maps from this copy's own retail maps (tools/map_groups.json). A group whose maps
     are not the retail files it was made from plays unmerged; merged files of older builds are removed."""
+    steps = steps or Steps(())
     maps = root / "cryoffear/maps"
     reject_links(maps)
     made, lines = {}, []
-    for group in merge_groups.load_groups():
-        if not group.enabled:
-            continue
+    enabled = [group for group in merge_groups.load_groups() if group.enabled]
+    for number, group in enumerate(enabled, 1):
+        steps.part((number - 1) / len(enabled), f"{number} of {len(enabled)}: {group.name}")
         try:
             made.update(merge_groups.install_group(maps, group))
             lines.append(f"{group.name}: merged {' + '.join(group.members)}")
         except (merge_groups.GroupInputMismatch, merge_groups.MergeCheckFailed, RuntimeError, ValueError, OSError) as error:
             lines.append(f"{group.name}: not merged, its maps play as usual: {error}")
+        steps.note(f"{number} of {len(enabled)}: {lines[-1]}")
     for path in maps.glob("cm_*"):
         if path.suffix in (".bsp", ".sections", ".partial") and f"maps/{path.name}" not in made:
             path.unlink()
@@ -370,7 +476,7 @@ def write_shortcuts(root: Path) -> bool:
     return result.returncode == 0
 
 
-def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path, shortcuts: bool, progress,
+def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path, shortcuts: bool, steps,
            merged: dict | None = None) -> None:
     """The parts setup and update share: the story cfg, the app in the copy, the installed record, shortcuts."""
     (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
@@ -382,21 +488,32 @@ def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path
              "source_game": source_game, "campaign_verified": False}
     (root / INSTALLED).write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     if shortcuts and not write_shortcuts(root):
-        progress(f"Done, but the desktop shortcut could not be made: start {APP_EXE} in {root}.", 1)
+        steps.done(f"Done, but the desktop shortcut could not be made: start {APP_EXE} in {root}.")
         return
-    progress("Done. Use the Cry of Fear Co-op shortcut on your desktop or in the Start menu.", 1)
+    steps.done("Done. Use the Cry of Fear Co-op shortcut on your desktop or in the Start menu.")
 
 
 def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress=lambda *_: None, shortcuts=True) -> Path:
+    """A new copy. progress(status, fraction, line) as it goes (Steps); a setup that stops says why in its log."""
+    steps = Steps(SETUP_STEPS, progress)
+    try:
+        return make_copy(Path(source), Path(destination), Path(payload), exe, shortcuts, steps)
+    except Exception as error:
+        steps.note(f"Stopped: {error}")
+        raise
+
+
+def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcuts: bool, steps: Steps) -> Path:
+    steps.start("Checking your game")
     source = validate_source(source)
     destination = validate_destination(source, destination)
-    payload = Path(payload)
     manifest = inspect_payload(payload)
-    progress("Checking game files and disk space", 0)
+    steps.note(f"Cry of Fear Co-op {manifest['version']} (build {manifest['build']}): a copy of {source} in {destination}")
     plan = copy_plan(source)
     with zipfile.ZipFile(payload / PAYLOAD_ZIP) as archive:
         package_paths = {info.filename.casefold() for info in archive.infolist() if not info.is_dir()}
     plan = [(relative, size) for relative, size in plan if relative.as_posix().casefold() not in package_paths]
+    steps.note(f"{len(plan)} game files to copy, {size_text(sum(size for _, size in plan))}")
     ancestor = destination.parent
     while not ancestor.exists():
         ancestor = ancestor.parent
@@ -404,57 +521,70 @@ def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress
     if shutil.disk_usage(ancestor).free < needed:
         raise ValueError(f"The destination needs at least {needed / (1024 ** 3):.1f} GB free.")
     destination.mkdir(parents=True, exist_ok=False)
+    steps.log_to(destination / SETUP_LOG)
     (destination / "SETUP-INCOMPLETE.txt").write_text("Setup is incomplete. Choose a new folder to retry; no original game files were changed.\n")
-    copy_assets(source, destination, plan, progress)
-    progress("Installing the co-op engine", .86)
+    steps.start("Copying game files")
+    copy_assets(source, destination, plan, steps)
+    steps.start("Installing the co-op engine")
     extract_payload(payload / PAYLOAD_ZIP, destination)
-    run_installer(destination)
+    run_installer(destination, steps)
     if digest_file(destination / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
     ensure_entity_limit(destination)
     if digest_file(destination / "cryoffear/cl_dlls/hl.dll") != STOCK_DLL_SHA:
         raise RuntimeError("The copied retail game DLL changed unexpectedly.")
-    progress("Making the Simon and weapon models from your game files", .92)
-    model_hashes = make_models(destination)
-    progress("Making the inventory art", .95)
-    make_art(destination)
-    progress("Joining story maps (fewer loading screens)", .97)
-    merged = make_merged_maps(destination)
+    steps.start("Making the Simon and weapon models")
+    model_hashes = make_models(destination, steps=steps)
+    steps.start("Making the inventory art")
+    make_art(destination, steps)
+    steps.start("Joining story maps (fewer loading screens)")
+    merged = make_merged_maps(destination, steps=steps)
     (destination / "cryoffear/config.cfg").write_text(default_controls() + f'name "{DEFAULT_NAME}"\nsensitivity 4\n', encoding="ascii")
     (destination / "steam_appid.txt").write_text("223710\n", encoding="ascii")
     (destination / "SETUP-INCOMPLETE.txt").unlink()
-    finish(destination, manifest, model_hashes, str(source), exe, shortcuts, progress, merged)
+    finish(destination, manifest, model_hashes, str(source), exe, shortcuts, steps, merged)
     return destination
 
 
 def update(root: Path, payload: Path, *, exe: Path, progress=lambda *_: None, shortcuts=True) -> Path:
-    """Lay a newer package over a copy made by this app: saves, settings and models stay."""
-    root = Path(root).resolve()
+    """Lay a newer package over a copy made by this app: saves, settings and models stay. progress as for setup;
+    the lines go on in the copy's setup log."""
+    steps = Steps(UPDATE_STEPS, progress)
+    try:
+        return update_copy(Path(root).resolve(), Path(payload), exe, shortcuts, steps)
+    except Exception as error:
+        steps.note(f"Stopped: {error}")
+        raise
+
+
+def update_copy(root: Path, payload: Path, exe: Path, shortcuts: bool, steps: Steps) -> Path:
     state = installed_state(root)
     if not state:
         raise ValueError("This folder is not a story co-op copy made by this app.")
     if game_is_running(root):
         raise ValueError("Close Cry of Fear first, then update.")
-    payload = Path(payload)
     manifest = inspect_payload(payload)
-    progress("Installing the new engine", .2)
+    steps.log_to(root / SETUP_LOG)
+    steps.start("Installing the new engine")
+    steps.note(f"Cry of Fear Co-op {manifest['version']} (build {manifest['build']}) over {state['version']} "
+               f"(build {state['build']}) in {root}")
     for rel in RETIRED_FILES:
         old = root / rel
         reject_links(old)
         if old.is_file():
             old.unlink()
     extract_payload(payload / PAYLOAD_ZIP, root, overwrite=True)
-    run_installer(root)
+    run_installer(root, steps)
     if digest_file(root / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
     ensure_entity_limit(root)
-    progress("Making the Simon and weapon models", .6)
-    models = make_models(root)
-    progress("Making the inventory art", .7)
-    make_art(root)
-    progress("Joining story maps (fewer loading screens)", .8)
-    merged = make_merged_maps(root)
-    finish(root, manifest, models, state["source_game"], exe, shortcuts, progress, merged)
+    steps.start("Making the Simon and weapon models")
+    models = make_models(root, steps=steps)
+    steps.start("Making the inventory art")
+    make_art(root, steps)
+    steps.start("Joining story maps (fewer loading screens)")
+    merged = make_merged_maps(root, steps=steps)
+    finish(root, manifest, models, state["source_game"], exe, shortcuts, steps, merged)
     return root
 
 
