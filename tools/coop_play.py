@@ -16,9 +16,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 changes only the host's J, so it stays 1.1
-VERSION_LABEL = "1.1.1"
-BUILD = 6   # counts on from 1.1 (build 5; 1.0 was 4, the test packages 1 to 3), so older copies are offered the update
+VERSION = "1.1"   # who can join whom: 1.1.1 (J) and 1.1.2 (the blur) change only the host's game, so it stays 1.1
+VERSION_LABEL = "1.1.2"
+BUILD = 7   # counts on (1.1.1 was 6, 1.1 5, 1.0 4, the test packages 1 to 3), so older copies are offered the update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"

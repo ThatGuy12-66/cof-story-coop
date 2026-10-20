@@ -1,12 +1,21 @@
-Cry of Fear Co-op 1.1.1
+Cry of Fear Co-op 1.1.2
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.2
+- No more getting stuck blind. Some levels blur the screen for a while and clear it
+  later, but the game only did that for the player who set it off, so in co-op one
+  player could stay blurred into the next levels and barely see. Now the blur is the
+  same for everyone and it clears when the level changes, as in the original. A co-op
+  checkpoint saved while blurred loads clear.
+- The app updates itself. From this version on, it checks for a newer version when
+  it opens: click "Update now" and it downloads and installs it.
+- 1.1, 1.1.1 and 1.1.2 can play together. The blur fix is in the host's game, so the
+  host should have 1.1.2.
 
 WHAT'S NEW IN 1.1.1
 - J works in rooms that only fit one player, like the last room of the nightmare
   level: you arrive on your partner's spot instead of getting "No room next to ...".
-- 1.1 and 1.1.1 can play together. The fix is in the host's game, so the host
-  should have 1.1.1.
 
 WHAT'S NEW IN 1.1
 - Night vision no longer flickers. The green light around you was drawn twice on
@@ -16,7 +25,7 @@ WHAT'S NEW IN 1.1
 - Setup and Update show what they are doing as they do it: each step, the files being
   copied, the models and maps being made, and the time so far. The same lines are kept
   in cof-story-setup.log in the co-op copy.
-Coming from 1.0 or 1.1? Run the new "CoF Story Co-op.exe" and click "Update".
+Coming from 1.0, 1.1 or 1.1.1? Run the new "CoF Story Co-op.exe" and click "Update".
 
 YOU NEED
 - Windows 10 or 11, and Cry of Fear installed from Steam (it's free). Keep Steam running.
