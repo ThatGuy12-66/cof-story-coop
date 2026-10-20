@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
+Last updated: 2026-10-19 evening: the crash on dying to the second boss (a respawn on the entry landmark fired the exit back) is fixed in Test 2 build 3, built, offline-tested and in the smoke copy, not played (see "Respawn crash after the second boss"). Before that, 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
@@ -60,6 +60,41 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - App minors fixed: hosting status keeps the last state on a missed query; setup notes the copy (`%LOCALAPPDATA%\CoF-Story-Coop.txt`) so a newer package finds a copy elsewhere; `--copy` resolves.
 - Decision left to the user: monster damage scales with every participant, bots included (1 AI ×1.68, 2 ×1.92, 3 ×2.16 vs alone ×1.44); left as retail.
 - Verification: full suite **241 OK** (`evidence/weapons-companions-20261015/full-suite-w2.log`), engine builds exit 0 (`build-*.log`). Commits: launcher `9d2790d..720e972`, engine `d887312d..715170e8` (branch `tester-package`). Live: not yet (next: package-fix4, smoke copy update, Play solo with three AIs).
+
+## Respawn crash after the second boss (2026-10-19 evening; fixed, built, offline-tested; not played)
+
+- The user, playing the smoke copy on Test 2 (merged maps, F11 stamina): "Game crashed when I got killed by second
+  boss." Log `evidence/tester-package-20261015/smoke/CoF-Story-Coop/story-session.log` lines ~71100-72080: 19:44:41
+  death (`respawn-sooner delay=10`); 19:44:52 the respawn's messages, then `[cof-sections] changelevel from=c_sewer2
+  to=c_sewer landmark=kalalale file=cm_basement`; client.dll faults in `CL_ParseUserMessage` (RVA 0x580A8, in
+  `CreateDecal`, called from `MsgCustomDecal` at 0x594E9; base 0x65300000).
+- Cause, two links. (1) hl.dll respawns a player on `gpGlobals->startspot`, the landmark the map was entered by
+  (decompilation player.cpp:7003-7134); in cm_sewer3 that is `kalalale` in the c_sewer2 section, inside
+  trigger_multiple *20 (fires `chsw55`, the changelevel to c_sewer); the move after PreThink touched it and the exit hold
+  said go (a solo human in the exit). Offline count (`evidence/map-merge-wave3-20261019/spawn_in_exit.py`/`.txt`,
+  `spawn_triggers.py`/`.txt`): **180 of 195 entry landmarks stand in an exit trigger**; 0 of 81 first
+  info_player_starts do, but 59 of 81 stand in a map-start script trigger, so "respawn on the first start" (tried,
+  reverted) is not safe either. (2) The respawn's Precache resent the init messages (every `env_static_decal` as
+  `customdecal`); `SV_InactivateClients` keeps queued messages across a CoF level change; the listen server loaded
+  cm_basement into the shared world model, and the client ran the old map's decals on a world `R_NewMap` had not set
+  up (NULL `polys`).
+- Fixes (engine `188b143b`, `19224602`; launcher tests `1e91c73`, build bump `34f6334`): `SV_RunCmd` notes
+  `SV_CoF_PartyDead` before PreThink and, after a PreThink that respawned, `SV_CoF_PartyRespawned` moves the player
+  (before their move touches anything) back where they came into the map (recorded at `SV_CoF_PartyTransitionArrive`)
+  or section (`SV_CoF_PartySectionMove`); a player carried in dead uses a partner's spot; no record (new spawncount):
+  left where the game put them, logged `cofstory phase=respawn-kept reason=no-entry`; logs `respawn-moved` otherwise.
+  Client: `CL_ParseUserMessage` drops `customdecal` while `cl.world_generation != Mod_WorldGeneration()`.
+- Not fixed (seen in the same log): ~71k ScreenFade messages to the companion bot; the arrival regroup could still
+  place a guest in a back trigger (edge).
+- **Verification states.** Offline: new tests watched failing first (`test_enhanced_respawn_spot`,
+  `test_enhanced_stale_world`, harness block in `tests/engine/cof_party_harness.c`); full suite 488 OK, 1 skipped
+  (`evidence/respawn-crash-20261019/full-suite.log`). Build: `tools\build_enhanced.cmd` exit 0, no warnings
+  (`build.log`), `xash.dll` `14876831…`. Package: `evidence/respawn-crash-20261019/package/CoF-Story-Coop-Test2.zip`
+  (`8910B255…`; exe `85DBDD4B…`; payload test2 build 3; commits launcher `34f6334`, engine `19224602`, FreeVGUI
+  `66eca8dc`), built with the uni notes hidden by `.git/info/exclude` and the line removed afterwards. Smoke copy:
+  updated with `update_smoke.py` -> `update-smoke.log` (test2 build 3, `xash.dll` `14876831…`, 29 groups merged,
+  `cryoffear/listenserver.cfg` kept; nothing was running, nothing launched). Live: **none**; the user's Continue is the 19:42:01
+  autosave at the c_sewer3 entry, just before the boss.
 
 ## Test 2 without launching: wave 3 merged maps, ambient loops, campaign check (2026-10-19; built and offline-tested; nothing played)
 
@@ -543,6 +578,7 @@ cmd /d /c tools\build_enhanced.cmd
 
 | Artifact | SHA-256 | Status |
 | --- | --- | --- |
+| `build-local-20260927/engine/xash.dll` (2026-10-19 evening), in the Test 2 build 3 package's payload (`evidence/respawn-crash-20261019/package/`) and the smoke copy | `14876831804D67D8E721C8D3CBE5E88790A0C2BA95C7027AC095120AFA8B1CF9` | Test 2 build 3: the respawn-crash fix (respawn back where the player came in; old-world decals dropped); engine `19224602`; built and offline-tested, never played |
 | `build-local-20260927/engine/xash.dll` (2026-10-19), in the Test 2 package's payload (`evidence/test2-20261019/package/`) | `533ABC475CED0ED0D061B79786C7E050EC8C7D08B4BA2C3F5AE1F76256E085B4` | Test 2: the decompilation fixes, the death-notice fix, per-section ambient loops, companion items left behind; engine `b0edceee`; built and offline-tested, never played |
 | `build-local-20260927/engine/xash.dll` (2026-10-15 11:42), in the tester package's payload (`evidence/tester-package-20261015/package/`) | `6C5DAB9BA7A13567EA96C2E307B8614B47496D58300A811B62E1C43F70A43D7A` | Tester package Test 1: everything below plus `cof_build` and `cof_continue`; committed (engine `d16d01f3`); not installed in the disposable copies |
 | `build-local-20260927/engine/xash.dll`, staged `evidence/menu-text-20261015/ui-pass2/xash.dll`; installed in `{host,guest}` (2026-10-15 04:45) | `BD39CF728B69D221BC65447AC11FE716FA3CEB17EAAEB5906932039E67540E52` | 12-slot inventory + companion routes + the RCON echo fix; live in the host copy (2026-10-15 early morning) |
@@ -580,7 +616,10 @@ For native inspection, use the installed computer-use skill and `node_repl` / `@
 
 ## Next steps, in order
 
-0. (2026-10-19) Test 2 (section "Test 2 without launching"): the user decides where "Report a bug" goes, merge/push of `tester-package`, and sending the zip. When the user allows a launch: one playthrough of a wave 3 chapter with merged maps on (the loops are heard only in their own section; doors land on their landmarks), the two-player join (`cofbuild test2`), and the paused runs (merged groups, two clients, the 197-exit sweep).
+0. (2026-10-19 evening) The respawn-crash fix (section "Respawn crash after the second boss") is in the smoke copy,
+   never played: the user's Continue from the c_sewer3 autosave, dying to the boss, should log `cofstory
+   phase=respawn-moved` and stay in cm_sewer3. The zip to send is now build 3 (`evidence/respawn-crash-20261019/package/`).
+   (2026-10-19) Test 2 (section "Test 2 without launching"): the user decides where "Report a bug" goes, merge/push of `tester-package`, and sending the zip. When the user allows a launch: one playthrough of a wave 3 chapter with merged maps on (the loops are heard only in their own section; doors land on their landmarks), the two-player join (`cofbuild test2`), and the paused runs (merged groups, two clients, the 197-exit sweep).
    (2026-10-15 midday) Tester package Test 1: with the user's go-ahead, the live check from the smoke copy (`evidence/tester-package-20261015/smoke/CoF-Story-Coop/CoF Story Co-op.exe`: Play solo → New game; then Host and `network.query_info` on 127.0.0.1:27015 shows `cofbuild test1`); then the user decides merge/push of `tester-package` and sends the zip. Building the next package: `python -m tools.build_tester_package --out evidence\<new folder>` after bumping `VERSION`/`VERSION_LABEL`/`BUILD` in `tools/coop_play.py`. Then the companion: the teleport rate on `c_apartment1`, the ledge jumps on entering `c_apartment2`, the bot standing in the player's view after the `c_start` opening. Live check still open: the objectives text on its paper (B) at 1280x720.
 1. The user runs (or authorizes) the campaign test with the disposable pair: `tools\Start-CampaignTest.ps1`, checklist in `docs/campaign-test-guide.md`. Do not launch it without the user's go-ahead; say before launching any window.
 2. After the session: `python tools\story_run_report.py <host log>` and record exact passing/failing cases here (redact RCON passwords).
