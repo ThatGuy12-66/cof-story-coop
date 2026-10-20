@@ -97,6 +97,20 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   the layout (`setup_screen_shot.py`, scratchpad).
 - Version 1.1, `BUILD` 5; readme "WHAT'S NEW IN 1.1", "Coming from 1.0? … click Update", and "If Setup or Update stops,
   attach cof-story-setup.log".
+- **Verification states.** Offline: full suite **505 OK, 1 skipped** (`evidence/release-1.1/full-suite.log`). Build:
+  engine `c875e6ce` → `xash.dll` `856725C9…` (waf, `build-decals.log` in `evidence/nightvision-20261020/`). Package:
+  `evidence/release-1.1/package/CoF-Story-Coop-1.1.zip`, SHA-256
+  `E64AF336C9455D6E55873F857A8CF94680043675302B5F05BA26C9B95A61D711`, 110,796,618 bytes; exe `AF66E117…`; payload 1.1
+  build 5, `vgui.dll` `40642512…`; commits launcher `0a2f1b5`, engine `c875e6ce`, FreeVGUI `66eca8dc`
+  (`package.log`, `package-report.json`); the uni notes hidden by `.git/info/exclude` for the build, the line removed
+  afterwards. Release check (`evidence/release-1.1/check_release.py` → `check-release.log`, all passed): zip files
+  and CRC, readme, payload (no retired files, the 1.1 engine with its renderer note), the extracted exe's
+  `--self-test`; a fresh `--install` from smoke-source (`--no-shortcuts`, 252 s: record 1.1 build 5, the 1.1 engine,
+  29 groups merged, `cof-story-setup.log` 478 lines with all six steps); and the 1.0 players' path: a copy made by the
+  1.0 exe (267 s), `--update` by the 1.1 exe (195 s: record 1.1 build 5, the 1.1 engine, a save kept, the log's four
+  steps). Both test copies deleted. Live: the NV fix only (above, NV-only engine in the smoke copy); the decals and
+  the 1.1 package itself not played. The user's own 1.0 copy (`%LOCALAPPDATA%\CoF-Story-Coop`) is untouched.
+- ModDB text for the 1.1 file: `evidence/release-1.1/moddb-text.txt`.
 - Other findings in the smoke copy's logs (10-19 night): not ours: `save/save_*.wav`, `krypande/k_crawl*`, `pl_wade*`, `models/grenade.mdl` are
   referenced by retail but absent from the game files; "X found the Y" carries two marker bytes on purpose
   (`CoF_StripPayload`). College: no repeat of the classroom loop; at 23:42:43 the player came through `oexd3_12`,
