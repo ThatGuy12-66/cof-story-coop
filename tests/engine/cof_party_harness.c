@@ -72,6 +72,7 @@ static size_t status_length;
 static int gate, give_ok, give_actual, give_calls, links, blocked, narrow_direction;
 static int solid_probe; static float solid_x; /* one point of solid world for hull tests */
 static int no_floor; static float no_floor_x; /* a shaft: nothing below this x */
+static int crowded; /* a room that fits one: every hull test that counts bodies fails */
 static float front_only_x; /* walls everywhere short of this x: only spots past it can be reached */
 static char prompts[MAX_CLIENTS][192]; /* the last ProFont line each player was sent */
 static const char *command_name=""; static int exit_key,exit_waiter,fades;
@@ -140,6 +141,7 @@ static trace_t SV_Move(const vec3_t start,vec3_t mins,vec3_t maxs,
     const vec3_t end,int type,edict_t *ignore,qboolean monsterclip) {
     trace_t t; memset(&t,0,sizeof(t)); t.fraction=1; VectorCopy(end,t.endpos);
     if(blocked) {t.startsolid=true; return t;}
+    if(crowded && type==MOVE_NORMAL) {t.startsolid=true; return t;}
     if(solid_probe && start[0]==solid_x && end[0]==solid_x) {t.startsolid=true; return t;}
     /* Retail hahaland staging rooms only fit the follower at +/-34 Y.
        The world rejects all 40/72 candidates; retain the occupied leader. */
@@ -160,7 +162,7 @@ static void setup(void) {
     memset(entities,0,sizeof(entities)); memset(clients,0,sizeof(clients));
     memset(private_data,0,sizeof(private_data)); memset(prompts,0,sizeof(prompts));
     exit_key=exit_waiter=fades=scene_watching=companion_moved=0; ending_fades_out=ending_fades_in=0; gift_log[0]=0;
-    gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=0; front_only_x=0;
+    gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=crowded=0; front_only_x=0;
     status_log[0]=0; status_length=0; sv.name="c_start";
     sv.state=ss_active; sv.time=10; svs.clients=clients; svs.maxclients=2;
     svs.spawncount++; svgame.edicts=entities; svgame.numEntities=12;
@@ -665,6 +667,18 @@ int main(void) {
     setup(); tick(0.1); entities[2].v.origin[0]=3000; blocked=1; warp(1);
     assert(links==0 && entities[2].v.origin[0]==3000 && fades==0);
     assert(!strcmp(prompts[1],"1:No room next to Little Rascal 1.") && strstr(status_log,"reason=no-room"));
+    /* A room only one fits (c_nightmare's last, `teleea`, 64 units, holds the exit to c_start; live 2026-10-20 J
+       only said "No room" until the exit hold let the partner go): share the partner's spot, as a teleport does. */
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.angles[1]=90; crowded=1; warp(1);
+    assert(links==1 && entities[2].v.origin[0]==entities[1].v.origin[0] && entities[2].v.origin[1]==entities[1].v.origin[1]);
+    assert(entities[2].v.origin[2]==entities[1].v.origin[2] && entities[2].v.angles[1]==90 && fades==1 && !prompts[1][0]);
+    assert(strstr(status_log,"cofstory phase=warp userid=101 partner=100 origin=0.000,0.000,0.000 shared=1"));
+    /* ...standing on the partner's floor when the partner crouches */
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.mins[2]=-18; entities[1].v.maxs[2]=18; crowded=1; warp(1);
+    assert(links==1 && entities[2].v.origin[0]==0 && entities[2].v.origin[2]==18);
+    /* ...but not over a drop (a partner on a ladder): stay put and say so */
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; crowded=1; no_floor=1; no_floor_x=0; warp(1);
+    assert(links==0 && entities[2].v.origin[0]==3000 && fades==0 && strstr(status_log,"reason=no-room"));
     /* Final review F4: a refusal also starts the cooldown, so mashing J logs one line per 2 s */
     warp(1); assert(logged("warp-refused")==1);
     tick(2.1); warp(1); assert(logged("warp-refused")==2);
