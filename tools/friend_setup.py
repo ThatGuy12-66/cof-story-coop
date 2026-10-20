@@ -1,8 +1,8 @@
-"""Private-copy installer for the story co-op tester app: setup and update.
+"""Private-copy installer for the story co-op app: setup and update.
 
 The window is tools/coop_app.py. The package contains code and Enhanced
 payloads only: every retail asset, both Simon models and the 12-slot inventory
-art are copied or generated on the tester's own computer from their own game.
+art are copied or generated on the player's own computer from their own game.
 """
 from __future__ import annotations
 
@@ -35,6 +35,11 @@ PAYLOAD_ZIP = "engine-payload.zip"
 PAYLOAD_JSON = "payload.json"
 INSTALLED = "cof-story-installed.json"
 MERGE_LOG = "cof-story-merge.log"
+# Upstream's player-zip files a copy has no use for (the app installs the engine itself): Enhanced's
+# Install.cmd/Uninstall.cmd (its uninstaller strips the copy's engine) and README (install into the Steam folder),
+# the cheats guide and the tester notices. The package leaves them out; an update removes the test packages' ones.
+RETIRED_FILES = ("README.txt", "Install.cmd", "Uninstall.cmd", "EXPERIMENTAL-STORY.txt", "STORY-START.txt",
+                 "cof-enhanced/CHEATS.md")
 ENTITY_LIMIT = 4096   # liblist.gam's commandargs "-num_edicts 4096": the limit Cry of Fear was made for
 # The name in the first config.cfg, before anyone has typed one in the app.
 DEFAULT_NAME = "Player"
@@ -433,6 +438,11 @@ def update(root: Path, payload: Path, *, exe: Path, progress=lambda *_: None, sh
     payload = Path(payload)
     manifest = inspect_payload(payload)
     progress("Installing the new engine", .2)
+    for rel in RETIRED_FILES:
+        old = root / rel
+        reject_links(old)
+        if old.is_file():
+            old.unlink()
     extract_payload(payload / PAYLOAD_ZIP, root, overwrite=True)
     run_installer(root)
     if digest_file(root / "xash.dll") != manifest["xash_sha256"]:

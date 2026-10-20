@@ -41,7 +41,7 @@ LOCAL_SOURCES = (
     "tests/engine/cof_party_harness.c",
     "tests/test_story_fixture.py", "docs/enhanced-story-testing.md",
     "tools/friend_setup.py", "tests/test_friend_setup.py",
-    "tools/build_tester_package.py", "tools/coop_app.py", "tools/coop_play.py", "tools/tester_readme.txt",
+    "tools/build_tester_package.py", "tools/coop_app.py", "tools/coop_play.py", "tools/player_readme.txt",
     "tools/make_inventory12_art.py", "cofcoop/network.py", "tests/test_coop_play.py", "tests/test_coop_app.py",
     "tests/test_enhanced_userinfo.py", "tests/engine/cof_userinfo_harness.c",
     "tests/test_enhanced_client_transition.py", "tests/engine/cof_client_transition_harness.c",
@@ -49,7 +49,7 @@ LOCAL_SOURCES = (
     "tests/test_enhanced_rules_zero.py", "tests/engine/cof_rules_zero_harness.c",
 )
 EXPERIMENTAL_NOTICE = (
-    "Cry of Fear story co-op tester build. Experimental: not an official Cry of Fear or Cry of Fear: Enhanced release.\n"
+    "Cry of Fear story co-op. Not an official Cry of Fear or Cry of Fear: Enhanced release.\n"
     "No retail game files are included; the app copies them from the player's own Steam installation.\n"
 )
 START_REQUIREMENTS = EXPERIMENTAL_NOTICE
@@ -116,7 +116,7 @@ def package(out: Path) -> dict:
     (staged / "SHA256SUMS.txt").write_text("".join(f"{entry['sha256']}  {name}\n" for name, entry in report["binaries"].items()), encoding="utf-8")
     commit = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True).strip()
     (staged / "BUILD-INFO.txt").write_text(
-        f"binaries_commit={commit}\nstamp=cofenhanced {VERSION} with local experimental story compatibility\n"
+        f"binaries_commit={commit}\nstamp=cofenhanced {VERSION} with story co-op\n"
         "local_story_changes=true\nprotocol=49\nretail_assets_included=false\n", encoding="utf-8")
     shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
     env = os.environ.copy()

@@ -1,4 +1,4 @@
-"""Cry of Fear story co-op: the tester app. Setup on first run, then Play solo, Host or Join."""
+"""Cry of Fear story co-op: the app. Setup on first run, then Play solo, Host or Join."""
 from __future__ import annotations
 
 import argparse
@@ -58,6 +58,14 @@ def start_game(root: Path, args: list[str]) -> subprocess.Popen:
                             stderr=subprocess.DEVNULL, creationflags=0x08000000)   # CREATE_NO_WINDOW
 
 
+def footer_text() -> str:
+    return f"Cry of Fear Co-op {play.VERSION_LABEL}"
+
+
+def report_bug() -> None:
+    webbrowser.open(play.REPORT_URL)
+
+
 def remember_copy(copy: Path, pointer: Path = COPY_POINTER) -> None:
     """A newer package finds a copy set up outside the default folder through this note."""
     try:
@@ -107,8 +115,8 @@ class App:
         self.body.pack(fill="both", expand=True)
         foot = ttk.Frame(window, padding=(20, 0, 20, 12))
         foot.pack(fill="x", side="bottom")
-        ttk.Label(foot, text=f"Story co-op {play.VERSION_LABEL} · early test build").pack(side="left")
-        ttk.Button(foot, text="Report a bug", command=lambda: webbrowser.open(play.ISSUES_URL)).pack(side="right")
+        ttk.Label(foot, text=footer_text()).pack(side="left")
+        ttk.Button(foot, text="Report a bug", command=report_bug).pack(side="right")
         ttk.Button(foot, text="Open logs folder", command=self.guard(self.open_logs)).pack(side="right", padx=6)
         window.protocol("WM_DELETE_WINDOW", self.close)
         window.after(100, self.pump)
@@ -236,8 +244,8 @@ class App:
 
     def show_update(self, copy):
         ttk = self.ttk
-        body = self.clear("Update story co-op", f"{play.VERSION_LABEL} is ready to install over your copy in {copy}. "
-                          "Your saves and settings are kept.")
+        body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
+                          f"in {copy}. Your saves and settings are kept.")
         status = self.tk.StringVar()
         button = ttk.Button(body, text="Update")
         button.pack(anchor="w", pady=14)

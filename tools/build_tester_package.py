@@ -1,4 +1,4 @@
-"""Build the tester package: CoF-Story-Coop-<version>.zip with the app exe, the readme and the source.
+"""Build the package: CoF-Story-Coop-<version>.zip with the app exe, the readme and the source.
 
 Nothing here launches the game. Build the engine first (tools\\build_enhanced.cmd) and
 commit every repository: the source archive must match the binaries.
@@ -23,7 +23,7 @@ from tools import coop_play as play  # noqa: E402
 from tools import friend_setup as setup_lib  # noqa: E402
 from tools import package_enhanced_story as enhanced  # noqa: E402
 
-README = ROOT / "tools/tester_readme.txt"
+README = ROOT / "tools/player_readme.txt"
 REPOS = {"launcher": ROOT, "engine": enhanced.ENGINE, "freevgui": enhanced.ENGINE / "3rdparty/freevgui"}
 ZIP_NAME = f"CoF-Story-Coop-{play.VERSION_LABEL.replace(' ', '')}.zip"
 
@@ -45,6 +45,19 @@ def write_zip(folder: Path, path: Path) -> None:
     with zipfile.ZipFile(path) as archive:
         if archive.testzip() is not None:
             raise RuntimeError("The package zip failed its CRC check.")
+
+
+def player_payload(player_zip: Path, target: Path) -> None:
+    """Enhanced's player zip as the app's engine payload, without the files a copy has no use for
+    (friend_setup.RETIRED_FILES)."""
+    retired = {name.casefold() for name in setup_lib.RETIRED_FILES}
+    with zipfile.ZipFile(player_zip) as source, zipfile.ZipFile(target, "x", compression=zipfile.ZIP_DEFLATED) as out:
+        for info in source.infolist():
+            if info.filename.casefold() not in retired:
+                out.writestr(info, source.read(info), compress_type=zipfile.ZIP_DEFLATED)
+    with zipfile.ZipFile(target) as archive:
+        if archive.testzip() is not None:
+            raise RuntimeError("The engine payload failed its CRC check.")
 
 
 def notices(target: Path) -> None:
@@ -78,7 +91,7 @@ def build(out: Path) -> dict:
     stage = enhanced.package(out / "enhanced")
     payload = out / "payload"
     payload.mkdir()
-    shutil.copyfile(stage["player_zip"], payload / setup_lib.PAYLOAD_ZIP)
+    player_payload(Path(stage["player_zip"]), payload / setup_lib.PAYLOAD_ZIP)
     manifest = {"schema": 2, "version": play.VERSION, "build": play.BUILD,
                 "xash_sha256": stage["binaries"]["xash.dll"]["sha256"]}
     (payload / setup_lib.PAYLOAD_JSON).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

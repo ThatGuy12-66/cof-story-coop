@@ -33,7 +33,7 @@ class StartTests(unittest.TestCase):
         for absent in ('-console', 's3cret', '-windowed', 'rcon'):
             self.assertFalse(any(absent in a for a in args), absent)
         self.assertLess(args.index(play.STORY_CFG), args.index(play.SESSION_CFG))
-        for line in ('maxplayers 3', 'sv_lan 0', 'sv_password "s3cret"', 'cof_companion 2', 'cof_build test2',
+        for line in ('maxplayers 3', 'sv_lan 0', 'sv_password "s3cret"', 'cof_companion 2', 'cof_build 1.0',
                      'cof_continue 0', 'hostname "Bob\'s game"', 'name "Bob"'):
             self.assertIn(line + '\n', cfg)
         self.assertNotIn('rcon', cfg)
@@ -131,18 +131,27 @@ class StartTests(unittest.TestCase):
         self.assertEqual(play.CHAPTER_CHOICES[1][1], 'c_start')
 
 
+class ReleaseTests(unittest.TestCase):
+    def test_the_release_is_1_0_and_updates_every_test_build(self):
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.0', '1.0'))
+        self.assertGreater(play.BUILD, 3)   # Test 2 was build 3: its copies must be offered the update
+
+    def test_bug_reports_go_to_the_public_discord(self):
+        self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')
+
+
 class HostCheckTests(unittest.TestCase):
     def test_check_host_refuses_other_or_missing_build(self):
-        for info in ({}, {'cofbuild': 'test1'}):
+        for info in ({}, {'cofbuild': 'test1'}, {'cofbuild': 'test2'}):
             with self.subTest(info=info), self.assertRaisesRegex(ValueError, 'different version'):
                 play.check_host(dict(info, numcl='1', maxcl='2'), password='')
-        play.check_host({'cofbuild': 'test2', 'numcl': '1', 'maxcl': '2', 'password': '0'}, password='')
+        play.check_host({'cofbuild': '1.0', 'numcl': '1', 'maxcl': '2', 'password': '0'}, password='')
 
     def test_check_host_full_or_needs_a_password(self):
         with self.assertRaisesRegex(ValueError, 'full'):
-            play.check_host({'cofbuild': 'test2', 'numcl': '2', 'maxcl': '2'}, password='')
+            play.check_host({'cofbuild': '1.0', 'numcl': '2', 'maxcl': '2'}, password='')
         with self.assertRaisesRegex(ValueError, 'password'):
-            play.check_host({'cofbuild': 'test2', 'numcl': '1', 'maxcl': '2', 'password': '1'}, password='')
+            play.check_host({'cofbuild': '1.0', 'numcl': '1', 'maxcl': '2', 'password': '1'}, password='')
 
 
 class CheckpointTests(unittest.TestCase):
@@ -218,7 +227,7 @@ class FakeNet:
     def query_info(self, endpoint, timeout=2):
         if not self.up:
             raise network.NetworkError('no answer')
-        return {'numcl': '1', 'maxcl': '4', 'cofbuild': 'test2'}
+        return {'numcl': '1', 'maxcl': '4', 'cofbuild': '1.0'}
 
 
 class HostWatchTests(unittest.TestCase):
@@ -268,7 +277,7 @@ class HostWatchTests(unittest.TestCase):
     def test_status_names_the_ai_companions(self):
         class Bots(FakeNet):
             def query_info(self, endpoint, timeout=2):
-                return {'numcl': '1', 'maxcl': '4', 'bots': '3', 'cofbuild': 'test2'}
+                return {'numcl': '1', 'maxcl': '4', 'bots': '3', 'cofbuild': '1.0'}
         status = play.HostWatch(27015, lan_only=True, net=Bots()).poll(True)
         self.assertIn('1 player and 3 AI companions (4 places)', status)
 

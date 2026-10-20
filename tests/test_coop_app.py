@@ -66,5 +66,15 @@ class StartTests(unittest.TestCase):
         self.assertEqual(app.main(["--install", "src", "dst"]), 2)
 
 
+class ReleaseTests(unittest.TestCase):
+    def test_the_footer_names_the_release_not_a_test_build(self):
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.0")
+
+    def test_report_a_bug_opens_the_discord(self):
+        with mock.patch.object(app.webbrowser, "open") as browser:
+            app.report_bug()
+        browser.assert_called_once_with("https://discord.gg/4uwV6jmmY7")
+
+
 if __name__ == "__main__":
     unittest.main()

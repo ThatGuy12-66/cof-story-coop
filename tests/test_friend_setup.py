@@ -16,7 +16,7 @@ def make_payload(folder: Path, engine=b"engine", build=1):
     with zipfile.ZipFile(folder / friend.PAYLOAD_ZIP, "w") as archive:
         archive.writestr("cof-enhanced/files/xash.dll", engine)
         archive.writestr("cof-enhanced/install.ps1", b"# installer")
-        archive.writestr("README.txt", b"readme")
+        archive.writestr("cof-enhanced/LICENSE", b"licence")
     (folder / friend.PAYLOAD_JSON).write_text(json.dumps({"schema": 2, "version": f"test{build}", "build": build,
                                                           "xash_sha256": hashlib.sha256(engine).hexdigest()}))
     return folder
@@ -291,6 +291,30 @@ class FriendSetupTests(unittest.TestCase):
             (root / "cryoffear/maps/cm_apartment1.bsp").write_bytes(b"changed")
             with self.assertRaisesRegex(ValueError, "merged"):
                 friend.validate_runtime(root)
+
+    def test_update_removes_what_test_packages_left_in_the_copy(self):
+        # the test packages put Enhanced's Install.cmd/Uninstall.cmd (its uninstaller strips the copy's engine),
+        # its README (install into the Steam folder), the cheats guide and the tester notices into the copy
+        retired = ("README.txt", "Install.cmd", "Uninstall.cmd", "EXPERIMENTAL-STORY.txt", "STORY-START.txt",
+                   "cof-enhanced/CHEATS.md")
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = Path(temp) / "CoF-Story-Coop", Path(temp) / "new.exe"
+            exe.write_bytes(b"new app")
+            for rel in ("xash.dll", *retired, "cryoffear/README.txt", "SAVE/cofcoop/autosave.cof"):
+                path = root / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"old")
+            (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test2", "build": 3,
+                "xash_sha256": hashlib.sha256(b"old").hexdigest(), "models": {}, "source_game": "src"}))
+            payload = make_payload(Path(temp) / "payload", b"new engine", build=4)
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                 mock.patch.object(friend.subprocess, "run", side_effect=fake_installer), \
+                 mock.patch.object(friend, "make_models", return_value={}), \
+                 mock.patch.object(friend, "make_merged_maps", return_value={}), \
+                 mock.patch.object(friend.art, "generate", return_value=[]):
+                friend.update(root, payload, exe=exe, shortcuts=False)
+            for rel in retired:
+                self.assertFalse((root / rel).exists(), rel)
+            for rel in ("cryoffear/README.txt", "SAVE/cofcoop/autosave.cof", "cof-enhanced/LICENSE"):
+                self.assertTrue((root / rel).exists(), rel)
 
     def test_update_refuses_while_the_game_runs(self):
         with tempfile.TemporaryDirectory() as temp:

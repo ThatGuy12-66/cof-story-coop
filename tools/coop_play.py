@@ -1,4 +1,4 @@
-"""Story co-op sessions for the tester app: what each start option runs.
+"""Story co-op sessions for the app: what each start option runs.
 
 Builds command lines and config text, reads the latest co-op checkpoint, checks
 a host before joining and watches a hosted game. Starts no process itself.
@@ -16,9 +16,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "test2"
-VERSION_LABEL = "Test 2"
-BUILD = 3
+VERSION = "1.0"
+VERSION_LABEL = "1.0"
+BUILD = 4   # counts on from the test packages (Test 2 was build 3), so their copies are offered the update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
@@ -26,7 +26,7 @@ SETTINGS = "cof-story-coop-settings.json"
 DEFAULT_PORT = 27015
 NEW_GAME_MAP = "c_intro"
 CHAPTER_CHOICES = [(label, name) for label, name in CHAPTERS if name != NEW_GAME_MAP]
-ISSUES_URL = "https://github.com/charliee1w/cof-story-coop/issues/new/choose"
+REPORT_URL = "https://discord.gg/4uwV6jmmY7"   # "Report a bug": the public Discord
 # Every game the app starts: story co-op on, the test tools off. The story trace
 # goes to the log for bug reports; the engine never draws it on screen.
 STORY_SETTINGS = (

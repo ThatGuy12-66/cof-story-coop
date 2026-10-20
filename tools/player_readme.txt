@@ -1,7 +1,6 @@
-Cry of Fear story co-op - Test 2
+Cry of Fear Co-op 1.0
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
-This is an early test build: expect bugs, and please report them.
 
 YOU NEED
 - Windows 10 or 11, and Cry of Fear installed from Steam (it's free). Keep Steam running.
@@ -24,7 +23,7 @@ PLAY
   to your PC in the router, or all use a VPN such as Tailscale, ZeroTier or Radmin and
   share that address. If Windows Firewall asks about Cry of Fear, allow it.
 - Join a game: paste the host's join code (or address) and their password, if any.
-Everyone must use the same test package.
+Everyone needs the same version of Cry of Fear Co-op.
 
 Start a new game (the intro), any chapter, or Continue from the last co-op checkpoint.
 The game makes a co-op checkpoint by itself after every level change.
@@ -41,18 +40,23 @@ H      tell the AI companions to wait or to follow
 Space  when dead: respawn next to your partner after about 10 seconds
 
 UPDATES
-When you get a newer package, run its "CoF Story Co-op.exe" and click "Update".
+When a newer version comes out, run its "CoF Story Co-op.exe" and click "Update".
 Your saves and settings are kept.
 
 UNINSTALL
 Delete the CoF-Story-Coop folder (%LOCALAPPDATA%\CoF-Story-Coop unless you chose
 another place) and the two "Cry of Fear Co-op" shortcuts.
 
+KNOWN ISSUES
+- At the college, the doors of the classroom where you find the screwdriver can keep
+  bringing you back into the same room. If it happens to you, please report it.
+
 REPORTING BUGS
-Click "Report a bug" in the app, or send the details to whoever gave you this package:
-what happened, the map or the place, roughly when, whether "Merged maps" was on, and
-the log ("Open logs folder" in the app; the log may show your Windows user name).
+Join the Discord: https://discord.gg/4uwV6jmmY7 ("Report a bug" in the app opens it).
+Say what happened, the map or the place, roughly when, and whether "Merged maps" was on,
+and attach the log ("Open logs folder" in the app; the log may show your Windows user name).
 Never post your password or join code publicly.
 
+Cry of Fear Co-op is a fan project, not made or endorsed by Team Psykskallar, the makers
+of Cry of Fear. Cry of Fear itself is not included: the app uses your own Steam copy.
 The engine is free software (GPL); its source is in the source-and-licences folder.
-Cry of Fear itself is not included: the app uses your own Steam copy.
