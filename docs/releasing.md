@@ -65,7 +65,7 @@ It stops at the first group of problems and says which. In order:
    test or dev wording, the payload (no retired files, the engine matches its record), the
    extracted exe's `--self-test`, the extracted exe reads the releases page
    (`--update-check`: network and TLS from the packaged exe), a fresh install from
-   `evidence/tester-package-20261015/smoke-source` (or `--source <Cry of Fear folder>`), and the
+   `evidence/tester-package-20261015/smoke-source/Cry of Fear` (or `--source <Cry of Fear folder>`), and the
    players' path: the version now on the releases page is downloaded, installed, and updated by X
    (a save must survive). The test copies are deleted.
 5. **The files for steps 3 and 4**: `release.json`, `moddb-text.txt`, `build-state.json`.

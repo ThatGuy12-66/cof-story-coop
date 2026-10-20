@@ -35,7 +35,7 @@ from tools import friend_setup as setup  # noqa: E402
 
 README = ROOT / "tools/player_readme.txt"
 NOTES = ROOT / "docs/releases"
-SMOKE_SOURCE = ROOT / "evidence/tester-package-20261015/smoke-source"   # a hardlink mirror of the baseline game
+SMOKE_SOURCE = ROOT / "evidence/tester-package-20261015/smoke-source/Cry of Fear"   # a hardlink mirror of the game
 ZIP_FILES = ["CoF Story Co-op.exe", "READ ME FIRST.txt", "source-and-licences/corresponding-source.zip",
              "source-and-licences/notices/PYINSTALLER-COPYING.txt", "source-and-licences/notices/PYTHON-LICENSE.txt",
              "source-and-licences/notices/TK-LICENSE.txt"]
