@@ -147,6 +147,37 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   ` shared=1` in the engine), `--self-test`, a fresh install (249 s, record 1.1 build 6, 29 groups), and a copy made
   by the 1.1 exe (220 s) updated by 1.1.1 (159 s, a save kept). 1.0 → 1.1.1 not run (same update code as 1.0 → 1.1).
   Live: nothing; the J fix not played. ModDB text: `evidence/release-1.1.1/moddb-text.txt`.
+- **"Couldn't see anything": the story blur stuck on both players. Fixed offline, not seen live, not in a package.**
+  The user, about the same log: the player "couldn't see anything. It made them blind." Cause (map data, the
+  decompilation and the retail hl.dll agree): `cof_blur`'s Use flips `m_iBlurActive` (+0x1EBC, hl.dll 100A5BB0) of
+  the activator only; the field is saved with the player, UpdateClientData sends "Blur", and client.dll draws a
+  radial smear (`gl_screenblur` 1 by default, about 60 copies at `gl_opacity` 0.5). c_nightmare: `nightmulti`
+  (trigger_once) flips blur2 at 0 and 39 and blur3 at 40.6, so the host (alone then) is blurred from 12:48:17 (its
+  `fadehehi` fade-in at 40.5 is in the log then); Wolf joins at 12:49:00 unblurred; `multispotea2` (blur3, `fadelaosee`,
+  `teleportea45` at 0, `teleportea` at 5) ran with Wolf as activator (`teleport-begin userid=2`), so Wolf's flip
+  turned Wolf's blur on and the host's stayed on. Both carried it into cm_start, where `slower_eyes_mm`'s four flips
+  (0, 20, 30, 34) change nothing. The host closed an options page at 12:49:28 (`FS_SaveVFSConfig`, the menu's
+  `host_writeconfig`), switched `gl_vbo` on at 12:51:17 (`R_GenerateVBO` mid-map), typed `kick all` and quit. Not
+  logged then: "Blur" was not in the trace. Scan of every retail map (`blur_scan.py`, session scratchpad): 30 maps have a
+  cof_blur; every story map's flips come in pairs; odd ones only in the endings, the suicide maps and `c_cof_*`; split
+  across triggers different players can fire in c_nightmare, c_down, c_forest6, c_rumpel2, c_subwaysick1/2,
+  c_theevinas, c_tricky, c_volcomator1/3.
+  Fix (engine `24ca59d8`, `90cbb658`; `sv_cof_blur.h/.c`, cvar `cof_coop_shared_blur` 1): one blur for the
+  party. After the game frame a flip by anyone sets everyone, a joiner/arrival takes the party's, a morphine trip
+  (`m_bIsTripping` +0x2278, MorphineTrip 100E8D70) stays the tripper's own until it ends; a story level change from a
+  map that does not hand the blur on (`CoF_BlurCarried`: "ending", "suicide", `c_cof_`) clears everyone's before
+  `SaveGameState` (`SV_CoF_BlurLeaving` in `SV_ChangeLevel`); a checkpoint loaded on such a map starts the party off
+  (`SV_CoF_BlurCheckpointLoaded`), so the player's stuck cm_start autosave is healed. "Blur" is in the trace now;
+  logs `phase=blur-shared userid blur reason from`, `phase=blur-cleared userid map`. Tests (launcher):
+  `test_enhanced_blur` (rule scenarios incl. the log's sequence, retail bytes, wiring), the retail harness block,
+  the server-transition harness stub. Not covered offline: the client draw itself, the skip's fast-forward.
+  Verification: offline, full suite **545 OK, 1 skipped** (`evidence/blur-20261020/full-suite.log`; the count
+  includes another session's new, uncommitted `test_app_update`/`test_release`, which were in the tree then). Build:
+  `tools/build_enhanced.cmd` exit 0, no warnings (`evidence/blur-20261020/build.log`), `xash.dll` `F161F1E2…`.
+  Package: none (1.1.1's zip `9498F12B…` does not have it). Live: nothing.
+  Also from the log, not changed: the 17 s of black at c_nightmare's end is the map's `fadelaosee` (hold 300 s, the
+  engine caps the message at 16 s) to every player, held by the exit wait; with the 1.1.1 J fix the partner can join
+  at once.
 - Deferred minor: the payload's `cof-enhanced/release.txt` still says `cofenhanced 0.4.0-test3`
   (`package_enhanced_story.VERSION`), as in 1.0 and 1.1.
 - Seen, not changed: Xaier pressed Enter 9 times in the intro, and every second press cancels the skip (Enter does

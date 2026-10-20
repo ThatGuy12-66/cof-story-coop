@@ -502,6 +502,19 @@ int main( void )
 		handle( private_data[0] + 0x2348, NULL ); view = 0; memcpy( private_data[0] + 0x2038, &view, 4 );
 		next = 0.0f; memcpy( private_data[0] + 0x3EC, &next, 4 ); private_data[0][0x434] = 0; edicts[8].free = 1;
 	}
+	/* The story's screen blur: m_iBlurActive (cof_blur flips it) and m_bIsTripping (a morphine trip), read and set. */
+	{
+		int blur = 1, trip = 1, value = 1;
+		memcpy( private_data[0] + 0x1EBC, &value, 4 ); private_data[0][0x2278] = 0;
+		assert( SV_CoF_RetailBlur( &clients[0], &blur, &trip ) && blur == 1 && trip == 0 );
+		private_data[0][0x2278] = 1;
+		assert( SV_CoF_RetailBlur( &clients[0], &blur, &trip ) && trip == 1 );
+		assert( SV_CoF_RetailSetBlur( &clients[0], 0 )); memcpy( &value, private_data[0] + 0x1EBC, 4 ); assert( value == 0 );
+		assert( private_data[0][0x2278] == 1 ); /* the trip is the game's */
+		clients[0].state = 0; /* not spawned */
+		assert( !SV_CoF_RetailBlur( &clients[0], &blur, &trip ) && !SV_CoF_RetailSetBlur( &clients[0], 1 ));
+		clients[0].state = cs_spawned; private_data[0][0x2278] = 0;
+	}
 
 	/* CPR: player 2 dies on the ground; player 1 can start the game's CPR on them (Use, body first). */
 	{

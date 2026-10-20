@@ -103,6 +103,7 @@ static void SV_ProcessFile(sv_client_t *cl, const char *name) { (void)cl; (void)
 static qboolean SV_CoF_StoryCoopEnabled(void) { return story_enabled; }
 static qboolean CoF_BeginStoryTransition(const char *map, const char *landmark) { (void)map; (void)landmark; transition_active = true; return true; }
 static void SV_CoF_TransitionReset(qboolean clear_history) { (void)clear_history; transition_active = false; }
+static void SV_CoF_BlurLeaving(const char *map) { (void)map; }
 static SAVERESTOREDATA *SaveGameState(qboolean changelevel) { (void)changelevel; return &save_data; }
 static SAVERESTOREDATA *LoadSaveData(const char *level) { (void)level; return &save_data; }
 static void SaveFinish(SAVERESTOREDATA *data) { (void)data; }
