@@ -1,6 +1,12 @@
-Cry of Fear Co-op 1.1
+Cry of Fear Co-op 1.1.1
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.1
+- J works in rooms that only fit one player, like the last room of the nightmare
+  level: you arrive on your partner's spot instead of getting "No room next to ...".
+- 1.1 and 1.1.1 can play together. The fix is in the host's game, so the host
+  should have 1.1.1.
 
 WHAT'S NEW IN 1.1
 - Night vision no longer flickers. The green light around you was drawn twice on
@@ -10,7 +16,7 @@ WHAT'S NEW IN 1.1
 - Setup and Update show what they are doing as they do it: each step, the files being
   copied, the models and maps being made, and the time so far. The same lines are kept
   in cof-story-setup.log in the co-op copy.
-Coming from 1.0? Run the new "CoF Story Co-op.exe" and click "Update".
+Coming from 1.0 or 1.1? Run the new "CoF Story Co-op.exe" and click "Update".
 
 YOU NEED
 - Windows 10 or 11, and Cry of Fear installed from Steam (it's free). Keep Steam running.
