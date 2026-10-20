@@ -19,8 +19,9 @@
  * of them a jump to a 17-byte stub in int3 padding, and three data words; and
  * four more bounds: a particle system's source entity and Cg water's water
  * entities, up to edict 8191 (docs/research/2026-10-18-cof-decompilation-survey.md
- * section 3, the launcher repo); and the night vision light gets a key of its
- * own, so it is one light, not two on every other frame.
+ * section 3, the launcher repo); the night vision light gets a key of its
+ * own, so it is one light, not two on every other frame; and a level's own
+ * decals move to engine storage, 1024 instead of 256.
  * Inventory and checks: evidence/map-merge-spike-20261016/client-renderer-patch-plan.md.
  *
  * Every edit compares its stock bytes first (absolute operands relocated to the
@@ -38,11 +39,13 @@
 #define COF_RP_CHAIN_BYTES ( COF_RP_PAGES_MAX * 4 )
 #define COF_RP_ENTITIES    2048                         /* brush entities a frame */
 #define COF_RP_ENTITY_BYTES ( COF_RP_ENTITIES * 4 )
+#define COF_RP_DECALS_MAX  1024                         /* a level's own decals: four merged maps of 256 */
+#define COF_RP_DECAL_BYTES ( COF_RP_DECALS_MAX * 32 )   /* customdecal: surface, point, normal, texinfo */
 #define COF_RP_LINKED      0x10000000u                  /* the image base the absolute operands were linked for */
 #define COF_RP_SET1        0x1CBF70                     /* RVA of the three set bases (GL names) */
-#define COF_RP_SITES       31
+#define COF_RP_SITES       34
 
-enum { COF_RP_NONE, COF_RP_PAGES, COF_RP_PAGES2, COF_RP_CHAINS, COF_RP_ENTLIST }; /* what a patched operand points at */
+enum { COF_RP_NONE, COF_RP_PAGES, COF_RP_PAGES2, COF_RP_CHAINS, COF_RP_ENTLIST, COF_RP_DECALS }; /* what a patched operand points at */
 
 typedef struct
 {
@@ -59,6 +62,7 @@ typedef struct
 #define RP_PB  0x101CC098u   /* the old page buffer, 64 * 128 * 128 * 3 bytes */
 #define RP_CH  0x104CDE80u   /* the old chain array, 64 dwords */
 #define RP_EL  0x104CD540u   /* the old brush-entity list, 512 dwords */
+#define RP_SD  0x101BF368u   /* the old static decals (gl_decals.cpp staticdecals), 256 of 32 bytes */
 #define RP_NOP5 0x90, 0x90, 0x90, 0x90, 0x90
 
 static const cof_rp_site_t cof_rp_sites[COF_RP_SITES] =
@@ -108,6 +112,12 @@ static const cof_rp_site_t cof_rp_sites[COF_RP_SITES] =
 	 * -66, -300, -1..-32 for the players' lights and entity indices. test [flags],40h / jz / push / call rel32 */
 	{ 0xB14AB, 10, 0, 0, COF_RP_NONE, { 0x40, 0x74, 0x59, 0x6A, 0x00, 0xE8, 0x3B, 0xAC, 0xFA, 0xFF },
 		{ 0x40, 0x74, 0x59, 0x6A, 0x9C, 0xE8, 0x3B, 0xAC, 0xFA, 0xFF } },
+	/* a level's own decals (env_static_decal, gl_decals.cpp): 256 -> 1024. A merged map joins up to four maps; the
+	 * merged subway (273) dropped 17 with "too many static decals on level!". The array has two references (the
+	 * relocation table): AllocStaticDecal 10057990 and the draw loop in DrawDecals */
+	{ 0x57996, 6, 0, 0, COF_RP_NONE, { 0x81, 0xF9, 0x00, 0x01, 0x00, 0x00 }, { 0x81, 0xF9, 0x00, 0x04, 0x00, 0x00 } }, /* cmp ecx,256 -> 1024 */
+	{ 0x579A3, 5, 1, 1, COF_RP_DECALS, { 0x05, RP_ABS( RP_SD ) }, { 0x05 } },                                         /* add eax,staticdecals */
+	{ 0x5879A, 5, 1, 1, COF_RP_DECALS, { 0xBF, RP_ABS( RP_SD ) }, { 0xBF } },                                         /* mov edi,staticdecals */
 };
 
 /* GL names of the three lightmap sets, 256 apart */
@@ -146,20 +156,23 @@ static int CoF_RP_Write( unsigned char *p, const void *bytes, size_t len )
 }
 
 /* Patch the module at `base` to use `pages` (COF_RP_PAGE_BYTES), `chains`
- * (COF_RP_CHAIN_BYTES) and `entities` (COF_RP_ENTITY_BYTES). Before the client's
- * HUD init (the set bases still zero). 1 when patched; 0 and nothing written
- * when already patched or any byte differs from the stock DLL. */
-static int CoF_RenderPatchApply( cof_render_patch_t *rp, unsigned char *base, void *pages, void *chains, void *entities )
+ * (COF_RP_CHAIN_BYTES), `entities` (COF_RP_ENTITY_BYTES) and `decals`
+ * (COF_RP_DECAL_BYTES, zeroed). Before the client's HUD init (the set bases
+ * still zero). 1 when patched; 0 and nothing written when already patched or
+ * any byte differs from the stock DLL. */
+static int CoF_RenderPatchApply( cof_render_patch_t *rp, unsigned char *base, void *pages, void *chains, void *entities,
+	void *decals )
 {
-	uint32_t storage[5], sets[3];
+	uint32_t storage[6], sets[3];
 	unsigned char want[17];
 	int i;
-	if( rp->base || !base || !pages || !chains || !entities ) return 0;
+	if( rp->base || !base || !pages || !chains || !entities || !decals ) return 0;
 	storage[COF_RP_NONE] = 0;
 	storage[COF_RP_PAGES] = (uint32_t)(uintptr_t)pages;
 	storage[COF_RP_PAGES2] = (uint32_t)(uintptr_t)pages + 2;
 	storage[COF_RP_CHAINS] = (uint32_t)(uintptr_t)chains;
 	storage[COF_RP_ENTLIST] = (uint32_t)(uintptr_t)entities;
+	storage[COF_RP_DECALS] = (uint32_t)(uintptr_t)decals;
 	for( i = 0; i < COF_RP_SITES; i++ )
 	{
 		CoF_RP_Expected( &cof_rp_sites[i], base, 0, storage, want );
@@ -199,5 +212,6 @@ static void CoF_RenderPatchRemove( cof_render_patch_t *rp )
 #undef RP_PB
 #undef RP_CH
 #undef RP_EL
+#undef RP_SD
 #undef RP_NOP5
 #endif /* COF_RENDERER_PATCH_H */
