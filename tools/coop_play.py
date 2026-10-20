@@ -18,7 +18,7 @@ from cofcoop.core import CHAPTERS
 
 VERSION = "test2"
 VERSION_LABEL = "Test 2"
-BUILD = 2
+BUILD = 3
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
