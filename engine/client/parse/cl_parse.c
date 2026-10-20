@@ -2306,6 +2306,12 @@ void CL_ParseUserMessage( sizebuf_t *msg, int svc_num, connprotocol_t proto )
 	// Cry of Fear story co-op: Inventory slots 7..12 never reach client.dll
 	if( CL_CoF_Inventory12Message( clgame.msg[i].name, iSize, pbuf ))
 		return;
+	// Cry of Fear: the listen server loaded another world in place and this client has not set it up yet (a level
+	// change in the frame of a respawn, whose init messages carry the map's static decals). The decal is the old
+	// world's, and the retail client.dll's CreateDecal walks this world's surfaces before R_NewMap built their polygons.
+	if( !Q_strcmp( clgame.msg[i].name, "customdecal" ) && clgame.entities && clgame.entities->model &&
+		cl.world_generation != Mod_WorldGeneration( ))
+		return;
 
 	if( clgame.msg[i].func )
 	{
