@@ -80,8 +80,8 @@ void CL_CoF_RendererLimitsLoad( void *module )
 		CL_CoF_RendererFree( );
 		return;
 	}
-	CL_CoF_RendererNote( "[cof-renderer] client.dll's renderer: %d lightmap pages, %d brush entities a frame, edicts up to 8191\n",
-		COF_RP_PAGES_MAX, COF_RP_ENTITIES );
+	CL_CoF_RendererNote( "[cof-renderer] client.dll's renderer: %d lightmap pages, %d brush entities a frame, edicts up to 8191, "
+		"one night vision light\n", COF_RP_PAGES_MAX, COF_RP_ENTITIES );
 #else
 	(void)module;
 #endif

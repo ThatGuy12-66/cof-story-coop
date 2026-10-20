@@ -19,7 +19,8 @@
  * of them a jump to a 17-byte stub in int3 padding, and three data words; and
  * four more bounds: a particle system's source entity and Cg water's water
  * entities, up to edict 8191 (docs/research/2026-10-18-cof-decompilation-survey.md
- * section 3, the launcher repo).
+ * section 3, the launcher repo); and the night vision light gets a key of its
+ * own, so it is one light, not two on every other frame.
  * Inventory and checks: evidence/map-merge-spike-20261016/client-renderer-patch-plan.md.
  *
  * Every edit compares its stock bytes first (absolute operands relocated to the
@@ -39,7 +40,7 @@
 #define COF_RP_ENTITY_BYTES ( COF_RP_ENTITIES * 4 )
 #define COF_RP_LINKED      0x10000000u                  /* the image base the absolute operands were linked for */
 #define COF_RP_SET1        0x1CBF70                     /* RVA of the three set bases (GL names) */
-#define COF_RP_SITES       30
+#define COF_RP_SITES       31
 
 enum { COF_RP_NONE, COF_RP_PAGES, COF_RP_PAGES2, COF_RP_CHAINS, COF_RP_ENTLIST }; /* what a patched operand points at */
 
@@ -101,6 +102,12 @@ static const cof_rp_site_t cof_rp_sites[COF_RP_SITES] =
 	{ 0x87047, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x00, 0x04, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
 	{ 0x8718B, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x00, 0x04, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
 	{ 0x878FB, 6, 0, 0, COF_RP_NONE, { 0x81, 0xFE, 0x00, 0x04, 0x00, 0x00 }, { 0x81, 0xFE, 0x00, 0x20, 0x00, 0x00 } },
+	/* the night vision light (view.cpp:1276, V_CalcRefdef): MY_AllocDlight( 0 ) -> ( -100 ). Remade every frame with
+	 * die = time + 0.01; key 0 took a new slot each time, so a frame under 10 ms drew last frame's light too and the
+	 * green light doubled on about half the frames (the strobe). A key reuses one slot. Keys in use: -1, -2, -8, -50,
+	 * -66, -300, -1..-32 for the players' lights and entity indices. test [flags],40h / jz / push / call rel32 */
+	{ 0xB14AB, 10, 0, 0, COF_RP_NONE, { 0x40, 0x74, 0x59, 0x6A, 0x00, 0xE8, 0x3B, 0xAC, 0xFA, 0xFF },
+		{ 0x40, 0x74, 0x59, 0x6A, 0x9C, 0xE8, 0x3B, 0xAC, 0xFA, 0xFF } },
 };
 
 /* GL names of the three lightmap sets, 256 apart */
