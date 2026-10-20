@@ -57,6 +57,8 @@ All of it lives in the engine's `engine/server/sv_cof_*.c` modules, switched on 
 
 Playtests run from the tester app: anyone with the zip can host, join or play solo. Building the
 zip: `python -m tools.build_tester_package --out evidence\<new folder>` ([building](docs/building.md)).
+Releasing a version (build, every check, ModDB, the public releases page the app updates from and the
+Discord bot announces): `python -m tools.release build`, then `publish` ([releasing](docs/releasing.md)).
 The older host script `HOST-STORY.cmd` (`tools/Start-StoryHost.ps1`, from `runtimes/enhanced`) is
 still there. Testing alone with two windows on one PC: `tools/Start-CampaignTest.ps1`
 ([guide](docs/campaign-test-guide.md)).

@@ -56,8 +56,10 @@ H      tell the AI companions to wait or to follow
 Space  when dead: respawn next to your partner after about 10 seconds
 
 UPDATES
-When a newer version comes out, run its "CoF Story Co-op.exe" and click "Update".
-Your saves and settings are kept.
+The app checks for a newer version when it opens. If there is one, click "Update now":
+it downloads the new version, closes, and the new version updates your copy.
+Your saves and settings are kept. (A newer zip's "CoF Story Co-op.exe" and its
+"Update" button do the same.)
 
 UNINSTALL
 Delete the CoF-Story-Coop folder (%LOCALAPPDATA%\CoF-Story-Coop unless you chose

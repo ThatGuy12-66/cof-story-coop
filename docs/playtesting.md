@@ -39,8 +39,9 @@ If setup refuses:
 - Anything else: send the message, and `friend-setup-install.log` from the new folder if there is
   one. It shows folder paths that include your Windows user name.
 
-**Updates:** when you get a newer zip, run its `CoF Story Co-op.exe` and click **Update**. Your
-saves and settings are kept.
+**Updates:** every version after 1.1.1 checks for a newer version when it opens and offers **Update
+now**: it downloads the new version, closes, and the new version updates your copy. A newer zip's
+`CoF Story Co-op.exe` and its **Update** button do the same. Your saves and settings are kept.
 
 ## Play
 

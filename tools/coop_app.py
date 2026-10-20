@@ -9,11 +9,13 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import webbrowser
 
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cofcoop import network
+from tools import app_update
 from tools import coop_play as play
 from tools import friend_setup as setup_lib
 
@@ -79,6 +81,17 @@ def remembered_copy(pointer: Path) -> Path | None:
         return Path(pointer.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return None
+
+
+def stamped(text: str) -> str:
+    """A line for the progress box, timed like setup's own lines."""
+    return f"{time.strftime('%H:%M:%S')}  {text}"
+
+
+def update_error(error) -> str:
+    if isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError)):
+        return "Couldn't download the update. Check your internet connection and try again."
+    return f"The update stopped: {error}"
 
 
 def elapsed_text(seconds: float) -> str:
@@ -163,6 +176,9 @@ class App:
         self.settings = {}
         self.watch = None
         self.panel = None
+        self.offer = None          # a newer release (app_update.Release), once the check finds one
+        self.update_slot = None    # where the main screen shows that offer
+        self.checked = False
         self.messages = queue.Queue()
         window.title("Cry of Fear Co-op")
         window.geometry("760x560")
@@ -295,13 +311,15 @@ class App:
         if chosen:
             var.set(str(Path(chosen) / "CoF-Story-Coop"))
 
-    def show_update(self, copy):
+    def show_update(self, copy, auto=False, wait=()):
+        """auto: started by the previous version's "Update now", which is closing: wait for it, then update."""
         ttk = self.ttk
         body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
                           f"in {copy}. Your saves and settings are kept.")
         button = ttk.Button(body, text="Update")
         button.pack(anchor="w", pady=14)
         panel = self.progress_panel(body)
+        report = self.reporter(panel)
 
         def stopped(error):
             panel.stop()
@@ -312,12 +330,105 @@ class App:
             panel.stop()
             self.show_main(root)
 
+        def job():
+            if wait:
+                report("Waiting for the old version to close…", 0, stamped("Waiting for the old version to close"))
+                app_update.wait_for_exit(list(wait))
+            return setup_lib.update(copy, self.payload, exe=self.exe, progress=report)
+
         def start():
             button.configure(state="disabled")
             panel.start()
-            self.work(lambda: setup_lib.update(copy, self.payload, exe=self.exe, progress=self.reporter(panel)),
-                      updated, stopped)
+            self.work(job, updated, stopped)
         button.configure(command=start)
+        if auto:
+            start()
+
+    def show_download(self, release):
+        """The main screen's "Update now": the new version's zip, then the new app takes over and this one closes."""
+        ttk = self.ttk
+        body = self.clear(f"Update to {release.label}", f"Downloading version {release.label} "
+                          f"({setup_lib.size_text(release.size)}). When it's done this window closes and the new "
+                          "version updates your copy. Your saves and settings are kept.")
+        stop = threading.Event()
+        cancel = ttk.Button(body, text="Cancel", command=stop.set)
+        cancel.pack(anchor="w", pady=14)
+        panel = self.progress_panel(body)
+        report = self.reporter(panel)
+        folder = app_update.DOWNLOADS / release.label
+        shown = [-1]
+
+        def progress(done, total):
+            percent = done * 100 // total
+            if percent != shown[0]:
+                shown[0] = percent
+                report(f"Downloading {release.label}: {setup_lib.size_text(done)} of {setup_lib.size_text(total)}",
+                       done / total * .9, None)
+
+        def job():
+            report(f"Downloading {release.label}", 0, stamped(f"Downloading {release.zip} from the releases page"))
+            path = app_update.download(release, folder, progress, stop.is_set)
+            report("Unpacking", .92, stamped("Downloaded; its size and SHA-256 match the release"))
+            exe = app_update.extract_app(path, folder)
+            report("Starting the new version", 1, stamped("Unpacked the new app; starting it"))
+            return exe
+
+        def ready(exe):
+            panel.stop()
+            try:
+                app_update.start_new_app(exe, self.root, app_update.pids_to_wait())
+            except OSError as error:
+                self.show_main(self.root)
+                self.error(f"The new version didn't start: {error}")
+                return
+            if self.watch:
+                self.watch.close()
+            self.window.destroy()
+
+        def stopped(error):
+            panel.stop()
+            self.show_main(self.root)
+            if not isinstance(error, app_update.Cancelled):
+                self.error(update_error(error))
+        panel.start()
+        self.work(job, ready, stopped)
+
+    # updates
+    def check_for_update(self):
+        """Once per run, off the UI thread; no answer (offline, GitHub down) just means no offer."""
+        if self.checked:
+            return
+        self.checked = True
+        exe = self.exe
+
+        def job():
+            app_update.clean_downloads(exe)
+            return app_update.newer_release(play.BUILD)
+        self.work(job, self.offer_update, lambda _: None)
+
+    def offer_update(self, release):
+        if release:
+            self.offer = release
+            self.show_offer()
+
+    def show_offer(self):
+        ttk, slot, release = self.ttk, self.update_slot, self.offer
+        if release is None or slot is None or not slot.winfo_exists():
+            return
+        for child in slot.winfo_children():
+            child.destroy()
+        box = ttk.Frame(slot, padding=(0, 0, 0, 10))
+        box.pack(fill="x")
+        ttk.Label(box, text=f"Version {release.label} is out.", font=("Segoe UI", 11, "bold")).pack(side="left")
+        ttk.Button(box, text="What's new", command=lambda: webbrowser.open(release.page_url)).pack(side="right")
+        ttk.Button(box, text="Update now", command=self.guard(self.update_now)).pack(side="right", padx=6)
+
+    def update_now(self):
+        if not self.root or self.offer is None:
+            raise ValueError("Set up the co-op copy first.")
+        if setup_lib.game_is_running(self.root):
+            raise ValueError("Close Cry of Fear first, then update.")
+        self.show_download(self.offer)
 
     def progress_panel(self, parent, clock=time.monotonic):
         self.panel = ProgressPanel(self.tk, self.ttk, parent, clock)
@@ -333,6 +444,9 @@ class App:
         self.root = Path(copy)
         self.settings = play.load_settings(self.root)
         body = self.clear("Cry of Fear co-op", "Play the campaign together, or alone with AI companions.")
+        self.update_slot = ttk.Frame(body)
+        self.update_slot.pack(fill="x")
+        self.show_offer()
         holder = self.row(body, "Your name", 12)
         self.name = self.tk.StringVar(value=self.settings["name"])
         ttk.Entry(holder, textvariable=self.name, width=28).pack(side="left")
@@ -343,6 +457,7 @@ class App:
             ttk.Button(body, text=text, command=action).pack(fill="x", ipady=8, pady=4)
         ttk.Label(body, text="In the game: J joins your partner, Enter skips a cutscene for everyone, "
                   "H tells the AI companions to wait or follow.", wraplength=700).pack(anchor="w", pady=(14, 0))
+        self.check_for_update()
 
     def remember(self, **values):
         self.settings.update(values)
@@ -523,13 +638,16 @@ class App:
         ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w")
 
 
-def open_window(payload, exe, copy=None):
+def open_window(payload, exe, copy=None, update_from=None, wait=()):
     import tkinter as tk
     dpi_aware()
     window = tk.Tk()
     app = App(window, payload, exe)
-    if copy:
-        app.show_main(copy)
+    state = setup_lib.installed_state(update_from) if update_from else None
+    if state and state["build"] < play.BUILD:
+        app.show_update(update_from, auto=True, wait=wait)
+    elif state or copy:
+        app.show_main(copy or update_from)
     else:
         mode, found = where_to_start(exe.parent, DEFAULT_COPY, play.BUILD)
         if mode == "setup":
@@ -557,6 +675,21 @@ def self_test(payload) -> int:
     return 0
 
 
+def update_check(out: Path) -> int:
+    """Reads the releases page the way the window does and writes what it found (the release check runs this
+    on the packaged exe, which has no console)."""
+    import dataclasses
+    import json
+    try:
+        latest = app_update.parse_release(app_update.read_info())
+        result = {"ok": True, "build": play.BUILD, "latest": dataclasses.asdict(latest),
+                  "newer": latest.build > play.BUILD}
+    except Exception as error:   # reported, not raised: the caller reads the file
+        result = {"ok": False, "build": play.BUILD, "error": f"{type(error).__name__}: {error}"}
+    out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    return 0 if result["ok"] else 1
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
@@ -565,11 +698,16 @@ def main(argv=None) -> int:
     parser.add_argument("--payload", help="the engine payload folder, for a run from source")
     parser.add_argument("--copy", help="open the main window for this copy")
     parser.add_argument("--no-shortcuts", action="store_true")
+    parser.add_argument("--update-from", help=argparse.SUPPRESS)   # the previous version's "Update now"
+    parser.add_argument("--wait-pid", help=argparse.SUPPRESS)
+    parser.add_argument("--update-check", metavar="OUT", help=argparse.SUPPRESS)   # releases: can this exe see the page
     args = parser.parse_args(argv)
     try:
         payload = payload_dir(args.payload) if (args.payload or getattr(sys, "frozen", False)) else None
         if args.self_test:
             return self_test(payload)
+        if args.update_check:
+            return update_check(Path(args.update_check))
         if args.install or args.update:
             if payload is None:
                 return 2
@@ -579,7 +717,9 @@ def main(argv=None) -> int:
             else:
                 setup_lib.update(Path(args.update), payload, exe=this_exe(), shortcuts=not args.no_shortcuts)
             return 0
-        open_window(payload, this_exe(), Path(args.copy).resolve() if args.copy else None)
+        open_window(payload, this_exe(), Path(args.copy).resolve() if args.copy else None,
+                    update_from=Path(args.update_from).resolve() if args.update_from else None,
+                    wait=app_update.parse_pids(args.wait_pid))
         return 0
     except (OSError, ValueError, RuntimeError, AssertionError) as error:
         if sys.stderr:
