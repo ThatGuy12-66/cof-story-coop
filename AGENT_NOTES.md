@@ -134,7 +134,21 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   no floor is within 64 units (a ladder); the log line gets ` shared=1`. Engine `3578c354`; harness test (launcher
   `7e450f9`, `crowded` knob: shared spot, crouched partner, ladder refusal); `test_enhanced_party`,
   `test_enhanced_respawn_spot`, `test_story_run_report`, `test_warp_bind` OK. Build: `tools/build_enhanced.cmd` →
-  `xash.dll` `643BFC42…`, no warnings (`evidence/warp-20261020/build.log`). **Not packaged; no version bump yet.**
+  `xash.dll` `643BFC42…`, no warnings (`evidence/warp-20261020/build.log`).
+- **1.1.1** (the user chose "1.1.1, works with 1.1"): `VERSION` stays "1.1" (the join check, so 1.1 and 1.1.1 join
+  each other; the fix is host-side), `VERSION_LABEL` "1.1.1", `BUILD` 6 (1.1 copies are offered Update); readme
+  "WHAT'S NEW IN 1.1.1", "1.1 and 1.1.1 can play together", "Coming from 1.0 or 1.1?" (launcher `b58baae`). Offline:
+  full suite **505 OK, 1 skipped** (`evidence/release-1.1.1/full-suite.log`). Package:
+  `evidence/release-1.1.1/package/CoF-Story-Coop-1.1.1.zip`, SHA-256
+  `9498F12B442868F84E4DD190E29B66286C2C7EC6CB046A63D5582AE15C42261F`, 110,799,327 bytes; exe `2CC984AF…`; payload 1.1
+  build 6, `xash.dll` `643BFC42…`; commits launcher `b58baae`, engine `3578c354`, FreeVGUI `66eca8dc` (uni notes
+  hidden by `.git/info/exclude` for the build, the line removed). Release check
+  (`evidence/release-1.1.1/check_release.py` → `check-release.log`, all passed): zip, readme, payload (the J fix's
+  ` shared=1` in the engine), `--self-test`, a fresh install (249 s, record 1.1 build 6, 29 groups), and a copy made
+  by the 1.1 exe (220 s) updated by 1.1.1 (159 s, a save kept). 1.0 → 1.1.1 not run (same update code as 1.0 → 1.1).
+  Live: nothing; the J fix not played. ModDB text: `evidence/release-1.1.1/moddb-text.txt`.
+- Deferred minor: the payload's `cof-enhanced/release.txt` still says `cofenhanced 0.4.0-test3`
+  (`package_enhanced_story.VERSION`), as in 1.0 and 1.1.
 - Seen, not changed: Xaier pressed Enter 9 times in the intro, and every second press cancels the skip (Enter does
   not autorepeat in game, so they were real presses). Xaier typed `kick all` in the console: stock Xash allows the
   console in any game with more than one slot (`cl_parse.c`, "allow console in multiplayer games"), so the
