@@ -54,8 +54,8 @@ int main( int argc, char **argv )
 	ents = (unsigned char *)VirtualAlloc( NULL, COF_RP_ENTITY_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 	assert( pages && chains && ents );
 
-	/* the table: 30 code edits and three data words */
-	assert( COF_RP_SITES == 30 );
+	/* the table: 31 code edits and three data words */
+	assert( COF_RP_SITES == 31 );
 
 	/* applied: every site holds its new code, with the real addresses of the new storage */
 	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents ));
@@ -88,6 +88,9 @@ int main( int argc, char **argv )
 	assert( !memcmp( base + 0x87047, "\x81\xFE\x00\x20\x00\x00", 6 ));       /* Cg water: its three loops */
 	assert( !memcmp( base + 0x8718B, "\x81\xFE\x00\x20\x00\x00", 6 ));
 	assert( !memcmp( base + 0x878FB, "\x81\xFE\x00\x20\x00\x00", 6 ));
+	/* the night vision light: test [flash flags],40h / jz / push -100 / call MY_AllocDlight. Key 0 took a new slot
+	 * every frame, so a frame under its 10 ms life drew last frame's light as well: twice the green, every other frame */
+	assert( !memcmp( base + 0xB14AB, "\x40\x74\x59\x6A\x9C\xE8\x3B\xAC\xFA\xFF", 10 ));
 
 	/* removed: the whole image is back byte for byte */
 	CoF_RenderPatchRemove( &patch );
