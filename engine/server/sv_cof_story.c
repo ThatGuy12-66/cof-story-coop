@@ -12,6 +12,7 @@
 #include "sv_cof_retail.h"
 #include "sv_cof_share.h"
 #include "sv_cof_trace.h"
+#include "sv_cof_useprobe.h"
 #include "sv_cof_exit.h"
 #include "sv_cof_state.h"
 #include "sv_cof_recovery.h"
@@ -375,6 +376,7 @@ void SV_CoF_StoryFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	SV_CoF_GatesFrame(); // first: the game's own rules as this frame wants them
+	SV_CoF_UseProbeFrame(); // a door just started: the player where the game's +use saw them
 	SV_CoF_RecoveryFrame();
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
