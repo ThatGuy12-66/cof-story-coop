@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-10-19 evening: the crash on dying to the second boss (a respawn on the entry landmark fired the exit back) is fixed in Test 2 build 3, built, offline-tested and in the smoke copy, not played (see "Respawn crash after the second boss"). Before that, 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
+Last updated: 2026-10-20: release 1.0 (version 1.0, build 4: player readme, Discord bug reports, upstream install docs and the cheats guide out of the copy; see "Release 1.0"). Before that, 2026-10-19 night: in cm_college2 both doors of the screwdriver classroom lead back into the room (live, after a trip to c_college2 and back); cause not found offline; a door-use probe is built and swapped into the smoke copy, not played (see "College classroom doors lead back in"). Before that, 2026-10-19 evening: the crash on dying to the second boss (a respawn on the entry landmark fired the exit back) is fixed in Test 2 build 3, built, offline-tested and in the smoke copy, not played (see "Respawn crash after the second boss"). Before that, 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
@@ -60,6 +60,74 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - App minors fixed: hosting status keeps the last state on a missed query; setup notes the copy (`%LOCALAPPDATA%\CoF-Story-Coop.txt`) so a newer package finds a copy elsewhere; `--copy` resolves.
 - Decision left to the user: monster damage scales with every participant, bots included (1 AI ×1.68, 2 ×1.92, 3 ×2.16 vs alone ×1.44); left as retail.
 - Verification: full suite **241 OK** (`evidence/weapons-companions-20261015/full-suite-w2.log`), engine builds exit 0 (`build-*.log`). Commits: launcher `9d2790d..720e972`, engine `d887312d..715170e8` (branch `tester-package`). Live: not yet (next: package-fix4, smoke copy update, Play solo with three AIs).
+
+## Release 1.0 (2026-10-20)
+
+- The user: "make me the public facing version that I'm going to send out to people. Get rid of all the admin stuff,
+  all the dev work stuff. Get us a like release version of it." Chose (chat): version **1.0**, "Report a bug" → their
+  Discord `https://discord.gg/4uwV6jmmY7`, build now with the college door bug listed as a known issue.
+- Changes (launcher, branch `tester-package`): `tools/coop_play.py` `VERSION`/`VERSION_LABEL` `1.0`, `BUILD` 4 (counts
+  on from Test 2's 3, so test copies are offered Update), `REPORT_URL` (was the private GitHub `ISSUES_URL`);
+  `tools/coop_app.py` footer `footer_text()` "Cry of Fear Co-op 1.0" (no "early test build"), `report_bug()`;
+  readme `tools/tester_readme.txt` → `tools/player_readme.txt` (player wording, known issues, Discord, fan-project line);
+  `tools/friend_setup.py` `RETIRED_FILES` (Enhanced's README.txt, Install.cmd, Uninstall.cmd, the cheats guide
+  `cof-enhanced/CHEATS.md`, `EXPERIMENTAL-STORY.txt`, `STORY-START.txt`): `build_tester_package.player_payload` leaves
+  them out of the engine payload and `update` deletes the test packages' ones from a copy; `package_enhanced_story`
+  notice text and the `release.txt` stamp lose "tester"/"experimental". Engine unchanged (`1ab3793e`, the door-use
+  probe build, `xash.dll` `61C160EE…`): the story log and the probe only write to `story-session.log`; the test gun
+  and cheats stay unreachable (the app writes `cof_test_gun 0`, `sv_cheats 0` every start; no console).
+- Not changed: the engine's on-screen Enhanced stamp ("cofenhanced 0.4.0-test3 (…)", top right for the first seconds:
+  upstream's version, compiled in); the hidden CLI flags of the exe; `corresponding-source.zip` still carries the
+  local tools and tests (the GPL source offer).
+
+## College classroom doors lead back in (2026-10-19 night; cause open; a diagnostic is built and in the smoke copy, not played)
+
+- The user, on the smoke copy (Test 2 build 3, merged maps): "Got all the way to college, but then the doors in
+  college for the classroom where you get the screwdriver, when I try and leave, it just brings me back into the same
+  room, both doors." Log `evidence/tester-package-20261015/smoke/CoF-Story-Coop/story-session.log` (session from
+  21:05), cm_college2, c_college1 section (dz +1024). First visit fine: 21:52:06 in by door 2 (`oexd2_1`), 21:52:11
+  screwdriver, 21:52:18 out by door 1 (`oexd1_2`). Then c_college2 and back (21:52:33-21:52:40; the Continue autosave
+  is 21:52:37, in c_college2), in by door 1 (21:53:22 `oexd1_1`), and every use from inside went back in: door 2 →
+  `oexd2_1` at 21:53:29, :32, :36; door 1 → `oexd1_1` at :42, :46, :49. No refusal or locked message.
+- Each doorway has two inter_door brushes 7 units apart: retail *40/*41 on the room's face (x -286..-285, to the
+  hallway), *23/*42 on the hallway's face (x -293..-292, back into the room); door 2 also has func_wall *7 (x -290)
+  between them. From inside, the game used the hallway-face brush, passing over the room-face one in front of it.
+- Ruled out offline (scripts and outputs in `evidence/college-doors-20261019/`): the merge (the door models and the
+  world's hull 0 match retail +1024; `door_hulls.txt`; `merged_world_doorway.py`: 0 of 459,940 cells differ); the
+  doors' key values (unnamed, no master; nothing can retarget or disable them); the engine (nothing writes a door's
+  owner or solid; traces have no per-section filter); the companion (over 128 units away at 21:53:29).
+- What the game does (decompilation player.cpp:3468-3610, CoF_InterDoor.cpp): PlayerUse traces 80 units from the eye
+  and uses what it hits if usable. Otherwise it ranks every usable entity within 80 of the origin by the dot of the
+  view with the box-clamped direction (best above 0.7; equals go to the lower edict). Square in front of a two-brush
+  door both brushes rank equal; off to one side the FAR brush wins. So the symptom fits the trace not returning the
+  room-face brush and the fallback picking the far one. Why the trace would miss only after the round trip: unknown.
+- Diagnostic (engine `1ab3793e`, launcher tests `a8c9d1a`): `engine/server/sv_cof_useprobe.c`, in the story frame
+  before the party code. The frame a player starts an inter_door it logs `cofstory phase=use-probe` (door, eye, view,
+  the engine's trace with the player skipped), `use-probe-hit` for each brush or body on the 80-unit ray, nearest
+  first (the door just used is listed too: its owner is now the player, so the engine's own trace skips it), and
+  `use-probe-door` for each inter_door within 80 with the fallback's dot. Observes only (trace globals restored);
+  gated by `cof_story_trace`; human players only.
+- Workaround meanwhile: `noclip` in the console (sv_cheats is on in the smoke copy's `listenserver.cfg`).
+- More offline analysis (`evidence/college-doors-20261019/`): `tie_rounding.py`: with the eye in line with a doorway
+  both panels clamp to (-L,0,0) and tie, and float rounding decides: at door 2 the hall-side brush wins in 11.1% of eye
+  x positions, at door 1 in 89.7%, so three door-2 failures from the fallback at the landing spot are unlikely: the
+  live trace probably returned the hall-side brush, or the user stood off-centre. `ent_classes.py`: retail c_college1
+  has no entity that can change another's fields (no trigger_changevalue and the like).
+- Automated repro (the user approved one run; 2026-10-19 23:38-23:40; `repro_doors.py`, output `repro-run1.txt`, log
+  `repro-20261019-234022.log`): fresh `map c_college1` merged, one companion, a section round trip c_college1 →
+  c_college2 → c_college1 through the exit triggers; afterwards both doors used from inside took the room-face brush
+  (door 2 → `oexd2_2`, door 1 → `oexd1_2`): **not reproduced**. Probe after the trip: `eye=-265,-912,1096 view=0,180
+  trace=0.287 hit=92`, ray hits #377 *55 0.250, #92 *21 0.287, #378 *56 0.337. Gaps: the script's uses from the hallway
+  registered nothing (aiming: `tools/live_loop.py` `look()` sends the angles and fixangle as two RCON packets and one
+  view came out at yaw 143; send both in one command joined by `;`), so the user's way in through the doors was not
+  exercised; the user also arrived by changelevel from cm_hamn (a save restore), took the screwdriver and used door 3
+  and doorch1 before the trip. Still open: the next live failure's `use-probe*` lines decide it.
+- 2026-10-20 ~00:00 (dated observation): the user's own play resumed on the smoke copy at their request, probe active.
+- **Verification states.** Offline: `test_enhanced_use_probe` watched failing (no module), then 2 OK; trace and party
+  tests 8 OK. Build: `tools\build_enhanced.cmd` exit 0 (`evidence/college-doors-20261019/build-probe.log`), `xash.dll`
+  `61C160EE…`. Smoke copy: `xash.dll` swapped by `swap_engine.py` (the install record's engine hash moved to match;
+  build 3's `14876831…` kept beside it as `xash-build3.dll`); not a package, the copy still says Test 2 build 3; nothing
+  was running, nothing launched. Live: **none**.
 
 ## Respawn crash after the second boss (2026-10-19 evening; fixed, built, offline-tested; not played)
 
@@ -578,6 +646,7 @@ cmd /d /c tools\build_enhanced.cmd
 
 | Artifact | SHA-256 | Status |
 | --- | --- | --- |
+| `build-local-20260927/engine/xash.dll` (2026-10-19 night), swapped into the smoke copy (no package) | `61C160EEBB35385A7CCDA9FE1CCD92559A1A06C9DAF04EC1CD16D9C5EB261C89` | Build 3 plus the door-use probe (`sv_cof_useprobe.c`); engine `1ab3793e`; built and offline-tested, never played |
 | `build-local-20260927/engine/xash.dll` (2026-10-19 evening), in the Test 2 build 3 package's payload (`evidence/respawn-crash-20261019/package/`) and the smoke copy | `14876831804D67D8E721C8D3CBE5E88790A0C2BA95C7027AC095120AFA8B1CF9` | Test 2 build 3: the respawn-crash fix (respawn back where the player came in; old-world decals dropped); engine `19224602`; built and offline-tested, never played |
 | `build-local-20260927/engine/xash.dll` (2026-10-19), in the Test 2 package's payload (`evidence/test2-20261019/package/`) | `533ABC475CED0ED0D061B79786C7E050EC8C7D08B4BA2C3F5AE1F76256E085B4` | Test 2: the decompilation fixes, the death-notice fix, per-section ambient loops, companion items left behind; engine `b0edceee`; built and offline-tested, never played |
 | `build-local-20260927/engine/xash.dll` (2026-10-15 11:42), in the tester package's payload (`evidence/tester-package-20261015/package/`) | `6C5DAB9BA7A13567EA96C2E307B8614B47496D58300A811B62E1C43F70A43D7A` | Tester package Test 1: everything below plus `cof_build` and `cof_continue`; committed (engine `d16d01f3`); not installed in the disposable copies |
@@ -616,7 +685,12 @@ For native inspection, use the installed computer-use skill and `node_repl` / `@
 
 ## Next steps, in order
 
-0. (2026-10-19 evening) The respawn-crash fix (section "Respawn crash after the second boss") is in the smoke copy,
+0. (2026-10-19 night) College doors (section "College classroom doors lead back in"): the smoke copy has the probe
+   engine. When the user plays it (Continue from the 21:52:37 autosave in c_college2, back through the door to
+   c_college1, into the screwdriver classroom, try both doors from inside), read the `use-probe*` lines at each
+   `door-begin`: which brush the ray met first, and whether the fallback ranked the doors. Then fix with a test, and
+   build a package (build 4) before sending anything.
+   (2026-10-19 evening) The respawn-crash fix (section "Respawn crash after the second boss") is in the smoke copy,
    never played: the user's Continue from the c_sewer3 autosave, dying to the boss, should log `cofstory
    phase=respawn-moved` and stay in cm_sewer3. The zip to send is now build 3 (`evidence/respawn-crash-20261019/package/`).
    (2026-10-19) Test 2 (section "Test 2 without launching"): the user decides where "Report a bug" goes, merge/push of `tester-package`, and sending the zip. When the user allows a launch: one playthrough of a wave 3 chapter with merged maps on (the loops are heard only in their own section; doors land on their landmarks), the two-player join (`cofbuild test2`), and the paused runs (merged groups, two clients, the 197-exit sweep).
