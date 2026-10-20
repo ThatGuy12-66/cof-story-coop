@@ -40,6 +40,8 @@
 #define COF_RETAIL_HAS_NV         0x0434 // bool m_bHasNightVision: picked up the bonus room's item_nightvision
 #define COF_RETAIL_VIEW_ENT       0x2038 // int m_iViewEntIndex
 #define COF_RETAIL_HEADSHIELD     0x2300 // int m_iHeadShieldOn: the night vision (sv_cof_light.h)
+#define COF_RETAIL_BLUR           0x1EBC // int m_iBlurActive: the story's screen blur, flipped by cof_blur (CCofBlur::Use 100A5BB0)
+#define COF_RETAIL_TRIPPING       0x2278 // bool m_bIsTripping: a morphine trip, the blur on for its 30 s (MorphineTrip 100E8D70)
 #define COF_RETAIL_CAMERA         0x2348 // EHANDLE m_hCurrentCamera
 #define COF_RETAIL_RESTART        0x04E8 // a team-wipe restart is pending
 #define COF_RETAIL_GETUP_END      0x04FC // float: when the CPR's get-up animation ends
@@ -726,6 +728,23 @@ qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );
 	return player && player[COF_RETAIL_IN_CALL];
+}
+
+qboolean SV_CoF_RetailBlur( sv_client_t *cl, int *blur, int *trip )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	if( !player ) return false;
+	memcpy( blur, player + COF_RETAIL_BLUR, sizeof( *blur ));
+	*trip = player[COF_RETAIL_TRIPPING] != 0;
+	return true;
+}
+
+qboolean SV_CoF_RetailSetBlur( sv_client_t *cl, int blur )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	if( !player ) return false;
+	memcpy( player + COF_RETAIL_BLUR, &blur, sizeof( blur ));
+	return true;
 }
 
 qboolean SV_CoF_RetailReviving( sv_client_t *cl )

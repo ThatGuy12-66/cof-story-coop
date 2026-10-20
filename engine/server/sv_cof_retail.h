@@ -78,6 +78,10 @@ qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl );
 int SV_CoF_RetailNightVision( sv_client_t *cl );
 // On a phone call, which refuses every weapon switch.
 qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl );
+// The story's screen blur (m_iBlurActive) and whether a morphine trip holds it; setting it, the game sends "Blur"
+// itself (UpdateClientData). False without a verified player.
+qboolean SV_CoF_RetailBlur( sv_client_t *cl, int *blur, int *trip );
+qboolean SV_CoF_RetailSetBlur( sv_client_t *cl, int blur );
 // A new player object whose HUD the game counts as set up: the multiplayer rules' InitHUD, which announces
 // "<name> has joined the game" to everyone, is skipped (for the AI companions, added again at every level change).
 qboolean SV_CoF_RetailHudInitialized( edict_t *ent );

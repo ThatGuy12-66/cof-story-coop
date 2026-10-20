@@ -180,7 +180,7 @@ void SV_CoF_TraceFrame( void )
 
 static qboolean CoF_TraceWatched( const char *name )
 {
-	static const char *const watch[] = { "ProFont", "Padlock", "Keypad", "Computer", "NoteDoc", "UserDoc", "AddNote", "Objectives", "ScreenFade" };
+	static const char *const watch[] = { "ProFont", "Padlock", "Keypad", "Computer", "NoteDoc", "UserDoc", "AddNote", "Objectives", "ScreenFade", "Blur" };
 	int i;
 
 	if( !name ) return false;

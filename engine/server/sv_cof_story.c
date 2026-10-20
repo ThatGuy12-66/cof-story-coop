@@ -305,6 +305,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_SectionsInit();
 	SV_CoF_BonusInit();
 	SV_CoF_LightInit();
+	SV_CoF_BlurInit();
 	SV_CoF_GatesInit();
 	SV_CoF_VoiceInit();
 	SV_CoF_WeatherInit();
@@ -392,6 +393,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_CameraModelsFrame();
 	SV_CoF_CompanionFrame();
 	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
+	SV_CoF_BlurFrame(); // a story blur flipped for one player is everyone's
 	SV_CoF_TestGunFrame();
 	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();
