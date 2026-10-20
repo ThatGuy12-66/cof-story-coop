@@ -563,6 +563,7 @@ static qboolean CoF_SessionRunLoad( void )
 	}
 	SV_ActivateServer( false );
 	CoF_TransitionResume();
+	SV_CoF_BlurCheckpointLoaded(); // the party's blur starts off (sv_cof_blur.c)
 	Q_strncpy( cof_session_latest, cof_session_pending_slot, sizeof( cof_session_latest ));
 	Con_Printf( "cofstory phase=session-loaded slot=%s map=%s generation=%d\n", cof_session_pending_slot, sv.name, svs.spawncount );
 	Mem_Free( cof_session_data ); cof_session_data = NULL;

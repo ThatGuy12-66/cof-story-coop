@@ -28,9 +28,12 @@ void SV_CoF_LightInit( void );
 void SV_CoF_LightFrame( void );
 qboolean SV_CoF_CoopFlashlightAllowed( void );
 qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
-// The story's screen blur, one for the whole party (sv_cof_blur.c): cof_coop_shared_blur, on by default.
+// The story's screen blur, one for the whole party (sv_cof_blur.c): cof_coop_shared_blur, on by default. Leaving
+// a map by a story level change, before the level is saved; a checkpoint loaded (the party starts off).
 void SV_CoF_BlurInit( void );
 void SV_CoF_BlurFrame( void );
+void SV_CoF_BlurLeaving( const char *map );
+void SV_CoF_BlurCheckpointLoaded( void );
 // Small, verified changes to the retail hl.dll (sv_cof_gates.c), and whether players hurt each other.
 void SV_CoF_GatesInit( void );
 // Simon's voice (sv_cof_voice.c): the sample to send instead of a player's police sample (buf, or sample itself).

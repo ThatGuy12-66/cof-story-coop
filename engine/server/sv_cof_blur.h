@@ -11,6 +11,11 @@ log, 2026-10-20). Here the blur is one state the party shares: a flip by anyone 
 or arrives takes the party's. A morphine trip (MorphineTrip 100E8D70: m_bIsTripping, the blur on for its 30 s) stays
 the tripper's own; when it ends they take the party's again.
 
+Every story map's flips come in pairs (all 30 maps with a cof_blur, read 2026-10-20), so in single player the blur is
+off whenever the story leaves a map, except where it hands the blur on: the endings and the suicide maps, and the
+game's own co-op maps (c_cof_*). So a level change from any other map leaves everyone's off, and a checkpoint loaded
+on one starts the party off: a save made while the blur was stuck is not stuck again.
+
 Plain C (standard library only): the offline tests share it.
 */
 #ifndef SV_COF_BLUR_H
@@ -45,11 +50,18 @@ typedef struct
 	int known[COF_BLUR_PLAYERS], blur[COF_BLUR_PLAYERS], trip[COF_BLUR_PLAYERS]; // last frame's, for a player seen
 } cof_blur_state_t;
 
-// Each map: the first player seen brings the party's blur with them (carried in or restored with their save).
-COF_BLUR_FN void CoF_BlurReset( cof_blur_state_t *s )
+// Each map: the first player seen brings the party's blur with them (carried in), or, with start_off, the party
+// starts off (a checkpoint loaded on a map that does not hand the blur on).
+COF_BLUR_FN void CoF_BlurReset( cof_blur_state_t *s, int start_off )
 {
 	memset( s, 0, sizeof( *s ));
-	s->party = -1;
+	s->party = start_off ? 0 : -1;
+}
+
+// A map that hands its blur on to the next one, as the game left it.
+COF_BLUR_FN int CoF_BlurCarried( const char *map )
+{
+	return map && ( strstr( map, "ending" ) || strstr( map, "suicide" ) || !strncmp( map, "c_cof_", 6 ));
 }
 
 // One frame. set[i] is the blur player i is to be given (-1: left as it is) and why[i] the reason. Returns the slot

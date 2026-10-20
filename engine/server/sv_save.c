@@ -2566,6 +2566,7 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	if( story )
 	{
 		if( !CoF_BeginStoryTransition( level, startspot )) return;
+		SV_CoF_BlurLeaving( oldlevel ); // the story leaves its blur off here; the players are saved with it below
 	}
 	else SV_CoF_TransitionReset( true );
 
