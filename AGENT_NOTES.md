@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-10-20: release 1.0 (version 1.0, build 4: player readme, Discord bug reports, upstream install docs and the cheats guide out of the copy; see "Release 1.0"). Before that, 2026-10-19 night: in cm_college2 both doors of the screwdriver classroom lead back into the room (live, after a trip to c_college2 and back); cause not found offline; a door-use probe is built and swapped into the smoke copy, not played (see "College classroom doors lead back in"). Before that, 2026-10-19 evening: the crash on dying to the second boss (a respawn on the entry landmark fired the exit back) is fixed in Test 2 build 3, built, offline-tested and in the smoke copy, not played (see "Respawn crash after the second boss"). Before that, 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
+Last updated: 2026-10-20 early morning: 1.1 polish started, investigation only: night vision flashing (cause open), the merged subway's decal overflow, an installer live-status request; the user installed 1.0 from the zip to test it (see "1.1 polish"). Before that, 2026-10-20: release 1.0 (version 1.0, build 4: player readme, Discord bug reports, upstream install docs and the cheats guide out of the copy; see "Release 1.0"). Before that, 2026-10-19 night: in cm_college2 both doors of the screwdriver classroom lead back into the room (live, after a trip to c_college2 and back); cause not found offline; a door-use probe is built and swapped into the smoke copy, not played (see "College classroom doors lead back in"). Before that, 2026-10-19 evening: the crash on dying to the second boss (a respawn on the entry landmark fired the exit back) is fixed in Test 2 build 3, built, offline-tested and in the smoke copy, not played (see "Respawn crash after the second boss"). Before that, 2026-10-19: Test 2 prepared without launching anything: wave 3 merged maps (29 groups), ambient loops per section, an offline check of every story exit; built and offline-tested, never played (see "Test 2 without launching"). Before that, 2026-10-18: the fixes from the decompilation survey are built and offline-tested on `tester-package` (46-task plan, 451 tests OK; live checks pending; see "Fixes from the decompilation survey (2026-10-18)"). Before that, 2026-10-15 midday: the first tester package, `CoF-Story-Coop-Test1.zip` (one app: setup, Play solo, Host, Join), built and smoke-installed; see "Tester package (2026-10-15)". All work is committed on branch `tester-package` (launcher and engine; FreeVGUI on `story-coop`), not merged, not pushed. Before that, 2026-10-15 early morning: a live UI pass fixed the wardrobe and objectives text, the 12-slot grid's alignment and the RCON echo (see "UI pass (2026-10-15)"); committed in the tester-package work's first commits. Before that, 2026-10-14 late evening: the AI companion fix (doors, hopping, stop-start) and its route-graph navigation, first played live 2026-10-14 23:09–23:34 (see "AI companion: doors, hops and routes"). Before that: the 12-slot inventory is implemented, verified offline, built and installed in the two disposable copies; NOT live-tested (see "Inventory grid"). Before that, 2026-10-13 late morning: `c_start` ↔ `c_start2` played live; the repositories were cleaned up and published as private GitHub repos for playtesters (see "Repository cleanup and sharing").
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
@@ -60,6 +60,48 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - App minors fixed: hosting status keeps the last state on a missed query; setup notes the copy (`%LOCALAPPDATA%\CoF-Story-Coop.txt`) so a newer package finds a copy elsewhere; `--copy` resolves.
 - Decision left to the user: monster damage scales with every participant, bots included (1 AI ×1.68, 2 ×1.92, 3 ×2.16 vs alone ×1.44); left as retail.
 - Verification: full suite **241 OK** (`evidence/weapons-companions-20261015/full-suite-w2.log`), engine builds exit 0 (`build-*.log`). Commits: launcher `9d2790d..720e972`, engine `d887312d..715170e8` (branch `tester-package`). Live: not yet (next: package-fix4, smoke copy update, Play solo with three AIs).
+
+## 1.1 (2026-10-20)
+
+- The user: "let's do some polish for 1.1. The night vision goggles caused constant flashing. Find any other bugs we
+  need to fix." (the flashing = "Lighting strobes": the green light on walls and floor pulses, the screen tint
+  steady). Then: "I want to test 1.0" → the zip's extracted exe (`evidence/release-20261020/package/unzipped/`,
+  hash `476BB033…` checked) started at 04:10 for their own play; they ran Setup themselves (default copy
+  `%LOCALAPPDATA%\CoF-Story-Coop`, record 1.0 build 4 at 04:15:45, about 5 min). Then: "a status thing in the
+  installer when it's doing all the setup and stuff so people can see what it's actually doing in real time"
+  (design approved in chat). Last: "Once it's all done and ready, go on the mod DB page and add the 1.1 files with
+  proper change logs and everything."
+- **Night vision strobe: cause found and fixed, seen live.** client.dll (`view.cpp`, RVA 0xB14AB) re-makes the green
+  light (radius 900) every frame with `MY_AllocDlight(0)` and `die = time + 0.01`. Key 0 takes a new slot each
+  call, so in any frame shorter than 10 ms last frame's light is still alive and two are drawn: measured 51% of
+  frames with 2 lights (`cl_fixtimerate 0`: 46%), the doubled brightness flickering on and off. Fix: the renderer
+  patch passes key -100 (`6a 00` → `6a 9c`; keys in use elsewhere: -1, -2, -8, -50, -66, -300, players -1..-32,
+  entity indices), so the light reuses its own slot. Live (approved launch, `evidence/nightvision-20261020/`,
+  `repro_nv.py`, `run.out` before, `run-fixed.out` after): after the fix 0 of 2497 frames drew two, one slot used.
+- **Static decals: 1024, not 256.** The merged subway `cm_subway1st1` has 273 level decals; client.dll's
+  `staticdecals[256]` (RVA 0x1BF368, 32-byte entries) dropped 17 ("too many static decals on level!"). The renderer
+  patch moves the array into engine-allocated storage of 1024 (`AllocStaticDecal` bound at 0x57996, its base at
+  0x579A3, the draw loop's base at 0x5879A; the relocation table has only those two references). Offline: the real
+  client.dll's `AllocStaticDecal` in the run harness keeps 1024 patched, 256 stock. **Not seen live.**
+- Engine commits (branch `tester-package`): `0b508f73` (NV), `c875e6ce` (decals); `xash.dll` `856725C9…`, its load
+  note "[cof-renderer] client.dll's renderer: … %d static decals, one night vision light". The smoke copy runs the
+  NV-only build `9829A338…` (swapped by `evidence/nightvision-20261020/swap_engine.py`, the earlier one kept as
+  `xash-probe.dll`), its record still Test 2 build 3.
+- **Setup and Update show what they do.** `friend_setup.Steps` reports (status, fraction, line) for each step,
+  sized from the 1.0 install timings (copy .33, engine .05, models .05, art .01, maps .55; update .07/.07/.01/.85): a
+  line per copied folder with its files and size, the Enhanced installer's own output streamed (Popen, "oem"
+  decoding), a line per model, art file and merged map. Every line also goes to `cof-story-setup.log` in the copy
+  (update appends; a failure writes "Stopped: …" first). The app (`coop_app.ProgressPanel`): the step, the bar, "M:SS
+  so far" and a read-only box of timestamped lines. Tests: `SetupProgressTests` (5, with a Popen double carrying the
+  real 1.0 installer output), `ProgressPanelTests` (3, a hidden real Tk window); a screenshot of the window checked
+  the layout (`setup_screen_shot.py`, scratchpad).
+- Version 1.1, `BUILD` 5; readme "WHAT'S NEW IN 1.1", "Coming from 1.0? … click Update", and "If Setup or Update stops,
+  attach cof-story-setup.log".
+- Other findings in the smoke copy's logs (10-19 night): not ours: `save/save_*.wav`, `krypande/k_crawl*`, `pl_wade*`, `models/grenade.mdl` are
+  referenced by retail but absent from the game files; "X found the Y" carries two marker bytes on purpose
+  (`CoF_StripPayload`). College: no repeat of the classroom loop; at 23:42:43 the player came through `oexd3_12`,
+  was teleported to `c2_lm1` facing `oexd3_22` and used it within a second (back into c_college1dark), then went on
+  through cm_hamn normally (likely a second press, not the reported bug).
 
 ## Release 1.0 (2026-10-20)
 

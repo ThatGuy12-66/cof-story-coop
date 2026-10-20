@@ -16,9 +16,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.0"
-VERSION_LABEL = "1.0"
-BUILD = 4   # counts on from the test packages (Test 2 was build 3), so their copies are offered the update
+VERSION = "1.1"
+VERSION_LABEL = "1.1"
+BUILD = 5   # counts on from 1.0 (build 4; the test packages were 1 to 3), so older copies are offered the update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"

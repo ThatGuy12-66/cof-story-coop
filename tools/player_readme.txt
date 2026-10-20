@@ -1,6 +1,16 @@
-Cry of Fear Co-op 1.0
+Cry of Fear Co-op 1.1
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1
+- Night vision no longer flickers. The green light around you was drawn twice on
+  about every other frame, so walls and floors strobed.
+- Levels keep all of their decals (posters, blood, signs). The joined subway level
+  had more than the game could hold and lost some.
+- Setup and Update show what they are doing as they do it: each step, the files being
+  copied, the models and maps being made, and the time so far. The same lines are kept
+  in cof-story-setup.log in the co-op copy.
+Coming from 1.0? Run the new "CoF Story Co-op.exe" and click "Update".
 
 YOU NEED
 - Windows 10 or 11, and Cry of Fear installed from Steam (it's free). Keep Steam running.
@@ -55,6 +65,7 @@ REPORTING BUGS
 Join the Discord: https://discord.gg/4uwV6jmmY7 ("Report a bug" in the app opens it).
 Say what happened, the map or the place, roughly when, and whether "Merged maps" was on,
 and attach the log ("Open logs folder" in the app; the log may show your Windows user name).
+If Setup or Update stops, attach cof-story-setup.log from the co-op copy folder.
 Never post your password or join code publicly.
 
 Cry of Fear Co-op is a fan project, not made or endorsed by Team Psykskallar, the makers
