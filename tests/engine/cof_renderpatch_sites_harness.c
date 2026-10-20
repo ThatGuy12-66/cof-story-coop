@@ -35,7 +35,7 @@ int main( int argc, char **argv )
 {
 	cof_render_patch_t patch;
 	unsigned char *base, *image;
-	unsigned char *pages, *chains, *ents;
+	unsigned char *pages, *chains, *ents, *decals;
 	size_t size;
 	void *taken;
 	int i, j;
@@ -52,14 +52,15 @@ int main( int argc, char **argv )
 	pages = (unsigned char *)VirtualAlloc( NULL, COF_RP_PAGE_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 	chains = (unsigned char *)VirtualAlloc( NULL, COF_RP_CHAIN_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 	ents = (unsigned char *)VirtualAlloc( NULL, COF_RP_ENTITY_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
-	assert( pages && chains && ents );
+	decals = (unsigned char *)VirtualAlloc( NULL, COF_RP_DECAL_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
+	assert( pages && chains && ents && decals );
 
-	/* the table: 31 code edits and three data words */
-	assert( COF_RP_SITES == 31 );
+	/* the table: 34 code edits and three data words */
+	assert( COF_RP_SITES == 34 );
 
 	/* applied: every site holds its new code, with the real addresses of the new storage */
-	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents ));
-	assert( !CoF_RenderPatchApply( &patch, base, pages, chains, ents )); /* once */
+	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents, decals ));
+	assert( !CoF_RenderPatchApply( &patch, base, pages, chains, ents, decals )); /* once */
 	for( i = 0; i < COF_RP_SITES; i++ )
 	{
 		const cof_rp_site_t *s = &cof_rp_sites[i];
@@ -73,6 +74,7 @@ int main( int argc, char **argv )
 		if( s->target == COF_RP_PAGES2 ) assert( Abs32( p + s->at ) == (unsigned)(size_t)pages + 2 );
 		if( s->target == COF_RP_CHAINS ) assert( Abs32( p + s->at ) == (unsigned)(size_t)chains );
 		if( s->target == COF_RP_ENTLIST ) assert( Abs32( p + s->at ) == (unsigned)(size_t)ents );
+		if( s->target == COF_RP_DECALS ) assert( Abs32( p + s->at ) == (unsigned)(size_t)decals );
 	}
 	/* the three lightmap sets 256 GL names apart, clear of the engine's and the client's other names */
 	assert( Abs32( base + COF_RP_SET1 ) == 0x03000000u );
@@ -91,6 +93,10 @@ int main( int argc, char **argv )
 	/* the night vision light: test [flash flags],40h / jz / push -100 / call MY_AllocDlight. Key 0 took a new slot
 	 * every frame, so a frame under its 10 ms life drew last frame's light as well: twice the green, every other frame */
 	assert( !memcmp( base + 0xB14AB, "\x40\x74\x59\x6A\x9C\xE8\x3B\xAC\xFA\xFF", 10 ));
+	/* static decals: 1024 a level, in the new storage (the allocator and the draw loop) */
+	assert( !memcmp( base + 0x57996, "\x81\xF9\x00\x04\x00\x00", 6 ));
+	assert( base[0x579A3] == 0x05 && Abs32( base + 0x579A4 ) == (unsigned)(size_t)decals );
+	assert( base[0x5879A] == 0xBF && Abs32( base + 0x5879B ) == (unsigned)(size_t)decals );
 
 	/* removed: the whole image is back byte for byte */
 	CoF_RenderPatchRemove( &patch );
@@ -107,7 +113,7 @@ int main( int argc, char **argv )
 			unsigned char was = base[s->rva + j];
 			Poke( base + s->rva + j, (unsigned char)( was ^ 0x5a ));
 			memcpy( image + s->rva + j, base + s->rva + j, 1 );
-			assert( !CoF_RenderPatchApply( &patch, base, pages, chains, ents ));
+			assert( !CoF_RenderPatchApply( &patch, base, pages, chains, ents, decals ));
 			assert( !patch.base && !memcmp( base, image, size ));
 			Poke( base + s->rva + j, was );
 			image[s->rva + j] = was;
@@ -117,12 +123,12 @@ int main( int argc, char **argv )
 	{
 		unsigned char was = base[COF_RP_SET1];
 		Poke( base + COF_RP_SET1, 0x01 );
-		assert( !CoF_RenderPatchApply( &patch, base, pages, chains, ents ));
+		assert( !CoF_RenderPatchApply( &patch, base, pages, chains, ents, decals ));
 		Poke( base + COF_RP_SET1, was );
 	}
 
 	/* and after all that it still applies */
-	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents ));
+	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents, decals ));
 	CoF_RenderPatchRemove( &patch );
 	assert( !memcmp( base, image, size ));
 

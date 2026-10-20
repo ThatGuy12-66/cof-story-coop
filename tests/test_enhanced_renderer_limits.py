@@ -45,6 +45,8 @@ class RetailClientTests(unittest.TestCase):
         self.assertIn('patched: 0 warnings, loaded 80', out)
         self.assertIn('patched bump: 0 warnings, loaded 80', out)
         self.assertIn('patched: 1496 brush entities', out)
+        self.assertIn('stock: 256 static decals', out)
+        self.assertIn('patched: 1024 static decals', out)   # four members of 256 each, the most a merged map joins
         self.assertIn('renderer patch run passed', out)
 
 

@@ -132,6 +132,22 @@ static void Clear( void )
 
 typedef void ( __cdecl *fn_t )( void );
 typedef void ( __cdecl *chain_t )( void *surf );
+typedef unsigned char *( __cdecl *alloc_t )( void );
+
+/* AllocStaticDecal (gl_decals.cpp, 10057990) from an empty level: how many it hands out, each 32 bytes on from `first` */
+static int StaticDecals( unsigned char *first )
+{
+	int n = 0;
+	unsigned char *got;
+	Put32( RVA( 0x1BF34C ), 0 ); /* numstaticdecals */
+	while(( got = ( (alloc_t)RVA( 0x57990 ))( )) != NULL )
+	{
+		assert( got == first + 32 * n );
+		n++;
+		assert( n <= 4096 );
+	}
+	return n;
+}
 
 static unsigned char *Run( void )
 {
@@ -153,7 +169,7 @@ int main( int argc, char **argv )
 {
 	static unsigned char *stock[2][3][256];
 	cof_render_patch_t patch;
-	unsigned char *pages, *chains, *list;
+	unsigned char *pages, *chains, *list, *decals;
 	void *taken;
 	int i, page, set, bump, expect, qualifying;
 	assert( argc == 2 );
@@ -231,6 +247,8 @@ int main( int argc, char **argv )
 			}
 	}
 	assert( Collect( ) == 512 ); /* the first 512 that qualify */
+	/* a map's own decals (env_static_decal): 256 (cm_subway1st1 has 273 and dropped 17, live 2026-10-19) */
+	printf( "stock: %d static decals\n", StaticDecals( RVA( 0x1BF368 )));
 
 	/* ---- patched ---- */
 	Put32( RVA( COF_RP_SET1 ), 0 );
@@ -239,9 +257,11 @@ int main( int argc, char **argv )
 	pages = Guarded( COF_RP_PAGE_BYTES );
 	chains = Guarded( COF_RP_CHAIN_BYTES );
 	list = Guarded( COF_RP_ENTITY_BYTES );
+	decals = Guarded( COF_RP_DECAL_BYTES );
 #ifndef RP_HARNESS_NO_PATCH
-	assert( CoF_RenderPatchApply( &patch, base, pages, chains, list ));
+	assert( CoF_RenderPatchApply( &patch, base, pages, chains, list, decals ));
 #endif
+	printf( "patched: %d static decals\n", StaticDecals( decals ));
 	set_names[0] = Get32( RVA( COF_RP_SET1 ));
 	set_names[1] = Get32( RVA( COF_RP_SET1 + 4 ));
 	set_names[2] = Get32( RVA( COF_RP_SET1 + 8 ));
