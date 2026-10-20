@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "sv_cof_story.h"
 #include "sv_cof_moments.h"
 #include "sv_cof_companion.h"
+#include "sv_cof_party.h"
 #include "cof_abi.h"
 #include "pm_local.h"
 #include "event_flags.h"
@@ -1008,7 +1009,7 @@ SV_RunCmd
 */
 void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 {
-	qboolean cof_scoped;
+	qboolean cof_scoped, cof_dead;
 	edict_t	*clent;
 	double	frametime;
 	usercmd_t cmd;
@@ -1091,7 +1092,11 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	if( ucmd->impulse ) clent->v.impulse = ucmd->impulse;
 
 	svgame.globals->time = cl->timebase;
+	// Cry of Fear story co-op: the game respawns a player in PreThink, on a spot that can stand in an exit's
+	// trigger; moved before the move below touches anything
+	cof_dead = SV_CoF_PartyDead( clent );
 	svgame.dllFuncs.pfnPlayerPreThink( clent );
+	if( cof_dead ) SV_CoF_PartyRespawned( cl );
 	SV_PlayerRunThink( clent, frametime, cl->timebase );
 
 	// If conveyor, or think, set basevelocity, then send to client asap too.

@@ -125,6 +125,13 @@ static cof_party_arrival_t cof_party_arrival;
 static int cof_party_fresh[MAX_CLIENTS]; // userid of a new join awaiting cs_spawned
 static int cof_party_regroup[MAX_CLIENTS]; // userid of an arrival still to be moved beside a partner
 static int cof_party_hidden[MAX_CLIENTS]; // userid still owed a door-hide undo after a map change
+// Where each player came into this map (a level change's arrival) or section (a merged map's section move), for a
+// respawn (SV_CoF_PartyRespawned); generation = svs.spawncount it was recorded in.
+static struct
+{
+	int userid, generation;
+	vec3_t origin;
+} cof_party_entry[MAX_CLIENTS];
 static int cof_party_generation = -1;
 static double cof_party_inventory_time;
 static convar_t *cof_party_respawn_delay;
@@ -276,6 +283,15 @@ static qboolean CoF_PartyMoveEdict( edict_t *ent, byte *pv, const vec3_t landing
 static qboolean CoF_PartyMove( sv_client_t *cl, const vec3_t landing, const vec3_t angles )
 {
 	return CoF_PartyMoveEdict( cl->edict, CoF_PartyPlayer( cl ), landing, angles );
+}
+
+static void CoF_PartyEntered( sv_client_t *cl )
+{
+	int i = CoF_PartySlot( cl );
+	if( i < 0 ) return;
+	cof_party_entry[i].userid = cl->userid;
+	cof_party_entry[i].generation = svs.spawncount;
+	VectorCopy( cl->edict->v.origin, cof_party_entry[i].origin );
 }
 
 static void CoF_PartyCheckGeneration( void )
@@ -1264,7 +1280,37 @@ qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_clie
 	}
 	if( !( cl->flags & FCL_FAKECLIENT ))
 		SV_CoF_RetailScreenFade( cl, 0.5f, 0.0f, 0, 0, 0, 0, 255 );
+	CoF_PartyEntered( cl );
 	return true;
+}
+
+// Dead as the game counts it: a respawn is a PreThink that begins dead and ends alive.
+qboolean SV_CoF_PartyDead( edict_t *ent )
+{
+	return SV_IsValidEdict( ent ) && ( !( ent->v.health > 0 ) || ent->v.deadflag != DEAD_NO );
+}
+
+// The game respawns a player on the landmark the map was entered by (EntSelectSpawnPoint, gpGlobals->startspot),
+// and nearly every story landmark stands in the trigger of its exit back, which their first move fires (live
+// 2026-10-19, cm_sewer3: the level change back crashed the game). Called after the PreThink that respawned them,
+// before that move: back where they came into this map or section (one carried in dead: where a partner did). The
+// placement beside a partner follows.
+void SV_CoF_PartyRespawned( sv_client_t *cl )
+{
+	int i = CoF_PartySlot( cl ), j;
+	if( i < 0 || !SV_CoF_StoryCoopEnabled() || !CoF_PartyPlayer( cl )) return;
+	if( cof_party_entry[i].userid != cl->userid || cof_party_entry[i].generation != svs.spawncount )
+	{
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+			if( cof_party_entry[j].generation == svs.spawncount && cof_party_entry[j].userid &&
+				cof_party_entry[j].userid == svs.clients[j].userid ) break;
+		i = j;
+	}
+	if( i >= svs.maxclients || i >= MAX_CLIENTS )
+		Con_Printf( "cofstory phase=respawn-kept userid=%d reason=no-entry\n", cl->userid );
+	else if( SV_CoF_PartySectionMove( cl, cof_party_entry[i].origin, NULL, NULL ))
+		Con_Printf( "cofstory phase=respawn-moved userid=%d\n", cl->userid );
+	else Con_Printf( "cofstory phase=respawn-kept userid=%d reason=no-room\n", cl->userid );
 }
 
 static byte *CoF_PartyArrived( sv_client_t *cl, int userid )
@@ -1332,6 +1378,11 @@ void SV_CoF_PartyTransitionArrive( unsigned int epoch )
 			Con_Printf( "cofstory phase=arrival-overlapped userid=%d beside=%d\n", cl->userid, svs.clients[anchor].userid );
 		else Con_Printf( "cofstory phase=arrival-stranded userid=%d\n", cl->userid );
 	}
+	// where each came in, for a respawn (through a door too, its flag still up)
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+		if( arrival.userid[i] && svs.clients[i].userid == arrival.userid[i] &&
+			CoF_PartyLivingPlayer( svs.clients[i].edict ) && !CoF_PartyInSolid( svs.clients[i].edict ))
+			CoF_PartyEntered( &svs.clients[i] );
 }
 
 // A refusal starts the cooldown too, so a mashed key logs one line per cooldown.

@@ -22,6 +22,10 @@ qboolean SV_CoF_PartyInDoor( const sv_client_t *cl );
 qboolean SV_CoF_PartyHolding( void );
 // A merged map's section move: cl to landing (view kept), beside anchor when that spot is solid; a short fade.
 qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor, const float *fallback );
+// A respawn is a PreThink that begins dead (SV_CoF_PartyDead) and ends alive: SV_CoF_PartyRespawned moves the
+// player, before their move, back where they came into this map or section.
+qboolean SV_CoF_PartyDead( edict_t *ent );
+void SV_CoF_PartyRespawned( sv_client_t *cl );
 // cof_warp and other commands the story layer handles itself; true when handled.
 qboolean SV_CoF_PartyClientCommand( sv_client_t *cl );
 #endif
