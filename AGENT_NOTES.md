@@ -120,6 +120,11 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - Known gaps: `SV_RestartAmbientSounds` (demo recording's full update only) resends the host's loops to everyone;
   client.dll lights models by map name (`forest1`-`forest6`), and c_forest1 now plays inside `cm_bridge`
   (cosmetic, unchecked); monsters chasing through a door do not follow in a section move (all merged groups).
+- 2026-10-19 evening, the user: "launch it i want inf stamina too". The smoke copy
+  (`evidence/tester-package-20261015/smoke/CoF-Story-Coop`) was updated to Test 2 with `friend_setup.update`
+  (`evidence/test2-20261019/update_smoke.py` -> `update-smoke.log`: test2 build 2, `xash.dll` `533ABC47…`, all 29
+  groups merged, no shortcuts), and only that copy got `cryoffear/listenserver.cfg` (`sv_cheats 1` at every map
+  start, F11 = `cof_infstamina 1`; delete the file to play without). The app was opened for the user to play.
 - Open for the user: where "Report a bug" goes (`coop_play.ISSUES_URL` is the private repo: a tester without an
   invite gets a 404); merge/push of `tester-package`; sending the zip.
 
