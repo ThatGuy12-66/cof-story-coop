@@ -79,6 +79,23 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
 - Not changed: the engine's on-screen Enhanced stamp ("cofenhanced 0.4.0-test3 (…)", top right for the first seconds:
   upstream's version, compiled in); the hidden CLI flags of the exe; `corresponding-source.zip` still carries the
   local tools and tests (the GPL source offer).
+- **Verification states.** Offline: the new tests watched failing first (12 failures/errors), then green; full suite
+  **497 OK, 1 skipped** (`evidence/release-20261020/full-suite.log`). Build: no engine rebuild (the built `xash.dll` is
+  newer than its sources; `package_enhanced_story` plan check). Package: `evidence/release-20261020/package/
+  CoF-Story-Coop-1.0.zip`, SHA-256 `68E92F8B7CD86D0354F67377DBE8519EE5B4A25D3A99C568ADDA02921C63FFB1`, 110,783,342
+  bytes; exe `476BB033…`; payload 1.0 build 4, `xash.dll` `61C160EE…`, `vgui.dll` `40642512…`; commits launcher
+  `81a95f8`, engine `1ab3793e`, FreeVGUI `66eca8dc` (`package.log`, `package-report.json`); built with the uni notes
+  hidden by `.git/info/exclude`, the line removed afterwards. Release check (`check_release.py` →
+  `check-release.log`, all passed): the zip's six files and CRC, the readme (1.0, Discord, no test/dev words), the
+  payload without the retired files, `release.txt` stamp `cofenhanced 0.4.0-test3 with story co-op`, the extracted
+  exe's `--self-test`, and a fresh `--install` from the extracted exe (smoke-source, `--no-shortcuts`, exit 0 in
+  330 s): record 1.0 build 4, engine and stock hl.dll, no retired files, no listenserver.cfg, story cfg with the test
+  tools off, 29 groups merged; that 5.2 GB test copy was deleted afterwards. Live: **none** (no game launched; the
+  user's own game on the smoke copy kept running, its `xash.dll` unchanged). Update over a Test 2 copy: unit-tested
+  only (the smoke copy was in use).
+- Deferred minors: `cof-enhanced-version.txt` (written by upstream's installer) still says "uninstall=run
+  Uninstall.cmd"; the host-check refusal names the other side's raw build ("theirs: test2").
+- Not done (user decisions): nothing merged, pushed or published; the zip is for the user to send.
 
 ## College classroom doors lead back in (2026-10-19 night; cause open; a diagnostic is built and in the smoke copy, not played)
 
