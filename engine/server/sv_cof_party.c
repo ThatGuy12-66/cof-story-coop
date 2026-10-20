@@ -1385,6 +1385,26 @@ void SV_CoF_PartyTransitionArrive( unsigned int epoch )
 			CoF_PartyEntered( &svs.clients[i] );
 }
 
+// The partner's own spot, feet on the partner's floor, for a room only one fits (c_nightmare's last, `teleea`,
+// 64 units wide, holds the exit to c_start): retail PreThink lets overlapping players pass through each other.
+// Not where the caller's hull meets the world (a partner crouched in a vent) or no floor is in reach (a ladder).
+static qboolean CoF_PartySharedSpot( sv_client_t *cl, edict_t *at, vec3_t result )
+{
+	edict_t *ent = cl->edict;
+	vec3_t down;
+	trace_t tr;
+	if( !CoF_PartyVectorValid( at->v.origin ) || !CoF_PartyVectorValid( at->v.mins ) ||
+		!CoF_PartyVectorValid( ent->v.mins ) || !CoF_PartyVectorValid( ent->v.maxs )) return false;
+	VectorCopy( at->v.origin, result );
+	result[2] += at->v.mins[2] - ent->v.mins[2];
+	tr = SV_Move( result, ent->v.mins, ent->v.maxs, result, MOVE_NOMONSTERS, ent, false );
+	if( tr.startsolid || tr.allsolid ) return false;
+	VectorCopy( result, down );
+	down[2] -= 64.0f;
+	tr = SV_Move( result, ent->v.mins, ent->v.maxs, down, MOVE_NOMONSTERS, ent, false );
+	return !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f && tr.plane.normal[2] >= 0.7f;
+}
+
 // A refusal starts the cooldown too, so a mashed key logs one line per cooldown.
 static void CoF_PartyWarpRefused( sv_client_t *cl, int slot, const char *reason, const char *text )
 {
@@ -1393,11 +1413,13 @@ static void CoF_PartyWarpRefused( sv_client_t *cl, int slot, const char *reason,
 	if( text ) SV_CoF_RetailProFont( cl, 1, text, false );
 }
 
-// cof_warp (bound to J): join the partner, wherever they are.
+// cof_warp (bound to J): join the partner, wherever they are: beside them, or on their spot when nothing beside
+// them is free.
 static void CoF_PartyWarp( sv_client_t *cl )
 {
 	int i = CoF_PartySlot( cl ), j, waiter = SV_CoF_ExitWaiter();
 	sv_client_t *partner = NULL;
+	qboolean shared = false;
 	float best = 0.0f, d;
 	vec3_t feet, landing, angles = { 0, 0, 0 };
 	char text[96];
@@ -1443,7 +1465,8 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	}
 	CoF_PartyFeet( cl, partner->edict, feet );
 	angles[1] = partner->edict->v.angles[1];
-	if( !CoF_PartyLanding( cl, partner->edict, feet, landing ) || !CoF_PartyMove( cl, landing, angles ))
+	if(( !CoF_PartyLanding( cl, partner->edict, feet, landing ) && !( shared = CoF_PartySharedSpot( cl, partner->edict, landing ))) ||
+		!CoF_PartyMove( cl, landing, angles ))
 	{
 		Q_snprintf( text, sizeof( text ), "No room next to %s.", partner->name );
 		CoF_PartyWarpRefused( cl, i, "no-room", text );
@@ -1453,7 +1476,7 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	// Black, fading in over half a second: the retail co-op door's blink. The
 	// warp does not depend on it being seen.
 	SV_CoF_RetailScreenFade( cl, 0.5f, 0.0f, 0, 0, 0, 0, 255 );
-	Con_Printf( "cofstory phase=warp userid=%d partner=%d origin=%.3f,%.3f,%.3f\n", cl->userid, partner->userid, landing[0], landing[1], landing[2] );
+	Con_Printf( "cofstory phase=warp userid=%d partner=%d origin=%.3f,%.3f,%.3f%s\n", cl->userid, partner->userid, landing[0], landing[1], landing[2], shared ? " shared=1" : "" );
 }
 
 // Client commands the story layer answers itself, before the game DLL sees them.
