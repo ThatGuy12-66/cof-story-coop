@@ -117,6 +117,31 @@ User: "Can we get weapons to appear properly in each other's hands?" → "Do it.
   was teleported to `c2_lm1` facing `oexd3_22` and used it within a second (back into c_college1dark), then went on
   through cm_hamn normally (likely a second press, not the reported bug).
 
+### After 1.1 went up: a player's log (2026-10-20)
+
+- 1.1 is on ModDB (its downloads page said "5 hours ago" when checked at about 10:40). The user then sent a log with no comment:
+  `story-session-20261020-125132.log` (copy in `evidence/warp-20261020/`). It is from another player's 1.1 copy
+  (renderer note with 1024 decals and one NV light; the clock about 3 h ahead), host "Xaier", guest "Wolf",
+  c_intro → c_nightmare → cm_start, 4 minutes.
+- **J in a room only one fits: fixed offline, not seen live.** At the end of c_nightmare the cof_teleports
+  `teleea45` and then `teleea` took Wolf into the exit room: `teleea` (639 -2951 -747), its trigger_changelevel `*57`
+  64×66 units, the exit to c_start. Xaier got "Wolf went somewhere you can't follow. Press J to join." and then the
+  exit hold's "Press J to join.", but every J gave `warp-refused reason=no-room` ("No room next to Wolf."): none
+  of `CoF_PartyLanding`'s 20 spots fits beside a hull in that room. The hold let Wolf go after 11.4 s
+  (`exit-forced`), and the level change carried Xaier anyway (`arrival-overlapped`). The teleport-follow and the
+  arrival already share the spot in such rooms (the `kunitei` fix); J did not. Now `CoF_PartyWarp` falls back to
+  `CoF_PartySharedSpot`: the partner's spot, feet on their floor, unless the caller's hull meets the world there or
+  no floor is within 64 units (a ladder); the log line gets ` shared=1`. Engine `3578c354`; harness test (launcher
+  `7e450f9`, `crowded` knob: shared spot, crouched partner, ladder refusal); `test_enhanced_party`,
+  `test_enhanced_respawn_spot`, `test_story_run_report`, `test_warp_bind` OK. Build: `tools/build_enhanced.cmd` →
+  `xash.dll` `643BFC42…`, no warnings (`evidence/warp-20261020/build.log`). **Not packaged; no version bump yet.**
+- Seen, not changed: Xaier pressed Enter 9 times in the intro, and every second press cancels the skip (Enter does
+  not autorepeat in game, so they were real presses). Xaier typed `kick all` in the console: stock Xash allows the
+  console in any game with more than one slot (`cl_parse.c`, "allow console in multiplayer games"), so the
+  release's "no console" holds only for single-slot games, and co-op always has two or more. The log's banner
+  still reads `1ab3793e-dirty, tester-package` (waf's configure-time stamp). Wolf's 31 `dodgeforward` in 3 s
+  during the chase is the dodge key. Missing retail sounds as before.
+
 ## Release 1.0 (2026-10-20)
 
 - The user: "make me the public facing version that I'm going to send out to people. Get rid of all the admin stuff,
