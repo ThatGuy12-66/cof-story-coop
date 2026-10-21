@@ -68,7 +68,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.1.6")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.1.7")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:

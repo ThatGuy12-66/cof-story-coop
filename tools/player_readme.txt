@@ -1,6 +1,17 @@
-Cry of Fear Co-op 1.1.6
+Cry of Fear Co-op 1.1.7
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.7
+- Level changes are faster for players who join. After a level change the host's
+  game sent each joining player the new level's setup a small piece at a time,
+  waiting for an answer after every piece; it now sends ten pieces at a time. The
+  farther apart you live, the more you notice it. Loading the level itself takes
+  as long as before.
+- Your microphone stays open through level changes instead of being closed and
+  opened again each time.
+- 1.1 to 1.1.7 can play together. The faster level changes are in the host's game,
+  so the host should update.
 
 WHAT'S NEW IN 1.1.6
 - Your hands no longer disappear after a door into the next level. The door hides
