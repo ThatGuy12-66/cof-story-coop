@@ -1582,6 +1582,28 @@ void NET_SendPacket( netsrc_t sock, size_t length, const void *data, netadr_t to
 
 /*
 ====================
+NET_RaiseSocketBuffer
+
+CoF story co-op: give the socket a queue of at least NET_SOCKET_BUFFER bytes. A burst of split packets waits
+there until the next frame reads it; Windows 7 gave a UDP socket 8 KB, Windows 11 gives 64 KB.
+====================
+*/
+#define NET_SOCKET_BUFFER ( 256 * 1024 )
+static void NET_RaiseSocketBuffer( int net_socket, int option, const char *name, int port )
+{
+	int size = 0;
+	WSAsize_t len = sizeof( size );
+
+	if( !NET_IsSocketError( getsockopt( net_socket, SOL_SOCKET, option, (char *)&size, &len )) && size >= NET_SOCKET_BUFFER )
+		return;
+
+	size = NET_SOCKET_BUFFER;
+	if( NET_IsSocketError( setsockopt( net_socket, SOL_SOCKET, option, (const char *)&size, sizeof( size ))))
+		Con_DPrintf( S_WARN "%s: port: %d setsockopt %s: %s\n", __func__, port, name, NET_ErrorString( ));
+}
+
+/*
+====================
 NET_IPSocket
 ====================
 */
@@ -1619,6 +1641,10 @@ static int NET_IPSocket( const char *net_iface, int port, int family )
 	{
 		Con_DPrintf( S_WARN "%s: port: %d setsockopt SO_BROADCAST: %s\n", __func__, port, NET_ErrorString( ));
 	}
+
+	// CoF story co-op: a client signing on gets its fragments in bursts of split packets (sv_cof_signon.h)
+	NET_RaiseSocketBuffer( net_socket, SO_RCVBUF, "SO_RCVBUF", port );
+	NET_RaiseSocketBuffer( net_socket, SO_SNDBUF, "SO_SNDBUF", port );
 
 	if( !NET_MakeSocketReuseAddr( net_socket ))
 	{

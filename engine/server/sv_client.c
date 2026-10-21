@@ -32,6 +32,7 @@ GNU General Public License for more details.
 #include "sv_cof_scene.h"
 #include "sv_cof_inventory12.h"
 #include "sv_cof_rescue.h"
+#include "sv_cof_signon.h"
 
 // challenges are valid for two consecutive windows of this size (max lifetime ~10s).
 #define CHALLENGE_WINDOW_SECONDS 5
@@ -193,6 +194,15 @@ static int SV_GetFragmentSize( void *pcl, fragsize_t mode )
 			return cl_frag_size;
 		else
 			return 0; // original engine behaviour
+	}
+
+	// signing on: ten split pieces per round trip instead of one (sv_cof_signon.h)
+	if( FBitSet( cl->extensions, NET_EXT_SPLITSIZE ))
+	{
+		int signon = CoF_SignonFragmentSize( cl_frag_size, cl->state == cs_spawned, COF_SIGNON_WINDOW, FRAGMENT_MAX_SIZE - HEADER_BYTES );
+
+		if( signon > 0 )
+			return signon;
 	}
 
 	// get in-game fragmentation size

@@ -1133,6 +1133,14 @@ void Voice_Idle( double frametime )
 }
 
 /*
+CoF story co-op: a story level change signs the client on again without a disconnect (cof_story_changelevel), and
+each sign-on's svc_voiceinit came here: new Opus objects over the ones still in use (never freed) and the microphone
+closed and opened again (SDL_OpenAudioDevice in the middle of every level change). The same codec and quality for the
+same number of players keeps what is open.
+*/
+static int voice_made_for_maxclients;
+
+/*
 =========================
 Voice_Init
 
@@ -1141,6 +1149,9 @@ Initialize the voice subsystem
 */
 qboolean Voice_Init( const char *pszCodecName, int quality, qboolean preinit )
 {
+	const qboolean same = voice.initialized && voice.quality == quality && voice_made_for_maxclients == cl.maxclients
+		&& !Q_strcmp( voice.codec, pszCodecName ) && ( voice.goldsrc ? voice.gs_encoder != NULL : voice.encoder != NULL );
+
 	Q_strncpy( voice.codec, pszCodecName, sizeof( voice.codec ));
 	voice.quality = quality;
 
@@ -1149,6 +1160,19 @@ qboolean Voice_Init( const char *pszCodecName, int quality, qboolean preinit )
 
 	if( preinit )
 		return true;
+
+	if( same )
+	{
+		if( !voice.device_opened )
+			voice.device_opened = VoiceCapture_Init();
+		return true;
+	}
+
+	// another codec or another number of players: let go of what the last one made first
+	if( voice.encoder || voice.gs_encoder || voice.custom_mode )
+		Voice_Disconnect();
+
+	voice_made_for_maxclients = cl.maxclients;
 
 	if( Voice_IsGoldSrcMode( pszCodecName ))
 	{
