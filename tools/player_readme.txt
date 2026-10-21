@@ -1,12 +1,26 @@
-Cry of Fear Co-op 1.1.5
+Cry of Fear Co-op 1.1.6
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.6
+- Your hands no longer disappear after a door into the next level. The door hides
+  them while the screen is black, and the level change kept them hidden.
+- The flashlight (F) stays on through level changes, and one press of F always turns
+  it on or off (it used to take two after a level change). Everyone sees everyone's
+  flashlight again after a level change.
+- No more bouncing back and forth between two levels. Right after a level change,
+  the way back only takes you back through its door; if you arrive standing in it,
+  step out first.
+- A player who was going through a door when the level changed is no longer stuck
+  frozen and invisible in the next level.
+- 1.1 to 1.1.6 can play together. The fixes are in the host's game, so the host
+  should update.
 
 WHAT'S NEW IN 1.1.5
 - Fixes a crash for the player who joins: right after a level change, the joining
   player's game could crash if it reconnected while still loading the last level.
-- 1.1, 1.1.1, 1.1.2, 1.1.3, 1.1.4 and 1.1.5 can play together. The fix is in the
-  joining player's game, so players who join games should update.
+- 1.1 to 1.1.5 can play together. The fix is in the joining player's game, so
+  players who join games should update.
 
 WHAT'S NEW IN 1.1.4
 - Fixes the graphics on AMD cards: the sky was drawn over the level, so you saw a grey
