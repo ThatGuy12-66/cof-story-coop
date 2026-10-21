@@ -66,6 +66,17 @@ int main( void )
 	assert( !Pick( "models/null.mdl", 0, 0, 0, NULL ));
 	assert( !Pick( "models/null.mdl", 26, 0, 0, NULL ));
 	assert( CoF_WeaponModelSame( "police\\models\\weapons\\RIFLE\\p_rifle.mdl", "police/models/weapons/rifle/p_rifle.mdl" ));
+	/* 1.1.8 (E2-5): the pick's pose only while the player stands in it (deadflag, fuser3, crouched, walking,
+	 * waterlevel, a game animation under way) */
+	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 0 ));
+	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 1, 0 ));  /* wading */
+	assert( !CoF_WeaponModelStanding( 2, 0.0f, 0, 1, 0, 0 )); /* dead or downed */
+	assert( !CoF_WeaponModelStanding( 0, 2.0f, 0, 1, 0, 0 )); /* reviving, knocked down */
+	assert( !CoF_WeaponModelStanding( 0, 1.0f, 0, 1, 0, 0 )); /* tripped */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 1, 1, 0, 0 )); /* crouched */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 0, 0, 0 )); /* on a ladder */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 2, 0 )); /* swimming */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 1 )); /* the game's get-up, dodge... */
 	/* every model the engine may precache is a generated one, short enough for a precache slot;
 	 * empty entries (a retail right hand) are skipped by the caller */
 	for( i = 0; i < CoF_WeaponModelCount(); i++ )

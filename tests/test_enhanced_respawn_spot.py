@@ -23,6 +23,16 @@ class RespawnSpotTests(unittest.TestCase):
         self.assertLess(moved, body.index('SV_PlayerRunThink( clent, frametime, cl->timebase );'))
         self.assertLess(moved, body.index('svgame.dllFuncs.pfnPM_Move( svgame.pmove, true );'))
 
+    def test_a_solid_way_in_falls_back_to_another_then_beside_a_partner(self):
+        # 1.1.8 (E1 F9): the recorded spot can be solid by now; the start landmark stands in the exit back, so try
+        # every recorded way in, then beside a living partner, and still mark the player as set down in an exit
+        # (tests/engine/cof_party_harness.c has the behaviour).
+        body = body_of(SERVER / 'sv_cof_party.c', 'void SV_CoF_PartyRespawned(')
+        entries = body.index('SV_CoF_PartySectionMove( cl, cof_party_entry[j].origin, NULL, NULL )')
+        partner = body.index('SV_CoF_PartySectionMove( cl, partner->edict->v.origin, partner, NULL )')
+        self.assertLess(entries, partner)
+        self.assertLess(partner, body.index('SV_CoF_ArrivalLanded( cl );'))
+
     def test_the_way_in_is_recorded_at_arrivals_and_section_moves(self):
         arrive = body_of(SERVER / 'sv_cof_party.c', 'void SV_CoF_PartyTransitionArrive(')
         assert_has(self, 'CoF_PartyEntered( &svs.clients[i] );', arrive)

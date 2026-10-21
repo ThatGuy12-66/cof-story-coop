@@ -6,6 +6,11 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <math.h>
+#ifndef _WIN32
+#include <strings.h>
+#define _stricmp strcasecmp /* cc on Linux: the same compare MSVC names _stricmp */
+#endif
 typedef unsigned char byte;
 typedef int qboolean;
 typedef int string_t;
@@ -13,6 +18,7 @@ typedef float vec3_t[3];
 #define true 1
 #define false 0
 #define MAX_CLIENTS 4
+#define cs_zombie 1
 #define cs_spawned 4
 #define ss_active 2
 #define DEAD_NO 0
@@ -31,7 +37,7 @@ typedef float vec3_t[3];
 #define ClearBits(f,b) ((f)&=~(b))
 #define VectorClear(a) memset((a),0,sizeof(vec3_t))
 typedef struct edict_s edict_t;
-typedef struct { string_t classname; vec3_t velocity; float health,takedamage,nextthink,fuser3; int deadflag,flags,spawnflags,iuser1; } entvars_t;
+typedef struct { string_t classname,targetname; vec3_t origin,velocity; float health,takedamage,nextthink,fuser3; int deadflag,flags,spawnflags,iuser1,iuser2; struct edict_s *owner; } entvars_t;
 struct edict_s { int free,serialnumber; void *pvPrivateData; entvars_t v; };
 typedef struct { int last_cmd, last_word, count; } sizebuf_t;
 typedef struct { sizebuf_t message; } netchan_t;
@@ -43,8 +49,9 @@ static struct { edict_t *edicts; int numEntities; struct { void (*pfnClientComma
 static edict_t entities[16];
 static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[MAX_CLIENTS][0x2400];
-static const char *strings[] = { "", "player", "trigger_camera", "cof_telescope", "info_target", "cof_mdlcutscene" };
-static byte mdl_private[0x400];
+static const char *strings[] = { "", "player", "trigger_camera", "cof_telescope", "info_target", "cof_mdlcutscene", "camera_model",
+	"cof_clothesmenu", "clothescamera" };
+static byte mdl_private[0x400], entity_private[16][0x400];
 #define BASE 0x10000000u
 static char log_text[16384];
 static size_t log_length;
@@ -52,6 +59,10 @@ static int gate, fades, commands, sender_during;
 static char last_command[64];
 static edict_t *sender;
 
+/* A merged map's sections stacked by height: section 1 from z 1000 up (merged), else not merged (-1). */
+static int merged;
+static int SV_CoF_PointSection( const vec3_t origin ) { return merged ? origin[2] >= 1000.0f : -1; }
+static int SV_CoF_PlayerSection( const edict_t *ent ) { return SV_CoF_PointSection( ent->v.origin ); }
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
 static uintptr_t SV_CoF_StoryBase( void ) { return gate ? BASE : 0; }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= entities && e < entities + 16 && !e->free; }
@@ -84,6 +95,7 @@ static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *t
 	snprintf( told[cl - clients], sizeof( told[0] ), "%s", text ); told_count++; return true;
 }
 static void SV_CoF_CommandSender( edict_t *e ) { sender = e; }
+static edict_t *command_sender;
 static void SV_CoF_RetailGameCommand( sv_client_t *cl ) { svgame.dllFuncs.pfnClientCommand( cl->edict ); }
 static void Con_Printf( const char *fmt, ... )
 {
@@ -97,7 +109,8 @@ static void Con_Printf( const char *fmt, ... )
 
 #include "scene_under_test.c"
 
-enum { CAM = 9, TELESCOPE = 10, MDL = 11 };
+enum { CAM = 9, TELESCOPE = 10, MDL = 11, MENU = 13 };
+static int wardrobe_closes;
 
 /* The game's telescopecancel: if the sender's handle names a telescope that is
  * on, its Use switches it off for the sender and clears the handle. */
@@ -107,6 +120,9 @@ static void game_command( edict_t *player )
 	cof_scene_handle_t h;
 	commands++;
 	sender_during = sender == player;
+	command_sender = sender;
+	/* closeclothes: the wardrobe's camera off (Use OFF 666) */
+	if( !strcmp( last_command, "closeclothes" ) && wardrobe_closes ) entities[CAM].v.iuser1 = 0;
 	memcpy( &h, pv + COF_SCENE_TELESCOPE, sizeof( h ));
 	if( !strcmp( last_command, "telescopecancel" ) && h.edict && h.edict->v.health != 0 )
 	{
@@ -122,7 +138,9 @@ static void setup( void )
 	memset( entities, 0, sizeof( entities )); memset( clients, 0, sizeof( clients ));
 	memset( private_data, 0, sizeof( private_data ));
 	memset( log_text, 0, sizeof( log_text )); log_length = 0;
-	gate = 1; fades = commands = sender_during = 0; sender = NULL; last_command[0] = 0;
+	gate = 1; fades = commands = sender_during = 0; sender = command_sender = NULL; last_command[0] = 0; merged = 0; wardrobe_closes = 1;
+	memset( entity_private, 0, sizeof( entity_private ));
+	for( i = 3; i < 16; i++ ) entities[i].pvPrivateData = entity_private[i];
 	sv.state = ss_active; sv.time = 100.0; svs.maxclients = 2; svs.spawncount = 1; svs.clients = clients;
 	memset( told, 0, sizeof( told )); told_count = 0; skip_speed.value = 10; argv0 = ""; sv_fps_value = 0;
 	svgame.edicts = entities; svgame.numEntities = 16; svgame.dllFuncs.pfnClientCommand = game_command;
@@ -155,6 +173,27 @@ static void in_camera( int slot )
 	clients[slot].pViewEntity = &entities[CAM];
 	e->v.flags |= FL_FROZEN | FL_NOTARGET; e->v.takedamage = DAMAGE_NO;
 	memcpy( private_data[slot] + COF_SCENE_CAMERA, &h, sizeof( h ));
+}
+/* 1.1.8: the c_start wardrobe: cof_clothesmenu MENU turns on trigger_camera CAM 'clothescamera' (sf 1108) for its user. */
+static void wardrobe( int user_slot )
+{
+	string_t name = 8;
+	cof_scene_handle_t h;
+	h.edict = clients[user_slot].edict; h.serial = h.edict->serialnumber;
+	entities[MENU].v.classname = 7; memcpy( entity_private[MENU] + COF_SCENE_CLOTHES_CAMERA, &name, sizeof( name ));
+	entities[CAM].v.targetname = 8; entities[CAM].v.spawnflags = 1108;
+	memcpy( entity_private[CAM] + COF_SCENE_CAMERA_USER, &h, sizeof( h ));
+}
+/* 1.1.8: a running model cutscene at x 300 (MDL) and the camera models it gave the host (12) and the guest (14). */
+static void model_scene( edict_t *owner )
+{
+	cof_scene_handle_t cam;
+	model_cutscene( 1 ); entities[MDL].v.spawnflags = 1 | 2 | 64; entities[MDL].v.owner = owner; entities[MDL].v.origin[0] = 300;
+	entities[12].v.classname = entities[14].v.classname = 6; entities[12].v.origin[0] = entities[14].v.origin[0] = 300;
+	entities[12].v.owner = &entities[1]; entities[14].v.owner = &entities[2];
+	entities[1].v.flags |= FL_FROZEN | FL_NOTARGET; entities[2].v.flags |= FL_FROZEN | FL_NOTARGET;
+	cam.edict = &entities[12]; cam.serial = 0; memcpy( private_data[0] + COF_SCENE_CAMERA_MODEL, &cam, sizeof( cam ));
+	cam.edict = &entities[14]; memcpy( private_data[1] + COF_SCENE_CAMERA_MODEL, &cam, sizeof( cam ));
 }
 static int logged( const char *s ) { int n = 0; const char *at = log_text; while(( at = strstr( at, s ))) { n++; at++; } return n; }
 static qboolean skip( int slot ) { argv0 = "cof_skip"; return SV_CoF_SceneClientCommand( &clients[slot] ); }
@@ -299,6 +338,113 @@ int main( void )
 	setup(); gate = 0; in_camera( 0 ); in_camera( 1 ); assert( !skip( 0 ) && steps( 1 ) == 1 );
 	setup(); in_camera( 0 ); in_camera( 1 ); clients[1].flags = FCL_FAKECLIENT; assert( skip( 1 ) && !told_count && steps( 1 ) == 1 );
 	setup(); argv0 = "cof_warp"; assert( !SV_CoF_SceneClientCommand( &clients[0] ));
+
+	/* 1.1.8 (K1): the wardrobe's camera views and freezes everyone, but its menu is its user's alone: the partner is
+	 * let go at once (health HUD back), never held again, and not "watching" with the user. */
+	{
+		int hud = 8 | 1;
+		setup(); wardrobe( 0 ); in_camera( 0 ); in_camera( 1 );
+		memcpy( private_data[1] + COF_SCENE_HIDEHUD, &hud, sizeof( hud ));
+		SV_CoF_SceneFrame();
+		assert( clients[0].pViewEntity == &entities[CAM] && ( host->v.flags & FL_FROZEN ));
+		assert( !clients[1].pViewEntity && !( guest->v.flags & ( FL_FROZEN | FL_NOTARGET )) && guest->v.takedamage == DAMAGE_AIM );
+		memcpy( &hud, private_data[1] + COF_SCENE_HIDEHUD, sizeof( hud )); assert( hud == 1 );
+		assert( logged( "phase=wardrobe-camera camera=9 menu=13" ) == 1 && logged( "camera-released userid=101 camera=9 reason=wardrobe" ) == 1 );
+		assert( !SV_CoF_SceneWatching( 100, 101 ) && !commands );
+		/* a respawn re-attached to it is let go again, not held */
+		clients[1].pViewEntity = &entities[CAM]; SV_CoF_SceneFrame();
+		assert( !clients[1].pViewEntity && !( guest->v.flags & FL_FROZEN ) && !logged( "camera-held" ) && logged( "reason=wardrobe" ) == 2 );
+		/* the user left with the menu open: closed by the game's own closeclothes, sent as the partner */
+		clients[0].state = cs_zombie; SV_CoF_SceneFrame();
+		assert( commands == 1 && !strcmp( last_command, "closeclothes" ) && command_sender == guest && !sender );
+		assert( logged( "wardrobe-closed camera=9 sender=101 reason=user-gone" ) == 1 && !entities[CAM].v.iuser1 );
+		SV_CoF_SceneFrame(); assert( commands == 1 );
+	}
+	/* the user died in it: closed as the user; a camera the game left running is closed again only 5 s later */
+	setup(); wardrobe( 1 ); in_camera( 0 ); in_camera( 1 ); guest->v.health = 0; wardrobe_closes = 0;
+	SV_CoF_SceneFrame(); assert( commands == 1 && command_sender == guest && logged( "sender=101 reason=user-dead" ) == 1 );
+	sv.time += 1.0; SV_CoF_SceneFrame(); assert( commands == 1 );
+	sv.time += 5.0; SV_CoF_SceneFrame(); assert( commands == 2 );
+	/* the user still there: nothing closed, the partner let go; and the user's partner was never watching with them */
+	setup(); wardrobe( 1 ); in_camera( 0 ); in_camera( 1 ); SV_CoF_SceneFrame();
+	assert( !commands && clients[1].pViewEntity == &entities[CAM] && !clients[0].pViewEntity );
+	entities[CAM].v.iuser1 = 0; clients[1].pViewEntity = NULL; guest->v.flags = 0; assert( !SV_CoF_SceneWatching( 100, 101 ));
+	/* a camera no wardrobe names stays everyone's */
+	setup(); entities[MENU].v.classname = 7; entities[CAM].v.targetname = 8; in_camera( 0 ); in_camera( 1 ); SV_CoF_SceneFrame();
+	assert( clients[0].pViewEntity && clients[1].pViewEntity && !log_length );
+
+	/* 1.1.8 (K4): a merged map. A camera of section 0 holds nobody in section 1 (another original level). */
+	{
+		int hud = 8 | 16 | 1, bars = 1;
+		setup(); merged = 1; guest->v.origin[2] = 2000; entities[CAM].v.spawnflags = 116 | 32; entities[CAM].v.iuser2 = 1;
+		in_camera( 0 ); in_camera( 1 );
+		memcpy( private_data[1] + COF_SCENE_HIDEHUD, &hud, sizeof( hud )); memcpy( private_data[1] + COF_SCENE_BARS, &bars, sizeof( bars ));
+		SV_CoF_SceneFrame();
+		assert( clients[0].pViewEntity == &entities[CAM] && !clients[1].pViewEntity && !( guest->v.flags & FL_FROZEN ));
+		memcpy( &hud, private_data[1] + COF_SCENE_HIDEHUD, sizeof( hud )); memcpy( &bars, private_data[1] + COF_SCENE_BARS, sizeof( bars ));
+		assert( hud == 1 && bars == 0 && logged( "camera-released userid=101 camera=9 reason=section" ) == 1 );
+		assert( !SV_CoF_SceneWatching( 100, 101 ));
+		/* moved to section 1 while it ran: let go, and not taken along by its end */
+		setup(); merged = 1; in_camera( 0 ); in_camera( 1 ); SV_CoF_SceneFrame(); guest->v.origin[2] = 2000; SV_CoF_SceneFrame();
+		assert( !clients[1].pViewEntity && logged( "reason=section" ) == 1 );
+		entities[CAM].v.iuser1 = 0; clients[0].pViewEntity = NULL; host->v.flags = 0; assert( !SV_CoF_SceneWatching( 100, 101 ));
+		/* the same section: everyone watches */
+		setup(); merged = 1; guest->v.origin[2] = 500; in_camera( 0 ); in_camera( 1 ); SV_CoF_SceneFrame();
+		assert( clients[1].pViewEntity && !log_length && SV_CoF_SceneWatching( 100, 101 ));
+	}
+	/* ...nor does a model cutscene of section 0: the guest's camera model goes, control and HUD come back */
+	{
+		uint32_t raw = 0x1234; int hud = 8 | 1 | 16;
+		setup(); merged = 1; model_scene( host ); guest->v.origin[2] = 2000;
+		memcpy( private_data[1] + COF_SCENE_DEATH_SCENE, &raw, 4 ); memcpy( private_data[1] + COF_SCENE_HIDEHUD, &hud, 4 );
+		SV_CoF_SceneFrame();
+		memcpy( &raw, private_data[1] + COF_SCENE_DEATH_SCENE, 4 ); memcpy( &hud, private_data[1] + COF_SCENE_HIDEHUD, 4 );
+		memcpy( &h, private_data[1] + COF_SCENE_CAMERA_MODEL, sizeof( h ));
+		assert( !raw && !h.edict && ( entities[14].v.flags & FL_KILLME ) && !( guest->v.flags & ( FL_FROZEN | FL_NOTARGET )) && hud == 0 );
+		memcpy( &h, private_data[0] + COF_SCENE_CAMERA_MODEL, sizeof( h ));
+		assert( h.edict == &entities[12] && !( entities[12].v.flags & FL_KILLME ) && ( host->v.flags & FL_FROZEN ));
+		assert( logged( "cutscene-released userid=101 cutscene=11 reason=section" ) == 1 );
+		SV_CoF_SceneFrame(); assert( logged( "cutscene-released" ) == 1 );
+		/* never its owner, whom the cutscene needs, wherever they are */
+		setup(); merged = 1; model_scene( guest ); guest->v.origin[2] = 2000; SV_CoF_SceneFrame();
+		assert(( guest->v.flags & FL_FROZEN ) && !( entities[14].v.flags & FL_KILLME ) && !log_length );
+		/* the same section, or not merged: left alone */
+		setup(); merged = 1; model_scene( host ); SV_CoF_SceneFrame(); assert(( guest->v.flags & FL_FROZEN ) && !log_length );
+		setup(); model_scene( host ); guest->v.origin[2] = 2000; SV_CoF_SceneFrame(); assert(( guest->v.flags & FL_FROZEN ) && !log_length );
+	}
+	/* a late joiner of section 1 is not kept in the black wait for a model cutscene of section 0 */
+	setup(); merged = 1; model_cutscene( 1 ); guest->v.origin[2] = 2000; private_data[1][COF_SCENE_CUTSCENE_WAIT] = 1; SV_CoF_SceneFrame();
+	assert( logged( "cutscene-wait-released userid=101" ) == 1 );
+	setup(); merged = 1; model_cutscene( 1 ); private_data[1][COF_SCENE_CUTSCENE_WAIT] = 1; SV_CoF_SceneFrame(); assert( !log_length );
+
+	/* 1.1.8 (M3 finding 2a): frozen in one running model cutscene is watching together (each through their own
+	 * camera model); not a partner left free, not a ladder's model, not once it is over. */
+	setup(); model_scene( host ); assert( SV_CoF_SceneWatching( 100, 101 ) && SV_CoF_SceneWatching( 101, 100 ));
+	guest->v.flags &= ~FL_FROZEN; assert( !SV_CoF_SceneWatching( 100, 101 ));
+	guest->v.flags |= FL_FROZEN; entities[14].v.origin[0] = 900; assert( !SV_CoF_SceneWatching( 100, 101 ));
+	entities[14].v.origin[0] = 300; model_cutscene( 0 ); assert( !SV_CoF_SceneWatching( 100, 101 ));
+
+	/* 1.1.8 (M1 finding 5): both watched one camera to its end: still together for 2 s, for the scene's closing
+	 * teleport that fires as the camera ends. */
+	setup(); in_camera( 0 ); in_camera( 1 ); SV_CoF_SceneFrame();
+	entities[CAM].v.iuser1 = 0; clients[0].pViewEntity = clients[1].pViewEntity = NULL; host->v.flags = guest->v.flags = 0;
+	sv.time += 0.05; SV_CoF_SceneFrame(); assert( SV_CoF_SceneWatching( 100, 101 ) && SV_CoF_SceneWatching( 101, 100 ));
+	sv.time += 1.9; assert( SV_CoF_SceneWatching( 100, 101 ));
+	sv.time += 0.2; assert( !SV_CoF_SceneWatching( 100, 101 ));
+	/* not after a level change (its time starts again): neither before nor after the first frame there */
+	setup(); in_camera( 0 ); in_camera( 1 ); sv.time = 300.0; SV_CoF_SceneFrame();
+	entities[CAM].v.iuser1 = 0; clients[0].pViewEntity = clients[1].pViewEntity = NULL; host->v.flags = guest->v.flags = 0;
+	svs.spawncount++; sv.time = 301.0; assert( !SV_CoF_SceneWatching( 100, 101 ));
+	SV_CoF_SceneFrame(); assert( !SV_CoF_SceneWatching( 100, 101 ));
+	/* not while it still runs (one left it); not someone new in that slot; not two cameras */
+	setup(); in_camera( 0 ); in_camera( 1 ); SV_CoF_SceneFrame(); clients[1].pViewEntity = NULL; guest->v.flags = 0;
+	assert( !SV_CoF_SceneWatching( 100, 101 ));
+	entities[CAM].v.iuser1 = 0; clients[0].pViewEntity = NULL; host->v.flags = 0; assert( SV_CoF_SceneWatching( 100, 101 ));
+	clients[1].userid = 102; assert( !SV_CoF_SceneWatching( 100, 102 ));
+	setup(); in_camera( 0 ); SV_CoF_SceneFrame(); entities[12].v.classname = 2; entities[12].v.iuser1 = 1; clients[1].pViewEntity = &entities[12];
+	guest->v.flags |= FL_FROZEN | FL_NOTARGET; guest->v.takedamage = DAMAGE_NO; SV_CoF_SceneFrame();
+	entities[CAM].v.iuser1 = entities[12].v.iuser1 = 0; clients[0].pViewEntity = clients[1].pViewEntity = NULL;
+	assert( !SV_CoF_SceneWatching( 100, 101 ));
 
 	puts( "scene glue scenarios passed" );
 	return 0;

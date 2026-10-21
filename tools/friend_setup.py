@@ -24,7 +24,7 @@ from tools import coop_play as play
 from tools import make_inventory12_art as art
 from tools import prepare_coop_weapons as weapons
 from tools.map_merge import groups as merge_groups
-from tools.prepare_simon_models import build_models, costume_files, validate_model
+from tools.prepare_simon_models import COSTUMES, build_models, costume_files, validate_model
 
 STOCK_DLL_SHA = "0036b91c01e92ed205513f52563053a55a66a32d257efb5f476b8f1f3dde0e63"
 EXCLUDED_DIRS = {"save", "saves", "logs", "screenshots", "downloads", "download", "cof-enhanced", "cof-enhanced-backup", "experiment-evidence", ".git", "__pycache__"}
@@ -45,6 +45,8 @@ ENTITY_LIMIT = 4096   # liblist.gam's commandargs "-num_edicts 4096": the limit 
 # The name in the first config.cfg, before anyone has typed one in the app.
 DEFAULT_NAME = "Player"
 SETUP_LOG = "cof-story-setup.log"   # every line the setup and update windows showed
+INCOMPLETE = "SETUP-INCOMPLETE.txt"   # in a copy whose setup has not finished (removed at the end of setup)
+KEPT_LOGS = 20   # session logs kept in story-logs
 # Each step's share of the bar: about its share of the time (the 1.0 install: copy 93 s, engine 13 s, models 13 s,
 # art under a second, story maps 156 s).
 SETUP_STEPS = (("Checking your game", .01), ("Copying game files", .33), ("Installing the co-op engine", .05),
@@ -399,6 +401,64 @@ def default_controls() -> str:
     return "\n".join(f'bind "{key}" "{value}"' for key, value in binds.items()) + "\n"
 
 
+# 1.1.8 (L6): the co-op keys of default_controls, also in the game's default key list (Options > Keybinds > Use
+# defaults binds kb_def.lst, which had none of them, so J, the way out of every strand, was lost) and in its list of
+# actions (kb_act.lst: the Keybinds menu shows and rebinds only those).
+COOP_KEYS = (("j", "cof_warp"), ("h", "cof_companion_order"), ("ENTER", "cof_skip"), ("KP_ENTER", "cof_skip"))
+COOP_ACTIONS = (("cof_warp", "Join your partner (co-op)"), ("cof_companion_order", "AI companions: wait or follow"),
+                ("cof_skip", "Skip a cutscene for everyone"))
+_KEY_LIST_TOKEN = r'(?:"[^"\r\n]*"|[^\s"]+)'
+_KEY_LIST_LINE = re.compile(rf'\s*(?://.*)?|\s*({_KEY_LIST_TOKEN})\s+({_KEY_LIST_TOKEN})\s*(?://.*)?')
+
+
+def _add_key_list_lines(path: Path, pairs, taken) -> int:
+    """Appends each "first" "second" pair of pairs whose first token (folded) is not in taken(rows) to a key list
+    of the known format (every line two tokens, blank or a comment); another format is left alone. The lines in
+    the file stay as they are. Returns the lines added, or -1 for a file of another format."""
+    data = path.read_bytes()
+    text = data.decode("latin-1")
+    rows = []
+    for line in text.splitlines():
+        match = _KEY_LIST_LINE.fullmatch(line)
+        if match is None:
+            return -1
+        if match[1]:
+            rows.append((match[1].strip('"').casefold(), match[2].strip('"').casefold()))
+    used = taken(rows)
+    added = [(first, second) for first, second in pairs if first.casefold() not in used]
+    if not added:
+        return 0
+    newline = "\r\n" if "\r\n" in text else "\n"
+    tail = "" if not text or text.endswith(("\n", "\r")) else newline
+    reject_links(path)
+    with path.open("ab") as stream:   # appended: the file's own lines are never rewritten
+        stream.write((tail + "".join(f'"{first}"\t\t"{second}"{newline}' for first, second in added)).encode("latin-1"))
+    return len(added)
+
+
+def add_coop_keys(root: Path, steps=None) -> None:
+    """J, H and Enter in the copy's default key list and the co-op commands in its list of actions (setup and
+    update; the files come from the game or the engine payload, and an update may have put the plain ones back).
+    A key the list already gives another command keeps it; the player's own binds (config.cfg) are not touched."""
+    steps = steps or Steps(())
+    shell = Path(root) / "cryoffear/gfx/shell"
+    for name, pairs, taken in (
+            ("kb_def.lst", COOP_KEYS, lambda rows: {key for key, _ in rows}),
+            ("kb_act.lst", COOP_ACTIONS, lambda rows: {command for command, _ in rows})):
+        path = shell / name
+        try:
+            if not path.is_file():
+                continue
+            added = _add_key_list_lines(path, pairs, taken)
+        except (OSError, ValueError) as error:
+            steps.note(f"The co-op keys could not be added to gfx/shell/{name}: {error}")   # never stops setup
+            continue
+        if added < 0:
+            steps.note(f"gfx/shell/{name} is not in the usual format; the co-op keys were not added to it")
+        elif added:
+            steps.note(f"Added the co-op keys to gfx/shell/{name} (Options > Keybinds)")
+
+
 def keep_previous_log(root: Path, name: str) -> Path | None:
     """The engine opens -log files with "w+": move the last one into story-logs first."""
     log = root / name
@@ -415,6 +475,14 @@ def keep_previous_log(root: Path, name: str) -> Path | None:
         number += 1
         kept = archive / f"{stem}-{stamp}-{number}.log"
     log.replace(kept)
+    # 1.1.8 (L13): the newest KEPT_LOGS only (with the story trace on, one session can write tens of MB)
+    try:
+        old = sorted((path for path in archive.glob(f"{stem}-*.log") if path.is_file()),
+                     key=lambda path: (path.stat().st_mtime, path.name))
+        for path in old[:-KEPT_LOGS]:
+            path.unlink()
+    except OSError:
+        pass   # a log that cannot go now goes next time; it never stops a game from starting
     return kept
 
 
@@ -493,9 +561,12 @@ def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path
     target = root / APP_EXE
     if Path(exe).resolve() != target.resolve():
         shutil.copyfile(exe, target)
+    add_coop_keys(root, steps)
     state = {"schema": 2, "version": manifest["version"], "build": manifest["build"],
              "xash_sha256": manifest["xash_sha256"], "models": models, "merged_maps": merged or {},
              "source_game": source_game, "campaign_verified": False}
+    if (root / "vgui.dll").is_file():   # 1.1.8 (L1): validate_runtime checks it with xash.dll
+        state["vgui_sha256"] = digest_file(root / "vgui.dll")
     (root / INSTALLED).write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     if shortcuts and not write_shortcuts(root):
         steps.done(f"Done, but the desktop shortcut could not be made: start {APP_EXE} in {root}.")
@@ -503,25 +574,93 @@ def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path
     steps.done("Done. Use the Cry of Fear Co-op shortcut on your desktop or in the Start menu.")
 
 
-def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress=lambda *_: None, shortcuts=True) -> Path:
-    """A new copy. progress(status, fraction, line) as it goes (Steps); a setup that stops says why in its log."""
+def model_sources() -> dict[str, str]:
+    """Every stock file the model generators read (under cryoffear) and its pinned SHA-256: the Simon, police and
+    weapon models and the costume textures."""
+    pinned = dict(weapons.SOURCES)
+    for folder, textures in COSTUMES.values():
+        for filename, expected in textures.values():
+            pinned[f"models/costumes/{folder}/{filename}"] = expected
+    return pinned
+
+
+def check_model_sources(source: Path, provided=frozenset()) -> None:
+    """1.1.8 (L5): the generators refuse anything but the stock bytes, and they run after the 5 GB copy; a modded
+    or damaged game is refused here, before it. provided: the payload's own paths (the copy gets those instead)."""
+    for rel, expected in model_sources().items():
+        if f"cryoffear/{rel}".casefold() in provided:
+            continue
+        item = Path(source) / "cryoffear" / rel
+        if not item.is_file() or digest_file(item) != expected:
+            raise ValueError(f"Your Cry of Fear files are modded or damaged (cryoffear/{rel} is not the original). In "
+                             "Steam, right-click Cry of Fear > Properties > Installed Files > Verify integrity of game "
+                             "files, then set up again.")
+
+
+def incomplete_copy(path: Path) -> bool:
+    """A folder an earlier setup of this app made and did not finish: our SETUP-INCOMPLETE.txt and our setup log in
+    it, no install record, and no link anywhere on the way to it."""
+    try:
+        root = Path(path).expanduser().absolute()
+        reject_links(root)
+        marker = root / INCOMPLETE
+        return (root.is_dir() and marker.is_file() and not marker.is_symlink() and (root / SETUP_LOG).is_file()
+                and not (root / SETUP_LOG).is_symlink() and not (root / INSTALLED).exists()
+                and marker.read_text(encoding="latin-1").startswith("Setup is incomplete."))
+    except (OSError, ValueError):
+        return False
+
+
+def remove_incomplete(path: Path, steps=None) -> list[str]:
+    """1.1.8 (L4): deletes the unfinished copy of an earlier setup (incomplete_copy only) so setup can use its folder
+    again. Links inside are removed, never followed; its two markers go last, so a delete that stops part way can
+    be retried. Returns the old setup log's lines."""
+    steps = steps or Steps(())
+    root = Path(path).expanduser().absolute()
+    if not incomplete_copy(root):
+        raise ValueError("Choose a new destination folder. Existing folders are never replaced.")
+    earlier = (root / SETUP_LOG).read_text(encoding="utf-8", errors="replace").splitlines()
+    steps.note(f"Deleting the unfinished copy an earlier setup left in {root}")
+    markers = {INCOMPLETE.casefold(), SETUP_LOG.casefold()}
+    for child in list(root.iterdir()):
+        if child.name.casefold() in markers:
+            continue
+        if child.is_dir() and not child.is_symlink() and not (hasattr(child, "is_junction") and child.is_junction()):
+            shutil.rmtree(child)
+        else:
+            child.unlink()   # a file, or a link itself (never what it points to)
+    (root / SETUP_LOG).unlink()
+    (root / INCOMPLETE).unlink()
+    root.rmdir()
+    return earlier
+
+
+def setup(source: Path, destination: Path, payload: Path, *, exe: Path, progress=lambda *_: None, shortcuts=True,
+          replace_incomplete: bool = False) -> Path:
+    """A new copy. progress(status, fraction, line) as it goes (Steps); a setup that stops says why in its log.
+    replace_incomplete: delete an unfinished copy of an earlier setup in destination first (incomplete_copy)."""
     steps = Steps(SETUP_STEPS, progress)
     try:
-        return make_copy(Path(source), Path(destination), Path(payload), exe, shortcuts, steps)
+        return make_copy(Path(source), Path(destination), Path(payload), exe, shortcuts, steps, replace_incomplete)
     except Exception as error:
         steps.note(f"Stopped: {error}")
         raise
 
 
-def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcuts: bool, steps: Steps) -> Path:
+def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcuts: bool, steps: Steps,
+              replace_incomplete: bool = False) -> Path:
     steps.start("Checking your game")
     source = validate_source(source)
+    if replace_incomplete and incomplete_copy(destination):
+        earlier = remove_incomplete(destination, steps)
+        steps.kept[:0] = earlier   # the new log starts with the stopped setup's lines, for a bug report
     destination = validate_destination(source, destination)
     manifest = inspect_payload(payload)
     steps.note(f"Cry of Fear Co-op {manifest['version']} (build {manifest['build']}): a copy of {source} in {destination}")
     plan = copy_plan(source)
     with zipfile.ZipFile(payload / PAYLOAD_ZIP) as archive:
         package_paths = {info.filename.casefold() for info in archive.infolist() if not info.is_dir()}
+    check_model_sources(source, package_paths)
     plan = [(relative, size) for relative, size in plan if relative.as_posix().casefold() not in package_paths]
     steps.note(f"{len(plan)} game files to copy, {size_text(sum(size for _, size in plan))}")
     ancestor = destination.parent
@@ -532,7 +671,8 @@ def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcu
         raise ValueError(f"The destination needs at least {needed / (1024 ** 3):.1f} GB free.")
     destination.mkdir(parents=True, exist_ok=False)
     steps.log_to(destination / SETUP_LOG)
-    (destination / "SETUP-INCOMPLETE.txt").write_text("Setup is incomplete. Choose a new folder to retry; no original game files were changed.\n")
+    (destination / INCOMPLETE).write_text("Setup is incomplete. Click Set up in the app again to delete this folder and "
+                                          "retry; no original game files were changed.\n")
     steps.start("Copying game files")
     copy_assets(source, destination, plan, steps)
     steps.start("Installing the co-op engine")
@@ -551,7 +691,7 @@ def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcu
     merged = make_merged_maps(destination, steps=steps)
     (destination / "cryoffear/config.cfg").write_text(default_controls() + f'name "{DEFAULT_NAME}"\nsensitivity 4\n', encoding="ascii")
     (destination / "steam_appid.txt").write_text("223710\n", encoding="ascii")
-    (destination / "SETUP-INCOMPLETE.txt").unlink()
+    (destination / INCOMPLETE).unlink()
     finish(destination, manifest, model_hashes, str(source), exe, shortcuts, steps, merged)
     return destination
 
@@ -597,6 +737,15 @@ def update_copy(root: Path, payload: Path, exe: Path, shortcuts: bool, steps: St
         raise ValueError("This folder is not a story co-op copy made by this app.")
     if game_is_running(root):
         raise ValueError("Close Cry of Fear first, then update.")
+    app = root / APP_EXE
+    if app.is_file() and Path(exe).resolve() != app.resolve():
+        # 1.1.8 (L14.12): finish replaces the copy's app last; while it runs, Windows refuses that, and the whole
+        # update would have to be done again
+        try:
+            with app.open("ab"):
+                pass
+        except OSError:
+            raise ValueError(f"Close the other Cry of Fear Co-op window (the app in {root}), then update.") from None
     manifest = inspect_payload(payload)
     steps.log_to(root / SETUP_LOG)
     steps.start("Installing the new engine")
@@ -623,6 +772,24 @@ def update_copy(root: Path, payload: Path, exe: Path, shortcuts: bool, steps: St
     return root
 
 
+class CopyMismatch(ValueError):
+    """validate_runtime: a file of the copy is not what its install record says. 1.1.8 (L1): the app then offers
+    Repair (update with its own payload, also at the same build); problem is the first sentence of the message."""
+
+    def __init__(self, problem: str):
+        self.problem = problem
+        super().__init__(f"{problem} Run the newest {APP_EXE} and click Update.")
+
+
+def entity_limit_set(root: Path) -> bool:
+    """gameinfo.txt has ensure_entity_limit's line: an update stopped after its installer step leaves it out."""
+    try:
+        lines = (Path(root) / "cryoffear/gameinfo.txt").read_text(encoding="latin-1").splitlines()
+    except OSError:
+        return False
+    return any(line.split()[:1] == ["max_edicts"] and line.split()[1:] == [str(ENTITY_LIMIT)] for line in lines)
+
+
 def validate_runtime(runtime: Path) -> Path:
     """A copy made by this app, with the engine and models it was set up with."""
     raw = Path(runtime).absolute()
@@ -631,9 +798,16 @@ def validate_runtime(runtime: Path) -> Path:
     if any(part.casefold() == "steamapps" for part in root.parts):
         raise ValueError("Use the separate game copy created by setup.")
     state = installed_state(root)
-    message = f"This game copy does not match its install. Run the newest {APP_EXE} and click Update."
+    message = "This game copy does not match its install."
     if not state or not (root / "xash.dll").is_file() or digest_file(root / "xash.dll") != state.get("xash_sha256"):
-        raise ValueError(message)
+        raise CopyMismatch(message)
+    # 1.1.8 (L1): vgui.dll is always installed with xash.dll (they share an interface every build changes); records
+    # from before 1.1.8 have no hash for it
+    if state.get("vgui_sha256") and (not (root / "vgui.dll").is_file()
+                                     or digest_file(root / "vgui.dll") != state["vgui_sha256"]):
+        raise CopyMismatch("The engine's vgui.dll is missing or changed. " + message)
+    if not entity_limit_set(root):
+        raise CopyMismatch("The game's entity limit (max_edicts in gameinfo.txt) is missing. " + message)
     for rel, expected in state.get("models", {}).items():
         path = PurePosixPath(rel)
         if path.is_absolute() or ".." in path.parts or "\\" in rel or ":" in rel:
@@ -641,7 +815,7 @@ def validate_runtime(runtime: Path) -> Path:
         model = root / "cryoffear" / rel
         reject_links(model)
         if not model.is_file() or digest_file(model) != expected:
-            raise ValueError("A generated Simon model is missing or changed. " + message)
+            raise CopyMismatch("A generated Simon model is missing or changed. " + message)
     for rel, expected in state.get("merged_maps", {}).items():
         path = PurePosixPath(rel)
         if path.is_absolute() or ".." in path.parts or "\\" in rel or ":" in rel or path.parts[:1] != ("maps",):
@@ -649,21 +823,44 @@ def validate_runtime(runtime: Path) -> Path:
         merged = root / "cryoffear" / rel
         reject_links(merged)
         if not merged.is_file() or digest_file(merged) != expected:
-            raise ValueError("A merged story map is missing or changed. " + message)
+            raise CopyMismatch("A merged story map is missing or changed. " + message)
     return root
 
 
-def game_is_running(runtime: Path) -> bool:
-    """A Cry of Fear process started from this copy (another copy's game does not count)."""
+GAME_PROCESSES = ("cof.exe", "coflaunchapp.exe")
+
+
+def game_process_named() -> bool:
+    """Any Cry of Fear process, from tasklist: it names processes but not their folders."""
+    tasklist = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/tasklist.exe"
+    result = subprocess.run([str(tasklist), "/FO", "CSV", "/NH"], capture_output=True, check=True, timeout=10,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    names = {line.split(",", 1)[0].strip().strip('"').casefold()
+             for line in result.stdout.decode("latin-1").splitlines() if line.strip()}
+    return any(name in names for name in GAME_PROCESSES)
+
+
+def game_is_running(runtime: Path, unknown: bool = False) -> bool:
+    """A Cry of Fear process started from this copy (another copy's game does not count).
+
+    1.1.8 (L3): when PowerShell fails or takes over 20 s (a broken WMI, a blocked PowerShell, a slow cold start),
+    tasklist answers instead, and any Cry of Fear process then counts; when that fails too, the answer is unknown
+    (the hosting window keeps a game it cannot see as running; Start, Join and Update go ahead)."""
     if os.name != "nt":
         return False
     shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
     command = ('Get-CimInstance Win32_Process -Filter "Name=\'cof.exe\' OR Name=\'CoFLaunchApp.exe\'" | '
                'Select-Object ProcessId,Name,ExecutablePath | ConvertTo-Json -Compress')
-    result = subprocess.run([str(shell), "-NoProfile", "-NonInteractive", "-Command", command],
-                            capture_output=True, text=True, check=True, timeout=20,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    rows = json.loads(result.stdout) if result.stdout.strip() else []
+    try:
+        result = subprocess.run([str(shell), "-NoProfile", "-NonInteractive", "-Command", command],
+                                capture_output=True, text=True, check=True, timeout=20,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        rows = json.loads(result.stdout) if result.stdout.strip() else []
+    except (OSError, ValueError, subprocess.SubprocessError):
+        try:
+            return game_process_named()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return unknown
     if isinstance(rows, dict):
         rows = [rows]
     prefix = (str(Path(runtime)) + os.sep).casefold()

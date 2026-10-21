@@ -62,7 +62,8 @@ typedef struct {
 } entvars_t;
 struct edict_s { int free, serialnumber; entvars_t v; };
 typedef struct { vec3_t viewangles; float forwardmove, sidemove, upmove; word buttons; byte msec; } usercmd_t;
-typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; double timebase; usercmd_t lastcmd; } sv_client_t;
+typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; double timebase; usercmd_t lastcmd; struct { int remote_address; } netchan; } sv_client_t;
+#define NET_IsLocalAddress( adr ) (( adr ) == 1 ) /* the listen server's own client: the host */
 typedef struct { qboolean startsolid, allsolid; float fraction; edict_t *ent; vec3_t endpos; struct { vec3_t normal; } plane; } trace_t;
 typedef struct { float value; const char *string; } convar_t;
 static struct { int state; double time, frametime; sv_client_t *current_client; char name[MAX_QPATH]; } sv;
@@ -371,6 +372,7 @@ static void setup( void )
 	SV_CoF_CompanionReset();
 	/* the host, alive, at the origin */
 	clients[0].state = cs_spawned; clients[0].userid = 1; clients[0].edict = &entities[1]; strcpy( clients[0].name, "Host" );
+	clients[0].netchan.remote_address = 1;
 	entities[1].v.classname = 1; entities[1].v.health = 100; entities[1].v.movetype = MOVETYPE_WALK; entities[1].v.view_ofs[2] = 28;
 	entities[2].free = 0; entities[2].v.health = 77; /* a stale object from the slot's last player */
 }
@@ -855,6 +857,20 @@ int main( void )
 	entities[4].v.origin[0] = 1936; frame( 0.05 );
 	assert( logged( "companion-cpr userid=201 leader=2" ) == 1 && !logged( "companion-cpr userid=200" ));
 	assert( strstr( told[1], "coming to help you up" ) && !told[0][0] );
+	/* 1.1.8 (E2-8): the guest's H orders only the bot looking after them; the host's, every bot */
+	entities[2].v.health = 100; entities[2].v.deadflag = DEAD_NO; frame( 0.05 ); frame( 0.05 );
+	assert( cof_companions[2].leader_userid == 1 && cof_companions[3].leader_userid == 2 );
+	argv0 = "cof_companion_order"; argc = 1;
+	assert( SV_CoF_CompanionClientCommand( &clients[1] ) && !strcmp( told[1], "Your companion waits here." ));
+	assert( !cof_companions[2].stay && cof_companions[3].stay );
+	assert( SV_CoF_CompanionClientCommand( &clients[1] ) && !strcmp( told[1], "Your companion follows you." ));
+	assert( !cof_companions[2].stay && !cof_companions[3].stay );
+	assert( SV_CoF_CompanionClientCommand( &clients[0] ) && !strcmp( told[0], "Your companions wait here." ));
+	assert( cof_companions[2].stay && cof_companions[3].stay );
+	/* the guest's H toggles theirs by their own: back to following */
+	assert( SV_CoF_CompanionClientCommand( &clients[1] ) && !strcmp( told[1], "Your companion follows you." ));
+	assert( cof_companions[2].stay && !cof_companions[3].stay );
+	argv0 = "";
 
 	/* Through a door after the host: the game takes them 600 units on in one frame, behind a wall;
 	 * the bot walks to where they left and comes out near where they arrived (not in front of them). */
@@ -874,6 +890,15 @@ int main( void )
 	entities[2].v.origin[0] = 60; SV_CoF_CompanionMoved( &clients[1] );
 	for( i = 0; i < 50; i++ ) { entities[2].v.origin[0] = 60; frame( 0.1 ); }
 	assert( !placed && !cof_companions[1].place_pending );
+	/* 1.1.8 (E2-7): one told to wait and carried along keeps waiting where it was carried, not at the old spot;
+	 * one following keeps following */
+	argv0 = "cof_companion_order"; argc = 1; assert( SV_CoF_CompanionClientCommand( &clients[0] )); argv0 = "";
+	assert( cof_companions[1].stay && cof_companions[1].stay_pos[0] == 60 );
+	entities[2].v.origin[0] = 4000; entities[2].v.origin[2] = 512; SV_CoF_CompanionMoved( &clients[1] );
+	assert( cof_companions[1].stay && cof_companions[1].stay_pos[0] == 4000 && cof_companions[1].stay_pos[2] == 512 );
+	cof_companions[1].stay = 0; cof_companions[1].stay_pos[0] = 1; entities[2].v.origin[0] = 70; SV_CoF_CompanionMoved( &clients[1] );
+	assert( !cof_companions[1].stay && cof_companions[1].stay_pos[0] == 1 );
+	entities[2].v.origin[2] = 0;
 	/* no spot out of the player's sight: asked again each frame, then (after 3 s) the least seen */
 	setup(); cvars[0].value = 1; settle(); place_ok = 0; entities[2].v.origin[0] = 3000; frame( 0.05 );
 	assert( !placed && !logged( "companion-teleport" ));

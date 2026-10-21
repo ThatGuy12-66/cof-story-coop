@@ -1,5 +1,6 @@
 """The tester app's entry decisions (tools/coop_app.py); the window itself is checked by --self-test."""
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,7 +69,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.1.7")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.1.8")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:
@@ -114,6 +115,226 @@ class ProgressPanelTests(unittest.TestCase):
         self.assertIsNotNone(self.app.panel)
         self.app.show_update(Path("copy"))
         self.assertIsNotNone(self.app.panel.box)
+
+
+def widgets(parent):
+    for child in parent.winfo_children():
+        yield child
+        yield from widgets(child)
+
+
+def texts(parent):
+    found = []
+    for widget in widgets(parent):
+        try:
+            found.append(str(widget.cget("text")))
+        except Exception:
+            pass
+    return found
+
+
+def button(parent, text):
+    return next(w for w in widgets(parent) if w.winfo_class() == "TButton" and w.cget("text") == text)
+
+
+class WindowTests(unittest.TestCase):
+    """The 1.1.8 fixes in the window (findings L1, L3, L4, L7, L11, L14)."""
+
+    def setUp(self):
+        import tkinter as tk
+        try:
+            self.window = tk.Tk()
+        except tk.TclError:
+            self.skipTest("no display for the window")
+        self.window.withdraw()
+        self.addCleanup(self.window.destroy)
+        self.temp = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.temp, ignore_errors=True))
+        self.app = app.App(self.window, Path("payload"), self.temp / "app.exe")
+        self.jobs = []
+        self.app.work = lambda job, done, failed=None: self.jobs.append((job, done, failed))
+        self.errors = []
+        self.app.error = self.errors.append
+        self.app.name = tk.StringVar(value="Bob")
+
+    def test_a_failing_handler_does_not_stop_the_others(self):
+        # L14.9: the re-arm was after the loop, so one exception lost every later result for good
+        seen = []
+        self.app.messages.put((lambda value: 1 / 0, None))
+        self.app.messages.put((seen.append, "next"))
+        self.app.pump()
+        self.assertEqual(seen, ["next"])
+        self.assertIsInstance(self.errors[0], ZeroDivisionError)
+
+    def test_a_failed_process_check_is_shown_not_swallowed(self):
+        # L3: guard did not catch SubprocessError, and the windowed app has no stderr: the button did nothing
+        def check():
+            raise subprocess.TimeoutExpired(["powershell"], 20)
+        self.app.guard(check)()
+        self.assertEqual(len(self.errors), 1)
+
+    def test_closing_during_setup_or_update_asks_first(self):
+        # L14.2: closing ends the job part way
+        from tkinter import messagebox
+        destroyed = []
+        self.app.window.destroy = lambda: destroyed.append(True)
+        for busy in ("setup", "update"):
+            self.app.busy = busy
+            with self.subTest(busy=busy), mock.patch.object(messagebox, "askokcancel", return_value=False) as ask:
+                self.app.close()
+                self.assertIn("part way", ask.call_args.args[1])
+            self.assertEqual(destroyed, [])
+        self.app.busy = None
+        with mock.patch.object(messagebox, "askokcancel") as ask:
+            self.app.close()
+        ask.assert_not_called()
+        self.assertEqual(destroyed, [True])
+
+    def copy(self, build=app.play.BUILD):
+        installed(self.temp / "copy", build)
+        (self.temp / "copy/cryoffear").mkdir(exist_ok=True)
+        self.app.root = self.temp / "copy"
+        return self.app.root
+
+    def test_start_checks_the_copy_off_the_ui_thread(self):
+        # L11: the check hashes about 0.6 GB and asks PowerShell; on the Tk thread the window froze
+        root = self.copy()
+        calls, started, stopped = [], [], []
+        with mock.patch.object(friend, "validate_runtime", side_effect=calls.append), \
+                mock.patch.object(friend, "game_is_running", return_value=False):
+            self.app.launch(["game"], "cfg\n", lambda: started.append(1), lambda: stopped.append(1))
+            self.assertEqual(calls, [])   # nothing yet on the UI thread
+            job, done, failed = self.jobs[0]
+            running = job()
+        self.assertEqual((calls, running), ([root], False))
+        self.app.launch(["game"], "cfg\n", lambda: started.append(2), lambda: stopped.append(2))
+        self.assertEqual((len(self.jobs), stopped), (1, [2]))   # one start at a time
+        with mock.patch.object(app, "start_game") as start:
+            done(False)
+        start.assert_called_once_with(root, ["game"])
+        self.assertEqual((root / "cryoffear" / app.play.SESSION_CFG).read_text(), "cfg\n")
+        self.assertEqual(started, [1])
+        self.app.launch(["game"], "cfg\n", lambda: started.append(3), lambda: stopped.append(3))
+        with mock.patch.object(app, "start_game") as start:
+            self.jobs[-1][1](True)   # already running
+        start.assert_not_called()
+        self.assertEqual((started, stopped[-1]), ([1], 3))
+        self.assertIn("already running", str(self.errors[-1]))
+
+    def test_the_start_screen_waits_for_the_check(self):
+        # L11 on the Start screen: Start is off while the copy is checked, then the game starts and the screen moves on
+        root = self.copy()
+        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
+            self.app.show_main(root)
+        self.app.show_start(solo=True)
+        start = button(self.app.body, "Start")
+        start.invoke()
+        self.assertEqual(str(start.cget("state")), "disabled")
+        self.assertIn("Checking your copy…", [str(w.cget("textvariable") and w.getvar(w.cget("textvariable")))
+                                              for w in widgets(self.app.body) if w.winfo_class() == "TLabel"])
+        self.jobs[-1][2](ValueError("Close it first."))   # the check failed: Start is back
+        self.assertEqual(str(start.cget("state")), "normal")
+        start.invoke()
+        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
+            self.jobs[-1][1](False)
+        self.assertIn("+map", game.call_args.args[1])
+        self.assertIn("Playing solo", texts(self.app.body))
+        self.assertTrue(app.play.load_settings(root)["first_launch_done"])
+
+    def test_a_copy_that_fails_its_check_is_offered_repair(self):
+        # L1: at the same build no Update was offered, and the only way out was a new setup
+        from tkinter import messagebox
+        self.copy()
+        mismatch = friend.CopyMismatch("A merged story map is missing or changed. This game copy does not match "
+                                       "its install.")
+        with mock.patch.object(messagebox, "askyesno", return_value=True) as ask, \
+                mock.patch.object(self.app, "show_update") as update:
+            self.app.launch(["game"], "cfg\n", lambda: None)
+            self.jobs[-1][2](mismatch)
+        self.assertIn("A merged story map is missing", ask.call_args.args[1])
+        self.assertNotIn("click Update", ask.call_args.args[1])
+        update.assert_called_once_with(self.app.root, auto=True, repair=True)
+        self.assertFalse(self.app.launching)
+        with mock.patch.object(messagebox, "askyesno", return_value=False), \
+                mock.patch.object(self.app, "show_update") as update:
+            self.app.offer_repair(mismatch)
+        update.assert_not_called()
+
+    def test_no_repair_without_a_payload_or_over_a_newer_copy(self):
+        from tkinter import messagebox
+        mismatch = friend.CopyMismatch("This game copy does not match its install.")
+        for payload, build in ((None, app.play.BUILD), (Path("payload"), app.play.BUILD + 1)):
+            self.app.payload = payload
+            self.copy(build)
+            with self.subTest(payload=payload, build=build), mock.patch.object(messagebox, "askyesno") as ask:
+                self.app.offer_repair(mismatch)
+            ask.assert_not_called()
+            self.assertIs(self.errors[-1], mismatch)
+
+    def test_the_repair_screen(self):
+        root = self.copy()
+        self.app.show_update(root, repair=True)
+        self.assertIn("Repair story co-op", texts(self.app.body))
+        button(self.app.body, "Repair").invoke()
+        self.assertEqual(self.app.busy, "update")
+        job, done, failed = self.jobs[-1]
+        with mock.patch.object(friend, "update", return_value=root) as update:
+            job()
+        self.assertEqual(update.call_args.args, (root, Path("payload")))
+        failed(ValueError("stopped"))
+        self.assertIsNone(self.app.busy)
+
+    def test_setup_offers_to_delete_an_unfinished_copy(self):
+        # L4: a stopped setup left its copy, and setup refused the folder from then on
+        from tkinter import messagebox
+        folder = self.temp / "CoF-Story-Coop"
+        folder.mkdir()
+        (folder / friend.INCOMPLETE).write_text("Setup is incomplete.\n")
+        (folder / friend.SETUP_LOG).write_text("log\n")
+        with mock.patch.object(app, "DEFAULT_COPY", folder):
+            self.app.show_setup()
+        self.jobs.clear()
+        with mock.patch.object(messagebox, "askyesno", return_value=False):
+            button(self.app.body, "Set up").invoke()
+        self.assertEqual(self.jobs, [])
+        with mock.patch.object(messagebox, "askyesno", return_value=True) as ask:
+            button(self.app.body, "Set up").invoke()
+        self.assertIn("unfinished copy", ask.call_args.args[1])
+        self.assertEqual(self.app.busy, "setup")
+        job, done, failed = self.jobs[-1]
+        with mock.patch.object(friend, "setup") as setup:
+            job()
+        self.assertIs(setup.call_args.kwargs["replace_incomplete"], True)
+        failed(RuntimeError("The engine could not be installed."))
+        self.assertIsNone(self.app.busy)
+        self.assertIn("delete the unfinished copy", self.app.panel.status.get())
+
+    def test_the_hosting_panel_names_the_firewall(self):
+        # L7: the first Host's Windows Firewall question can sit behind the borderless game
+        self.copy()
+        watch = app.play.HostWatch(27015, lan_only=False)
+        self.addCleanup(lambda: setattr(watch, "closed", True))
+        self.app.show_running(watch, solo=False)
+        self.assertTrue(any("Windows Firewall" in text for text in texts(self.app.body)))
+
+    def test_join_is_off_while_it_checks(self):
+        # L14.10: a second click started a second check and a second start
+        self.copy()
+        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
+            self.app.show_main(self.app.root)
+        self.app.show_join()
+        entry = next(w for w in widgets(self.app.body) if w.winfo_class() == "TEntry")
+        entry.insert(0, "203.0.113.7:27015")
+        join = button(self.app.body, "Join")
+        join.invoke()
+        self.assertEqual(str(join.cget("state")), "disabled")
+        job, ready, refused = self.jobs[-1]
+        with mock.patch.object(app.network, "query_info", return_value={"cofbuild": app.play.VERSION,
+                                                                       "cofmaps": "00000000"}):
+            with self.assertRaisesRegex(ValueError, "merged maps differ"):
+                job()   # L8: this copy has no merged maps, the host has others
+        refused(ValueError("The host's merged maps differ from yours."))
+        self.assertEqual(str(join.cget("state")), "normal")
 
 
 if __name__ == "__main__":

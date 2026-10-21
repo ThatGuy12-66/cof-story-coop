@@ -18,6 +18,12 @@ class UseProbeTests(unittest.TestCase):
         })
         self.assertIn('use-probe scenarios passed', out)
 
+    def test_off_unless_its_own_cvar_says_so(self):
+        """1.1.8 (E2-10, L): it went with cof_story_trace, which the app writes 1 for every session."""
+        source = (ENGINE_SERVER / 'sv_cof_useprobe.c').read_text()
+        self.assertIn('Cvar_Get( "cof_use_probe", "0", 0,', source)
+        self.assertNotIn('cof_story_trace" )', source)
+
     def test_story_frame_probes_before_the_party_moves_anyone(self):
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         frame = body(story, 'void SV_CoF_StoryFrame(')

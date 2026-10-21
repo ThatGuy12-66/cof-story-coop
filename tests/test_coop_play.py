@@ -112,7 +112,8 @@ class StartTests(unittest.TestCase):
                 play.clean_name(bad)
         self.assertEqual(play.clean_password(''), '')
         self.assertEqual(play.clean_port('27020'), 27020)
-        for bad in ('80', '70000', 'abc'):
+        self.assertEqual(play.clean_port('65534'), 65534)
+        for bad in ('80', '70000', 'abc', '65535'):   # 1.1.8 (L14.5): 65535's -clientport would be 65536
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 play.clean_port(bad)
         self.assertEqual(play.clean_players('4'), 4)
@@ -129,14 +130,24 @@ class StartTests(unittest.TestCase):
         self.assertEqual(play.NEW_GAME_MAP, 'c_intro')
         self.assertNotIn('c_intro', [name for _, name in play.CHAPTER_CHOICES])
         self.assertEqual(play.CHAPTER_CHOICES[1][1], 'c_start')
+        # 1.1.8: chapter 5 starts where it begins in the story, at the end of c_subwaysick2
+        self.assertIn(('Chapter 5 — Leaving this for good', 'c_subwaysick2'), play.CHAPTER_CHOICES)
+
+    def test_a_chapter_start_asks_for_its_kit(self):
+        def config(map_name, cont):
+            return play.host_launch(Path('copy'), solo=True, name='Test', map_name=map_name, players=2, password='',
+                                    companions=1, port=27015, cont=cont, video=[])[1]
+        self.assertIn('cof_chapter_start c_attic\n', config('c_attic', False))
+        self.assertNotIn('cof_chapter_start', config('c_intro', False))
+        self.assertNotIn('cof_chapter_start', config('c_attic', True))
 
 
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
-        # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes) and 1.1.7 (faster
-        # level changes) keep 1.1's version, so 1.1 to 1.1.7 players join each other
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.1.7'))
-        self.assertGreater(play.BUILD, 11)   # 1.1.6 was build 11: its copies must be offered the update
+        # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
+        # level changes) and 1.1.8 (the debug pass) keep 1.1's version, so 1.1 to 1.1.8 players join each other
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.1.8'))
+        self.assertGreater(play.BUILD, 12)   # 1.1.7 was build 12: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
         self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')
@@ -154,6 +165,44 @@ class HostCheckTests(unittest.TestCase):
             play.check_host({'cofbuild': '1.1', 'numcl': '2', 'maxcl': '2'}, password='')
         with self.assertRaisesRegex(ValueError, 'password'):
             play.check_host({'cofbuild': '1.1', 'numcl': '1', 'maxcl': '2', 'password': '1'}, password='')
+
+
+class MergedMapsCheckTests(unittest.TestCase):
+    """1.1.8 (L8): the join check compared only cofbuild; a guest without the host's merged maps (or another
+    version of them) failed at the first merged level."""
+
+    MAPS = {'maps/cm_apartment1.bsp': '1' * 64, 'maps/cm_apartment1.sections': '2' * 64}
+
+    def test_the_tag_names_the_merged_maps_installed(self):
+        tag = play.merged_maps_tag(self.MAPS)
+        self.assertRegex(tag, r'\A[0-9a-f]{8}\Z')
+        self.assertEqual(tag, play.merged_maps_tag(dict(reversed(list(self.MAPS.items())))))
+        self.assertNotEqual(tag, play.merged_maps_tag(dict(self.MAPS, **{'maps/cm_apartment1.bsp': '3' * 64})))
+        self.assertNotEqual(tag, play.merged_maps_tag({}))
+        self.assertEqual(play.merged_maps_tag(None), play.merged_maps_tag({}))
+
+    def test_the_host_sends_it_only_with_merged_maps_on(self):
+        tag = play.merged_maps_tag(self.MAPS)
+        for merged, maps, expected in ((True, tag, f'cof_maps {tag}\n'), (False, tag, None), (True, '', None),
+                                       (True, 'x;quit', None)):
+            with self.subTest(merged=merged, maps=maps):
+                _, cfg = play.host_launch(Path('copy'), solo=False, name='Bob', map_name='c_start', players=2,
+                                          password='', companions=0, port=27015, cont=False, video=[],
+                                          merged=merged, maps=maps)
+                if expected:
+                    self.assertIn(expected, cfg)
+                else:
+                    self.assertNotIn('cof_maps', cfg)
+                self.assertIn(f'cof_build {play.VERSION}\n', cfg)   # 1.1.x guests still compare only this
+
+    def test_a_guest_with_other_merged_maps_is_told_to_update(self):
+        ours = play.merged_maps_tag(self.MAPS)
+        host = {'cofbuild': play.VERSION, 'numcl': '1', 'maxcl': '2', 'password': '0'}
+        with self.assertRaisesRegex(ValueError, 'merged maps differ.*Update'):
+            play.check_host(dict(host, cofmaps=play.merged_maps_tag({})), password='', maps=ours)
+        play.check_host(dict(host, cofmaps=ours), password='', maps=ours)
+        play.check_host(host, password='', maps=ours)   # a 1.1.7 host, or merged maps off: not checked
+        play.check_host(dict(host, cofmaps=ours), password='')   # no tag of our own: not checked
 
 
 class CheckpointTests(unittest.TestCase):

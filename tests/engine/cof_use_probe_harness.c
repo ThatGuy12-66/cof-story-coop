@@ -48,14 +48,22 @@ static globalvars_t globals;
 static struct { int numEntities; globalvars_t *globals; } svgame;
 static sv_client_t clients[2];
 static edict_t edicts[8];
-static float trace_value = 1.0f;
 static trace_t move_result; /* what SV_Move returns: the engine's own trace is not under test */
 static float world_fraction = 1.0f;
 static char console[8192];
 static size_t console_length;
 
 static int Q_strcmp( const char *a, const char *b ) { return strcmp( a, b ); }
-static float Cvar_VariableValue( const char *name ) { return !strcmp( name, "cof_story_trace" ) ? trace_value : 0.0f; }
+/* the probe's own cvar (1.1.8: cof_use_probe, default 0; no longer cof_story_trace, which releases have on) */
+typedef struct { float value; } convar_t;
+static convar_t probe_cvar;
+static int probe_cvar_gets;
+static convar_t *Cvar_Get( const char *name, const char *value, int flags, const char *description )
+{
+	if( strcmp( name, "cof_use_probe" ) || strcmp( value, "0" ) || flags || !description ) abort();
+	probe_cvar_gets++;
+	return &probe_cvar;
+}
 static const char *SV_GetString( string_t s ) { return s ? s : ""; }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= edicts && e < edicts + 8 && !e->free; }
 static edict_t *SV_EdictNum( int n ) { return &edicts[n]; }
@@ -144,7 +152,7 @@ static void reset( void )
 	cof_probe_spawncount = 1;
 	svgame.numEntities = 7; svgame.globals = &globals;
 	globals.trace_fraction = 0.5f; globals.trace_ent = NULL;
-	trace_value = 1.0f; world_fraction = 1.0f;
+	probe_cvar.value = 1.0f; world_fraction = 1.0f;
 	edicts[0].v.classname = "worldspawn";
 	clients[0].state = cs_spawned; clients[0].userid = 1; clients[0].edict = &edicts[1];
 	edicts[1].v.classname = "player";
@@ -207,9 +215,9 @@ int main( void )
 	SV_CoF_UseProbeFrame();
 	CHECK( IS( "" ));
 
-	/* story trace off: nothing */
+	/* the probe off: nothing */
 	reset();
-	trace_value = 0.0f;
+	probe_cvar.value = 0.0f;
 	edicts[5].v.owner = &edicts[1];
 	SV_CoF_UseProbeFrame();
 	CHECK( IS( "" ));
@@ -223,6 +231,7 @@ int main( void )
 	SV_CoF_UseProbeFrame();
 	CHECK( strstr( console, "phase=use-probe userid=1 door=5 " ));
 
+	CHECK( probe_cvar_gets == 1 ); /* made once, then read */
 	printf( "use-probe scenarios passed\n" );
 	return failures;
 }

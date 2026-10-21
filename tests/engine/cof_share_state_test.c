@@ -11,6 +11,8 @@
 #define PHONE "inventoryitems/weapons/weapon_mobile.txt"
 #define TACLIGHT "inventoryitems/taclight.txt"
 #define FUSE "inventoryitems/fuse.txt"
+#define LADDER "inventoryitems/ladder1.txt"
+#define SPADE "inventoryitems/spade.txt"
 
 static cof_share_state_t s;
 static char inv[2][COF_SHARE_SLOTS][COF_SHARE_NAME];
@@ -36,6 +38,13 @@ static int has_event( int kind, int slot, const char *d )
 	return 0;
 }
 static int plan( int p, int free_slots, double now, char *out ) { return CoF_SharePlan( &s, p, free_slots, now, out ); }
+static int copies( int p, const char *d ) { return CoF_ShareCount( inv[p], d ); }
+static void deliver( int p, int slot, const char *d, double now ) /* our give, landing */
+{
+	CoF_ShareIssued( &s, p, COF_SHARE_GIVE, d, now );
+	put( p, slot, d );
+	look();
+}
 static void start( void )
 {
 	CoF_ShareReset( &s );
@@ -174,6 +183,93 @@ int main( void )
 	inv[1][3][0] = 0; look(); /* the game clears the first match: one copy is left either way */
 	assert( has_event( COF_SHARE_REMOVED, 1, KEY ) && !has_event( COF_SHARE_USED, 1, KEY ) && s.party.count == 1 );
 	assert( plan( 1, 5, 2, item ) == COF_SHARE_NONE && !has_event( COF_SHARE_STALLED, 1, KEY ));
+
+	/* 1.1.8 (M1 finding 1): fuses come from several places and each fuse box uses one up; c_subway2st1 and
+	 * c_subway2st3 need two boxes filled with no fuse to be had in between, so one player alone carries two.
+	 * The party keeps both: a second fuse is found (not taken), everyone is brought to two. */
+	start(); put( 0, 0, FUSE ); look();
+	assert( plan( 1, 6, 1, item ) == COF_SHARE_GIVE && !strcmp( item, FUSE ));
+	deliver( 1, 0, FUSE, 1 );
+	s.event_count = 0; put( 0, 1, FUSE ); look(); /* the second box's pull (c_subway2st1 givefuseffs) */
+	assert( has_event( COF_SHARE_FOUND, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 && CoF_ShareFinder( &s, FUSE ) == 101 );
+	assert( plan( 0, 4, 2, item ) == COF_SHARE_NONE ); /* not taken: the party has two */
+	assert( plan( 1, 5, 2, item ) == COF_SHARE_GIVE && !strcmp( item, FUSE ));
+	s.event_count = 0; deliver( 1, 1, FUSE, 2 );
+	assert( has_event( COF_SHARE_DELIVERED, 1, FUSE ) && !has_event( COF_SHARE_FOUND, 1, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+	assert( plan( 1, 4, 3, item ) == COF_SHARE_NONE );
+	/* ...the first box (inventoryuse) takes one copy: the party has one left, the partner's second copy goes */
+	CoF_ShareObserve( &s, 0, 101, 1, inv[0] ); s.event_count = 0;
+	inv[0][1][0] = 0; CoF_ShareCommand( &s, 0, CoF_ShareCommandKind( "inventoryuse" ), inv[0] );
+	assert( has_event( COF_SHARE_USED, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 1 );
+	assert( plan( 0, 5, 4, item ) == COF_SHARE_NONE );
+	assert( plan( 1, 4, 4, item ) == COF_SHARE_TAKE && !strcmp( item, FUSE ));
+	CoF_ShareIssued( &s, 1, COF_SHARE_TAKE, FUSE, 4 );
+	inv[1][0][0] = 0; s.event_count = 0; look(); /* the game clears the first match */
+	assert( has_event( COF_SHARE_REMOVED, 1, FUSE ) && !has_event( COF_SHARE_USED, 1, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 1 );
+	assert( copies( 0, FUSE ) == 1 && copies( 1, FUSE ) == 1 && plan( 1, 5, 5, item ) == COF_SHARE_NONE );
+	/* ...the second box, by the partner: the last copy is used and the finder's taken */
+	CoF_ShareObserve( &s, 1, 102, 1, inv[1] ); s.event_count = 0;
+	clear( 1, FUSE ); CoF_ShareCommand( &s, 1, CoF_ShareCommandKind( "inventoryuse" ), inv[1] );
+	assert( has_event( COF_SHARE_USED, 1, FUSE ) && s.party.count == 0 );
+	assert( plan( 0, 5, 6, item ) == COF_SHARE_TAKE && !strcmp( item, FUSE ));
+
+	/* Both boxes filled before any take lands: two uses, two copies gone, nothing left over. */
+	start(); put( 0, 0, FUSE ); put( 0, 1, FUSE ); look(); deliver( 1, 0, FUSE, 1 ); deliver( 1, 1, FUSE, 1 );
+	assert( CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+	CoF_ShareObserve( &s, 0, 101, 1, inv[0] ); inv[0][0][0] = 0; CoF_ShareCommand( &s, 0, COF_SHARE_CMD_OTHER, inv[0] );
+	CoF_ShareObserve( &s, 1, 102, 1, inv[1] ); inv[1][1][0] = 0; CoF_ShareCommand( &s, 1, COF_SHARE_CMD_OTHER, inv[1] );
+	assert( s.party.count == 0 && plan( 0, 5, 2, item ) == COF_SHARE_TAKE && plan( 1, 5, 2, item ) == COF_SHARE_TAKE );
+
+	/* A pull that lands in the same look as our give: one delivered, one found. */
+	start(); put( 0, 0, FUSE ); look();
+	CoF_ShareIssued( &s, 1, COF_SHARE_GIVE, FUSE, 1 ); put( 1, 0, FUSE ); put( 1, 1, FUSE ); s.event_count = 0; look();
+	assert( has_event( COF_SHARE_DELIVERED, 1, FUSE ) && has_event( COF_SHARE_FOUND, 1, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+	assert( plan( 0, 5, 2, item ) == COF_SHARE_GIVE && !strcmp( item, FUSE ));
+
+	/* A partner without their copy yet who finds one: a find, never mistaken for the copy they lack. */
+	start(); put( 0, 0, FUSE ); look(); put( 1, 0, FUSE ); look();
+	assert( CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+
+	/* Dropping one of two sets it down: the party keeps two, the dropper is not handed another, and picking
+	 * it back up is not a new find. A respawn wipe is not a use. */
+	start(); put( 0, 0, FUSE ); put( 0, 1, FUSE ); look(); deliver( 1, 0, FUSE, 1 ); deliver( 1, 1, FUSE, 1 );
+	CoF_ShareObserve( &s, 0, 101, 1, inv[0] ); s.event_count = 0;
+	inv[0][1][0] = 0; CoF_ShareCommand( &s, 0, COF_SHARE_CMD_DROP, inv[0] );
+	assert( has_event( COF_SHARE_DROPPED, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+	assert( plan( 0, 5, 2, item ) == COF_SHARE_NONE && plan( 1, 4, 2, item ) == COF_SHARE_NONE );
+	s.event_count = 0; put( 0, 1, FUSE ); look();
+	assert( !has_event( COF_SHARE_FOUND, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 && s.players[0].set_down.count == 0 );
+	alive[1] = 0; look(); memset( inv[1], 0, sizeof( inv[1] )); alive[1] = 1; look();
+	assert( CoF_ShareSetCount( &s.party, FUSE ) == 2 && plan( 1, 6, 3, item ) == COF_SHARE_GIVE && !strcmp( item, FUSE ));
+	deliver( 1, 0, FUSE, 3 );
+	assert( plan( 1, 5, 4, item ) == COF_SHARE_GIVE ); deliver( 1, 1, FUSE, 4 );
+	assert( plan( 1, 4, 5, item ) == COF_SHARE_NONE );
+
+	/* A new session sees everyone anew: copies up to the party's count are the party's own, not new finds. */
+	start(); put( 0, 0, FUSE ); put( 0, 1, FUSE ); put( 1, 0, FUSE ); put( 1, 1, FUSE );
+	CoF_ShareReset( &s ); look();
+	assert( CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+	/* ...and a newcomer with nothing is brought to two copies. */
+	memset( inv[1], 0, sizeof( inv[1] )); CoF_ShareObserve( &s, 1, 0, 0, NULL ); CoF_ShareObserve( &s, 1, 206, 1, inv[1] );
+	assert( plan( 1, 6, 1, item ) == COF_SHARE_GIVE ); CoF_ShareIssued( &s, 1, COF_SHARE_GIVE, FUSE, 1 ); put( 1, 0, FUSE );
+	CoF_ShareObserve( &s, 1, 206, 1, inv[1] );
+	assert( plan( 1, 5, 2, item ) == COF_SHARE_GIVE ); CoF_ShareIssued( &s, 1, COF_SHARE_GIVE, FUSE, 2 ); put( 1, 1, FUSE );
+	CoF_ShareObserve( &s, 1, 206, 1, inv[1] );
+	assert( plan( 1, 4, 3, item ) == COF_SHARE_NONE && CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+
+	/* The checkpoint keeps both copies (one entry each); an older checkpoint's single entry is one copy. */
+	{
+		cof_share_archive_t archive;
+		memset( &archive, 0, sizeof( archive ));
+		archive.party = s.party;
+		assert( CoF_ShareArchiveValid( &archive ) && CoF_ShareSetCount( &archive.party, FUSE ) == 2 );
+	}
+
+	/* Ladders count too (two in the maps, each ladder spot uses one); the spade (two, never used up) keeps one. */
+	start(); put( 0, 0, LADDER ); look(); put( 0, 1, LADDER ); look();
+	assert( CoF_ShareSetCount( &s.party, LADDER ) == 2 && plan( 0, 4, 1, item ) == COF_SHARE_NONE );
+	start(); put( 0, 0, SPADE ); look(); put( 0, 1, SPADE ); look();
+	assert( s.party.count == 1 && plan( 0, 4, 1, item ) == COF_SHARE_TAKE && !strcmp( item, SPADE ));
 
 	/* A new session starts with an empty ledger. */
 	CoF_ShareReset( &s );

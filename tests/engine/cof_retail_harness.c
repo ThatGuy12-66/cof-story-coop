@@ -15,6 +15,7 @@ typedef long long fs_offset_t;
 #define MAX_CLIENTS 32
 #define FL_KILLME ( 1 << 30 )
 #define FL_ONGROUND ( 1 << 9 )
+#define FL_FROZEN ( 1 << 12 )
 #define DEAD_NO 0
 #define DEAD_DEAD 2
 #define ARRAYSIZE( x ) ( sizeof( x ) / sizeof(( x )[0] ))
@@ -38,7 +39,8 @@ static size_t Q_strncpy( char *dst, const char *src, size_t size )
 	else memcpy( dst, src, n + 1 );
 	return n;
 }
-typedef struct { float health, fuser3; int deadflag, flags, spawnflags; string_t classname; } entvars_t;
+typedef float vec3_t[3];
+typedef struct { float health, fuser3; int deadflag, flags, spawnflags; string_t classname, target, targetname; vec3_t absmin, absmax; } entvars_t;
 typedef struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; } edict_t;
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict; } sv_client_t;
 typedef void ( *xcommand_t )( void );
@@ -50,7 +52,7 @@ static sv_client_t clients[2];
 static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x210], monster_private[3][0x360];
 static const char *strings[] = { "", "inventoryitems/hallkey.txt", "inventoryitems/weapons/weapon_mobile.txt", "inventoryitems/fuse.txt", "cof_document",
 	"weapon_glock", "weapon_switchblade", "weapon_syringe", "weapon_shotgun", "monster_slower", "monster_generic", "monster_sawrunner", "monster_nerd",
-	"weapon_dualweapon", "findthekey", "txtfiles/custom_objectives.txt", "txtfiles/hints.txt" };
+	"weapon_dualweapon", "findthekey", "txtfiles/custom_objectives.txt", "txtfiles/hints.txt", "cof_yesno", "ryesno", "trigger_multiple", "boat" };
 #define STRINGS ( (int)ARRAYSIZE( strings ))
 static byte dll_image[0x217118 + 19 * 19 * 4]; /* the relationship table sits at +0x217118 */
 static int private_lookups, uses;
@@ -197,6 +199,7 @@ int main( void )
 	char slots[COF_RETAIL_SLOTS][COF_RETAIL_ITEM], nice[64];
 	string_t id;
 	int i;
+	edict_t kept8;
 	static const byte fade[10] = { 0x00, 0x08, 0x99, 0x01, 0x00, 0x00, 0, 0, 0, 255 };
 
 	svs.maxclients = 2;
@@ -336,7 +339,7 @@ int main( void )
 		clients[1].state = cs_spawned;
 	}
 
-	/* probe: give and remove need sv_cheats; slots and messages do not */
+	/* probe: give and remove need sv_cheats; reading the slots does not */
 	argc = 4; argv[0] = "cof_story_probe"; argv[1] = "give"; argv[2] = "2"; argv[3] = "inventoryitems/hallkey.txt";
 	give_calls = 0; probe();
 	assert( give_calls == 0 && strstr( console, "what=give result=0 reason=needs-sv_cheats" ));
@@ -345,6 +348,14 @@ int main( void )
 	argc = 3; argv[1] = "slots"; argv[2] = "1"; probe();
 	assert( strstr( console, "cofstory phase=probe-slot userid=1 index=1 descriptor=\"inventoryitems/hallkey.txt\"" ));
 	assert( strstr( console, "what=slots userid=1 result=1 free=4" ));
+	/* 1.1.8 (L): a message or a fade to a player needs sv_cheats too (the console is open in co-op) */
+	cheats = 0; last_msg_name[0] = 0; console_length = 0; console[0] = 0;
+	probe(); assert( strstr( console, "what=slots userid=1 result=1 free=4" )); /* reading still works */
+	argc = 5; argv[1] = "msg"; argv[3] = "4"; argv[4] = "hello"; probe();
+	assert( !last_msg_name[0] && strstr( console, "what=msg result=0 reason=needs-sv_cheats" ));
+	argc = 4; argv[1] = "fade"; argv[3] = "1.5"; probe();
+	assert( !last_msg_name[0] && strstr( console, "what=fade result=0 reason=needs-sv_cheats" ));
+	cheats = 1;
 	argc = 5; argv[1] = "msg"; argv[3] = "4"; argv[4] = "hello"; probe();
 	assert( last_msg[0] == 4 && !strcmp( (char *)last_msg + 1, "hello" ));
 	/* probe: doc and codenote write game state, so they need sv_cheats too */
@@ -455,6 +466,18 @@ int main( void )
 		assert( SV_CoF_RetailInWheelchair( &clients[0] ) && !SV_CoF_RetailInWheelchair( &clients[1] ));
 		edicts[8].serialnumber++; assert( !SV_CoF_RetailInWheelchair( &clients[0] )); /* the chair is gone */
 		handle( private_data[0] + 0x390, NULL ); edicts[8].free = 1;
+		/* the boat: m_pBoat (+0x380) names a live boat */
+		assert( !SV_CoF_RetailInBoat( &clients[0] ));
+		kept8 = edicts[8];
+		edicts[8].free = 0; edicts[8].serialnumber = 6; edicts[8].v.flags = 0; edicts[8].v.classname = SV_AllocString( "boat" );
+		handle( private_data[0] + 0x380, &edicts[8] );
+		assert( SV_CoF_RetailInBoat( &clients[0] ) && !SV_CoF_RetailInBoat( &clients[1] ) && !SV_CoF_RetailInWheelchair( &clients[0] ));
+		edicts[8].v.flags = FL_KILLME; assert( !SV_CoF_RetailInBoat( &clients[0] )); edicts[8].v.flags = 0; /* being removed */
+		edicts[8].v.classname = SV_AllocString( "cof_yesno" ); assert( !SV_CoF_RetailInBoat( &clients[0] )); /* not a boat */
+		edicts[8].v.classname = SV_AllocString( "boat" );
+		edicts[8].serialnumber++; assert( !SV_CoF_RetailInBoat( &clients[0] )); /* the boat is gone */
+		clients[0].state = 0; edicts[8].serialnumber--; assert( !SV_CoF_RetailInBoat( &clients[0] )); clients[0].state = cs_spawned;
+		handle( private_data[0] + 0x380, NULL ); edicts[8] = kept8;
 	}
 	/* m_iFlashlightFlags (+0x5D0): which lights the player has on (16: a lit flare or the book laser in hand) */
 	{
@@ -554,6 +577,65 @@ int main( void )
 		edicts[1].v.fuser3 = 2.0f; handle( private_data[0] + 0x2698, &edicts[2] );
 		SV_CoF_RetailCprRepair(); assert( edicts[1].v.fuser3 == 2.0f );
 		edicts[1].v.fuser3 = 0.0f; handle( private_data[0] + 0x2698, NULL );
+		/* 1.1.8 (E2-2): fuser3 2 is also the taller's knock-down (m_bWaitingToFall +0x50C, the fall flag +0x1ED0 and
+		 * its time +0x1ECC): the game gets it up itself, so it is never taken for a CPR (forcing the CPR get-up made it
+		 * land again every frame) */
+		{
+			float fall, end;
+			edict_t kept6 = edicts[6], kept7 = edicts[7];
+			int kept_count = svgame.numEntities;
+			put_float( private_data[0] + 0x4FC, 7.0f );
+			edicts[1].v.fuser3 = 2.0f; private_data[0][0x50C] = 1; private_data[0][0x1ED0] = 1; put_float( private_data[0] + 0x1ECC, 53.0f );
+			console_length = 0; console[0] = 0;
+			for( i = 0; i < 5; i++ ) { SV_CoF_RetailCprRepair(); sv.time += 0.5; }
+			memcpy( &end, private_data[0] + 0x4FC, sizeof( end )); memcpy( &fall, private_data[0] + 0x1ECC, sizeof( fall ));
+			assert( edicts[1].v.fuser3 == 2.0f && end == 7.0f && fall == 53.0f && !console[0] );
+			/* K2: a camera's EnableControl cleared the flag and its time under the knocked-down player: after a moment
+			 * the flag comes back with the time now, and the game's own get-up runs */
+			private_data[0][0x1ED0] = 0; put_float( private_data[0] + 0x1ECC, 0.0f );
+			SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] );           /* noticed */
+			sv.time += 0.5; SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] ); /* within the moment */
+			sv.time += 0.6; SV_CoF_RetailCprRepair();
+			memcpy( &fall, private_data[0] + 0x1ECC, sizeof( fall ));
+			assert( private_data[0][0x1ED0] == 1 && fall == (float)sv.time && edicts[1].v.fuser3 == 2.0f );
+			assert( strstr( console, "cofstory phase=fall-unstuck userid=1 fuser3=2" ) && !strstr( console, "cpr-unstuck" ));
+			/* once is enough: with the flag back it is the game's again */
+			console_length = 0; console[0] = 0; sv.time += 2.0; SV_CoF_RetailCprRepair(); assert( !console[0] );
+			private_data[0][0x50C] = 0; private_data[0][0x1ED0] = 0; edicts[1].v.fuser3 = 0.0f;
+			/* a trip (fuser3 1) the same; frozen by a scene it waits for the scene's end */
+			edicts[1].v.fuser3 = 1.0f; edicts[1].v.flags = FL_FROZEN;
+			SV_CoF_RetailCprRepair(); sv.time += 3.0; SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] );
+			edicts[1].v.flags = 0;
+			SV_CoF_RetailCprRepair(); sv.time += 1.1; SV_CoF_RetailCprRepair();
+			assert( private_data[0][0x1ED0] == 1 && strstr( console, "cofstory phase=fall-unstuck userid=1 fuser3=1" ));
+			private_data[0][0x1ED0] = 0;
+			/* in a CPR (linked either way) it is left to the CPR */
+			handle( private_data[0] + 0x26A0, &edicts[2] );
+			SV_CoF_RetailCprRepair(); sv.time += 2.0; SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] );
+			handle( private_data[0] + 0x26A0, NULL );
+			/* c_roofs2's ryesno roots the player it asks (fuser3 1, no flag) while they stand in its trigger: not down */
+			memset( &edicts[6], 0, sizeof( edicts[6] )); memset( &edicts[7], 0, sizeof( edicts[7] )); svgame.numEntities = 12;
+			edicts[6].free = 0; edicts[6].v.classname = SV_AllocString( "cof_yesno" ); edicts[6].v.targetname = SV_AllocString( "ryesno" );
+			edicts[7].free = 0; edicts[7].v.classname = SV_AllocString( "trigger_multiple" ); edicts[7].v.target = SV_AllocString( "ryesno" );
+			edicts[7].v.absmin[0] = edicts[7].v.absmin[1] = edicts[7].v.absmin[2] = 0.0f;
+			edicts[7].v.absmax[0] = edicts[7].v.absmax[1] = edicts[7].v.absmax[2] = 64.0f;
+			edicts[1].v.absmin[0] = edicts[1].v.absmin[1] = edicts[1].v.absmin[2] = 10.0f;
+			edicts[1].v.absmax[0] = edicts[1].v.absmax[1] = edicts[1].v.absmax[2] = 42.0f;
+			console_length = 0; console[0] = 0;
+			SV_CoF_RetailCprRepair(); sv.time += 3.0; SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] && !console[0] );
+			/* elsewhere, a fuser3 1 without its flag is a trip whose flag was cleared */
+			edicts[1].v.absmin[0] = 100.0f; edicts[1].v.absmax[0] = 132.0f;
+			SV_CoF_RetailCprRepair(); sv.time += 1.1; SV_CoF_RetailCprRepair(); assert( private_data[0][0x1ED0] == 1 );
+			private_data[0][0x1ED0] = 0; edicts[1].v.absmin[0] = 10.0f; edicts[1].v.absmax[0] = 42.0f;
+			edicts[6].v.targetname = 0; /* no ryesno in this map: the trigger means nothing */
+			SV_CoF_RetailCprRepair(); sv.time += 1.1; SV_CoF_RetailCprRepair(); assert( private_data[0][0x1ED0] == 1 );
+			private_data[0][0x1ED0] = 0; edicts[1].v.fuser3 = 0.0f; SV_CoF_RetailCprRepair();
+			edicts[6] = kept6; edicts[7] = kept7; svgame.numEntities = kept_count;
+			/* the dead are not touched (a death's fall has its own flag; the body is CPR's) */
+			edicts[1].v.health = 0; edicts[1].v.deadflag = DEAD_DEAD; edicts[1].v.fuser3 = 1.0f;
+			SV_CoF_RetailCprRepair(); sv.time += 2.0; SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] );
+			edicts[1].v.health = 100; edicts[1].v.deadflag = DEAD_NO; edicts[1].v.fuser3 = 0.0f;
+		}
 		/* A syringe heal holds both players at fuser3 25 with the view locked until its BladeRetract 1.5 s later;
 		 * a healer killed in between leaves the partner held for good. After 3 s it is let go, view unlocked. */
 		edicts[2].v.health = 100; edicts[2].v.deadflag = DEAD_NO; handle( private_data[1] + 0x26A0, NULL );
@@ -571,6 +653,11 @@ int main( void )
 		/* the dead never revive anyone */
 		edicts[1].v.health = 0; assert( !SV_CoF_RetailRevive( &clients[0], &clients[1] ) && uses == 1 );
 		edicts[1].v.health = 100;
+		/* the game's own body animation (m_flSequenceOverrideTime +0x4F4) runs until its time */
+		put_float( private_data[0] + 0x4F4, (float)sv.time + 1.0f ); assert( SV_CoF_RetailOwnAnimation( &clients[0] ));
+		put_float( private_data[0] + 0x4F4, (float)sv.time ); assert( !SV_CoF_RetailOwnAnimation( &clients[0] ));
+		clients[0].state = 0; put_float( private_data[0] + 0x4F4, (float)sv.time + 1.0f );
+		assert( !SV_CoF_RetailOwnAnimation( &clients[0] )); clients[0].state = cs_spawned; put_float( private_data[0] + 0x4F4, 0.0f );
 		/* a hard landing: held down while fuser3 is set */
 		private_data[0][0x1ED0] = 1; assert( !SV_CoF_RetailFallen( &clients[0] ));
 		edicts[1].v.fuser3 = 1.0f; assert( SV_CoF_RetailFallen( &clients[0] ));

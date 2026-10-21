@@ -16,7 +16,9 @@ class CameraModelTests(unittest.TestCase):
             "the player's scene: 0",
             'the scene ended (pDeathScene cleared): 1',
             'the player has a newer scene: 1',
-            'the player left: 1',
+            'the player left (no object): 1',
+            'a player who left or is loading, whose object still holds it: 0',
+            'an owner object we cannot read: 0',
             'placed by the map (no owner): 0',
             'owned by another entity: 0',
         ])
@@ -29,6 +31,11 @@ class CameraModelWiringTests(unittest.TestCase):
         frame = body_of(SERVER / 'sv_cof_camera_models.c', 'void SV_CoF_CameraModelsFrame(')
         assert_has(self, 'SetBits( ent->v.flags, FL_KILLME );', frame)
         assert_has(self, 'COF_CAMERA_MODEL_SCENE', frame)
+        # 1.1.8 (E2-1): the owner's player object decides, not its client state (a player who left or is loading
+        # keeps the object, and a running model cutscene walks its raw pDeathScene).
+        self.assertNotIn('cs_spawned', frame)
+        self.assertNotIn('svs.clients', frame)
+        assert_has(self, 'owner->pvPrivateData', frame)
         assert_has(self, 'SV_CoF_CameraModelsInit();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryInit('))
         assert_has(self, 'SV_CoF_CameraModelsFrame();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame('))
 

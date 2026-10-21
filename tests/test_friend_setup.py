@@ -2,10 +2,12 @@ from datetime import datetime
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import tempfile
 import subprocess
+import types
 import unittest
 from unittest import mock
 import zipfile
@@ -50,6 +52,10 @@ class FakeInstaller:
         self.returncode = self.code
 
 
+# game_is_running asks Windows only on Windows: this stands in for friend_setup's os there (paths stay this OS's)
+WINDOWS = types.SimpleNamespace(name="nt", environ=os.environ, sep=os.sep)
+
+
 class FriendSetupTests(unittest.TestCase):
     def test_only_a_game_from_this_copy_counts_as_running(self):
         root = Path("C:/Games/CoF-Story-Coop")
@@ -57,12 +63,37 @@ class FriendSetupTests(unittest.TestCase):
                                (None, False)):
             rows = [{"ProcessId": 1, "Name": "CoFLaunchApp.exe", "ExecutablePath": str(path) if path else None}]
             reply = subprocess.CompletedProcess([], 0, json.dumps(rows), "")
-            with self.subTest(path=path), mock.patch.object(friend.subprocess, "run", return_value=reply) as run:
+            with self.subTest(path=path), mock.patch.object(friend, "os", WINDOWS), \
+                    mock.patch.object(friend.subprocess, "run", return_value=reply) as run:
                 self.assertEqual(friend.game_is_running(root), expected)
                 self.assertIn("Name='cof.exe' OR Name='CoFLaunchApp.exe'", run.call_args.args[0][-1])
         reply = subprocess.CompletedProcess([], 0, "", "")
-        with mock.patch.object(friend.subprocess, "run", return_value=reply):
+        with mock.patch.object(friend, "os", WINDOWS), mock.patch.object(friend.subprocess, "run", return_value=reply):
             self.assertFalse(friend.game_is_running(root))
+
+    def test_without_an_answer_from_powershell_tasklist_answers(self):
+        # 1.1.8 (L3): a PowerShell that fails or takes over 20 s made Start, Join and Update do nothing at all
+        root = Path("C:/Games/CoF-Story-Coop")
+        listing = b'"System Idle Process","0","Services","0","8 K"\r\n"CoFLaunchApp.exe","4242","Console","1","90 K"\r\n'
+        for failure in (subprocess.TimeoutExpired(["powershell"], 20), subprocess.CalledProcessError(1, ["powershell"]),
+                        OSError("blocked"), subprocess.CompletedProcess([], 0, "{not json", "")):
+            for tasks, expected in ((listing, True), (b'"explorer.exe","9","Console","1","9 K"\r\n', False)):
+                def run(command, **kwargs):
+                    if Path(command[0]).name == "tasklist.exe":
+                        return subprocess.CompletedProcess(command, 0, tasks, b"")
+                    if isinstance(failure, subprocess.CompletedProcess):
+                        return failure
+                    raise failure
+                with self.subTest(failure=type(failure).__name__, expected=expected), \
+                        mock.patch.object(friend, "os", WINDOWS), mock.patch.object(friend.subprocess, "run", run):
+                    self.assertIs(friend.game_is_running(root), expected)
+
+    def test_when_windows_cannot_say_the_answer_is_unknown(self):
+        def run(command, **kwargs):
+            raise subprocess.TimeoutExpired(command, 20)
+        with mock.patch.object(friend, "os", WINDOWS), mock.patch.object(friend.subprocess, "run", run):
+            self.assertIs(friend.game_is_running(Path("C:/copy")), False)   # Start, Join and Update go ahead
+            self.assertIs(friend.game_is_running(Path("C:/copy"), unknown=True), True)   # hosting keeps the game
 
     def test_copy_excludes_personal_state_and_overrides_but_keeps_campaign_cfg(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -324,6 +355,7 @@ class FriendSetupTests(unittest.TestCase):
             root = Path(temp) / "copy"
             (root / "cryoffear/maps").mkdir(parents=True)
             (root / "xash.dll").write_bytes(b"engine")
+            (root / "cryoffear/gameinfo.txt").write_text("max_edicts 4096\n")   # 1.1.8: checked too (L1)
             (root / "cryoffear/maps/cm_apartment1.bsp").write_bytes(b"merged")
             (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test1", "build": 1,
                 "xash_sha256": hashlib.sha256(b"engine").hexdigest(), "models": {}, "source_game": "src",
@@ -395,16 +427,20 @@ class FriendSetupTests(unittest.TestCase):
 STAMP = re.compile(r"^\d\d:\d\d:\d\d  ")
 
 
+STOCK_MODELS = {"models/cutscene/player.mdl": hashlib.sha256(b"simon").hexdigest()}   # stands in for model_sources
+
+
 def make_source(folder: Path) -> Path:
-    """A retail game folder in miniature: what validate_source looks for, and two sounds."""
+    """A retail game folder in miniature: what validate_source looks for, two sounds and a stock model."""
     for rel, data in {"CoFLaunchApp.exe": b"launcher", "cryoffear/liblist.gam": b"game",
                       "cryoffear/maps/c_game_menu1.bsp": b"menu", "cryoffear/cl_dlls/hl.dll": b"stock dll",
-                      "cryoffear/sound/a.wav": b"a", "cryoffear/sound/b.wav": b"bb"}.items():
+                      "cryoffear/sound/a.wav": b"a", "cryoffear/sound/b.wav": b"bb",
+                      "cryoffear/models/cutscene/player.mdl": b"simon"}.items():
         path = folder / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
     return folder
 
 
-def made_copy(temp: Path, installer=FakeInstaller, seen=None):
+def made_copy(temp: Path, installer=FakeInstaller, seen=None, replace_incomplete=False):
     """friend.setup from make_source into a new copy, with the generators stood in for; returns the copy."""
     from tools.map_merge import groups
     group = groups.Group("cm_apartment1", ["c_apartment1", "c_apartment2"], {}, "1" * 64, "2" * 64, 1, True)
@@ -412,6 +448,7 @@ def made_copy(temp: Path, installer=FakeInstaller, seen=None):
     exe.write_bytes(b"app")
     models = {"models/player/cof_s1/cof_s1.mdl": b"s1", "models/coop/p_axe.mdl": b"axe"}
     with mock.patch.object(friend, "STOCK_DLL_SHA", hashlib.sha256(b"stock dll").hexdigest()), \
+         mock.patch.object(friend, "model_sources", return_value=STOCK_MODELS), \
          mock.patch.object(friend.subprocess, "Popen", installer), \
          mock.patch.object(friend, "generated_models", return_value=models), \
          mock.patch.object(friend, "validate_model"), \
@@ -419,7 +456,8 @@ def made_copy(temp: Path, installer=FakeInstaller, seen=None):
          mock.patch.object(friend.merge_groups, "load_groups", return_value=[group]), \
          mock.patch.object(friend.merge_groups, "install_group", return_value={"maps/cm_apartment1.bsp": "1" * 64}):
         friend.setup(source, copy, make_payload(temp / "payload"), exe=exe, shortcuts=False,
-                     progress=lambda *report: seen.append(report) if seen is not None else None)
+                     progress=lambda *report: seen.append(report) if seen is not None else None,
+                     replace_incomplete=replace_incomplete)
     return copy
 
 
@@ -516,6 +554,298 @@ class SetupProgressTests(unittest.TestCase):
         self.assertEqual(seen[-1][1], 1)
         self.assertEqual(log[0], "05:00:00  the first setup")
         self.assertIn("Installing 667 files...", [STAMP.sub("", line) for line in log])
+
+
+def a_copy(root: Path, **record) -> Path:
+    """A copy that passes validate_runtime: engine, vgui.dll, the entity limit, one model and its record."""
+    for rel, data in {"xash.dll": b"engine", "vgui.dll": b"vgui", "cryoffear/gameinfo.txt": b'gamedir "cryoffear"\r\n'
+                      b"max_edicts 4096\r\n", "cryoffear/models/player/cof_s1/cof_s1.mdl": b"model"}.items():
+        path = root / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+    state = {"schema": 2, "version": "1.1", "build": 12, "xash_sha256": hashlib.sha256(b"engine").hexdigest(),
+             "vgui_sha256": hashlib.sha256(b"vgui").hexdigest(), "source_game": "src",
+             "models": {"models/player/cof_s1/cof_s1.mdl": hashlib.sha256(b"model").hexdigest()}, "merged_maps": {}}
+    state.update(record)
+    (root / friend.INSTALLED).write_text(json.dumps(state))
+    return root
+
+
+class RepairCheckTests(unittest.TestCase):
+    """1.1.8 (L1): what the install check finds is a CopyMismatch, which the app offers to repair."""
+
+    def test_every_mismatch_is_a_copy_mismatch_with_its_problem(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = a_copy(Path(temp) / "copy")
+            self.assertEqual(friend.validate_runtime(root), root.resolve())
+            for rel, data, problem in (("xash.dll", b"other", "does not match its install"),
+                                       ("vgui.dll", b"other", "vgui.dll"),
+                                       ("cryoffear/gameinfo.txt", b'gamedir "cryoffear"\r\n', "max_edicts"),
+                                       ("cryoffear/models/player/cof_s1/cof_s1.mdl", b"other", "Simon model")):
+                good = (root / rel).read_bytes()
+                (root / rel).write_bytes(data)
+                with self.subTest(rel=rel), self.assertRaises(friend.CopyMismatch) as caught:
+                    friend.validate_runtime(root)
+                self.assertIn(problem, caught.exception.problem)
+                self.assertIsInstance(caught.exception, ValueError)   # callers that catch ValueError still do
+                self.assertIn("click Update", str(caught.exception))
+                (root / rel).write_bytes(good)
+            (root / "cryoffear/gameinfo.txt").unlink()
+            with self.assertRaises(friend.CopyMismatch):
+                friend.validate_runtime(root)
+
+    def test_a_record_from_before_1_1_8_has_no_vgui_hash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = a_copy(Path(temp) / "copy", vgui_sha256=None)
+            (root / "vgui.dll").write_bytes(b"whatever it is")
+            self.assertEqual(friend.validate_runtime(root), root.resolve())
+
+    def test_setup_and_update_record_the_vgui_dll(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = Path(temp) / "copy", Path(temp) / "app.exe"
+            (root / "cryoffear").mkdir(parents=True)
+            exe.write_bytes(b"app")
+            (root / "vgui.dll").write_bytes(b"vgui")
+            manifest = {"version": "1.1", "build": 12, "xash_sha256": "0" * 64}
+            friend.finish(root, manifest, {}, "src", exe, False, friend.Steps(()))
+            self.assertEqual(friend.installed_state(root)["vgui_sha256"], hashlib.sha256(b"vgui").hexdigest())
+            (root / "vgui.dll").unlink()
+            friend.finish(root, manifest, {}, "src", exe, False, friend.Steps(()))
+            self.assertNotIn("vgui_sha256", friend.installed_state(root))
+
+    def test_repair_is_the_update_at_the_same_build(self):
+        # the record's build equals the payload's: update lays the engine over again and remakes the generated files
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = a_copy(Path(temp) / "copy", build=5), Path(temp) / "app.exe"
+            exe.write_bytes(b"app")
+            (root / "cryoffear/gameinfo.txt").write_bytes(b'gamedir "cryoffear"\r\n')   # an update stopped part way
+            with self.assertRaises(friend.CopyMismatch):
+                friend.validate_runtime(root)
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                 mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
+                 mock.patch.object(friend, "make_models", return_value={}), \
+                 mock.patch.object(friend, "make_merged_maps", return_value={}), \
+                 mock.patch.object(friend.art, "generate", return_value=[]):
+                friend.update(root, make_payload(Path(temp) / "payload", b"engine", build=5), exe=exe, shortcuts=False)
+            self.assertEqual(friend.validate_runtime(root), root.resolve())
+
+
+class IncompleteSetupTests(unittest.TestCase):
+    """1.1.8 (L4): a setup that stopped left up to 5 GB in a folder that setup then refused to use."""
+
+    def test_only_an_unfinished_copy_of_this_app_counts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "CoF-Story-Coop"
+            self.assertFalse(friend.incomplete_copy(folder))
+            folder.mkdir()
+            (folder / friend.INCOMPLETE).write_text("Setup is incomplete. Choose a new folder to retry; ...\n")
+            self.assertFalse(friend.incomplete_copy(folder))   # our setup log too
+            (folder / friend.SETUP_LOG).write_text("05:00:00  Step 1 of 6: Checking your game\n")
+            self.assertTrue(friend.incomplete_copy(folder))   # 1.1.7's marker text counts
+            (folder / friend.INSTALLED).write_text("{}")
+            self.assertFalse(friend.incomplete_copy(folder))   # a finished copy never
+            (folder / friend.INSTALLED).unlink()
+            (folder / friend.INCOMPLETE).write_text("someone else's file\n")
+            self.assertFalse(friend.incomplete_copy(folder))
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "links")
+    def test_a_link_is_never_followed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder, outside = Path(temp) / "CoF-Story-Coop", Path(temp) / "outside"
+            (folder / "cryoffear/maps").mkdir(parents=True)
+            outside.mkdir()
+            (outside / "keep.txt").write_text("not ours")
+            (folder / friend.INCOMPLETE).write_text("Setup is incomplete.\n")
+            (folder / friend.SETUP_LOG).write_text("log\n")
+            try:
+                os.symlink(outside, folder / "linked", target_is_directory=True)
+                os.symlink(outside, folder / "cryoffear/maps/linked", target_is_directory=True)
+                os.symlink(folder, Path(temp) / "via-link", target_is_directory=True)
+            except OSError:
+                self.skipTest("no symlinks here")
+            self.assertFalse(friend.incomplete_copy(Path(temp) / "via-link"))
+            with self.assertRaisesRegex(ValueError, "new destination"):
+                friend.remove_incomplete(Path(temp) / "via-link")
+            friend.remove_incomplete(folder)
+            self.assertFalse(folder.exists())
+            self.assertEqual((outside / "keep.txt").read_text(), "not ours")
+
+    def test_setup_deletes_the_unfinished_copy_and_starts_again_when_asked(self):
+        class Failing(FakeInstaller):
+            code = 1
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaises(RuntimeError):
+                made_copy(Path(temp), installer=Failing)
+            copy = Path(temp) / "CoF-Story-Coop"
+            self.assertTrue(friend.incomplete_copy(copy))
+            (copy / "cryoffear/stray.bin").write_bytes(b"x")
+            with self.assertRaisesRegex(ValueError, "new destination"):   # never without the player's yes
+                made_copy(Path(temp))
+            self.assertTrue((copy / "cryoffear/stray.bin").exists())
+            made_copy(Path(temp), replace_incomplete=True)
+            self.assertFalse((copy / "cryoffear/stray.bin").exists() or (copy / friend.INCOMPLETE).exists())
+            self.assertEqual(friend.installed_state(copy)["build"], 1)
+            log = [STAMP.sub("", line) for line in (copy / friend.SETUP_LOG).read_text(encoding="utf-8").splitlines()]
+        # the new log keeps the stopped setup's lines, for a bug report
+        self.assertIn("Stopped: The engine could not be installed. See friend-setup-install.log in the copy.", log)
+        self.assertLess(log.index("Stopped: The engine could not be installed. See friend-setup-install.log in the copy."),
+                        log.index(f"Deleting the unfinished copy an earlier setup left in {copy.absolute()}"))
+
+    def test_a_finished_or_foreign_folder_is_never_deleted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            copy = made_copy(Path(temp))
+            with self.assertRaisesRegex(ValueError, "new destination"):
+                made_copy(Path(temp), replace_incomplete=True)
+            self.assertIsNotNone(friend.installed_state(copy))
+
+
+class ModelSourceTests(unittest.TestCase):
+    """1.1.8 (L5): a modded or damaged game is refused before the 5 GB copy, not at the models after it."""
+
+    def test_the_pinned_sources_are_the_generators_own(self):
+        pinned = friend.model_sources()
+        self.assertEqual({rel: pinned[rel] for rel in friend.weapons.SOURCES}, friend.weapons.SOURCES)
+        self.assertEqual({rel for rel in pinned if rel.startswith("models/costumes/")},
+                         {f"models/costumes/{rel}" for rel in friend.costume_files()})
+
+    def test_a_changed_or_missing_source_names_the_fix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = make_source(Path(temp) / "retail")
+            pinned = dict(STOCK_MODELS, **{"models/costumes/HLC/HLC_Hoodie.tga": hashlib.sha256(b"hoodie").hexdigest()})
+            (source / "cryoffear/models/costumes/HLC").mkdir(parents=True)
+            (source / "cryoffear/models/costumes/HLC/HLC_Hoodie.tga").write_bytes(b"hoodie")
+            with mock.patch.object(friend, "model_sources", return_value=pinned):
+                friend.check_model_sources(source)
+                (source / "cryoffear/models/cutscene/player.mdl").write_bytes(b"a model mod")
+                with self.assertRaisesRegex(ValueError, "Verify integrity of game files"):
+                    friend.check_model_sources(source)
+                friend.check_model_sources(source, {"cryoffear/models/cutscene/player.mdl"})   # the payload's own
+                (source / "cryoffear/models/costumes/HLC/HLC_Hoodie.tga").unlink()
+                with self.assertRaisesRegex(ValueError, "HLC_Hoodie.tga"):
+                    friend.check_model_sources(source, {"cryoffear/models/cutscene/player.mdl"})
+
+    def test_setup_refuses_before_it_copies(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = make_source(Path(temp) / "retail")
+            (source / "cryoffear/models/cutscene/player.mdl").write_bytes(b"a model mod")
+            with mock.patch.object(friend, "STOCK_DLL_SHA", hashlib.sha256(b"stock dll").hexdigest()), \
+                    mock.patch.object(friend, "model_sources", return_value=STOCK_MODELS), \
+                    mock.patch.object(friend, "copy_assets") as copy, \
+                    self.assertRaisesRegex(ValueError, "modded or damaged"):
+                friend.setup(source, Path(temp) / "copy", make_payload(Path(temp) / "payload"),
+                             exe=Path(temp) / "app.exe", shortcuts=False)
+            copy.assert_not_called()
+            self.assertFalse((Path(temp) / "copy").exists())
+
+
+KB_DEF = b'"w"\t\t"+forward"\r\n"h"\t\t"+hint"\r\n// a comment\r\n\r\nSPACE +jump\r\n"1"\t\t"quicksel 1"\r\n'
+KB_ACT = b'"blank"\t\t"Movement"\r\n"+forward"\t\t"Move forward"\r\n"cof_skip"\t\t"Skip"'
+
+
+class CoopKeyListTests(unittest.TestCase):
+    """1.1.8 (L6): Options > Keybinds > Use defaults binds kb_def.lst, which had no J, H or Enter."""
+
+    def keys(self, root, kb_def=KB_DEF, kb_act=KB_ACT):
+        shell = root / "cryoffear/gfx/shell"
+        shell.mkdir(parents=True, exist_ok=True)
+        (shell / "kb_def.lst").write_bytes(kb_def)
+        (shell / "kb_act.lst").write_bytes(kb_act)
+        return shell
+
+    def test_the_coop_keys_are_added_once_and_nothing_else_changes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            shell = self.keys(Path(temp))
+            notes = []
+            friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
+            kb_def, kb_act = (shell / "kb_def.lst").read_bytes(), (shell / "kb_act.lst").read_bytes()
+            # j, ENTER and KP_ENTER added; h keeps the list's own command
+            self.assertEqual(kb_def, KB_DEF + b'"j"\t\t"cof_warp"\r\n"ENTER"\t\t"cof_skip"\r\n"KP_ENTER"\t\t"cof_skip"\r\n')
+            # cof_skip is in the menu already; the file had no last line ending
+            self.assertEqual(kb_act, KB_ACT + b'\r\n"cof_warp"\t\t"Join your partner (co-op)"\r\n'
+                                              b'"cof_companion_order"\t\t"AI companions: wait or follow"\r\n')
+            self.assertEqual(len(notes), 2)
+            friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
+            self.assertEqual(((shell / "kb_def.lst").read_bytes(), (shell / "kb_act.lst").read_bytes()), (kb_def, kb_act))
+            self.assertEqual(len(notes), 2)
+
+    def test_a_list_of_another_format_or_no_list_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as temp:
+            odd = b'"w" "+forward" "extra"\n'
+            shell = self.keys(Path(temp), kb_def=odd)
+            (shell / "kb_act.lst").unlink()
+            notes = []
+            friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
+            self.assertEqual((shell / "kb_def.lst").read_bytes(), odd)
+            self.assertFalse((shell / "kb_act.lst").exists())
+            self.assertIn("not in the usual format", notes[0])
+            friend.add_coop_keys(Path(temp) / "nothing-here")
+
+    def test_update_adds_them_to_the_copy_and_keeps_the_players_binds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = a_copy(Path(temp) / "copy", build=5), Path(temp) / "app.exe"
+            exe.write_bytes(b"app")
+            shell = self.keys(root)
+            (root / "cryoffear/config.cfg").write_bytes(b'bind "j" "+jump"\n')
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                 mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
+                 mock.patch.object(friend, "make_models", return_value={}), \
+                 mock.patch.object(friend, "make_merged_maps", return_value={}), \
+                 mock.patch.object(friend.art, "generate", return_value=[]):
+                friend.update(root, make_payload(Path(temp) / "payload", b"engine", build=6), exe=exe, shortcuts=False)
+            self.assertIn(b'"j"\t\t"cof_warp"', (shell / "kb_def.lst").read_bytes())
+            self.assertEqual((root / "cryoffear/config.cfg").read_bytes(), b'bind "j" "+jump"\n')
+
+
+class LogKeepingTests(unittest.TestCase):
+    def test_story_logs_keeps_the_newest_twenty(self):
+        # 1.1.8 (L13): every start moved the last log into story-logs, which was never pruned
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / "story-logs"
+            archive.mkdir()
+            for number in range(25):
+                old = archive / f"story-session-202610{number:02}-000000.log"
+                old.write_text(str(number))
+                os.utime(old, (1_000_000 + number, 1_000_000 + number))
+            (archive / "notes.txt").write_text("not a session log")
+            (root / "story-session.log").write_text("latest")
+            kept = friend.keep_previous_log(root, "story-session.log")
+            logs = sorted(path.name for path in archive.glob("story-session-*.log"))
+            self.assertEqual(len(logs), friend.KEPT_LOGS)
+            self.assertIn(kept.name, logs)
+            self.assertNotIn("story-session-20261000-000000.log", logs)   # the oldest went
+            self.assertIn("story-session-20261024-000000.log", logs)
+            self.assertTrue((archive / "notes.txt").exists())
+
+
+class ManualUpdateTests(unittest.TestCase):
+    def test_an_update_refuses_while_the_copys_own_app_runs(self):
+        # 1.1.8 (L14.12): it failed at the very end, replacing the running app, and had to be done again
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = a_copy(Path(temp) / "copy", build=5), Path(temp) / "new.exe"
+            exe.write_bytes(b"new app")
+            (root / friend.APP_EXE).write_bytes(b"old app, running")
+            real_open = Path.open
+
+            def locked(path, mode="r", *args, **kwargs):
+                if Path(path).name == friend.APP_EXE and Path(path).parent == root.resolve() and "r" not in mode:
+                    raise PermissionError(13, "The process cannot access the file")
+                return real_open(path, mode, *args, **kwargs)
+            payload = make_payload(Path(temp) / "payload", b"engine", build=6)
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                    mock.patch.object(Path, "open", locked), \
+                    mock.patch.object(friend, "extract_payload") as extract, \
+                    self.assertRaisesRegex(ValueError, "Close the other Cry of Fear Co-op window"):
+                friend.update(root, payload, exe=exe, shortcuts=False)
+            extract.assert_not_called()
+            self.assertEqual((root / friend.APP_EXE).read_bytes(), b"old app, running")
+            # the copy's own app repairing its copy is no other window
+            with mock.patch.object(friend, "game_is_running", return_value=False), \
+                    mock.patch.object(Path, "open", locked), \
+                    mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
+                    mock.patch.object(friend, "make_models", return_value={}), \
+                    mock.patch.object(friend, "make_merged_maps", return_value={}), \
+                    mock.patch.object(friend.art, "generate", return_value=[]):
+                friend.update(root, payload, exe=root / friend.APP_EXE, shortcuts=False)
+            self.assertEqual(friend.installed_state(root)["build"], 6)
 
 
 if __name__ == "__main__":

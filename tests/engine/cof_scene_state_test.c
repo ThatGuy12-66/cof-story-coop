@@ -65,6 +65,37 @@ int main( void )
 	memset( &w, 0, sizeof( w )); memset( &other, 0, sizeof( other ));
 	assert( !CoF_WatchTogether( &w, &other )); /* nobody in a camera is not "together" */
 
+	/* 1.1.8 (K1, K4): a running camera that is not theirs (the wardrobe's, another merged-map section's) is left at
+	 * once, never held; a model cutscene of another section is left as its end would. */
+	watching( 40 ); w.camera_elsewhere = 1; assert( CoF_WatchDecide( &w ) == COF_WATCH_RELEASE );
+	w.frozen = 0; assert( CoF_WatchDecide( &w ) == COF_WATCH_RELEASE );
+	memset( &w, 0, sizeof( w )); w.model_scene = 11; assert( CoF_WatchDecide( &w ) == 0 );
+	w.model_elsewhere = 1; assert( CoF_WatchDecide( &w ) == COF_WATCH_MODEL_RELEASE );
+	/* ...and is nobody's to watch together */
+	watching( 40 ); other = w; other.camera_elsewhere = 1;
+	assert( !CoF_WatchTogether( &w, &other ) && !CoF_WatchTogether( &other, &w ));
+
+	/* 1.1.8 (M3 finding 2a): two frozen in one running model cutscene watch it together. */
+	memset( &w, 0, sizeof( w )); w.model_scene = 11; w.frozen = 1; other = w;
+	assert( CoF_WatchTogether( &w, &other ));
+	other.frozen = 0; assert( !CoF_WatchTogether( &w, &other ) && !CoF_WatchTogether( &other, &w ));
+	other.frozen = 1; other.model_scene = 12; assert( !CoF_WatchTogether( &w, &other ));
+	other.model_scene = 11; other.model_elsewhere = 1; assert( !CoF_WatchTogether( &w, &other ));
+	w.model_scene = other.model_scene = 0; other.model_elsewhere = 0; assert( !CoF_WatchTogether( &w, &other ));
+
+	/* 1.1.8 (M1 finding 5): both watched one camera to its end, at most 2 s ago. */
+	{
+		cof_watch_seen_t a = { 40, 3, 10.0 }, b = { 40, 3, 10.0 };
+		assert( CoF_WatchRecent( &a, &b, 0, 11.0 ) && CoF_WatchRecent( &a, &b, 0, 12.0 ));
+		assert( !CoF_WatchRecent( &a, &b, 0, 12.1 )); /* too long ago */
+		assert( !CoF_WatchRecent( &a, &b, 0, 1.0 )); /* a time from before it: another map's clock */
+		assert( !CoF_WatchRecent( &a, &b, 1, 11.0 )); /* it still runs: one of them left it */
+		b.seen = 7.0; assert( !CoF_WatchRecent( &a, &b, 0, 11.0 )); /* one stopped watching long before its end */
+		b.seen = 10.0; b.serial = 4; assert( !CoF_WatchRecent( &a, &b, 0, 11.0 )); /* another entity in that slot */
+		b.serial = 3; b.camera = 41; assert( !CoF_WatchRecent( &a, &b, 0, 11.0 ));
+		memset( &a, 0, sizeof( a )); memset( &b, 0, sizeof( b )); assert( !CoF_WatchRecent( &a, &b, 0, 0.5 ));
+	}
+
 	/* Skipping. Held: frozen in a running camera, or in a model cutscene. */
 	watching( 40 ); assert( CoF_SkipHeld( &w ));
 	w.frozen = 0; assert( !CoF_SkipHeld( &w )); /* a camera that leaves them free: they play, never at speed */

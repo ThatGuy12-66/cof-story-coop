@@ -96,7 +96,7 @@ $hostExtra = switch ($Mode) {
     'companion' { "+maxplayers $($Companions + 1) +cof_companion $Companions +cof_companion_drive 0" }
     default { '+cof_companion 0 +cof_companion_drive 0' }
 }
-$hostExtra += if ($Gun -eq 'none') { ' +cof_test_gun 0' } else { " +cof_test_gun weapon_$Gun" }
+$hostExtra += if ($Gun -eq 'none') { ' +cof_test_gun 0' } else { " +sv_cheats 1 +cof_test_gun weapon_$Gun" } # 1.1.8: the test gun needs cheats on
 Write-Host "Starting the host on $Map ($Mode mode, test gun: $Gun, engine $($hostHash.Substring(0, 12)))..."
 Start-Process -FilePath (Join-Path $hostCopy 'CoFLaunchApp.exe') -WorkingDirectory $hostCopy -WindowStyle Normal -ArgumentList `
     "-windowed -width 1280 -height 720 -console -port 27115 -clientport 27116 -log campaign-host.log -logtime +exec cof_campaign.cfg $hostExtra +map $Map"

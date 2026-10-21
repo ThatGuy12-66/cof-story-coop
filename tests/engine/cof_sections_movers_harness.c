@@ -33,5 +33,9 @@ int main( void )
 	p[1].origin[0] = 100;
 	p[3].in_exit = 1;
 	show( "only a bot in the exit", p, 6 );
+	/* 1.1.8 (E1 F3): the only one in the exit just moved (or stands there since arriving): nobody moves */
+	p[3].in_exit = 0;
+	p[5].in_exit = 1;
+	show( "just moved, in the exit", p, 6 );
 	return 0;
 }

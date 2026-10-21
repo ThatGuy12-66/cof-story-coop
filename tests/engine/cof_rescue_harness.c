@@ -25,8 +25,8 @@ typedef float vec3_t[3];
 #define SetBits(f,b) ((f)|=(b))
 #define FBitSet(f,b) ((f)&(b))
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
-#include <math.h>
-#define VectorDistance(a,b) ((float)sqrt(((a)[0]-(b)[0])*((a)[0]-(b)[0])+((a)[1]-(b)[1])*((a)[1]-(b)[1])+((a)[2]-(b)[2])*((a)[2]-(b)[2])))
+/* only compared, so the squared distance does (cc on Linux links no libm here) */
+#define VectorDistance(a,b) ((float)(((a)[0]-(b)[0])*((a)[0]-(b)[0])+((a)[1]-(b)[1])*((a)[1]-(b)[1])+((a)[2]-(b)[2])*((a)[2]-(b)[2])))
 typedef struct edict_s edict_t;
 typedef struct {
 	string_t classname, targetname;
@@ -39,7 +39,9 @@ struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; };
 typedef struct { int state, userid; unsigned int flags; edict_t *edict; } sv_client_t;
 static struct { int state; double time; } sv;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
-static struct { edict_t *edicts; int numEntities; struct { void (*pfnClientKill)( edict_t * ); } dllFuncs; } svgame;
+typedef struct { float time; } globalvars_t;
+static globalvars_t globals;
+static struct { edict_t *edicts; int numEntities; struct { void (*pfnClientKill)( edict_t * ); } dllFuncs; globalvars_t *globals; } svgame;
 #define ENTITIES 24
 static edict_t entities[ENTITIES];
 static sv_client_t clients[MAX_CLIENTS];
@@ -123,6 +125,7 @@ static void setup( void )
 	gate = 1; spawned = 0; spawned_class[0] = spawned_name[0] = 0;
 	sv.state = ss_active; sv.time = 100; svs.maxclients = 2; svs.clients = clients; svs.spawncount++;
 	svgame.edicts = entities; svgame.numEntities = ENTITIES; svgame.dllFuncs.pfnClientKill = client_kill;
+	svgame.globals = &globals; globals.time = 100.0f;
 	memset( kills, 0, sizeof( kills )); memset( controls_given, 0, sizeof( controls_given )); memset( messages_to, 0, sizeof( messages_to ));
 	memset( hidden, 0, sizeof( hidden ));
 	message_name[0] = physics_key[0] = physics_value[0] = 0; message_size = 0;
@@ -245,9 +248,21 @@ int main( void )
 	}
 
 	/* The crazybitch picks her moment from her enemy (m_hEnemy +0x184) but makes INDEXENT( 1 ), the host, turn his gun
-	 * on himself, wherever he is (MonsterThink 10055860): while she thinks, edict 1 is her enemy. */
-	setup(); spawn( 9, 8, 0 );
-	set_handle( 9, 0x184, &entities[2], 1 );
+	 * on himself, wherever he is (MonsterThink 10055860): in the think that takes the gun, edict 1 is her enemy. */
+	{
+		float due = 99.0f;
+		setup(); spawn( 9, 8, 0 ); set_handle( 9, 0x184, &entities[2], 1 );
+		/* 1.1.8 (K5): not in any other think (her sight check walks the edicts from edict 1): not started, not ready,
+		 * or the attempt not yet due */
+		assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );
+		private_data[9][0x370] = 1; assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );
+		private_data[9][0x372] = 1; due = 101.0f; memcpy( private_data[9] + 0x36C, &due, 4 );
+		assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );
+		due = 100.0f; memcpy( private_data[9] + 0x36C, &due, 4 ); assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );
+		private_data[9][0x370] = 0; due = 99.0f; memcpy( private_data[9] + 0x36C, &due, 4 );
+		assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );
+		private_data[9][0x370] = 1;
+	}
 	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == &entities[2] );  /* the guest she fights */
 	set_handle( 9, 0x184, &entities[1], 1 );
 	assert( SV_CoF_RescueThinkSlotOne( &entities[9] ) == NULL );          /* the host: as retail */

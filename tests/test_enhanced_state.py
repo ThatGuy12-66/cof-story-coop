@@ -24,6 +24,14 @@ class StoryStateTests(unittest.TestCase):
         })
         self.assertIn('state integration scenarios passed', out)
 
+    def test_map_start_patches(self):
+        # 1.1.8: permanent fades are their activator's (K3); a toggling env_global only sets its global (M2 F6)
+        out = run_native(self, 'cof_state_activate_harness.c', {
+            'sv_cof_state_data.h': (ENGINE_SERVER / 'sv_cof_state_data.h').read_text(),
+            'state_under_test.c': '#include "sv_cof_state_data.h"\n' + strip_includes((ENGINE_SERVER / 'sv_cof_state.c').read_text()),
+        })
+        self.assertIn('state activation scenarios passed', out)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -417,8 +417,10 @@ class InfoQueryTests(unittest.TestCase):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as idle:
             idle.bind(('127.0.0.1', 0))
             port = idle.getsockname()[1]
-        with self.assertRaises(network.NetworkError):
+        with self.assertRaises(network.NetworkError) as caught:
             network.query_info(network.Endpoint('127.0.0.1', port), timeout=0.5)
+        # 1.1.8 (L7): the host's first Windows Firewall question is easily missed behind the game
+        self.assertIn('the host’s Windows Firewall', str(caught.exception))
 
 
 if __name__ == '__main__':

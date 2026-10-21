@@ -6,6 +6,7 @@ typedef int qboolean;
 #define false 0
 #define ca_active 3
 #define ca_connected 2
+#define ca_validate 5
 #define FWORLD_WATERALPHA 1
 #define FBitSet(value, flag) ((value) & (flag))
 #define Q_strcmp strcmp
@@ -30,6 +31,13 @@ static void CL_ClearState(void)
 static void CL_InitEdicts(int clients)
 { assert(clgame.entities == NULL); inits++; preserved_clients = clients; clgame.entities = entities; }
 static void Con_Reportf(const char *format, ...) { (void)format; }
+/* 1.1.8: the notice carries the spawncount of the map left */
+static int cl_cof_story_epoch = -1;
+static int argc = 1;
+static const char *argv1 = "";
+static int Cmd_Argc(void) { return argc; }
+static const char *Cmd_Argv(int i) { return i == 1 ? argv1 : "cof_story_changelevel"; }
+static int Q_atoi(const char *s) { int v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0'); return v; }
 static void CL_Reconnect(qboolean setup_netchan)
 {
     sizebuf_t message = {0};
@@ -53,6 +61,23 @@ int main(void)
     cls.state = ca_active; cls.demoplayback = true;
     CL_CoF_StoryChangeLevel_f();
     assert(clears == 1 && reconnects == 1);
+    /* 1.1.8: a notice with the spawncount of the map left: acted on once, its second copy ignored */
+    cls.demoplayback = false; cls.state = ca_active; cl.maxclients = 2; clgame.entities = entities;
+    clears = inits = reconnects = loading = 0; argc = 2; argv1 = "7";
+    CL_CoF_StoryChangeLevel_f();
+    assert(clears == 1 && reconnects == 1 && cl_cof_story_epoch == 7);
+    CL_CoF_StoryChangeLevel_f();
+    assert(clears == 1 && reconnects == 1);
+    /* ...a guest still signing on (it was loading when the party left) starts again on the new map */
+    cls.state = ca_connected; argv1 = "8";
+    CL_CoF_StoryChangeLevel_f();
+    assert(clears == 1 && reconnects == 2 && cl_cof_story_epoch == 8);
+    CL_CoF_StoryChangeLevel_f(); /* told again before its "new" arrived: already acted on */
+    assert(reconnects == 2);
+    /* ...an old server's notice (no count) still needs a client in game */
+    argc = 1; argv1 = "";
+    CL_CoF_StoryChangeLevel_f();
+    assert(reconnects == 2);
     puts("story client transition entity lifetime passed");
     return 0;
 }

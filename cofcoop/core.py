@@ -29,7 +29,8 @@ CHAPTERS = [
     ("Chapter 2 — Who is that doctor?", "c_basement"),
     ("Chapter 3 — The city is not safe", "c_sewer3"),
     ("Chapter 4 — Drowned in sorrow", "c_park3"),
-    ("Chapter 5 — Leaving this for good", "c_subway2st1"),
+    # 1.1.8: c_subway2st1's first spawn is the chapter 4 arrival; chapter 5 begins at its landing from c_subwaysick2
+    ("Chapter 5 — Leaving this for good", "c_subwaysick2"),
     ("Chapter 6 — It's not over yet", "c_bridge"),
     ("Chapter 7 — Only safe at home", "c_attic"),
     ("Chapter 8 — My life ends here (ending 1)", "c_ending1b"),

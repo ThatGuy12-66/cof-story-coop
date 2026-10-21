@@ -1,3 +1,6 @@
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wcomment" /* cc on Linux: a comment in sv_cof_descriptor.h holds a glob */
+#endif
 #define main retail_fixture_main
 #include "retail_fixture.c"
 #undef main
@@ -6,7 +9,6 @@
 #define DEAD_NO 0
 #define cs_connected 2
 #define Q_stricmp _stricmp
-static struct { int spawncount; } state_svs;
 static sv_client_t *SV_ClientFromEdict( edict_t *entity, qboolean spawned )
 {
 	int index;

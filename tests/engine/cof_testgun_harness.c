@@ -56,6 +56,8 @@ static convar_t *Cvar_Get( const char *name, const char *value, int flags, const
 	assert( !strcmp( name, "cof_test_gun" ) && !value[0] ); /* off unless asked for */
 	return &cvar;
 }
+static int cheats; /* sv_cheats (1.1.8: the test gun is a cheat) */
+static int Cvar_VariableInteger( const char *name ) { assert( !strcmp( name, "sv_cheats" )); return cheats; }
 static int slot_of( const sv_client_t *cl ) { return (int)( cl - clients ); }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && !e->free; }
 static qboolean SV_CoF_TransitionActive( void ) { return transition; }
@@ -108,7 +110,7 @@ static void setup( const char *gun )
 	memset( entities, 0, sizeof( entities )); memset( clients, 0, sizeof( clients ));
 	memset( log_text, 0, sizeof( log_text )); log_length = 0;
 	memset( infinite, 0, sizeof( infinite )); memset( held, 0, sizeof( held )); memset( supplies, 0, sizeof( supplies ));
-	transition = wheelchair = phone = pending = gives = equips = 0; free_slots = 4; give_ok = 1; switch_ok = 1;
+	transition = wheelchair = phone = pending = gives = equips = 0; free_slots = 4; give_ok = 1; switch_ok = 1; cheats = 1;
 	last_give[0] = last_equip[0] = last_asked[0] = 0;
 	sv.time = 100.0; svs.maxclients = MAX_CLIENTS; svs.spawncount = 1; svs.clients = clients;
 	cvar.string = gun;
@@ -152,6 +154,14 @@ int main( void )
 	setup( "p345" ); run( 3.0 ); assert( !gives && logged( "test-gun-refused class=p345" ) == 1 );
 	setup( "item_key" ); run( 3.0 ); assert( !gives && logged( "test-gun-refused" ) == 1 );
 	setup( "weapon_supercalifragilisticexpialidocious_gun" ); run( 3.0 ); assert( logged( "test-gun-refused" ) == 1 );
+
+	/* 1.1.8 (L): only with sv_cheats on: asked for without it, refused once and nothing done; sv_cheats going to 0
+	 * turns its infinite ammo off as switching it off does */
+	setup( "weapon_m16" ); cheats = 0; run( 5.0 );
+	assert( !gives && !supplies[0] && !infinite[0] && logged( "cofstory phase=test-gun-refused reason=sv_cheats" ) == 1 );
+	cheats = 1; run( 3.0 ); assert( gives == 1 && infinite[0] );
+	cheats = 0; run( 3.0 ); assert( !infinite[0] && logged( "test-gun-off userid=2" ) == 1 && logged( "reason=sv_cheats" ) == 2 );
+	cvar.string = ""; run( 1.0 ); cvar.string = "weapon_m16"; run( 1.0 ); assert( logged( "reason=sv_cheats" ) == 3 ); /* asked again */
 
 	/* switched off: the game's switch goes back off once, with one line */
 	setup( "weapon_m16" ); run( 3.0 ); assert( infinite[0] );

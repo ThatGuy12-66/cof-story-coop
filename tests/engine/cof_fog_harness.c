@@ -32,5 +32,10 @@ int main( void )
 	show( "wanted all", CoF_FogWanted( fogs, 2, -1, got ), got );
 	fogs[0].active = 0; fogs[0].fading = 1; /* fading out: off */
 	show( "wanted 0 fading out", CoF_FogWanted( fogs, 2, 0, got ), got );
+	/* what a frame sends: after a reset only a fog that is on; a section move and a new map's first frame either */
+	printf( "send reset on: %d, off: %d\n", CoF_FogSend( 1, 0, 0, 1 ), CoF_FogSend( 1, 0, 0, 0 ));
+	printf( "send section on: %d, off: %d\n", CoF_FogSend( 0, 1, 0, 1 ), CoF_FogSend( 0, 1, 0, 0 ));
+	printf( "send arrival on: %d, off: %d\n", CoF_FogSend( 0, 0, 1, 1 ), CoF_FogSend( 0, 0, 1, 0 ));
+	printf( "send nothing new: %d\n", CoF_FogSend( 0, 0, 0, 1 ));
 	return 0;
 }

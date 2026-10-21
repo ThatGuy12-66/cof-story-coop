@@ -6,6 +6,7 @@ a host before joining and watches a hosted game. Starts no process itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,9 +17,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 to 1.1.7 (J, the blur, AMD graphics, a join crash, level changes, faster level changes) keep it: 1.1
-VERSION_LABEL = "1.1.7"
-BUILD = 12   # counts on (1.1.6 was 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
+VERSION = "1.1"   # who can join whom: 1.1.1 to 1.1.8 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass) keep it: 1.1
+VERSION_LABEL = "1.1.8"
+BUILD = 13   # counts on (1.1.7 was 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
@@ -30,7 +31,7 @@ REPORT_URL = "https://discord.gg/4uwV6jmmY7"   # "Report a bug": the public Disc
 # Every game the app starts: story co-op on, the test tools off. The story trace
 # goes to the log for bug reports; the engine never draws it on screen.
 STORY_SETTINGS = (
-    "cof_story_coop 1", "cof_story_trace 1", "sv_cheats 0", "sv_enttools_enable 0", "developer 0",
+    "cof_story_coop 1", "cof_story_trace 1", "sv_connect_timeout_ban 0", "sv_cheats 0", "sv_enttools_enable 0", "developer 0",
     "coop 0", "deathmatch 1", "mp_timelimit 0", "mp_fraglimit 0", "cof_test_gun 0", "fps_max 60",
     "rate 50000", "cl_cmdrate 60", "cl_updaterate 60", "cl_forwardspeed 300", "cl_backspeed 200",
     "cl_sidespeed 200", "+mlook",
@@ -41,6 +42,7 @@ DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion":
 MAX_COMPANIONS = 3   # the game takes four players at most
 _MAP = re.compile(r"[a-z0-9_]{1,32}\Z")
 _SLOT = re.compile(r"[a-z0-9_-]{1,24}\Z")
+_TAG = re.compile(r"[0-9a-f]{8}\Z")
 _ARCHIVE = struct.Struct("<5I")      # cof_archive_header_t: magic, version, count, size, checksum
 _ENTRY = struct.Struct("<64sI")      # cof_archive_entry_t: name, size
 _SESSION = struct.Struct("<4I64s")   # cof_session_data_t: version, clients, entities, maps, map
@@ -78,7 +80,8 @@ def _number(value, low: int, high: int, message: str) -> int:
 
 
 def clean_port(value) -> int:
-    return _number(value, 1024, 65535, "The port must be a number from 1024 to 65535.")
+    # 1.1.8 (L14.5): up to 65534, the game also takes the next port (-clientport)
+    return _number(value, 1024, 65534, "The port must be a number from 1024 to 65534.")
 
 
 def clean_players(value) -> int:
@@ -104,9 +107,17 @@ def party_size(*, solo: bool, players: int, companions: int, fill: bool, checkpo
     return places, places - 1 if fill else 0
 
 
+def merged_maps_tag(merged_maps: dict) -> str:
+    """1.1.8 (L8): 8 hex digits for the merged story maps a copy has installed (its record's merged_maps: path ->
+    SHA-256), the same for two copies only when they have the same merged maps."""
+    text = "".join(f"{path}={digest}\n" for path, digest in sorted(dict(merged_maps or {}).items()))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+
+
 def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
                 companions: int, port: int, cont: bool, video: list[str],
-                bonus_room: bool = False, merged: bool = True, coop_flashlight: bool = False) -> tuple[list[str], str]:
+                bonus_room: bool = False, merged: bool = True, coop_flashlight: bool = False,
+                maps: str = "") -> tuple[list[str], str]:
     """Play solo (LAN only, with AI companions) or host: the command line and the session cfg.
 
     companions: how many AI companion bots to keep (each gives its place to a friend who joins).
@@ -115,7 +126,8 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     merged: door-joined story maps load as one map (fewer loading screens); a continued
     session keeps the mode it was saved with (Checkpoint.merged).
     coop_flashlight: F gives everyone a free torch (Cry of Fear's co-op mode); off, the light is Simon's phone and
-    the story's own lights, as in the single-player game."""
+    the story's own lights, as in the single-player game.
+    maps: merged_maps_tag of the host's copy, sent (cof_maps) only with merged maps on, for check_host."""
     name = clean_name(name)
     password = "" if solo else clean_password(password)
     map_name = map_name.lower()
@@ -130,6 +142,11 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
              f"cof_companion {companions}", "cof_companion_drive 0",
              f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
              f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}"]
+    if merged and _TAG.match(maps):
+        lines.append(f"cof_maps {maps}")
+    if not cont and map_name != NEW_GAME_MAP:
+        # a chapter start: the engine hands out what the story would have given by then (1.1.8)
+        lines.append(f"cof_chapter_start {map_name}")
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
     return args, "\n".join(lines) + "\n"
@@ -144,12 +161,17 @@ def join_launch(runtime: Path, *, name: str, password: str, endpoint: str, video
     return args, config
 
 
-def check_host(info: dict, *, password: str) -> None:
-    """Refuse a join that cannot work, before the game starts (info: network.query_info)."""
+def check_host(info: dict, *, password: str, maps: str = "") -> None:
+    """Refuse a join that cannot work, before the game starts (info: network.query_info). maps: merged_maps_tag of
+    this copy, compared with the host's cofmaps (sent by 1.1.8 hosts playing merged maps; others are not checked)."""
     theirs = info.get("cofbuild", "")
     if theirs != VERSION:
         raise ValueError(f"The host runs a different version of story co-op (theirs: {theirs or 'unknown'}, "
                          f"yours: {VERSION_LABEL}). Everyone needs the same package.")
+    if info.get("cofmaps") and maps and info["cofmaps"] != maps:
+        # 1.1.8 (L8): the guest's game would stop at the first merged level it lacks or has another version of
+        raise ValueError("The host's merged maps differ from yours. Update Cry of Fear Co-op on both PCs to the "
+                         "newest version and try again (or the host can untick Merged maps).")
     try:
         players, limit = int(info.get("numcl", "0")), int(info.get("maxcl", "0"))
     except ValueError:

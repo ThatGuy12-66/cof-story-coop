@@ -43,7 +43,7 @@ stays with you through level changes, deaths and checkpoints. When the story emp
 inventory (`c_start`, the `c_bridge` bag, the stairway), it comes back. It is handed over only while
 two slots are free, so a key always fits; drop something if you want it back sooner. A gun you drop
 stays on the floor and a new one is handed over. The AI companion bot keeps its own kit. Host
-console: `cof_test_gun weapon_shotgun` hands out a shotgun as well (the M16 stays),
+console (with `sv_cheats 1`, which the script sets): `cof_test_gun weapon_shotgun` hands out a shotgun as well (the M16 stays),
 `cof_test_gun 0` turns infinite ammo off (the log says `test-gun-off`).
 
 Use `-Gun none` for the checks where ammo matters: the AI reloading a story gun (in solo mode the

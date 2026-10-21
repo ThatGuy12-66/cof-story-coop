@@ -23,7 +23,10 @@ class ExitTests(unittest.TestCase):
                 if entity.get('classname') != 'trigger_changelevel':
                     continue
                 target = entity.get('targetname')
-                scripted = bool(target and any(other.get('target') == target for other in entities))
+                # 1.1.8: a reusable trigger_multiple firing the exit makes it a walk-in exit, anything else scripted
+                firers = [other for other in entities if target and other.get('target') == target]
+                scripted = any(other.get('classname') != 'trigger_multiple' or float(other.get('wait') or 0) < 0
+                               for other in firers)
                 if scripted and any(other.get('classname') == 'trigger_once' and other.get('target') == target for other in entities):
                     found_once_only.add((path.stem, entity.get('landmark', '')))
                 values = [path.stem, entity.get('map', ''), entity.get('landmark', ''), fixture_name]

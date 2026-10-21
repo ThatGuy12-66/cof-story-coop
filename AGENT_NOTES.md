@@ -830,7 +830,7 @@ For native inspection, use the installed computer-use skill and `node_repl` / `@
 
 0. (2026-10-19 night) College doors (section "College classroom doors lead back in"): the smoke copy has the probe
    engine. When the user plays it (Continue from the 21:52:37 autosave in c_college2, back through the door to
-   c_college1, into the screwdriver classroom, try both doors from inside), read the `use-probe*` lines at each
+   c_college1, into the screwdriver classroom, try both doors from inside), read the `use-probe*` lines (since 1.1.8 the probe needs `cof_use_probe 1` on the host) at each
    `door-begin`: which brush the ray met first, and whether the fallback ranked the doors. Then fix with a test, and
    build a package (build 4) before sending anything.
    (2026-10-19 evening) The respawn-crash fix (section "Respawn crash after the second boss") is in the smoke copy,

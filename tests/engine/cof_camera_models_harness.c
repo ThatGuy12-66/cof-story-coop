@@ -14,7 +14,9 @@ int main( void )
 	left( "the player's scene", 1, 1, &model_a, &model_a );
 	left( "the scene ended (pDeathScene cleared)", 1, 1, NULL, &model_a );
 	left( "the player has a newer scene", 2, 1, &model_b, &model_a );
-	left( "the player left", 3, 0, NULL, &model_a );
+	left( "the player left (no object)", 3, 0, NULL, &model_a );
+	left( "a player who left or is loading, whose object still holds it", 3, 1, &model_a, &model_a );
+	left( "an owner object we cannot read", 3, -1, NULL, &model_a );
 	left( "placed by the map (no owner)", 0, 0, NULL, &model_a );
 	left( "owned by another entity", 9, 0, NULL, &model_a );
 	return 0;

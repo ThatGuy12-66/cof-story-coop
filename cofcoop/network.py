@@ -300,7 +300,8 @@ def query_info(endpoint: Endpoint, timeout: float = 2) -> dict:
             return parse_info_reply(_recv_message(sock, deadline))
     except (OSError, TimeoutError) as exc:
         raise NetworkError(f'No answer from {endpoint}. Check the address, that the host’s game is running, '
-                           f'and that UDP {endpoint.port} reaches the host (router port or a shared VPN).') from exc
+                           f'and that UDP {endpoint.port} reaches the host (router port, the host’s Windows '
+                           f'Firewall, or a shared VPN).') from exc
 
 
 def rcon(endpoint: Endpoint, password: str, command: str, timeout: float = 2) -> str:

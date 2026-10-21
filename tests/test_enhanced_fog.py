@@ -23,6 +23,10 @@ class FogTests(unittest.TestCase):
             'wanted 1: 0 [0 0 0 0 0 0]',
             'wanted all: 1 [40 50 60 0 100 900]',
             'wanted 0 fading out: 0 [0 0 0 0 0 0]',
+            'send reset on: 1, off: 0',
+            'send section on: 1, off: 1',
+            'send arrival on: 1, off: 1',
+            'send nothing new: 0',
         ])
 
 
@@ -36,6 +40,14 @@ class FogWiringTests(unittest.TestCase):
 
     def test_runs_with_the_story_layer(self):
         assert_has(self, 'SV_CoF_FogFrame();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame('))
+
+    def test_a_new_maps_first_frame_gets_the_fog(self):
+        """1.1.8 (E2-6): a story level change sends no ResetHUD or InitHUD, and a START_ON env_fog went only to
+        the players already in (c_subwaysick1, c_trainscene): each player's first frame of a new map is replayed."""
+        frame = body_of(SERVER / 'sv_cof_fog.c', 'void SV_CoF_FogFrame(')
+        assert_has(self, 'arrived = cof_fog_players[slot].generation != svs.spawncount;', frame)
+        assert_has(self, 'CoF_FogSend( cof_fog_players[slot].replay, moved, arrived, wanted )', frame)
+        assert_has(self, 'cof_fog_players[slot].generation = svs.spawncount;', frame)
 
 
 if __name__ == '__main__':

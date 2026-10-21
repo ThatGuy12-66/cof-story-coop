@@ -313,6 +313,19 @@ int main( void )
 	msg( "Padlock", MSG_ONE, NULL ); SV_CoF_TraceMsgEnd();
 	CHECK( IS( "cofstory phase=msg name=Padlock to=? data=\n" ));
 	clear();
+	/* 1.1.8 (L13): one sent to an AI companion alone is not traced; to everyone it still is */
+	clients[3].flags = FCL_FAKECLIENT;
+	msg( "ScreenFade", MSG_ONE, clients[3].edict ); SV_CoF_TraceMsgByte( 1 ); SV_CoF_TraceMsgEnd();
+	msg( "ScreenFade", MSG_ONE_UNRELIABLE, clients[3].edict ); SV_CoF_TraceMsgByte( 1 ); SV_CoF_TraceMsgEnd();
+	CHECK( IS( "" ));
+	msg( "ScreenFade", MSG_ONE, clients[2].edict ); SV_CoF_TraceMsgByte( 1 ); SV_CoF_TraceMsgEnd();
+	CHECK( IS( "cofstory phase=msg name=ScreenFade to=12 data=1\n" ));
+	clear();
+	msg( "ScreenFade", MSG_ALL, NULL ); SV_CoF_TraceMsgByte( 2 ); SV_CoF_TraceMsgEnd();
+	CHECK( IS( "cofstory phase=msg name=ScreenFade to=all data=2\n" ));
+	clients[3].flags = 0;
+	clear();
+	clear();
 	msg( "HudText", MSG_ALL, NULL ); SV_CoF_TraceMsgByte( 1 ); SV_CoF_TraceMsgEnd();
 	CHECK( IS( "" ));
 	msg( "AddNote", MSG_ONE, clients[0].edict ); SV_CoF_TraceMsgByte( 3 ); SV_CoF_TraceMsgString( "" ); SV_CoF_TraceMsgString( "" ); SV_CoF_TraceMsgEnd();

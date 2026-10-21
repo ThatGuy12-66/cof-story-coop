@@ -149,6 +149,15 @@ class ProgressPanel:
             self.box.see("end")
 
 
+# 1.1.8 (L14.2): closing the window ends a setup or update part way (its worker thread dies with the app)
+BUSY_WARNINGS = {
+    "setup": "Setup is still running. Closing now stops it part way; click Set up again later to delete the "
+             "unfinished copy and start over. Close anyway?",
+    "update": "The update is still running. Closing now stops it part way, and the copy may not start until it is "
+              "updated or repaired. Close anyway?",
+}
+
+
 def where_to_start(exe_dir: Path, default_copy: Path, build: int, pointer: Path | None = COPY_POINTER):
     """'main' (a copy to play from), 'update' (an older copy), 'newer' (a copy newer than this app) or 'setup'."""
     if setup_lib.installed_state(exe_dir):
@@ -179,6 +188,8 @@ class App:
         self.offer = None          # a newer release (app_update.Release), once the check finds one
         self.update_slot = None    # where the main screen shows that offer
         self.checked = False
+        self.busy = None           # "setup" or "update" while one runs (BUSY_WARNINGS)
+        self.launching = False     # a Start or Join is checking the copy (launch)
         self.messages = queue.Queue()
         window.title("Cry of Fear Co-op")
         window.geometry("760x560")
@@ -217,7 +228,10 @@ class App:
                 handler, value = self.messages.get_nowait()
             except queue.Empty:
                 break
-            handler(value)
+            try:
+                handler(value)
+            except Exception as error:   # 1.1.8 (L14.9): one failing handler must not stop every later result
+                self.error(error)
         self.window.after(100, self.pump)
 
     def error(self, error):
@@ -228,13 +242,13 @@ class App:
         def run(*_):
             try:
                 action()
-            except (OSError, ValueError, RuntimeError, network.NetworkError) as error:
-                self.error(error)
+            except (OSError, ValueError, RuntimeError, network.NetworkError, subprocess.SubprocessError) as error:
+                self.error(error)   # 1.1.8 (L3): the windowed app has no stderr, an uncaught error was a dead button
         return run
 
     def close(self):
         from tkinter import messagebox
-        warning = play.close_warning(self.watch)
+        warning = BUSY_WARNINGS.get(self.busy) or play.close_warning(self.watch)
         if warning and not messagebox.askokcancel("Cry of Fear Co-op", warning, parent=self.window):
             return
         if self.watch:
@@ -281,20 +295,32 @@ class App:
 
         def stopped(error):
             panel.stop()
+            self.busy = None
             button.configure(state="normal")
-            panel.status.set("Setup stopped. Your Steam game is unchanged.")
+            left = setup_lib.incomplete_copy(Path(destination.get()))
+            panel.status.set("Setup stopped. Your Steam game is unchanged." +
+                             (" Click Set up to delete the unfinished copy and try again." if left else ""))
             self.error(error)
 
         def made(copy):
             panel.stop()
+            self.busy = None
             remember_copy(copy)
             self.show_main(copy)
 
         def start():
+            from tkinter import messagebox
+            src, dst = Path(source.get()), Path(destination.get())
+            # 1.1.8 (L4): a setup that stopped leaves its copy (up to 5 GB) in the folder, which setup never reuses
+            replace = setup_lib.incomplete_copy(dst)
+            if replace and not messagebox.askyesno("Set up", f"{dst} holds the unfinished copy of a setup that "
+                                                   "stopped. Delete it and set up again?", parent=self.window):
+                return
             button.configure(state="disabled")
             panel.start()
-            src, dst = Path(source.get()), Path(destination.get())
-            self.work(lambda: setup_lib.setup(src, dst, self.payload, exe=self.exe, progress=self.reporter(panel)),
+            self.busy = "setup"
+            self.work(lambda: setup_lib.setup(src, dst, self.payload, exe=self.exe, progress=self.reporter(panel),
+                                              replace_incomplete=replace),
                       made, stopped)
         button.configure(command=start)
         self.work(setup_lib.steam_candidates, found, lambda _: found([]))
@@ -311,23 +337,31 @@ class App:
         if chosen:
             var.set(str(Path(chosen) / "CoF-Story-Coop"))
 
-    def show_update(self, copy, auto=False, wait=()):
-        """auto: started by the previous version's "Update now", which is closing: wait for it, then update."""
+    def show_update(self, copy, auto=False, wait=(), repair=False):
+        """auto: started by the previous version's "Update now", which is closing: wait for it, then update.
+        repair: the same update over a copy of this build that fails its install check (offer_repair)."""
         ttk = self.ttk
-        body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
-                          f"in {copy}. Your saves and settings are kept.")
-        button = ttk.Button(body, text="Update")
+        if repair:
+            body = self.clear("Repair story co-op", f"Version {play.VERSION_LABEL} is installed again over your copy "
+                              f"in {copy}, and its models and merged maps are made again from its own game files. "
+                              "Your saves and settings are kept.")
+        else:
+            body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
+                              f"in {copy}. Your saves and settings are kept.")
+        button = ttk.Button(body, text="Repair" if repair else "Update")
         button.pack(anchor="w", pady=14)
         panel = self.progress_panel(body)
         report = self.reporter(panel)
 
         def stopped(error):
             panel.stop()
+            self.busy = None
             button.configure(state="normal")
             self.error(error)
 
         def updated(root):
             panel.stop()
+            self.busy = None
             self.show_main(root)
 
         def job():
@@ -339,10 +373,25 @@ class App:
         def start():
             button.configure(state="disabled")
             panel.start()
+            self.busy = "update"
             self.work(job, updated, stopped)
         button.configure(command=start)
         if auto:
             start()
+
+    def offer_repair(self, error):
+        """1.1.8 (L1): a copy that fails its install check (CopyMismatch) at this app's build had no way back
+        but a new setup: Update is offered only to older copies. Repair runs the same update with this app's own
+        payload. Not offered without a payload, or to a copy newer than this app (it would go back a version)."""
+        from tkinter import messagebox
+        state = setup_lib.installed_state(self.root) if self.root else None
+        if self.payload is None or not state or state["build"] > play.BUILD:
+            self.error(error)
+            return
+        if messagebox.askyesno("Repair", f"{error.problem}\n\nRepair it now? The co-op engine is installed again "
+                               "and the models and merged maps are made again from the copy's own game files (a few "
+                               "minutes). Your saves and settings are kept.", parent=self.window):
+            self.show_update(self.root, auto=True, repair=True)
 
     def show_download(self, release):
         """The main screen's "Update now": the new version's zip, then the new app takes over and this one closes."""
@@ -463,15 +512,49 @@ class App:
         self.settings.update(values)
         play.save_settings(self.root, self.settings)
 
-    def launch(self, args, config):
-        setup_lib.validate_runtime(self.root)
-        if setup_lib.game_is_running(self.root):
-            raise ValueError("Cry of Fear is already running from this copy. Close it first.")
-        (self.root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
-        (self.root / "cryoffear" / play.SESSION_CFG).write_text(config, encoding="ascii")
-        setup_lib.keep_previous_log(self.root, play.LOG)
-        start_game(self.root, args)
-        self.remember(name=self.name.get().strip(), first_launch_done=True)
+    def maps_tag(self) -> str:
+        """This copy's merged maps for the host's cof_maps and the join check (1.1.8, L8)."""
+        merged = (setup_lib.installed_state(self.root) or {}).get("merged_maps")
+        return play.merged_maps_tag(merged if isinstance(merged, dict) else {})
+
+    def launch(self, args, config, started, stopped=lambda: None):
+        """Starts the game, then started(); stopped() when it does not start. The copy's install check (it hashes
+        about 0.6 GB) and the running-game check (PowerShell) run off the UI thread (1.1.8, L11: they froze the
+        window); a copy that fails its install check is offered Repair (L1)."""
+        if self.launching:
+            stopped()
+            self.error("Cry of Fear is starting already. Wait a moment.")
+            return
+        self.launching = True
+        root = self.root
+
+        def check():
+            setup_lib.validate_runtime(root)
+            return setup_lib.game_is_running(root)
+
+        def checked(running):
+            self.launching = False
+            try:
+                if running:
+                    raise ValueError("Cry of Fear is already running from this copy. Close it first.")
+                (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
+                (root / "cryoffear" / play.SESSION_CFG).write_text(config, encoding="ascii")
+                setup_lib.keep_previous_log(root, play.LOG)
+                start_game(root, args)
+                self.remember(name=self.name.get().strip(), first_launch_done=True)
+                started()
+            except (OSError, ValueError, RuntimeError, network.NetworkError, subprocess.SubprocessError) as error:
+                stopped()
+                self.error(error)
+
+        def failed(error):
+            self.launching = False
+            stopped()
+            if isinstance(error, setup_lib.CopyMismatch):
+                self.offer_repair(error)
+            else:
+                self.error(error)
+        self.work(check, checked, failed)
 
     def video(self):
         return play.video_flags(not self.settings["first_launch_done"], desktop_size())
@@ -554,19 +637,34 @@ class App:
                                             password=password.get(), companions=ais, port=number,
                                             cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get(),
                                             merged=play.merged_for_start(checkpoint, checkbox=merged.get()),
-                                            coop_flashlight=torch.get())
-            self.launch(args, config)
-            self.remember(bonus_room=bonus.get(), merged_maps=merged.get(), coop_flashlight=torch.get())
-            if solo and not checkpoint:
-                self.remember(companions=ais)
-            if not solo:
-                self.remember(players=self.settings["players"] if checkpoint else count, password=password.get(),
-                              companion=companion.get(), port=number)
-            self.show_running(play.HostWatch(number, lan_only=solo), solo)
+                                            coop_flashlight=torch.get(), maps=self.maps_tag())
+            choices = dict(bonus_room=bonus.get(), merged_maps=merged.get(), coop_flashlight=torch.get())
+            hosting = dict(players=self.settings["players"] if checkpoint else count, password=password.get(),
+                           companion=companion.get(), port=number)
+
+            def started():
+                checking.set("")
+                self.remember(**choices)
+                if solo and not checkpoint:
+                    self.remember(companions=ais)
+                if not solo:
+                    self.remember(**hosting)
+                self.show_running(play.HostWatch(number, lan_only=solo), solo)
+
+            def stopped():
+                checking.set("")
+                if start_button.winfo_exists():
+                    start_button.configure(state="normal")
+            start_button.configure(state="disabled")   # one start at a time while the copy is checked
+            checking.set("Checking your copy…")
+            self.launch(args, config, started, stopped)
         buttons = ttk.Frame(body)
         buttons.pack(anchor="w", pady=16)
-        ttk.Button(buttons, text="Start", command=self.guard(start)).pack(side="left")
+        checking = tk.StringVar()
+        start_button = ttk.Button(buttons, text="Start", command=self.guard(start))
+        start_button.pack(side="left")
         ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=6)
+        ttk.Label(buttons, textvariable=checking).pack(side="left", padx=6)
 
     def show_running(self, watch, solo):
         ttk, tk = self.ttk, self.tk
@@ -574,7 +672,8 @@ class App:
         body = self.clear("Playing solo" if solo else "Hosting",
                           "Keep this window open while you play." if solo else
                           "Send your friends the join code (and the password, if you set one). "
-                          "Keep this window open while you host.")
+                          "Keep this window open while you host. If Windows Firewall asks about Cry of Fear (its "
+                          "window can be hidden behind the game), click Allow access, or friends can't join.")
         status = tk.StringVar(value="Starting the game...")
         ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w", pady=4)
         if not solo:
@@ -600,7 +699,7 @@ class App:
             time.sleep(5)
             while not watch.closed:
                 try:
-                    running = setup_lib.game_is_running(root)
+                    running = setup_lib.game_is_running(root, unknown=True)
                 except (OSError, ValueError, subprocess.SubprocessError):
                     running = True
                 self.messages.put((status.set, watch.poll(running)))
@@ -620,20 +719,33 @@ class App:
             secret = play.clean_password(password.get())
             endpoint = network.parse_endpoint(target.get())
             status.set(f"Checking {endpoint}…")
+            button.configure(state="disabled")   # 1.1.8 (L14.10): a second click started a second check and start
+
+            def enable():
+                if button.winfo_exists():
+                    button.configure(state="normal")
 
             def ready(_):
-                args, config = play.join_launch(self.root, name=name, password=secret, endpoint=str(endpoint),
-                                                video=self.video())
-                self.guard(lambda: (self.launch(args, config),
-                                    status.set("Joining. The game window opens in a moment.")))()
+                try:
+                    args, config = play.join_launch(self.root, name=name, password=secret, endpoint=str(endpoint),
+                                                    video=self.video())
+                except ValueError as error:
+                    refused(error)
+                    return
+                self.launch(args, config,
+                            lambda: (enable(), status.set("Joining. The game window opens in a moment.")),
+                            lambda: (enable(), status.set("")))
 
             def refused(error):
+                enable()
                 status.set("")
                 self.error(error)
-            self.work(lambda: play.check_host(network.query_info(endpoint, timeout=3), password=secret), ready, refused)
+            self.work(lambda: play.check_host(network.query_info(endpoint, timeout=3), password=secret,
+                                              maps=self.maps_tag()), ready, refused)
         buttons = ttk.Frame(body)
         buttons.pack(anchor="w", pady=16)
-        ttk.Button(buttons, text="Join", command=self.guard(join)).pack(side="left")
+        button = ttk.Button(buttons, text="Join", command=self.guard(join))
+        button.pack(side="left")
         ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=6)
         ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w")
 

@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdarg.h>
+#ifndef _WIN32
+#include <strings.h>
+#define _stricmp strcasecmp /* cc on Linux: the same compare MSVC names _stricmp */
+#endif
 typedef unsigned char byte;
 typedef int qboolean;
 typedef int string_t;
@@ -17,7 +21,10 @@ typedef float vec3_t[3];
 #define ss_active 2
 #define DEAD_NO 0
 #define SOLID_NOT 0
+#define SOLID_TRIGGER 1
 #define SOLID_SLIDEBOX 3
+#define CONTENTS_EMPTY -1
+#define CONTENTS_SOLID -2
 #define FL_GODMODE (1<<6)
 #define FL_FROZEN (1<<12)
 #define FL_KILLME (1<<30)
@@ -34,14 +41,32 @@ typedef float vec3_t[3];
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
 #define VectorSubtract(a,b,c) ((c)[0]=(a)[0]-(b)[0],(c)[1]=(a)[1]-(b)[1],(c)[2]=(a)[2]-(b)[2])
 #define DotProduct(a,b) ((a)[0]*(b)[0]+(a)[1]*(b)[1]+(a)[2]*(b)[2])
+#define VectorAdd(a,b,c) ((c)[0]=(a)[0]+(b)[0],(c)[1]=(a)[1]+(b)[1],(c)[2]=(a)[2]+(b)[2])
+#define VectorClear(x) ((x)[0]=(x)[1]=(x)[2]=0)
+#define VectorIsNull(v) ((v)[0] == 0.0f && (v)[1] == 0.0f && (v)[2] == 0.0f)
 typedef struct edict_s edict_t;
 typedef struct {
-	string_t classname, target, targetname;
-	vec3_t origin, absmin, absmax;
-	float health, nextthink, fuser3;
-	int deadflag, flags, spawnflags, iuser1, solid;
+	string_t classname, target, targetname, message;
+	vec3_t origin, angles, velocity, avelocity, absmin, absmax;
+	float health, nextthink, fuser3, dmg;
+	int deadflag, flags, spawnflags, iuser1, solid, modelindex;
 	edict_t *owner;
 } entvars_t;
+/* brush models: hull 1 is the brush grown by a player's half size, so a point in it is a player touching the brush */
+typedef struct { int firstclipnode; vec3_t clip_mins; } hull_t;
+enum { mod_bad, mod_brush };
+typedef struct { int type; hull_t hulls[4]; vec3_t shape_min, shape_max; } model_t;
+static model_t models[4];
+static model_t *SV_ModelHandle( int index ) { return index > 0 && index < 4 ? &models[index] : NULL; }
+static int PM_HullPointContents( hull_t *hull, int num, const vec3_t p )
+{
+	static const float half[3] = { 16, 16, 36 };
+	const model_t *mod = &models[num];
+	int k;
+	assert( hull == &models[num].hulls[1] && hull->clip_mins[2] == -36.0f );
+	for( k = 0; k < 3; k++ ) if( p[k] < mod->shape_min[k] - half[k] || p[k] > mod->shape_max[k] + half[k] ) return CONTENTS_EMPTY;
+	return CONTENTS_SOLID;
+}
 struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; };
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; } sv_client_t;
 typedef struct { int buttons; } usercmd_t;
@@ -53,7 +78,9 @@ static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[24][0x2900];
 static const char *strings[] = { "", "player", "trigger_once", "cof_killplayer", "die", "cof_phonecall", "sophiecall",
 	"gateinter", "cof_ladder_manager", "cof_ladder_manager_use", "lad1", "wheelchair", "camera_model", "cof_yesno",
-	"ryesno", "yesno", "multi_manager", "lad2" };
+	"ryesno", "yesno", "multi_manager", "lad2",
+	/* 18 */ "cof_teleport", "info_teleport_destination", "trigger_hurt", "multifallheh", "teleportfall", "teleportfall2",
+	/* 24 */ "kallamig", "multiroofscene", "rsstart", "globalr", "boat", "monster", "trigger_relay", "ladddd" };
 static char log_text[16384];
 static size_t log_length;
 static int gate, kills[MAX_CLIENTS + 1], has_phone[MAX_CLIENTS], fired;
@@ -81,14 +108,31 @@ static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *t
 {
 	snprintf( prompts[cl - clients], sizeof( prompts[0] ), "%d:%s", colour, text ); return true;
 }
-static int logos_to[MAX_CLIENTS], logo_value;
+static int logos_to[MAX_CLIENTS], logo_value, fades_to[MAX_CLIENTS], boats_to[MAX_CLIENTS], faded_in[MAX_CLIENTS], links, controls_given[24];
+static byte fade_value[2];
 static void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, int size );
 /* as the engine: the message goes out, and is seen by the moments hook like any other */
 static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable )
 {
-	assert( !strcmp( name, "CoFLogo" ) && size == 1 && reliable );
-	logos_to[NUM_FOR_EDICT( to ) - 1]++; logo_value = payload[0];
+	assert( reliable );
+	if( !strcmp( name, "CoFLogo" )) { assert( size == 1 ); logos_to[NUM_FOR_EDICT( to ) - 1]++; logo_value = payload[0]; }
+	else if( !strcmp( name, "GreyFade" )) { assert( size == 2 ); fades_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( fade_value, payload, 2 ); }
+	else { assert( !strcmp( name, "Boat" ) && size == 2 && payload[0] == 0xFF && payload[1] == 0xFF ); boats_to[NUM_FOR_EDICT( to ) - 1]++; }
 	SV_CoF_MomentsMessage( to, name, payload, size );
+	return true;
+}
+static qboolean SV_CoF_RetailScreenFade( sv_client_t *cl, float duration, float hold, int flags, int r, int g, int b, int a )
+{
+	assert( duration == 1.0f && hold == 0.0f && !flags && !r && !g && !b && a == 255 );
+	faded_in[cl - clients]++; return true;
+}
+static void SV_LinkEdict( edict_t *e, qboolean touch ) { assert( !touch ); links++; }
+/* CBasePlayer::EnableControl( TRUE ), thiscall 100DEFF0 */
+static qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg )
+{
+	int i;
+	assert( rva == 0xDEFF0 && arg == (void *)1 );
+	for( i = 0; i < 24; i++ ) if( private_data[i] == self ) controls_given[i]++;
 	return true;
 }
 static const char *Cmd_Argv( int i ) { return i == 0 ? argv0 : i == 1 ? argv1 : ""; }
@@ -125,6 +169,8 @@ static void setup( void )
 	}
 	for( i = 3; i < 24; i++ ) entities[i].free = 1;
 	memset( logos_to, 0, sizeof( logos_to )); logo_value = -1;
+	memset( fades_to, 0, sizeof( fades_to )); memset( boats_to, 0, sizeof( boats_to )); memset( faded_in, 0, sizeof( faded_in ));
+	memset( controls_given, 0, sizeof( controls_given )); links = 0; memset( models, 0, sizeof( models ));
 	SV_CoF_MomentsReset();
 }
 static edict_t *spawn( int i, string_t classname, string_t targetname, string_t target )
@@ -146,6 +192,28 @@ static void set_think( int entity, uint32_t rva ) { uint32_t v = rva ? BASE + rv
 static uint32_t get_think( int entity ) { uint32_t v; memcpy( &v, private_data[entity] + COF_THINK, 4 ); return v; }
 static int logged( const char *s ) { int n = 0; const char *at = log_text; while(( at = strstr( at, s ))) { n++; at++; } return n; }
 static qboolean command( int slot, const char *a0, const char *a1 ) { strcpy( argv0, a0 ); strcpy( argv1, a1 ); argc = 2; return SV_CoF_MomentsClientCommand( &clients[slot] ); }
+/* 1.1.8: a multi_manager (CMultiManager private data) firing these names */
+static void mm_spawn( int i, string_t name, int count, const string_t *targets )
+{
+	int k;
+	spawn( i, 16, name, 0 );
+	memcpy( private_data[i] + COF_MM_COUNT, &count, 4 );
+	for( k = 0; k < count && k < 16; k++ ) memcpy( private_data[i] + COF_MM_NAMES + k * 4, &targets[k], 4 );
+}
+static void set_vec( vec3_t v, float x, float y, float z ) { v[0] = x; v[1] = y; v[2] = z; }
+/* 1.1.8: the c_roofs fall: trigger_once 10 -> multi_manager 11 'multifallheh' -> cof_teleport 12 'teleportfall' ->
+ * info_teleport_destination 13 'teleportfall2' (1911 532 381), in trigger_hurt 14 (brush model 1, dmg 1000, on). */
+static void fall_trap( void )
+{
+	string_t fall[] = { 22 };
+	edict_t *hurt;
+	spawn( 10, 2, 0, 21 ); mm_spawn( 11, 21, 1, fall );
+	spawn( 12, 18, 22, 23 ); set_vec( spawn( 13, 19, 23, 0 )->v.origin, 1911, 532, 381 );
+	hurt = spawn( 14, 20, 0, 0 ); hurt->v.dmg = 1000; hurt->v.solid = SOLID_TRIGGER; hurt->v.modelindex = 1;
+	models[1].type = mod_brush; models[1].hulls[1].firstclipnode = 1; set_vec( models[1].hulls[1].clip_mins, -16, -16, -36 );
+	set_vec( models[1].shape_min, 1800, 400, 300 ); set_vec( models[1].shape_max, 2000, 600, 450 );
+	set_vec( hurt->v.absmin, 1800, 400, 300 ); set_vec( hurt->v.absmax, 2000, 600, 450 );
+}
 static void yesno_message( int slot, int index )
 {
 	byte payload[32]; int n = (int)strlen( "gfx/yesno.tga" ) + 1;
@@ -356,6 +424,128 @@ int main( void )
 	host->v.deadflag = DEAD_NO;
 	gate = 0; assert( !SV_CoF_MomentsStackedTouch( host )); gate = 1;
 	assert( !SV_CoF_MomentsStackedTouch( &entities[5] ) && !SV_CoF_MomentsStackedTouch( NULL ));
+	/* 1.1.8 (M1 findings 2 and 6): a trigger_once that teleports its toucher into a kill box is a fall floor:
+	 * only who touched it dies, and it stays for the next. */
+	setup(); fall_trap(); SV_CoF_MomentsFrame();
+	assert( logged( "phase=fall-floor trigger=10 target=multifallheh trap=1" ) == 1 );
+	assert( SV_CoF_MomentsTriggerTouch( &entities[10], guest ) && kills[2] == 1 && !kills[1] );
+	memcpy( &bits, private_data[2] + COF_PL_DEATHBITS, 4 ); assert( bits == 0 );
+	assert( SV_CoF_MomentsTriggerTouch( &entities[10], host ) && kills[1] == 1 && logged( "fall-death userid=100 trigger=10" ) == 1 );
+	/* c_city's flowers: the hurt starts off and the same chain switches it on */
+	{
+		string_t chain[] = { 22, 24 };
+		setup(); fall_trap(); mm_spawn( 11, 21, 2, chain ); entities[14].v.solid = SOLID_NOT; entities[14].v.targetname = 24;
+		SV_CoF_MomentsFrame(); assert( logged( "trap=1" ) == 1 );
+		/* ...a hurt the chain switches off is no trap */
+		setup(); fall_trap(); mm_spawn( 11, 21, 2, chain ); entities[14].v.targetname = 24;
+		SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ) && !SV_CoF_MomentsTriggerTouch( &entities[10], guest ));
+	}
+	/* no trap: a hurt that is off and stays so, one that spares players (8), one too weak, a landing beside the
+	 * brush's own shape (in its box only), a teleport that moves a monster, a manager not laid out as expected */
+	setup(); fall_trap(); entities[14].v.solid = SOLID_NOT; SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ));
+	setup(); fall_trap(); entities[14].v.spawnflags = 8; SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ));
+	setup(); fall_trap(); entities[14].v.dmg = 50; SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ));
+	setup(); fall_trap(); set_vec( models[1].shape_min, 1800, 400, 300 ); set_vec( models[1].shape_max, 1850, 450, 320 );
+	SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ));
+	setup(); fall_trap(); entities[12].v.message = 29; SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ));
+	setup(); fall_trap(); value = 99; memcpy( private_data[11] + COF_MM_COUNT, &value, 4 ); SV_CoF_MomentsFrame(); assert( !logged( "fall-floor" ));
+	/* the trigger aimed straight at the teleport counts too */
+	setup(); fall_trap(); entities[10].v.target = 22; SV_CoF_MomentsFrame(); assert( logged( "target=teleportfall trap=1" ) == 1 );
+
+	/* 1.1.8 (M1 finding 4): c_roofs has two entrances to its 358 s scene (multiroofscene; rsstart fires it 0.5 s
+	 * later). The first that fires switches the other off, which would replay the scene and toggle stater off. */
+	{
+		string_t scene[] = { 27 }, start[] = { 25 };
+		setup(); spawn( 10, 2, 0, 25 ); mm_spawn( 11, 25, 1, scene ); spawn( 12, 2, 0, 26 ); mm_spawn( 13, 26, 1, start );
+		SV_CoF_MomentsFrame();
+		assert( logged( "scene-entrance trigger=10 target=multiroofscene" ) == 1 && logged( "scene-entrance trigger=12 target=rsstart" ) == 1 );
+		assert( !entities[10].v.iuser1 && !entities[12].v.iuser1 );
+		entities[10].v.flags |= FL_KILLME; SV_CoF_MomentsFrame();
+		assert( entities[12].v.iuser1 == 1 && logged( "scene-entrance-off trigger=12 fired=10" ) == 1 );
+		SV_CoF_MomentsFrame(); assert( logged( "scene-entrance-off" ) == 1 );
+		/* the other way round: the entrance is gone (freed) */
+		setup(); spawn( 10, 2, 0, 25 ); mm_spawn( 11, 25, 1, scene ); spawn( 12, 2, 0, 26 ); mm_spawn( 13, 26, 1, start );
+		SV_CoF_MomentsFrame(); entities[12].free = 1; SV_CoF_MomentsFrame();
+		assert( entities[10].v.iuser1 == 1 && logged( "scene-entrance-off trigger=10 fired=12" ) == 1 );
+		/* c_nightmare: two aimed at one manager, which fires the third's: any one switches the other two off */
+		setup(); spawn( 10, 2, 0, 26 ); spawn( 14, 2, 0, 26 ); mm_spawn( 13, 26, 1, start ); spawn( 12, 2, 0, 25 ); mm_spawn( 11, 25, 1, scene );
+		SV_CoF_MomentsFrame(); entities[12].v.flags |= FL_KILLME; SV_CoF_MomentsFrame();
+		assert( entities[10].v.iuser1 == 1 && entities[14].v.iuser1 == 1 && logged( "scene-entrance-off" ) == 2 );
+		/* a named trigger (the map may switch or remove it) or an entrance to another scene: left alone */
+		setup(); spawn( 10, 2, 0, 25 ); mm_spawn( 11, 25, 1, scene ); spawn( 12, 2, 24, 26 ); mm_spawn( 13, 26, 1, start );
+		SV_CoF_MomentsFrame(); assert( !logged( "scene-entrance" ));
+		setup(); spawn( 10, 2, 0, 25 ); mm_spawn( 11, 25, 1, scene ); spawn( 12, 2, 0, 26 ); mm_spawn( 13, 26, 1, scene );
+		SV_CoF_MomentsFrame(); entities[10].free = 1; SV_CoF_MomentsFrame(); assert( !logged( "scene-entrance" ) && !entities[12].v.iuser1 );
+	}
+
+	/* 1.1.8 (K6): the c_lake boat's rider leaves mid-crossing: the boat is freed and goes back to where the map put it */
+	{
+		edict_t *boat;
+		uint32_t rider = (uint32_t)(uintptr_t)private_data[2], got;
+		setup(); boat = spawn( 15, 28, 0, 0 ); set_vec( boat->v.origin, 594, -2862, 9 ); set_vec( boat->v.angles, 0, -10, 0 );
+		SV_CoF_MomentsFrame();
+		set_vec( boat->v.origin, -300, 2000, 9 ); boat->v.angles[1] = 80; set_vec( boat->v.velocity, 50, 0, 0 );
+		memcpy( private_data[15] + COF_BOAT_RIDER, &rider, 4 ); memcpy( private_data[15] + COF_BOAT_EXIT, &rider, 4 );
+		memcpy( private_data[15] + COF_BOAT_TELLER, &rider, 4 ); set_handle( 2, COF_PL_BOAT, boat );
+		SV_CoF_MomentsDrop( &clients[0] ); assert( !links ); /* the host is not its rider */
+		SV_CoF_MomentsDrop( &clients[1] );
+		memcpy( &got, private_data[15] + COF_BOAT_RIDER, 4 ); assert( !got );
+		memcpy( &got, private_data[15] + COF_BOAT_EXIT, 4 ); assert( !got );
+		memcpy( &got, private_data[15] + COF_BOAT_TELLER, 4 ); assert( !got );
+		assert( boat->v.origin[0] == 594 && boat->v.origin[1] == -2862 && boat->v.angles[1] == -10 && !boat->v.velocity[0] && links == 1 );
+		assert( !get_handle( 2, COF_PL_BOAT ) && logged( "boat-freed userid=101 boat=15 moved=1" ) == 1 );
+		/* Before a level change every rider is let go as Disembark does, without the move: on board (m_pBoat), out of
+		 * the boat's view with the health HUD back; still boarding (the 1 s fade), only control and the fade. */
+		setup(); boat = spawn( 15, 28, 0, 0 ); memcpy( private_data[15] + COF_BOAT_RIDER, &rider, 4 ); set_handle( 2, COF_PL_BOAT, boat );
+		value = 8 | 1; memcpy( private_data[2] + COF_PL_HIDEHUD, &value, 4 ); set_vec( boat->v.origin, 10, 20, 0 );
+		SV_CoF_MomentsReleaseRiders();
+		memcpy( &got, private_data[15] + COF_BOAT_RIDER, 4 ); memcpy( &value, private_data[2] + COF_PL_HIDEHUD, 4 );
+		assert( !got && !get_handle( 2, COF_PL_BOAT ) && value == 1 && boats_to[1] == 1 && !boats_to[0] );
+		assert( controls_given[2] == 1 && faded_in[1] == 1 && boat->v.origin[0] == 10 && logged( "boat-released boat=15 userid=101" ) == 1 );
+		SV_CoF_MomentsReleaseRiders(); assert( controls_given[2] == 1 ); /* nobody rides now */
+		setup(); boat = spawn( 15, 28, 0, 0 ); memcpy( private_data[15] + COF_BOAT_RIDER, &rider, 4 );
+		value = 8; memcpy( private_data[2] + COF_PL_HIDEHUD, &value, 4 ); SV_CoF_MomentsReleaseRiders();
+		memcpy( &value, private_data[2] + COF_PL_HIDEHUD, 4 ); assert( value == 8 && !boats_to[1] && controls_given[2] == 1 && faded_in[1] == 1 );
+	}
+
+	/* 1.1.8 (M3 finding 7): c_ending4's cof_greyfade shows the grey fade to the host only: the guest gets it the
+	 * next frame, once; a fade the game sent everyone (the book Simons) is not sent again. */
+	{
+		byte fade[2] = { 0, 3 };
+		setup(); SV_CoF_MomentsFrame(); SV_CoF_MomentsMessage( host, "GreyFade", fade, 2 ); assert( !fades_to[1] );
+		SV_CoF_MomentsFrame(); assert( fades_to[1] == 1 && !fades_to[0] && fade_value[1] == 3 && logged( "greyfade-shared in=0 seconds=3 to=1" ) == 1 );
+		SV_CoF_MomentsFrame(); assert( fades_to[1] == 1 );
+		setup(); SV_CoF_MomentsFrame(); SV_CoF_MomentsMessage( host, "GreyFade", fade, 2 ); SV_CoF_MomentsMessage( guest, "GreyFade", fade, 2 );
+		SV_CoF_MomentsFrame(); assert( !fades_to[0] && !fades_to[1] && !logged( "greyfade-shared" ));
+		setup(); SV_CoF_MomentsFrame(); clients[1].flags = FCL_FAKECLIENT; SV_CoF_MomentsMessage( host, "GreyFade", fade, 2 );
+		SV_CoF_MomentsFrame(); assert( !fades_to[1] );
+		setup(); gate = 0; SV_CoF_MomentsMessage( host, "GreyFade", fade, 2 ); gate = 1; SV_CoF_MomentsFrame(); assert( !fades_to[1] );
+	}
+
+	/* 1.1.8 (M3 finding 6d): after cof_stopwheelchair the empty chair would board anyone and take their weapons:
+	 * it takes nobody now (no use function). A carried chair, or a dead one (the rescue's), keeps it. */
+	{
+		uint32_t chair_use = BASE + 0x86000, got, carried = 0x1234;
+		setup(); chair = spawn( 17, 11, 0, 0 ); chair->v.owner = guest; memcpy( private_data[17] + COF_USE, &chair_use, 4 );
+		SV_CoF_MomentsFrame(); memcpy( &got, private_data[17] + COF_USE, 4 );
+		assert( !got && logged( "wheelchair-stopped chair=17" ) == 1 && preferred == NULL );
+		SV_CoF_MomentsFrame(); assert( logged( "wheelchair-stopped" ) == 1 );
+		setup(); chair = spawn( 17, 11, 0, 0 ); chair->v.owner = guest; memcpy( private_data[17] + COF_USE, &chair_use, 4 );
+		memcpy( private_data[17] + COF_CHAIR_RIDER, &carried, 4 ); SV_CoF_MomentsFrame();
+		memcpy( &got, private_data[17] + COF_USE, 4 ); assert( got == chair_use && preferred == guest );
+		setup(); chair = spawn( 17, 11, 0, 0 ); memcpy( private_data[17] + COF_USE, &chair_use, 4 ); private_data[17][COF_CHAIR_DEAD] = 1;
+		SV_CoF_MomentsFrame(); memcpy( &got, private_data[17] + COF_USE, 4 ); assert( got == chair_use );
+	}
+	/* 1.1.8 (M1 finding 8): c_down's trigger_relay killladddd would remove the ladder's only use (ladddd) under a
+	 * partner still at the top: its kill of a ladder use is dropped; a relay killing anything else keeps its kill. */
+	{
+		string_t kill = 31, got;
+		setup(); spawn( 16, 9, 31, 10 ); spawn( 20, 30, 0, 0 ); memcpy( private_data[20] + COF_DELAY_KILLTARGET, &kill, 4 );
+		kill = 22; spawn( 21, 30, 0, 0 ); memcpy( private_data[21] + COF_DELAY_KILLTARGET, &kill, 4 ); spawn( 22, 18, 22, 0 );
+		SV_CoF_MomentsFrame();
+		memcpy( &got, private_data[20] + COF_DELAY_KILLTARGET, 4 ); assert( !got && logged( "ladder-kept relay=20 use=ladddd" ) == 1 );
+		memcpy( &got, private_data[21] + COF_DELAY_KILLTARGET, 4 ); assert( got == 22 && logged( "ladder-kept" ) == 1 );
+	}
 	puts( "moments scenarios passed" );
 	return 0;
 }

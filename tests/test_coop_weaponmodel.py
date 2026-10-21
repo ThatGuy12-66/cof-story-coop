@@ -28,6 +28,11 @@ class WeaponModelTests(unittest.TestCase):
         write = frame[frame.index('static void SV_WriteEntitiesToClient'):]
         # the other hand's follow entities go in before the sort the delta compression needs
         self.assertLess(write.index('SV_CoF_WeaponModelFollowers('), write.index('qsort( frame_ents.entities'))
+        # 1.1.8 (E2-5): the pose goes out only in the plain standing one; the model in any
+        body = (ENGINE_SERVER / 'sv_cof_weaponmodel.c').read_text()
+        pick = body[body.index('void SV_CoF_WeaponModelFrame('):body.index('void SV_CoF_WeaponModelState(')]
+        self.assertLess(pick.index('CoF_WeaponModelStanding('), pick.index('.sequence = pick.sequence;'))
+        self.assertIn('.model = CoF_WeaponModelIndex( pick.model );', pick)
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         self.assertIn('SV_CoF_WeaponModelFrame();', story)
         init = (ENGINE_SERVER / 'sv_init.c').read_text()

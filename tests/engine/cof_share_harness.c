@@ -16,7 +16,12 @@ typedef int qboolean;
 #define COF_RETAIL_ITEM 64
 #define Q_snprintf snprintf
 #define Q_strcmp strcmp
+#ifdef _WIN32
 #define Q_stricmp _stricmp
+#else
+#include <strings.h>
+#define Q_stricmp strcasecmp
+#endif
 static void Q_strncpy( char *target, const char *source, size_t size ) { snprintf( target, size, "%s", source ); }
 typedef struct { struct { float health; int deadflag; } v; } edict_t;
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict; } sv_client_t;
@@ -55,13 +60,13 @@ static int SV_CoF_RetailFreeSlots( sv_client_t *cl )
 	for( i = 0; i < usable; i++ ) if( !inv[who( cl )][i][0] ) n++;
 	return n;
 }
-/* the game's AddInventoryItem: first free usable slot, never a second copy */
+/* the game's AddItemToInventory for an item_key: first free usable slot. Only weapon_* are deduplicated
+   (player.cpp:11264-11276), so a story item already held lands in a second slot. */
 static qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *d )
 {
 	int i, p = who( cl );
 	gives++;
 	if( refuse_give || ( refuse_item && !strcmp( d, refuse_item ))) return false;
-	for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) return true;
 	for( i = 0; i < ( three[p] ? 3 : active ); i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return true; }
 	return false;
 }
@@ -125,6 +130,14 @@ static void end( int p ) { SV_CoF_ShareCommandEnd( &clients[p] ); }
 static int holds( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) return 1; return 0; }
 static void lose( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) inv[p][i][0] = 0; }
 static void gain( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return; } }
+static int copies( int p, const char *d ) { int i, n = 0; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) n += !strcmp( inv[p][i], d ); return n; }
+static void use_one( int p, const char *d ) /* a fuse box (func_button, ClearOutSlot): one slot */
+{
+	int i;
+	begin( p, "inventoryuse" );
+	for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) { inv[p][i][0] = 0; break; }
+	end( p );
+}
 
 int main( void )
 {
@@ -277,6 +290,38 @@ int main( void )
 		SV_CoF_ShareRecovered( &clients[0] );
 		assert( holds( 0, GLOCK ) && holds( 0, "inventoryitems/weapons/weapon_mobile.txt" ) );
 	}
+	/* 1.1.8 (M1 finding 1): c_subway2st3's gate needs two fuse boxes filled, and both fuses come from the two
+	   c_subway2st1 pulls. Each pull is a find, everyone carries two, each box takes one copy, none is left. */
+	setup(); gain( 0, FUSE ); frame( 0.1 ); frame( 0.1 );
+	assert( copies( 1, FUSE ) == 1 );
+	gain( 1, FUSE ); frame( 0.1 ); frame( 0.1 ); /* the partner pulls the second while holding the first's copy */
+	assert( copies( 0, FUSE ) == 2 && copies( 1, FUSE ) == 2 && takes == 0 );
+	assert( strstr( console, "cofstory phase=item-found userid=2 item=" FUSE ) && !strcmp( last_line[0], "5:Little Rascal 2 found the fuse" ));
+	use_one( 0, FUSE ); frame( 0.1 ); frame( 0.1 );
+	assert( copies( 0, FUSE ) == 1 && copies( 1, FUSE ) == 1 && takes == 1 );
+	assert( strstr( console, "cofstory phase=item-used userid=1 item=" FUSE ) && strstr( console, "cofstory phase=item-removed userid=2 item=" FUSE ));
+	use_one( 1, FUSE ); frame( 0.1 ); frame( 0.1 ); frame( 2 );
+	assert( copies( 0, FUSE ) == 0 && copies( 1, FUSE ) == 0 && takes == 2 );
+	/* ...a key (one copy) still loses a second copy at once */
+	setup(); gain( 0, KEY ); frame( 0.1 ); frame( 0.1 ); gain( 1, KEY ); frame( 0.1 ); frame( 0.1 );
+	assert( copies( 1, KEY ) == 1 && takes == 1 );
+
+	/* Continue keeps both copies: after the checkpoint loads, a returning player and a brand-new joiner are
+	   each brought to two fuses. */
+	setup(); gain( 0, FUSE ); gain( 0, FUSE ); for( i = 0; i < 6; i++ ) frame( 0.1 );
+	assert( copies( 1, FUSE ) == 2 );
+	{
+		cof_share_archive_t archive;
+		size_t mark;
+		SV_CoF_ShareExport( &archive );
+		SV_CoF_ShareReset(); memset( inv, 0, sizeof( inv ));
+		assert( SV_CoF_ShareImport( &archive ));
+		clients[1].userid = 9; strcpy( clients[1].name, "Newcomer" );
+		mark = console_length;
+		for( i = 0; i < 6; i++ ) frame( 0.1 );
+		assert( copies( 0, FUSE ) == 2 && copies( 1, FUSE ) == 2 && !strstr( console + mark, "item-found" ));
+	}
+
 	/* twelve slots: a partner whose slots 1..6 are full still gets the shared key, in slot 7 */
 	setup(); active = 12;
 	for( i = 0; i < 6; i++ ) strcpy( inv[1][i], GLOCK );

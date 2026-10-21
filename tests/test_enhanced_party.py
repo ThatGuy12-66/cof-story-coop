@@ -41,7 +41,7 @@ class EnhancedPartyTests(unittest.TestCase):
                     '@.\\party-test.exe\n')
                 command = ['cmd.exe', '/d', '/c', str(work / 'build.cmd')]
             else:
-                command = ['sh', '-c', 'cc -std=c99 -Wall -Wextra -Werror -Wno-unused-parameter harness.c -o party-test && ./party-test']
+                command = ['sh', '-c', 'cc -std=c99 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-function harness.c -o party-test -lm && ./party-test']
             result = subprocess.run(command, cwd=work, capture_output=True, text=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('party scenarios passed', result.stdout)

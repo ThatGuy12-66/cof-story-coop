@@ -28,10 +28,13 @@ typedef float vec3_t[3];
 #define EF_NODRAW 128
 #define MOVE_NORMAL 0
 #define MOVE_NOMONSTERS 1
+#define SOLID_NOT 0
+#define SOLID_TRIGGER 1
 #define ARRAYSIZE(x) (sizeof(x)/sizeof((x)[0]))
 #define Q_strcmp strcmp
 #define Q_strncmp strncmp
 #define Q_atoi atoi
+#define Q_atof atof
 #define Q_snprintf snprintf
 #define Q_strlen strlen
 static void Q_strncpy(char *d,const char *s,size_t n) { size_t i; for(i=0;i+1<n && s[i];i++) d[i]=s[i]; d[i]=0; }
@@ -42,15 +45,16 @@ typedef struct edict_s edict_t;
 typedef struct {
     string_t classname,target,targetname,model,message;
     vec3_t origin,mins,maxs,angles,v_angle,view_ofs,velocity,basevelocity,absmin,absmax;
-    float health,takedamage;
-    int deadflag,movetype,flags,effects,fixangle,spawnflags;
+    float health,takedamage,dmg;
+    int deadflag,movetype,flags,effects,fixangle,spawnflags,solid;
     edict_t *owner,*aiment;
 } entvars_t;
 struct edict_s { int free,serialnumber; void *pvPrivateData; entvars_t v; };
 typedef struct { int state,userid; unsigned int flags; char name[32]; edict_t *edict,*pViewEntity; } sv_client_t;
 typedef struct { qboolean allsolid,startsolid; float fraction; vec3_t endpos;
     struct {vec3_t normal;} plane; edict_t *ent; } trace_t;
-static struct { int state,paused; double time; const char *name; } sv;
+typedef struct { char *entities; } model_t;
+static struct { int state,paused; double time; const char *name; model_t *worldmodel; char startspot[64]; } sv;
 static struct { int maxclients,spawncount; sv_client_t *clients; } svs;
 static struct { int numEntities; edict_t *edicts; } svgame;
 static edict_t entities[32];
@@ -66,7 +70,8 @@ static const char *strings[] = {"", "player", "weapon_mobile", "weapon_switchbla
     "inventoryitems/weapons/../weapon_mobile.txt", "info_landmark", "hahaland",
     "info_teleport_destination", "cof_teleport", "tp-dest", "trigger_teleport",
     "trigger_changelevel", "trigger_multiple", "cl-exit", "*1", "*2",
-    "endingcheck", "ending_exit4", "ending_exit3", "cof_giveitems", "boat_exit"};
+    "endingcheck", "ending_exit4", "ending_exit3", "cof_giveitems", "boat_exit",
+    "tp-src", "trigger_hurt", "tp-dest2"};
 static char status_log[16384];
 static size_t status_length;
 static int gate, give_ok, give_actual, give_calls, links, blocked, narrow_direction;
@@ -74,6 +79,7 @@ static int solid_probe; static float solid_x; /* one point of solid world for hu
 static int no_floor; static float no_floor_x; /* a shaft: nothing below this x */
 static int crowded; /* a room that fits one: every hull test that counts bodies fails */
 static float front_only_x; /* walls everywhere short of this x: only spots past it can be reached */
+static int solid_zone; static float zone_min_x,zone_max_x; /* everything ending in this x range is solid */
 static char prompts[MAX_CLIENTS][192]; /* the last ProFont line each player was sent */
 static const char *command_name=""; static int exit_key,exit_waiter,fades;
 typedef struct { float value; } convar_t;
@@ -124,6 +130,31 @@ static qboolean SV_CoF_ExitWarpKey(sv_client_t *cl) { return exit_key; }
 static int scene_watching; /* userid of the partner watching userid 100's cutscene */
 static qboolean SV_CoF_SceneWatching(int owner,int userid) { return owner==100 && userid==scene_watching; }
 static int SV_CoF_ExitWaiter(void) { return exit_waiter; }
+/* Merged map sections: bands of section_height units of z (0: not a merged map, -1 everywhere). */
+static float section_height;
+static int SV_CoF_PointSection(const vec3_t origin) { return section_height ? (int)floorf(origin[2]/section_height) : -1; }
+static int SV_CoF_PlayerSection(const edict_t *e) { return e ? SV_CoF_PointSection(e->v.origin) : -1; }
+/* The live info_landmark the map was entered by (sv.startspot), when has_landmark. */
+static int has_landmark; static vec3_t landmark_at;
+static qboolean SV_CoF_LiveLandmark(const char *name,vec3_t origin) {
+    if(!has_landmark || strcmp(name,sv.startspot)) return false;
+    VectorCopy(landmark_at,origin); return true;
+}
+/* The entity script parser of the engine, for sv.worldmodel->entities: quoted strings and braces. */
+static char *COM_ParseFile(char *data,char *token,int size) {
+    int n=0;
+    if(!data) return NULL;
+    while(*data && (unsigned char)*data<=' ') data++;
+    if(!*data) return NULL;
+    if(*data=='"') {
+        for(data++;*data && *data!='"';data++) if(n<size-1) token[n++]=*data;
+        if(*data) data++;
+    }
+    else token[n++]=*data++;
+    token[n]=0;
+    return data;
+}
+static model_t world_model;
 static char gift_log[256]; /* the story gifts reported to the test gun, "userid:class;" */
 static void SV_CoF_TestGunGift(sv_client_t *cl,const char *name) {
     size_t n=strlen(gift_log); snprintf(gift_log+n,sizeof(gift_log)-n,"%d:%s;",cl->userid,name);
@@ -131,6 +162,8 @@ static void SV_CoF_TestGunGift(sv_client_t *cl,const char *name) {
 /* the companion module told that the party code moved a player (a bot starts afresh beside its person) */
 static int companion_moved;
 static void SV_CoF_CompanionMoved(sv_client_t *cl) { companion_moved++; }
+static int arrival_landed;
+static void SV_CoF_ArrivalLanded(const sv_client_t *cl) { arrival_landed++; }
 static int ending_fades_out,ending_fades_in;
 static qboolean SV_CoF_RetailScreenFade(sv_client_t *cl,float duration,float hold,int flags,int r,int g,int b,int a) {
     assert(duration==0.5f && r==0 && g==0 && b==0 && a==255);
@@ -141,6 +174,7 @@ static trace_t SV_Move(const vec3_t start,vec3_t mins,vec3_t maxs,
     const vec3_t end,int type,edict_t *ignore,qboolean monsterclip) {
     trace_t t; memset(&t,0,sizeof(t)); t.fraction=1; VectorCopy(end,t.endpos);
     if(blocked) {t.startsolid=true; return t;}
+    if(solid_zone && end[0]>=zone_min_x && end[0]<=zone_max_x) {t.startsolid=true; return t;}
     if(crowded && type==MOVE_NORMAL) {t.startsolid=true; return t;}
     if(solid_probe && start[0]==solid_x && end[0]==solid_x) {t.startsolid=true; return t;}
     /* Retail hahaland staging rooms only fit the follower at +/-34 Y.
@@ -162,8 +196,9 @@ static void setup(void) {
     memset(entities,0,sizeof(entities)); memset(clients,0,sizeof(clients));
     memset(private_data,0,sizeof(private_data)); memset(prompts,0,sizeof(prompts));
     exit_key=exit_waiter=fades=scene_watching=companion_moved=0; ending_fades_out=ending_fades_in=0; gift_log[0]=0;
-    gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=crowded=0; front_only_x=0;
+    gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=crowded=solid_zone=0; front_only_x=0;
     status_log[0]=0; status_length=0; sv.name="c_start";
+    sv.worldmodel=&world_model; world_model.entities=NULL; sv.startspot[0]=0; has_landmark=0; section_height=0;
     sv.state=ss_active; sv.time=10; svs.clients=clients; svs.maxclients=2;
     svs.spawncount++; svgame.edicts=entities; svgame.numEntities=12;
     for(i=0;i<2;i++) {
@@ -222,6 +257,37 @@ static void finish_door(void) {
     entities[1].v.origin[2]-=entities[1].v.mins[2];
     entities[1].v.origin[2]+=1;
 }
+/* A scripted teleport: entities[10] the info_teleport_destination tp-dest at x=2000, entities[11] a cof_teleport to it
+   (no name: nothing in the entity script says who fires it, so it is followed as before 1.1.8). */
+static void teleport_setup(float partner_x) {
+    setup(); entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+    entities[11].v.classname=18; entities[11].v.target=19; entities[2].v.origin[0]=partner_x; tick(0.1);
+}
+/* The game moves the activator (player 1) to x, as cof_teleport's Use does through SetOrigin. */
+static void teleport_to(float x) {
+    vec3_t from; VectorCopy(entities[1].v.origin,from); entities[1].v.origin[0]=x; SV_CoF_PartyNoteOrigin(&entities[1],from);
+}
+static const char *cut_off_line="1:Little Rascal 1 went somewhere you can't follow. Press J to join.";
+static char script_walkin[]=
+    "{ \"classname\" \"worldspawn\" }\n"
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_multiple\" \"target\" \"tp-src\" \"model\" \"*3\" }\n"
+    "{ \"model\" \"*4\" \"wait\" \"2\" \"targetname\" \"tp-src\" \"target\" \"tp-src\" \"classname\" \"trigger_multiple\" }\n";
+static char script_managed[]=
+    "{ \"classname\" \"worldspawn\" }\n"
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_multiple\" \"target\" \"tp-src\" \"model\" \"*3\" }\n"
+    "{ \"classname\" \"multi_manager\" \"targetname\" \"mm\" \"tp-src#2\" \"1.5\" }\n";
+static char script_once[]=
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_multiple\" \"target\" \"tp-src\" \"wait\" \"-1\" \"model\" \"*3\" }\n";
+static char script_button[]=
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_multiple\" \"target\" \"tp-src\" \"model\" \"*3\" }\n"
+    "{ \"classname\" \"func_button\" \"target\" \"tp-src\" \"model\" \"*5\" }\n";
+static char script_killed[]=
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_multiple\" \"target\" \"tp-src\" \"killtarget\" \"tp-src\" \"model\" \"*3\" }\n";
 int main(void) {
     vec3_t before,previous;
     /* The retail classname mirror remains zero while descriptor slots work. */
@@ -343,10 +409,24 @@ int main(void) {
     setup(); tick(0.1); entities[2].v.origin[0]=3000; clients[0].pViewEntity=&entities[9];
     SV_CoF_PartyPlayerReady(&clients[1],true); tick(1); assert(links==0);
     clients[0].pViewEntity=NULL; tick(0.1); assert(links==1);
-    /* ...but never after the wait expires, nor once the joiner walked off. */
+    /* ...however long the partner's scene lasts (1.1.8, M1 F7: c_roofs' runs six minutes; this used to give up
+       after 30 s)... */
     setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.flags|=FL_FROZEN;
-    SV_CoF_PartyPlayerReady(&clients[1],true); tick(31); entities[1].v.flags&=~FL_FROZEN;
+    SV_CoF_PartyPlayerReady(&clients[1],true); tick(31);
+    {int k; for(k=0;k<400;k++) tick(1);} entities[1].v.flags&=~FL_FROZEN;
+    tick(0.1); assert(links==1 && entities[2].v.origin[0]==35);
+    /* ...or their own: a late joiner frozen by the scene's camera */
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; clients[1].pViewEntity=&entities[9];
+    SV_CoF_PartyPlayerReady(&clients[1],true); {int k; for(k=0;k<60;k++) tick(1);} clients[1].pViewEntity=NULL;
+    tick(0.1); assert(links==1 && entities[2].v.origin[0]==35);
+    /* ...but never after the wait expires while both could play (no room beside the partner meanwhile),
+       nor while the only partner is dead, nor once the joiner walked off. */
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; blocked=1;
+    SV_CoF_PartyPlayerReady(&clients[1],true); tick(15); tick(16); blocked=0;
     tick(0.1); assert(links==0);
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.health=0;
+    SV_CoF_PartyPlayerReady(&clients[1],true); tick(15); tick(16); entities[1].v.health=100;
+    tick(0.1); assert(entities[2].v.origin[0]==3000 && !strstr(status_log,"spawn-placed userid=101"));
     setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.flags|=FL_FROZEN;
     SV_CoF_PartyPlayerReady(&clients[1],true); tick(0.1); entities[2].v.origin[0]=3100;
     entities[1].v.flags&=~FL_FROZEN; tick(0.1);
@@ -839,5 +919,198 @@ int main(void) {
         clients[0].state=clients[1].state=cs_spawned; tick(0.1);
         entities[1].v.origin[0]=3000; SV_CoF_PartyRespawned(&clients[0]); assert(entities[1].v.origin[0]==1000);
     }
+
+    /* 1.1.8 (M3 4, M1 9): a cof_teleport only reusable trigger_multiples fire (c_village3's "wrong way" bounces
+     * beside the ending rooms, ~120 in the story maps) moves whoever walks in, like trigger_teleport: nobody is
+     * taken along and nobody is told, read from the map's entity script. */
+    teleport_setup(64); entities[11].v.targetname=31; world_model.entities=script_walkin; teleport_to(2000); tick(0.1);
+    assert(links==0 && entities[2].v.origin[0]==64 && !strstr(status_log,"teleport-begin"));
+    assert(strstr(status_log,"cofstory phase=teleport-own userid=100 reason=walk-in"));
+    teleport_setup(-500); entities[11].v.targetname=31; world_model.entities=script_walkin; teleport_to(2000); tick(0.1);
+    assert(links==0 && !prompts[1][0] && !strstr(status_log,"cut-off"));
+    /* ...read once a map: the same script text is not parsed again until the next map */
+    world_model.entities=script_managed; entities[1].v.origin[0]=0; teleport_to(2000); tick(0.1);
+    assert(logged("reason=walk-in")==2 && !strstr(status_log,"teleport-begin"));
+    svs.spawncount++; tick(0.1); tick(0.1); entities[1].v.origin[0]=0; teleport_to(2000); tick(0.1);
+    assert(strstr(status_log,"teleport-begin userid=100"));
+    /* any other firer keeps it scripted: a multi_manager key ("name#2" fires "name"), a trigger_multiple that waits
+     * -1 (it removes itself), a button, any other key naming it */
+    {
+        char *scripts[4]; int k;
+        scripts[0]=script_managed; scripts[1]=script_once; scripts[2]=script_button; scripts[3]=script_killed;
+        for(k=0;k<4;k++) {
+            teleport_setup(64); entities[11].v.targetname=31; world_model.entities=scripts[k]; teleport_to(2000); tick(0.1);
+            assert(links==1 && entities[2].v.origin[0]==2035 && strstr(status_log,"teleport-begin userid=100 target=tp-dest companions=1"));
+        }
+    }
+    /* ...as does a second cof_teleport to the same destination that the script cannot vouch for */
+    teleport_setup(64); entities[11].v.targetname=31; world_model.entities=script_walkin;
+    entities[12].v.classname=18; entities[12].v.target=19; svgame.numEntities=13; teleport_to(2000); tick(0.1);
+    assert(links==1 && strstr(status_log,"companions=1"));
+    /* The one waiting at a held exit is never dragged away from it (it would give the exit up), nor told to
+     * press J (the waiter's J leaves by the exit). */
+    teleport_setup(64); exit_waiter=101; teleport_to(2000); tick(0.1);
+    assert(links==0 && entities[2].v.origin[0]==64 && strstr(status_log,"companions=0") && !prompts[1][0]);
+    /* 1.1.8 (M1 2, 6): a destination inside a live trigger_hurt that kills (c_roofs' fall, c_city's trap once armed)
+     * is the activator's alone: nobody follows, nobody is told. */
+    teleport_setup(64); entities[12].v.classname=32; entities[12].v.solid=SOLID_TRIGGER; entities[12].v.dmg=1000;
+    absbox(&entities[12],2000,64); svgame.numEntities=13; teleport_to(2000); tick(0.1);
+    assert(links==0 && !strstr(status_log,"teleport-begin") && strstr(status_log,"teleport-own userid=100 reason=deadly"));
+    teleport_setup(-500); entities[12].v.classname=32; entities[12].v.solid=SOLID_TRIGGER; entities[12].v.dmg=1000;
+    absbox(&entities[12],2000,64); svgame.numEntities=13; teleport_to(2000); tick(0.1);
+    assert(!prompts[1][0] && !strstr(status_log,"cut-off"));
+    /* ...switched off, hurting less, or elsewhere: followed as before */
+    {
+        int k;
+        for(k=0;k<3;k++) {
+            teleport_setup(64); entities[12].v.classname=32; entities[12].v.solid=k==0 ? SOLID_NOT : SOLID_TRIGGER;
+            entities[12].v.dmg=k==1 ? 50.0f : 1000.0f; absbox(&entities[12],k==2 ? 5000.0f : 2000.0f,64); svgame.numEntities=13;
+            teleport_to(2000); tick(0.1); assert(links==1 && entities[2].v.origin[0]==2035);
+        }
+    }
+    /* 1.1.8 (M3 2b): the activator's next teleport (c_ending1b's at t=0, right after the section move) no longer
+     * forgets a partner still frozen in the previous one's scene: they come along to the new one. */
+    teleport_setup(64); entities[12].v.classname=17; entities[12].v.targetname=33; entities[12].v.origin[0]=5000;
+    entities[13].v.classname=18; entities[13].v.target=33; svgame.numEntities=14;
+    entities[2].v.flags|=FL_FROZEN; teleport_to(2000); tick(0.1); assert(links==0 && strstr(status_log,"companions=1"));
+    teleport_to(5000); tick(0.1); assert(links==0 && logged("companions=1")==2 && !prompts[1][0]);
+    entities[2].v.flags&=~FL_FROZEN; tick(0.1); assert(links==1 && entities[2].v.origin[0]==5035);
+    /* 1.1.8 (M3 2c): the "Press J" line is said again while its reader stays cut off: not while they are frozen
+     * (J is refused there), every 10 s once they can act on it, three more times at most. */
+    teleport_setup(-500); entities[2].v.flags|=FL_FROZEN; teleport_to(2000); tick(0.1);
+    assert(!strcmp(prompts[1],cut_off_line) && logged("cut-off userid=101 owner=100 kind=teleport")==1);
+    prompts[1][0]=0; tick(5); tick(5.1); tick(10); assert(!prompts[1][0]);
+    entities[2].v.flags&=~FL_FROZEN; tick(0.1);
+    assert(!strcmp(prompts[1],cut_off_line) && logged("cut-off userid=101 owner=100 kind=teleport repeat=1")==1);
+    prompts[1][0]=0; tick(5); assert(!prompts[1][0]);
+    tick(5.1); assert(logged("repeat=2")==1); tick(10.1); assert(logged("repeat=3")==1);
+    tick(10.1); tick(10.1); tick(30); assert(logged("repeat=")==3);
+    /* ...never once they joined (J), or while an exit hold speaks for itself */
+    teleport_setup(-500); teleport_to(2000); tick(0.1); assert(prompts[1][0]);
+    warp(1); assert(entities[2].v.origin[0]==2035); entities[2].v.origin[0]=-500; tick(10.1); tick(10.1);
+    assert(!logged("repeat="));
+    teleport_setup(-500); teleport_to(2000); tick(0.1); exit_waiter=100; tick(10.1); tick(10.1); assert(!logged("repeat="));
+    exit_waiter=0; tick(0.1); assert(logged("repeat=1")==1);
+    /* ...nor to a dead player */
+    teleport_setup(-500); teleport_to(2000); tick(0.1); entities[2].v.health=0; tick(10.1); entities[2].v.health=100; tick(0.1);
+    assert(!logged("repeat="));
+    /* 1.1.8 (K 4): every camera holds every player, so in a merged map a partner watching from another section is
+     * not pulled into the scene; one in the activator's section still is. */
+    teleport_setup(-500); section_height=1000; scene_watching=101; entities[2].v.flags|=FL_FROZEN;
+    clients[1].pViewEntity=&entities[9]; entities[2].v.origin[2]=1500; teleport_to(2000); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0"));
+    teleport_setup(-500); section_height=1000; scene_watching=101; entities[2].v.flags|=FL_FROZEN;
+    clients[1].pViewEntity=&entities[9]; teleport_to(2000); tick(0.1);
+    assert(links==1 && entities[2].v.origin[0]==2035);
+    /* 1.1.8 (M1 F7): a pending placement no longer stops the follow: an activator whose placement waits (a fresh
+     * join, frozen in the opening scene) is followed by the partner watching with them, and stays where the scene
+     * put them... */
+    teleport_setup(64); scene_watching=101; entities[1].v.flags|=FL_FROZEN; entities[2].v.flags|=FL_FROZEN;
+    clients[1].pViewEntity=&entities[9]; SV_CoF_PartyPlayerReady(&clients[0],true); tick(0.1);
+    teleport_to(2000); tick(0.1);
+    assert(strstr(status_log,"teleport-begin userid=100 target=tp-dest companions=1") && entities[2].v.origin[0]==2035);
+    entities[1].v.flags&=~FL_FROZEN; entities[2].v.flags&=~FL_FROZEN; clients[1].pViewEntity=NULL; tick(0.1); tick(1);
+    assert(entities[1].v.origin[0]==2000 && !strstr(status_log,"spawn-placed userid=100"));
+    /* ...and a partner respawned into the scene beside them comes along too, not placed back afterwards */
+    teleport_setup(64); entities[2].v.health=0; entities[2].v.deadflag=2; tick(0.1);
+    entities[2].v.health=100; entities[2].v.deadflag=DEAD_NO; entities[2].v.flags|=FL_FROZEN; tick(0.1);
+    teleport_to(2000); tick(0.1); assert(strstr(status_log,"companions=1"));
+    entities[2].v.flags&=~FL_FROZEN; tick(0.1); tick(1);
+    assert(entities[2].v.origin[0]==2035 && !strstr(status_log,"spawn-placed userid=101"));
+    /* ...but the respawn's own SetOrigin onto the spawn spot is no teleport, even onto a scene's destination */
+    teleport_setup(64); entities[2].v.health=0; entities[2].v.deadflag=2; tick(0.1);
+    entities[2].v.health=100; entities[2].v.deadflag=DEAD_NO;
+    VectorCopy(entities[2].v.origin,before); entities[2].v.origin[0]=2000; SV_CoF_PartyNoteOrigin(&entities[2],before); tick(0.1);
+    assert(!strstr(status_log,"teleport-begin") && entities[1].v.origin[0]==0);
+    /* 1.1.8 (E1 F5): a door companion who went their own way since the door began stays where they are: walked
+     * off, through a door of their own, or into another section of a merged map. */
+    setup(); start_door(); entities[2].v.origin[0]=300; finish_door(); tick(0.1);
+    assert(links==0 && entities[2].v.origin[0]==300 && strstr(status_log,"door-party-skipped userid=101 reason=moved"));
+    assert(!prompts[1][0]); /* the door is still there to take */
+    setup(); start_door(); entities[2].v.origin[0]=300; entities[5].free=1; finish_door(); tick(0.1);
+    assert(links==0 && !strcmp(prompts[1],cut_off_line)); /* it removed itself: told how to follow */
+    setup(); start_door(); private_data[1][0x1EA4]=1; entities[7].v.classname=4; entities[7].v.owner=&entities[2];
+    finish_door(); tick(0.1);
+    assert(links==0 && strstr(status_log,"door-party-skipped userid=101 reason=own-door"));
+    setup(); section_height=100; start_door(); entities[2].v.origin[2]=100; finish_door(); tick(0.1);
+    assert(links==0 && strstr(status_log,"door-party-skipped userid=101 reason=section"));
+    setup(); section_height=100; start_door(); entities[2].v.origin[0]=100; finish_door(); tick(0.1);
+    assert(links==1 && entities[2].v.origin[0]==547); /* a step aside is still beside the door */
+    /* 1.1.8 (E1 F6): a player who cannot take a shared weapon (a full inventory) is asked less and less often
+     * (5, 10, 20, 40, then every 60 s) and logged once a map; it still arrives once there is room. */
+    setup(); inventory(0,0,2); give_ok=false; {int k; for(k=0;k<240;k++) tick(0.5);}
+    assert(logged("starter-deferred userid=101 class=weapon_mobile")==1 && give_calls>=4 && give_calls<=6);
+    svs.spawncount++; {int k; for(k=0;k<20;k++) tick(0.5);}
+    assert(logged("starter-deferred userid=101 class=weapon_mobile")==2);
+    give_ok=true; {int k; for(k=0;k<130;k++) tick(0.5);} assert(CoF_PartyInventory(&clients[1])&1);
+    /* 1.1.8 (E1 F7): a door companion who never fits beside the exit is told how to follow once the door is gone
+     * and the wait is over; not while the door is still there to take. */
+    setup(); start_door(); entities[5].free=1; finish_door(); blocked=1; tick(0.1); assert(!prompts[1][0]);
+    tick(6); blocked=0;
+    assert(links==0 && !strcmp(prompts[1],cut_off_line) && strstr(status_log,"door-expired userid=100"));
+    assert(strstr(status_log,"cut-off userid=101 owner=100 kind=door"));
+    setup(); start_door(); finish_door(); blocked=1; tick(0.1); tick(6); blocked=0;
+    assert(links==0 && !prompts[1][0] && strstr(status_log,"door-expired userid=100"));
+    /* ...and a teleport companion held in a scene past the wait is told too (the repeats reach them once free) */
+    teleport_setup(64); entities[2].v.flags|=FL_FROZEN; teleport_to(2000); tick(0.1); assert(!prompts[1][0]);
+    tick(10.1); assert(!strcmp(prompts[1],cut_off_line) && strstr(status_log,"teleport-expired userid=100"));
+    /* 1.1.8 (E1 F9): a respawn whose own way in is solid now (a door brush closed on it) takes another recorded
+     * way in; with every way in solid, a spot beside a living partner; with none, the game's spot as before. */
+    {
+        vec3_t landmark={0,0,0}, far_in={5000,0,0};
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        arrive(1000,4000); clients[0].state=clients[1].state=cs_spawned; tick(0.1);
+        assert(entities[2].v.origin[0]==1035); /* the partner's way in */
+        assert(SV_CoF_PartySectionMove(&clients[0],far_in,NULL,NULL)); /* the leader's: a section move */
+        solid_zone=1; zone_min_x=900; zone_max_x=1200;
+        entities[2].v.health=0; entities[2].v.deadflag=2; tick(0.1);
+        entities[2].v.health=100; entities[2].v.deadflag=DEAD_NO; entities[2].v.origin[0]=3000; arrival_landed=0;
+        SV_CoF_PartyRespawned(&clients[1]);
+        assert(entities[2].v.origin[0]==5000 && strstr(status_log,"respawn-moved userid=101\n") && arrival_landed>=1);
+        zone_max_x=5100; entities[1].v.origin[0]=7000; entities[2].v.origin[0]=3000;
+        SV_CoF_PartyRespawned(&clients[1]);
+        assert(entities[2].v.origin[0]==7035 && strstr(status_log,"respawn-moved userid=101 beside=100"));
+        blocked=1; entities[2].v.origin[0]=3000; SV_CoF_PartyRespawned(&clients[1]);
+        assert(entities[2].v.origin[0]==3000 && strstr(status_log,"respawn-kept userid=101 reason=no-room"));
+        blocked=0;
+    }
+    /* 1.1.8 (E1 F2): everyone came in inside solid (an exit released far from where its waiter stood carries the
+     * party into the walls): the leader stands beside the destination landmark, the partner beside the leader. */
+    {
+        vec3_t landmark={3000,0,0};
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        has_landmark=1; landmark_at[0]=6000; landmark_at[1]=landmark_at[2]=0; Q_strncpy(sv.startspot,"hahaland",sizeof(sv.startspot));
+        solid_zone=1; zone_min_x=900; zone_max_x=4100; arrive(1000,4000);
+        assert(entities[1].v.origin[0]==6000 && entities[2].v.origin[0]==6035);
+        assert(strstr(status_log,"arrival-landmark userid=100") && strstr(status_log,"arrival-placed userid=101 beside=100"));
+        /* the landmark itself in a wall: the first free spot beside it */
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        has_landmark=1; landmark_at[0]=6000; landmark_at[1]=landmark_at[2]=0; Q_strncpy(sv.startspot,"hahaland",sizeof(sv.startspot));
+        solid_zone=1; zone_min_x=900; zone_max_x=6000; arrive(1000,4000);
+        assert(entities[1].v.origin[0]==6035 && entities[2].v.origin[0]==6070);
+        /* ...not when one arrival is out of solid (falling down a shaft, as an exit can be taken): as before */
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        has_landmark=1; landmark_at[0]=6000; Q_strncpy(sv.startspot,"hahaland",sizeof(sv.startspot));
+        solid_probe=1; solid_x=1000; no_floor=1; no_floor_x=4000; narrow_direction=1; arrive(1000,4000);
+        assert(links==0 && entities[2].v.origin[0]==4000 && strstr(status_log,"arrival-stranded userid=101"));
+        assert(!strstr(status_log,"arrival-landmark"));
+        /* ...nor without a live landmark of that name */
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        solid_zone=1; zone_min_x=900; zone_max_x=4100; arrive(1000,4000);
+        assert(!strstr(status_log,"arrival-landmark") && strstr(status_log,"arrival-stranded userid=101"));
+    }
+    /* 1.1.8 (chapter starts): a chapter start's kit reaches every player though nobody carries it yet, once, and
+     * not the starters; the grant is that map's only: from the next map on only what somebody carries is shared. */
+    setup(); tick(0.1); SV_CoF_PartyGrant("weapon_glock"); tick(1.2);
+    assert(logged("chapter-kit class=weapon_glock")==1);
+    assert(CoF_PartyInventory(&clients[0])==4 && CoF_PartyInventory(&clients[1])==4);
+    give_calls=0; tick(0.6); assert(give_calls==0);
+    memset(private_data[1]+0x21FC,0,13*sizeof(string_t)); entities[2].v.health=0; tick(0.1);
+    entities[2].v.health=100; tick(1.2); tick(1.2); assert(CoF_PartyInventory(&clients[1])==4); /* a respawn on the start map */
+    svs.spawncount++; tick(0.1);
+    memset(private_data[0]+0x21FC,0,13*sizeof(string_t)); memset(private_data[1]+0x21FC,0,13*sizeof(string_t));
+    entities[2].v.health=0; tick(0.1); entities[2].v.health=100; give_calls=0; tick(1.2); tick(1.2);
+    assert(give_calls==0 && !CoF_PartyInventory(&clients[1]));
+    gate=false; SV_CoF_PartyGrant("weapon_glock"); gate=true; assert(logged("chapter-kit")==1); /* story co-op only */
     puts("party scenarios passed"); return 0;
 }
