@@ -597,9 +597,11 @@ void SV_CoF_SessionFrame( void )
 		if( first )
 		{
 			CoF_SessionLatest();
-			// Keep the last checkpoint for the host to load, but only one that
+			// Keep the last checkpoint for Continue to load, but only one that
 			// can be loaded: otherwise a team wipe here would find nothing.
-			if( cof_session_latest[0] && CoF_SessionUsable( cof_session_latest ))
+			// 1.1.8: only for Continue. A new game or a chapter start that kept
+			// it loaded another session's checkpoint at its first team wipe.
+			if( cof_continue && cof_continue->value && cof_session_latest[0] && CoF_SessionUsable( cof_session_latest ))
 			{
 				cof_session_auto_needed = false;
 				Con_Printf( "cofstory phase=session-checkpoint-preserved slot=%s\n", cof_session_latest );

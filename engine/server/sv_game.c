@@ -5817,12 +5817,15 @@ qboolean SV_LoadProgs( const char *name )
 
 	svgame.globals->maxEntities = GI->max_edicts;
 	svgame.globals->maxClients = svs.maxclients;
-	svgame.edicts = Mem_Calloc( svgame.mempool, sizeof( edict_t ) * GI->max_edicts );
+	// Cry of Fear story co-op, 1.1.8: MAX_CLIENTS free edicts past the last one. In the think where the crazybitch
+	// takes a guest's gun, INDEXENT( 1 ) is that guest (sv_cof_rescue.c), and her Look -> UTIL_EntitiesInBox walks
+	// maxEntities edicts from it: up to MAX_CLIENTS - 1 past the end. They are never handed out.
+	svgame.edicts = Mem_Calloc( svgame.mempool, sizeof( edict_t ) * ( GI->max_edicts + MAX_CLIENTS ));
 	svs.static_entities = Z_Calloc( sizeof( entity_state_t ) * MAX_STATIC_ENTITIES );
 	svs.baselines = Z_Calloc( sizeof( entity_state_t ) * GI->max_edicts );
 	svgame.numEntities = svs.maxclients + 1; // clients + world
 
-	for( int i = 0; i < GI->max_edicts; i++ )
+	for( int i = 0; i < GI->max_edicts + MAX_CLIENTS; i++ )
 		svgame.edicts[i].free = true; // mark all edicts as freed
 
 	Cvar_FullSet( "host_gameloaded", "1", FCVAR_READ_ONLY );
