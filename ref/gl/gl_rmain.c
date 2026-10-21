@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "gl_local.h"
 #include "gl_cof_farclip.h"
+#include "gl_cof_depthrange.h"
 #include "xash3d_mathlib.h"
 #include "library.h"
 #include "beamdef.h"
@@ -330,7 +331,18 @@ static void R_Clear( int bitMask )
 	}
 
 	pglDepthFunc( GL_LEQUAL );
-	pglDepthRange( gldepthmin, gldepthmax );
+
+	// CoF: the world in 0..0.8 on every driver, as Cry of Fear's opengl32.dll sets it (gl_cof_depthrange.h)
+	pglDepthRange( gldepthmin, CoF_DepthRangeFar( gldepthmin, gldepthmax ));
+	{
+		static qboolean reported;
+
+		if( !reported )
+		{
+			gEngfuncs.Con_Printf( "[cof-depth] the world draws in depth 0 to 0.8, the rule of Cry of Fear's opengl32.dll, on every driver\n" );
+			reported = true;
+		}
+	}
 }
 
 //=============================================================================

@@ -14,6 +14,7 @@ GNU General Public License for more details.
 */
 
 #include "gl_local.h"
+#include "gl_cof_depthrange.h"
 #include "xash3d_mathlib.h"
 #include "const.h"
 #include "r_studioint.h"
@@ -3576,8 +3577,8 @@ void R_DrawViewModel( void )
 		Matrix4x4_Copy( RI.worldviewProjectionMatrix, saved_worldviewprojection );
 	}
 
-	// restore depth range
-	pglDepthRange( gldepthmin, gldepthmax );
+	// restore depth range (CoF: the world's 0..0.8, see gl_cof_depthrange.h)
+	pglDepthRange( gldepthmin, CoF_DepthRangeFar( gldepthmin, gldepthmax ));
 }
 
 /*
