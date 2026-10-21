@@ -11,7 +11,12 @@ void SV_CoF_RecoveryInit( void );
 void SV_CoF_RecoveryReset( void );
 void SV_CoF_RecoveryFrame( void );
 void SV_CoF_RecoveryDrop( sv_client_t *cl );
+// After a drop (the game's ClientDisconnect or not): the weapons the leaver's player object held are freed, the
+// object let go of them first; a human leaver's P345 or sledgehammer is left where they stood (1.1.8).
 void SV_CoF_RecoveryDropDone( sv_client_t *cl );
+// Around every think (sv_phys.c): the chainsaw boss's grab strips its human victim before the kill (1.1.8).
+void SV_CoF_RecoveryThinkBegin( edict_t *thinker );
+void SV_CoF_RecoveryThinkEnd( void );
 // A player a story level change carried over leaving before signing on in the new map: their items, kept as for a leaver.
 void SV_CoF_RecoveryDropCarried( sv_client_t *cl );
 void SV_CoF_RecoveryJoin( sv_client_t *cl );

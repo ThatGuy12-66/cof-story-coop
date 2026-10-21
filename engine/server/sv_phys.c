@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "library.h"
 #include "triangleapi.h"
 #include "ref_common.h"
+#include "sv_cof_recovery.h"
 
 typedef int (*PHYSICAPI)( int, server_physics_api_t*, physics_interface_t* );
 #if !XASH_DEDICATED
@@ -218,7 +219,9 @@ static qboolean SV_TryThink( edict_t *ent, double frametime, double time )
 	ent->v.nextthink = 0.0f;
 	svgame.globals->time = thinktime;
 	SV_CoF_RescueThinkBegin( ent );
+	SV_CoF_RecoveryThinkBegin( ent );
 	svgame.dllFuncs.pfnThink( ent );
+	SV_CoF_RecoveryThinkEnd();
 	SV_CoF_RescueThinkEnd();
 
 	return true;

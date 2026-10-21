@@ -17,7 +17,9 @@
  *   restarts the map.
  * - The crazybitch (monster_crazybitch MonsterThink 10055860) picks her moment from her enemy, then makes
  *   INDEXENT( 1 ), the host, turn his gun on himself wherever he is; an AI companion she fights set it off, and its
- *   own struggle never ran. While she thinks, edict 1 is her enemy when that is a living player.
+ *   own struggle never ran. While she thinks, edict 1 is her enemy when that is a living player; 1.1.8 (K5): only
+ *   in a think that takes the gun, as her sight check and player loops start at edict 1 (they skipped the host and
+ *   read past the edict array whenever she fought a guest).
  * - Bosses bound to "the first player": the c_roofs2 boss looks for it every think and attacks only while it is in
  *   sight (CRoofBoss::MonsterThink 10068CD0); the c_attic doctor caches it (+0x368) and aims at, shoots and hurts
  *   only that one (CoF_DoctorBoss.cpp). Both go for a living player they see, nearest first, and keep them while
@@ -44,6 +46,10 @@
 #define COF_CHAIR_RIDER 0x384 // raw CBasePlayer *m_pPlayer
 #define COF_MONSTER_SIZE 0x368
 #define COF_MONSTER_ENEMY 0x184 // EHANDLE m_hEnemy
+#define COF_BITCH_SIZE 0x378 // CCrazyBitch : CBaseMonster (0x368)
+#define COF_BITCH_ATTEMPT 0x36C // float m_flSuicideAttempt
+#define COF_BITCH_START 0x370 // bool b_StartSuicide
+#define COF_BITCH_READY 0x372 // bool b_ReadyToSuicide
 #define COF_DOCTOR_SIZE 0x3A8
 #define COF_DOCTOR_PLAYER 0x368 // raw CBasePlayer *pPlayer (1002E853)
 #define COF_SIMON_SIZE 0x390
@@ -310,7 +316,15 @@ edict_t *SV_CoF_RescueThinkSlotOne( edict_t *thinker )
 {
 	cof_rescue_handle_t enemy;
 	int index;
+	byte *pv;
+	float attempt;
 	if( !thinker || !SV_CoF_StoryCoopEnabled() || !CoF_RescueClass( thinker, "monster_crazybitch" )) return NULL;
+	// 1.1.8 (K5): only the think in which she takes the gun (MonsterThink's last block, the only INDEXENT( 1 ) she
+	// needs): started, ready and the attempt due when the think begins. The blocks before it can only set these for
+	// a later think. Her sight check (Look -> UTIL_EntitiesInBox) walks the edicts from INDEXENT( 1 ) every think.
+	if( !( pv = SV_CoF_StoryEntityPrivate( thinker, COF_BITCH_SIZE )) || !pv[COF_BITCH_START] || !pv[COF_BITCH_READY] ) return NULL;
+	memcpy( &attempt, pv + COF_BITCH_ATTEMPT, sizeof( attempt ));
+	if( !svgame.globals || attempt >= svgame.globals->time ) return NULL;
 	enemy = CoF_RescueHandleIn( thinker, COF_MONSTER_SIZE, COF_MONSTER_ENEMY );
 	if( !enemy.edict || !SV_IsValidEdict( enemy.edict ) || enemy.edict->serialnumber != enemy.serial ) return NULL;
 	index = NUM_FOR_EDICT( enemy.edict );

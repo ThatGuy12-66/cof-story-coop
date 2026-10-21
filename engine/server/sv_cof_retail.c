@@ -35,6 +35,7 @@
 #define COF_RETAIL_NEXT_ATTACK    0x0308 // float m_flNextAttack: a holster or deploy under way
 #define COF_RETAIL_WHEELCHAIR     0x0390 // EHANDLE m_hWheelchair: riding the c_ending4b chair (player-state RE)
 #define COF_RETAIL_ATTACHED_CAMERA 0x0388 // EHANDLE m_pAttachedCamera
+#define COF_RETAIL_BOAT           0x0380 // EHANDLE m_pBoat: rowing the c_lake boat (player.h order: m_hTelescope +0x370, m_pPuzzleBar, m_pBoat, m_pAttachedCamera +0x388)
 #define COF_RETAIL_FLASH_FLAGS    0x05D0 // int m_iFlashlightFlags: 1 phone light, 8 flashlight, 16 lit flare/book laser...
 #define COF_RETAIL_NV_NEXT        0x03EC // float m_flNextNightVisionTime
 #define COF_RETAIL_HAS_NV         0x0434 // bool m_bHasNightVision: picked up the bonus room's item_nightvision
@@ -44,9 +45,12 @@
 #define COF_RETAIL_TRIPPING       0x2278 // bool m_bIsTripping: a morphine trip, the blur on for its 30 s (MorphineTrip 100E8D70)
 #define COF_RETAIL_CAMERA         0x2348 // EHANDLE m_hCurrentCamera
 #define COF_RETAIL_RESTART        0x04E8 // a team-wipe restart is pending
+#define COF_RETAIL_SEQUENCE_END   0x04F4 // float m_flSequenceOverrideTime: the game's own body animation runs until then
 #define COF_RETAIL_GETUP_END      0x04FC // float: when the CPR's get-up animation ends
 #define COF_RETAIL_GIBBED         0x0501
 #define COF_RETAIL_FALL_FREEZE    0x1ED0 // bool m_bShouldFallFreeze: held down after a hard landing
+#define COF_RETAIL_FALL_TIME      0x1ECC // float m_fFallingTime: the get-up comes after it
+#define COF_RETAIL_WAITING_FALL   0x050C // bool m_bWaitingToFall: a taller's knock-down until its get-up (RevivePlayer clears +0x50C)
 #define COF_RETAIL_IN_CALL        0x1EE8 // bool m_bInPhoneCall: equip and quick-select refused
 #define COF_RETAIL_DEFER_DEPLOY   0x1EF9 // bool m_bWeaponWaitingToDeploy: a switch under way
 #define COF_RETAIL_INFINITE_AMMO  0x21EA // bool m_bInfiniteAmmo: every firing path skips the clip and syringe count
@@ -678,6 +682,14 @@ qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl )
 	return player && CoF_RetailHandle( player + COF_RETAIL_WHEELCHAIR ) != NULL;
 }
 
+qboolean SV_CoF_RetailInBoat( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	edict_t *boat;
+	return player && ( boat = CoF_RetailHandle( player + COF_RETAIL_BOAT )) != NULL && !FBitSet( boat->v.flags, FL_KILLME ) &&
+		!Q_strcmp( SV_GetString( boat->v.classname ), "boat" );
+}
+
 qboolean SV_CoF_RetailHudInitialized( edict_t *ent )
 {
 	byte *pv = CoF_RetailPrivate( ent, COF_RETAIL_PLAYER_SIZE );
@@ -809,6 +821,76 @@ static void CoF_RetailSyringeRepair( int i, sv_client_t *cl )
 	Con_Printf( "cofstory phase=syringe-unstuck userid=%d\n", cl->userid );
 }
 
+// c_roofs2's cof_yesno "ryesno" roots the player it asks (fuser3 1, no fall flag: CCofYesNo::Use, effects.cpp:7565)
+// until they answer; its trigger_multiple fires it while they stand in it. Such a player is not down.
+static qboolean CoF_RetailAskedYesNo( const edict_t *player )
+{
+	int i;
+	qboolean prompt = false;
+	for( i = svs.maxclients + 1; i < svgame.numEntities && !prompt; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		prompt = SV_IsValidEdict( ent ) && !Q_strcmp( SV_GetString( ent->v.classname ), "cof_yesno" ) &&
+			!Q_strcmp( SV_GetString( ent->v.targetname ), "ryesno" );
+	}
+	for( i = svs.maxclients + 1; prompt && i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		if( !SV_IsValidEdict( ent ) || Q_strcmp( SV_GetString( ent->v.target ), "ryesno" )) continue;
+		if( player->v.absmin[0] <= ent->v.absmax[0] && player->v.absmax[0] >= ent->v.absmin[0] &&
+			player->v.absmin[1] <= ent->v.absmax[1] && player->v.absmax[1] >= ent->v.absmin[1] &&
+			player->v.absmin[2] <= ent->v.absmax[2] && player->v.absmax[2] >= ent->v.absmin[2] )
+			return true;
+	}
+	return false;
+}
+
+// 1.1.8 (K2): a trip (fuser3 1) or a taller's knock-down (fuser3 2) gets up only through PostThink's get-up, which
+// needs m_bShouldFallFreeze; every EnableControl (each camera and model cutscene start and end, for all players)
+// clears it, and the player could never walk again. Held down so for a moment, not frozen, not in CPR, not asked by
+// a yes/no: set the flag and its time back, and the game's own get-up runs on the next PostThink.
+#define COF_RETAIL_FALL_GRACE 1.0
+static double cof_retail_fall_since[MAX_CLIENTS];
+
+static void CoF_RetailFallRepair( int i, sv_client_t *cl, byte *body )
+{
+	float fuser3 = cl->edict->v.fuser3, now = (float)sv.time;
+	if( i >= MAX_CLIENTS ) return;
+	if(( fuser3 != 1.0f && fuser3 != 2.0f ) || body[COF_RETAIL_FALL_FREEZE] || cof_retail_fall_since[i] > sv.time ||
+		CoF_RetailHandle( body + COF_RETAIL_CPR_TARGET ) || CoF_RetailHandle( body + COF_RETAIL_REVIVER ))
+	{
+		cof_retail_fall_since[i] = 0.0; // standing, a fall the game ends itself, or a CPR under way
+		return;
+	}
+	if( fuser3 == 2.0f && !body[COF_RETAIL_WAITING_FALL] )
+	{
+		// A CPR the game cancelled because its body came alive (a respawn) or left clears only the link, leaving
+		// the reviver's CPR state (fuser3 2) to block every attack: end it the way a cancel does, by its get-up.
+		// 1.1.8 (E2-2): only this case; the taller's knock-down is fuser3 2 too (with m_bWaitingToFall), and
+		// forcing its get-up made it land again every frame.
+		cl->edict->v.fuser3 = 4.0f;
+		memcpy( body + COF_RETAIL_GETUP_END, &now, sizeof( now ));
+		cof_retail_fall_since[i] = 0.0;
+		Con_Printf( "cofstory phase=cpr-unstuck userid=%d\n", cl->userid );
+		return;
+	}
+	if( FBitSet( cl->edict->v.flags, FL_FROZEN ) || ( fuser3 == 1.0f && CoF_RetailAskedYesNo( cl->edict )))
+	{
+		cof_retail_fall_since[i] = 0.0; // a scene holds them (its end calls EnableControl again), or a question
+		return;
+	}
+	if( !cof_retail_fall_since[i] )
+	{
+		cof_retail_fall_since[i] = sv.time;
+		return;
+	}
+	if( sv.time - cof_retail_fall_since[i] <= COF_RETAIL_FALL_GRACE ) return;
+	body[COF_RETAIL_FALL_FREEZE] = 1;
+	memcpy( body + COF_RETAIL_FALL_TIME, &now, sizeof( now ));
+	cof_retail_fall_since[i] = 0.0;
+	Con_Printf( "cofstory phase=fall-unstuck userid=%d fuser3=%d\n", cl->userid, (int)fuser3 );
+}
+
 void SV_CoF_RetailCprRepair( void )
 {
 	int i;
@@ -820,18 +902,10 @@ void SV_CoF_RetailCprRepair( void )
 		if( body && CoF_RetailAlive( cl->edict )) CoF_RetailSyringeRepair( i, cl );
 		if( body && CoF_RetailAlive( cl->edict ))
 		{
-			// A CPR the game cancelled because its body came alive (a respawn)
-			// clears only the link, leaving the reviver's CPR state (fuser3 2)
-			// to block every attack: end it the way a cancel does, by its get-up.
-			if( cl->edict->v.fuser3 == 2.0f && !CoF_RetailHandle( body + COF_RETAIL_CPR_TARGET ))
-			{
-				float now = (float)sv.time;
-				cl->edict->v.fuser3 = 4.0f;
-				memcpy( body + COF_RETAIL_GETUP_END, &now, sizeof( now ));
-				Con_Printf( "cofstory phase=cpr-unstuck userid=%d\n", cl->userid );
-			}
+			CoF_RetailFallRepair( i, cl, body );
 			continue;
 		}
+		if( i < MAX_CLIENTS ) cof_retail_fall_since[i] = 0.0;
 		if( !body || !( by = CoF_RetailHandle( body + COF_RETAIL_REVIVER ))) continue;
 		reviver = CoF_RetailPrivate( by, COF_RETAIL_PLAYER_SIZE );
 		if( reviver && CoF_RetailAlive( by ) && CoF_RetailHandle( reviver + COF_RETAIL_CPR_TARGET ) == cl->edict ) continue;
@@ -844,6 +918,15 @@ qboolean SV_CoF_RetailFallen( sv_client_t *cl )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );
 	return player && player[COF_RETAIL_FALL_FREEZE] && cl->edict->v.fuser3 != 0.0f;
+}
+
+qboolean SV_CoF_RetailOwnAnimation( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	float end;
+	if( !player ) return false;
+	memcpy( &end, player + COF_RETAIL_SEQUENCE_END, sizeof( end ));
+	return end > (float)sv.time;
 }
 
 qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command )
@@ -1001,8 +1084,9 @@ static void CoF_RetailProbe_f( void )
 		Con_Printf( "cofstory phase=probe what=slots userid=%d result=%d free=%d\n", cl->userid, result, SV_CoF_RetailFreeSlots( cl ));
 		return;
 	}
-	if(( !Q_strcmp( what, "give" ) || !Q_strcmp( what, "remove" ) || !Q_strcmp( what, "doc" ) || !Q_strcmp( what, "codenote" )) &&
-		!Cvar_VariableInteger( "sv_cheats" ))
+	// Everything but reading the slots changes what a player has or sees (1.1.8: msg and fade too; the console is open
+	// in co-op).
+	if( !Cvar_VariableInteger( "sv_cheats" ))
 	{
 		Con_Printf( "cofstory phase=probe what=%s result=0 reason=needs-sv_cheats\n", what );
 		return;

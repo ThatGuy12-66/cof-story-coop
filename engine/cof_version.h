@@ -8,8 +8,8 @@ to "dev" values when this file is absent.
 #ifndef COF_VERSION_H
 #define COF_VERSION_H
 
-#define COFE_VERSION   "0.4.0-test3"
-#define COFE_MILESTONE "m10"
-#define COFE_COMMIT    "e4cdbfa"
+#define COFE_VERSION   "1.1.8"
+#define COFE_MILESTONE "release"
+#define COFE_COMMIT    "1.1.8"
 
 #endif // COF_VERSION_H

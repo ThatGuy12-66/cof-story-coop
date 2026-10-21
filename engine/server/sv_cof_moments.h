@@ -17,4 +17,6 @@ void SV_CoF_MomentsDrop( sv_client_t *cl );
 qboolean SV_CoF_MomentsClientCommand( sv_client_t *cl );
 // A user message the game sent (variable-size ones, as SV_CoF_StateMessage).
 void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, int size );
+// Before a level change is captured: every boat rider is let go as Disembark does, without the move (1.1.8).
+void SV_CoF_MomentsReleaseRiders( void );
 #endif

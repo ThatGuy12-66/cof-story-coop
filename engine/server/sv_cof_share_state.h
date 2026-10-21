@@ -5,7 +5,10 @@
  * dedupes only weapon_* descriptors, so a story item can sit in two of one
  * player's slots (a give again after the confirm window, a world copy picked
  * up): the second copy is taken. Desired state: every player holds every party
- * item once, except those they set down, and nothing the party no longer has. */
+ * item once, except those they set down, and nothing the party no longer has.
+ * 1.1.8 (M1 finding 1): the counted items below are the exception: the party
+ * keeps one entry per copy (copies found minus copies used), every player is
+ * brought to that many, and a use takes one copy. */
 #ifndef SV_COF_SHARE_STATE_H
 #define SV_COF_SHARE_STATE_H
 #include <string.h>
@@ -117,6 +120,26 @@ static int CoF_ShareHolds( const cof_share_player_t *p, const char *name )
 	return 0;
 }
 
+// 1.1.8 (M1 finding 1): story items the maps hand out more than once and use up
+// one copy at a time, so one player alone carries two. Fuses: c_down, c_stad,
+// c_college2 and the two c_subway2st1 fuse boxes give them; c_subway2st1's and
+// c_subway2st3's gates each need two boxes filled (game_counter health 2), with
+// no fuse to be had in between. Ladders: c_avlopp and c_apartment4sick each have
+// one, each ladder spot uses one. A set kept one copy, so co-op was a fuse short.
+// The party now holds one entry per copy of these (an old checkpoint's single
+// entry reads as one copy). The spade (two, never used up) keeps one copy.
+static int CoF_ShareCounted( const char *name )
+{
+	return !strcmp( name, "inventoryitems/fuse.txt" ) || !strcmp( name, "inventoryitems/ladder1.txt" );
+}
+
+static int CoF_ShareSetCount( const cof_share_set_t *set, const char *name )
+{
+	int i, n = 0;
+	for( i = 0; i < set->count; i++ ) n += !strcmp( set->items[i].name, name );
+	return n;
+}
+
 static void CoF_ShareReset( cof_share_state_t *s )
 {
 	memset( s, 0, sizeof( *s ));
@@ -150,6 +173,19 @@ static void CoF_ShareFound( cof_share_state_t *s, int slot, const char *name )
 	if( CoF_ShareSetAdd( &s->party, name, p->userid )) CoF_ShareEvent( s, COF_SHARE_FOUND, slot, name );
 }
 
+// A counted item gained outside a delivery: the copy this player set down,
+// picked back up, or one more copy for the party.
+static void CoF_ShareFoundCopy( cof_share_state_t *s, int slot, const char *name )
+{
+	cof_share_player_t *p = &s->players[slot];
+	if( CoF_ShareSetRemove( &p->set_down, name ) || s->party.count >= COF_SHARE_ITEMS ) return;
+	CoF_ShareCopy( s->party.items[s->party.count].name, name );
+	s->party.items[s->party.count].finder = p->userid;
+	s->party.count++;
+	CoF_ShareEvent( s, COF_SHARE_FOUND, slot, name );
+}
+
+// Removes one entry: the item, or one copy of a counted item.
 static void CoF_ShareUsed( cof_share_state_t *s, int slot, const char *name )
 {
 	if( CoF_ShareSetRemove( &s->party, name )) CoF_ShareEvent( s, COF_SHARE_USED, slot, name );
@@ -165,12 +201,59 @@ static int CoF_ShareCount( char held[COF_SHARE_SLOTS][COF_SHARE_NAME], const cha
 	return n;
 }
 
-static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_SLOTS][COF_SHARE_NAME], int ignore_losses, int loss )
+// 1.1.8 (M1 finding 1): the counted items by number of copies, each copy lost or
+// gained handled like a whole item below. joining: a new player in this slot;
+// their copies up to the party's count are the party's own (a new session sees
+// every player anew), only copies beyond it are found.
+static void CoF_ShareApplyCounted( cof_share_state_t *s, int slot, char held[COF_SHARE_SLOTS][COF_SHARE_NAME], int ignore_losses, int loss, int joining )
+{
+	cof_share_player_t *p = &s->players[slot];
+	int i, j, seen, before, after, party;
+	for( i = 0; i < 2 * COF_SHARE_SLOTS; i++ )
+	{
+		const char *name = i < COF_SHARE_SLOTS ? p->held[i] : held[i - COF_SHARE_SLOTS];
+		if( !CoF_ShareCounted( name )) continue;
+		for( seen = j = 0; j < i && !seen; j++ ) seen = !strcmp( j < COF_SHARE_SLOTS ? p->held[j] : held[j - COF_SHARE_SLOTS], name );
+		if( seen ) continue; // this item is done
+		before = CoF_ShareCount( p->held, name );
+		after = CoF_ShareCount( held, name );
+		party = CoF_ShareSetCount( &s->party, name );
+		if( joining ) before = after < party ? after : party;
+		for( ; before > after; before-- ) // one copy fewer
+		{
+			if( p->pending == COF_SHARE_TAKE && !strcmp( p->pending_name, name ))
+			{
+				p->pending = COF_SHARE_NONE;
+				CoF_ShareSetRemove( &p->stalled, name );
+				CoF_ShareEvent( s, COF_SHARE_REMOVED, slot, name );
+			}
+			else if( ignore_losses ) continue;
+			else if( loss != COF_SHARE_LOSS_USED )
+			{
+				CoF_ShareSetAdd( &p->set_down, name, 0 );
+				CoF_ShareEvent( s, loss == COF_SHARE_LOSS_DROPPED ? COF_SHARE_DROPPED : COF_SHARE_COMBINED, slot, name );
+			}
+			else CoF_ShareUsed( s, slot, name );
+		}
+		for( ; before < after; before++ ) // one copy more
+		{
+			if( p->pending == COF_SHARE_GIVE && !strcmp( p->pending_name, name ))
+			{
+				p->pending = COF_SHARE_NONE;
+				CoF_ShareSetRemove( &p->stalled, name );
+				CoF_ShareEvent( s, COF_SHARE_DELIVERED, slot, name );
+			}
+			else CoF_ShareFoundCopy( s, slot, name );
+		}
+	}
+}
+
+static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_SLOTS][COF_SHARE_NAME], int ignore_losses, int loss, int joining )
 {
 	cof_share_player_t *p = &s->players[slot];
 	int i, j, kept, now_held;
-	// a second copy taken: one fewer, the item still held
-	if( p->pending == COF_SHARE_TAKE && ( now_held = CoF_ShareCount( held, p->pending_name )) > 0 &&
+	// a second copy taken: one fewer, the item still held (counted items: below)
+	if( p->pending == COF_SHARE_TAKE && !CoF_ShareCounted( p->pending_name ) && ( now_held = CoF_ShareCount( held, p->pending_name )) > 0 &&
 		now_held < CoF_ShareCount( p->held, p->pending_name ))
 	{
 		p->pending = COF_SHARE_NONE;
@@ -180,7 +263,7 @@ static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // losses
 	{
 		const char *name = p->held[i];
-		if( !name[0] ) continue;
+		if( !name[0] || CoF_ShareCounted( name )) continue;
 		for( kept = j = 0; j < COF_SHARE_SLOTS && !kept; j++ ) kept = !strcmp( held[j], name );
 		if( kept ) continue;
 		if( p->pending == COF_SHARE_TAKE && !strcmp( p->pending_name, name ))
@@ -200,7 +283,7 @@ static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // gains
 	{
 		const char *name = held[i];
-		if( !name[0] || CoF_ShareHolds( p, name )) continue;
+		if( !name[0] || CoF_ShareCounted( name ) || CoF_ShareHolds( p, name )) continue;
 		if( p->pending == COF_SHARE_GIVE && !strcmp( p->pending_name, name ))
 		{
 			p->pending = COF_SHARE_NONE;
@@ -210,6 +293,7 @@ static void CoF_ShareApply( cof_share_state_t *s, int slot, char held[COF_SHARE_
 		}
 		CoF_ShareFound( s, slot, name );
 	}
+	CoF_ShareApplyCounted( s, slot, held, ignore_losses, loss, joining );
 	memcpy( p->held, held, sizeof( p->held ));
 }
 
@@ -233,11 +317,11 @@ static void CoF_ShareObserve( cof_share_state_t *s, int slot, int userid, int al
 		memset( p, 0, sizeof( *p ));
 		p->userid = userid;
 		p->alive = alive;
-		CoF_ShareApply( s, slot, held, 0, COF_SHARE_LOSS_USED );
+		CoF_ShareApply( s, slot, held, 0, COF_SHARE_LOSS_USED, 1 );
 		return;
 	}
 	respawned = alive && !p->alive; // CBasePlayer::Spawn wiped the inventory
-	CoF_ShareApply( s, slot, held, respawned || !alive, COF_SHARE_LOSS_USED );
+	CoF_ShareApply( s, slot, held, respawned || !alive, COF_SHARE_LOSS_USED, 0 );
 	if( respawned )
 	{
 		memset( &p->set_down, 0, sizeof( p->set_down ));
@@ -271,7 +355,7 @@ static void CoF_ShareCommand( cof_share_state_t *s, int slot, int kind, char slo
 		for( i = 0; i < COF_SHARE_SLOTS; i++ )
 			if( held[i][0] && !CoF_ShareHolds( &s->players[slot], held[i] )) loss = COF_SHARE_LOSS_USED;
 	}
-	CoF_ShareApply( s, slot, held, !s->players[slot].alive, loss );
+	CoF_ShareApply( s, slot, held, !s->players[slot].alive, loss, 0 );
 }
 
 static int CoF_ShareBackingOff( const cof_share_player_t *p, const char *name, double now )
@@ -315,11 +399,18 @@ static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double
 	}
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // a second copy of one item
 		for( j = i + 1; j < COF_SHARE_SLOTS; j++ )
-			if( p->held[i][0] && !strcmp( p->held[i], p->held[j] ) && !CoF_ShareBackingOff( p, p->held[j], now ))
+			if( p->held[i][0] && !strcmp( p->held[i], p->held[j] ) && !CoF_ShareCounted( p->held[j] ) && !CoF_ShareBackingOff( p, p->held[j], now ))
 			{
 				CoF_ShareCopy( out, p->held[j] );
 				return COF_SHARE_TAKE;
 			}
+	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // more copies of a counted item than the party has left (1.1.8)
+		if( CoF_ShareCounted( p->held[i] ) && CoF_ShareCount( p->held, p->held[i] ) > CoF_ShareSetCount( &s->party, p->held[i] ) &&
+			!CoF_ShareBackingOff( p, p->held[i], now ))
+		{
+			CoF_ShareCopy( out, p->held[i] );
+			return COF_SHARE_TAKE;
+		}
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // copies of items the party used up
 		if( p->held[i][0] && CoF_ShareSetFind( &s->party, p->held[i] ) < 0 && !CoF_ShareBackingOff( p, p->held[i], now ))
 		{
@@ -329,7 +420,9 @@ static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double
 	for( i = 0; i < s->party.count; i++ )
 	{
 		const char *name = s->party.items[i].name;
-		if( CoF_ShareHolds( p, name ) || CoF_ShareSetFind( &p->set_down, name ) >= 0 || CoF_ShareBackingOff( p, name, now )) continue;
+		// held already: once, or as many copies as the party has of a counted item (1.1.8)
+		if(( CoF_ShareCounted( name ) ? CoF_ShareCount( p->held, name ) >= CoF_ShareSetCount( &s->party, name ) : CoF_ShareHolds( p, name )) ||
+			CoF_ShareSetFind( &p->set_down, name ) >= 0 || CoF_ShareBackingOff( p, name, now )) continue;
 		if( free_slots > 0 )
 		{
 			CoF_ShareCopy( out, name );

@@ -26,6 +26,12 @@ typedef struct
 	int model_cutscene; // a cof_mdlcutscene is running (the only thing that ends that wait)
 	int camera_model; // P+388 names their camera model (a model cutscene, a ladder or the strangle attaches one)
 	int animating; // fuser3 != 0: CPR, phone, struggle, syringe or a fall
+	// 1.1.8 (K1, K4): that running camera is not theirs to watch: the wardrobe's (its menu is its user's alone), or
+	// one in another section of a merged map (another original level)
+	int camera_elsewhere;
+	// 1.1.8 (M3 finding 2a): the running cof_mdlcutscene their camera model belongs to (edict index, 0 = none), and
+	// whether it plays in another section of a merged map and is not theirs (its owner, whom it needs, stays held)
+	int model_scene, model_elsewhere;
 } cof_watch_t;
 
 enum
@@ -37,17 +43,20 @@ enum
 	// Held in that black wait with no model cutscene to end it: MP PlayerSpawn
 	// (100C948D) starts the wait for ANY player's camera model, a ladder's or the
 	// strangle's too, and only cof_mdlcutscene's end (1009F584) clears it.
-	COF_WATCH_UNWAIT = 1 << 4
+	COF_WATCH_UNWAIT = 1 << 4,
+	// 1.1.8 (K4): a model cutscene of another merged-map section holds them: what its end does, for them alone
+	COF_WATCH_MODEL_RELEASE = 1 << 5
 };
 
 static int CoF_WatchDecide( const cof_watch_t *w )
 {
 	int act = 0;
-	if( w->camera && !w->camera_live ) act |= COF_WATCH_RELEASE;
+	if( w->camera && ( !w->camera_live || w->camera_elsewhere )) act |= COF_WATCH_RELEASE;
 	else if( w->camera && w->camera_freezes && ( !w->frozen || !w->notarget || !w->invulnerable )) act |= COF_WATCH_HOLD;
 	if( w->telescope_off ) act |= COF_WATCH_TELESCOPE;
 	if( w->was_cutscene_wait && !w->cutscene_wait ) act |= COF_WATCH_FADE_IN;
 	if( w->cutscene_wait && !w->model_cutscene ) act |= COF_WATCH_UNWAIT;
+	if( w->model_scene && w->model_elsewhere ) act |= COF_WATCH_MODEL_RELEASE;
 	return act;
 }
 
@@ -58,10 +67,30 @@ static int CoF_WatchSettle( const cof_watch_t *w )
 }
 
 // Two players watch the same running camera: in the story they are one
-// character, so a scripted move of one takes the other along.
+// character, so a scripted move of one takes the other along. 1.1.8 (M3
+// finding 2a): so do two frozen in the same running model cutscene, which
+// freezes every player, each through their own camera model.
 static int CoF_WatchTogether( const cof_watch_t *a, const cof_watch_t *b )
 {
-	return a->camera && a->camera_live && a->camera == b->camera;
+	if( a->camera && a->camera_live && !a->camera_elsewhere && !b->camera_elsewhere && a->camera == b->camera ) return 1;
+	return a->model_scene && !a->model_elsewhere && !b->model_elsewhere && a->frozen && b->frozen && a->model_scene == b->model_scene;
+}
+
+// 1.1.8 (M1 finding 5): the camera a living player last watched running, and when.
+#define COF_WATCH_RECENT 2.0 // seconds after its end that a camera still makes two players one
+typedef struct
+{
+	int camera, serial; // edict index and serial number, 0: none
+	double seen;
+} cof_watch_seen_t;
+
+// Both watched the same camera until it ended, at most COF_WATCH_RECENT ago:
+// the designers fire a scene's closing teleport as its last camera ends, when
+// nobody looks through it any more (c_apartmentsick, c_roofs2).
+static int CoF_WatchRecent( const cof_watch_seen_t *a, const cof_watch_seen_t *b, int still_running, double now )
+{
+	return a->camera && !still_running && a->camera == b->camera && a->serial == b->serial &&
+		now >= a->seen && now >= b->seen && now - a->seen <= COF_WATCH_RECENT && now - b->seen <= COF_WATCH_RECENT;
 }
 
 // Cutscene skip (cof_skip, Enter). The retail single-player skip runs the game

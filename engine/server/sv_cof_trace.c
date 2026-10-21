@@ -191,9 +191,14 @@ static qboolean CoF_TraceWatched( const char *name )
 
 void SV_CoF_TraceMsgBegin( const char *name, int dest, edict_t *ent )
 {
+	sv_client_t *cl;
+
 	// a capture left open by an earlier message must never leak into this one
 	cof_trace_msg.open = false;
 	if( !CoF_TraceOn() || !CoF_TraceWatched( name )) return;
+	// 1.1.8 (L13): what the game sends an AI companion alone tells nothing (71k ScreenFade lines in one log)
+	if(( dest == MSG_ONE || dest == MSG_ONE_UNRELIABLE ) && ( cl = SV_ClientFromEdict( ent, false )) != NULL &&
+		FBitSet( cl->flags, FCL_FAKECLIENT )) return;
 	cof_trace_msg.open = true;
 	cof_trace_msg.name = name;
 	cof_trace_msg.dest = dest;

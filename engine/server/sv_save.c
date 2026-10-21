@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #include "sv_cof_session.h"
 #include "sv_cof_sections.h"
 #include "sv_cof_scene.h"
+#include "sv_cof_moments.h"
 #include "sv_cof_archive.h"
 #include "sv_story_transition_state.h"
 
@@ -203,6 +204,8 @@ static qboolean CoF_BeginStoryTransition( const char *map, const char *landmark 
 			CoF_TransitionCompanionItem( CoF_TransitionFakeClient( ent->v.owner ), CoF_TransitionFakeClient( ent->v.aiment )))
 			cof_transition.inventory_owner[i] = -1;
 	}
+	// 1.1.8 (M2 finding 4): a rower would be carried over frozen with nothing to row; let them go first.
+	SV_CoF_MomentsReleaseRiders();
 	{
 		int exits[16], exit_count = SV_CoF_MapExitModels( sv.name, SV_CoF_TransitionRequestedLevel( map, landmark ),
 			SV_CoF_TransitionSourceLandmark( map, landmark ), exits, ARRAYSIZE( exits ), NULL, NULL );

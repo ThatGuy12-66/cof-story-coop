@@ -290,17 +290,20 @@ typedef struct
 /*
 Who a section move takes (movers[i] = 1): every living person in the exit who did not just move, and every
 living person within reach of one of them. Nobody in the exit (a scripted change, say a cutscene's end): every
-living person who did not just move. Bots follow their leader on their own; the dead respawn where they are.
-Returns how many move.
+living person who did not just move. Someone in the exit whose touch does not count yet (moved_recently: just
+moved, or standing in it since arriving): nobody moves (1.1.8; before, that read as a scripted change and took
+everyone else). Bots follow their leader on their own; the dead respawn where they are. Returns how many move.
 */
 COF_SECT_FN int CoF_SectionMovers( const cof_sect_player_t *p, int count, int *movers, float reach )
 {
-	int i, j, activators = 0, moved = 0;
+	int i, j, activators = 0, occupants = 0, moved = 0;
 	for( i = 0; i < count; i++ )
 	{
 		movers[i] = p[i].alive && p[i].human && !p[i].moved_recently && p[i].in_exit;
 		activators += movers[i];
+		occupants += p[i].alive && p[i].human && p[i].in_exit;
 	}
+	if( !activators && occupants ) return 0;
 	for( i = 0; i < count; i++ )
 	{
 		if( movers[i] || !p[i].alive || !p[i].human || p[i].moved_recently ) continue;

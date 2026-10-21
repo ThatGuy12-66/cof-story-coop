@@ -1,4 +1,4 @@
-/* Cry of Fear inventory descriptors (cryoffear/inventoryitems/*.txt).
+/* Cry of Fear inventory descriptors (cryoffear/inventoryitems/<name>.txt).
  * Pure helpers, no engine types. GPL-3.0-or-later.
  * A descriptor is a list of blocks:  "key" { data "value" }
  * Story items are the descriptors directly under inventoryitems/; weapons/,

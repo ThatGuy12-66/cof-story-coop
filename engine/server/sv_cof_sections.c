@@ -16,6 +16,7 @@ by each session) decides whether an original map name loads its merged file.
 #include "sv_cof_party.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_session.h"
+#include "sv_cof_story.h"
 
 #define COF_SECTION_COOLDOWN 1.5    // a player just moved is not moved again: no ping-pong between two exits
 #define COF_SECTION_NEAR 128.0f     // partners this close to someone in the exit come along, as at doors
@@ -29,6 +30,7 @@ static qboolean cof_sect_loaded_ok;
 static int cof_sect_generation = -1;
 static double cof_sect_moved_at[MAX_CLIENTS];
 static double cof_sect_refused_at[MAX_CLIENTS]; // a refused move logged (once a second: it is tried every frame)
+static double cof_sect_nobody_at;               // "section-move-nobody" logged (once a second, likewise)
 static int cof_sect_alive[MAX_CLIENTS];   // userid while alive, -userid once dead (a respawn follows)
 static int cof_sect_last[MAX_CLIENTS];    // the section a player was last in, alive
 static qboolean cof_sect_entered[COF_SECT_MAX];
@@ -233,17 +235,17 @@ static qboolean CoF_SectAlive( const edict_t *e )
 	return e->v.health > 0 && e->v.deadflag == DEAD_NO;
 }
 
-static void CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r, int slot, const vec3_t landing, sv_client_t *anchor, const float *landmark )
+static qboolean CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r, int slot, const vec3_t landing, sv_client_t *anchor, const float *landmark )
 {
 	sv_client_t *cl = &svs.clients[slot];
 	int from = CoF_SectionsAt( s, cl->edict->v.origin[2] );
 	if( !SV_CoF_PartySectionMove( cl, landing, anchor, landmark ))
 	{
 		// tried again every frame while they stand in the door: logged once a second
-		if( sv.time < cof_sect_refused_at[slot] + 1.0 ) return;
+		if( sv.time < cof_sect_refused_at[slot] + 1.0 && sv.time >= cof_sect_refused_at[slot] ) return false;
 		cof_sect_refused_at[slot] = sv.time;
 		Con_Printf( S_WARN "[cof-story-transition] phase=section-move-refused userid=%d to=%s reason=no-room\n", cl->userid, s->sec[r->to_section].map );
-		return;
+		return false;
 	}
 	cof_sect_moved_at[slot] = sv.time;
 	SV_CoF_CompanionMoved( cl ); // a companion bot carried along starts afresh beside its person
@@ -252,6 +254,7 @@ static void CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r,
 		s->sec[from].map, s->sec[r->to_section].map, CoF_SectionsOriginalName( &s->sec[r->to_section], r->dest_landmark ),
 		cl->edict->v.origin[0], cl->edict->v.origin[1], cl->edict->v.origin[2] );
 	CoF_SectEnter( s, r->to_section, true );
+	return true;
 }
 
 // The section move itself. forced >= 0: that player is the one in the exit (an exit whose trigger is gone).
@@ -270,13 +273,19 @@ static void CoF_SectMove( const cof_sections_t *s, const cof_sect_route_t *r, co
 		if( cl->state != cs_spawned || !SV_IsValidEdict( cl->edict )) continue;
 		p[i].alive = CoF_SectAlive( cl->edict );
 		p[i].human = !FBitSet( cl->flags, FCL_FAKECLIENT ) && !SV_CoF_CompanionAway( cl );
-		p[i].moved_recently = sv.time < cof_sect_moved_at[i] + COF_SECTION_COOLDOWN;
+		// just moved, or in the exit since arriving or respawning there (sv_cof_arrival.c): their touch does not count
+		p[i].moved_recently = sv.time < cof_sect_moved_at[i] + COF_SECTION_COOLDOWN || ( forced < 0 && !SV_CoF_ArrivalTouchCounts( cl ));
 		p[i].in_exit = forced >= 0 ? i == forced : count > 0 && SV_CoF_PartyInExit( cl->edict, models, count );
 		VectorCopy( cl->edict->v.origin, p[i].origin );
 	}
 	if( !CoF_SectionMovers( p, n, movers, COF_SECTION_NEAR ))
 	{
-		Con_Printf( "[cof-story-transition] phase=section-move-nobody to=%s landmark=%s\n", level, landmark ? landmark : "" );
+		// asked every frame while someone stands in the exit: logged once a second
+		if( sv.time >= cof_sect_nobody_at + 1.0 || sv.time < cof_sect_nobody_at )
+		{
+			cof_sect_nobody_at = sv.time;
+			Con_Printf( "[cof-story-transition] phase=section-move-nobody to=%s landmark=%s\n", level, landmark ? landmark : "" );
+		}
 		return;
 	}
 	for( i = 0; i < n && anchor < 0; i++ ) if( movers[i] && p[i].in_exit ) anchor = i;
@@ -297,7 +306,8 @@ static void CoF_SectMove( const cof_sections_t *s, const cof_sect_route_t *r, co
 		landing[2] += 1.0f;
 	}
 	// the destination landmark is the last resort when the offset lands in a wall (a door entered off its usual spot)
-	CoF_SectMoveOne( s, r, anchor, landing, NULL, landmarks ? dst : NULL );
+	// the one who took the exit could not be moved: the others stay with them (tried again next frame)
+	if( !CoF_SectMoveOne( s, r, anchor, landing, NULL, landmarks ? dst : NULL )) return;
 	for( i = 0; i < n; i++ )
 	{
 		if( !movers[i] || i == anchor ) continue;

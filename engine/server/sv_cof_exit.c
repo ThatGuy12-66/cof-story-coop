@@ -241,6 +241,16 @@ int SV_CoF_ExitWaiter( void )
 	return CoF_ExitLive() ? cof_exit.waiter : 0;
 }
 
+// The live hold is for this exit (the game asks for it again every frame while it is held).
+qboolean SV_CoF_ExitHeld( const char *level, const char *landmark )
+{
+	char map[COF_EXIT_NAME];
+	if( !CoF_ExitLive() || COM_StringEmptyOrNULL( level ) || COM_StringEmptyOrNULL( landmark ) || Q_strlen( level ) >= sizeof( map )) return false;
+	Q_strncpy( map, level, sizeof( map ));
+	COM_StripExtension( map );
+	return !Q_strcmp( cof_exit.level, map ) && !Q_strcmp( cof_exit.landmark, landmark );
+}
+
 qboolean SV_CoF_ExitQuietAlert( const char *text )
 {
 	return CoF_ExitLive() && !Q_strncmp( text, "CHANGE LEVEL: ", 14 );

@@ -1199,8 +1199,9 @@ void SV_CoF_CompanionFrame( void )
 	}
 }
 
-// Every companion waits where it stands, or follows again. Returns how many heard it.
-static int CoF_CompanionOrder( int stay )
+// Every companion (or only those looking after the person with this userid) waits where it stands, or follows
+// again. Returns how many heard it.
+static int CoF_CompanionOrder( int stay, int leader_userid )
 {
 	int i, heard = 0;
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
@@ -1208,6 +1209,7 @@ static int CoF_CompanionOrder( int stay )
 		cof_companion_t *c = &cof_companions[i];
 		sv_client_t *cl = &svs.clients[i];
 		if( !c->userid || cl->userid != c->userid || !( c->bot || c->driving ) || !SV_IsValidEdict( cl->edict )) continue;
+		if( leader_userid && c->leader_userid != leader_userid ) continue;
 		c->stay = stay;
 		VectorCopy( cl->edict->v.origin, c->stay_pos );
 		CoF_BrainReset( &c->brain ); // a fresh trail from here
@@ -1217,16 +1219,18 @@ static int CoF_CompanionOrder( int stay )
 	return heard;
 }
 
-// cof_companion_order (bound to H): toggle wait / follow for every companion.
+// cof_companion_order (bound to H): toggle wait / follow for every companion. 1.1.8 (E2-8): the host's order goes to
+// every companion; a guest's only to those looking after them (it stopped the bot following the host, untold).
 qboolean SV_CoF_CompanionClientCommand( sv_client_t *cl )
 {
 	char text[96];
-	int i, stay = 1, heard;
+	int i, stay = 1, heard, only;
 	if( Q_strcmp( Cmd_Argv( 0 ), "cof_companion_order" ) || !SV_CoF_StoryCoopEnabled() ) return false;
+	only = NET_IsLocalAddress( cl->netchan.remote_address ) && !FBitSet( cl->flags, FCL_FAKECLIENT ) ? 0 : cl->userid;
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
-		if( cof_companions[i].stay && cof_companions[i].userid ) { stay = 0; break; }
+		if( cof_companions[i].stay && cof_companions[i].userid && ( !only || cof_companions[i].leader_userid == only )) { stay = 0; break; }
 	if( Cmd_Argc() > 1 ) stay = !Q_stricmp( Cmd_Argv( 1 ), "wait" );
-	heard = CoF_CompanionOrder( stay );
+	heard = CoF_CompanionOrder( stay, only );
 	if( !heard ) Q_strncpy( text, "No companion to give orders to.", sizeof( text ));
 	else if( heard == 1 ) Q_strncpy( text, stay ? "Your companion waits here." : "Your companion follows you.", sizeof( text ));
 	else Q_strncpy( text, stay ? "Your companions wait here." : "Your companions follow you.", sizeof( text ));
@@ -1252,7 +1256,7 @@ static void CoF_CompanionCommand_f( void )
 	}
 	if( !Q_stricmp( what, "wait" ) || !Q_stricmp( what, "follow" ))
 	{
-		CoF_CompanionOrder( !Q_stricmp( what, "wait" ));
+		CoF_CompanionOrder( !Q_stricmp( what, "wait" ), 0 );
 		return;
 	}
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
@@ -1291,4 +1295,7 @@ void SV_CoF_CompanionMoved( sv_client_t *cl )
 	c->brain.count = c->brain.cursor = c->brain.door = c->brain.broken = 0;
 	c->brain.have_sample = c->brain.have_leader_last = c->brain.following = 0;
 	c->brain.stuck_since = c->brain.lost_since = 0.0;
+	// 1.1.8 (E2-7): one told to wait keeps waiting, here: the old spot may be in another section (it walked into
+	// walls toward it and guarded it instead of where it is).
+	if( c->stay && SV_IsValidEdict( cl->edict )) VectorCopy( cl->edict->v.origin, c->stay_pos );
 }

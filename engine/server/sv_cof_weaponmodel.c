@@ -95,7 +95,9 @@ void SV_CoF_WeaponModelFrame( void )
 		if( !CoF_WeaponModelPick( game, id, right, left, CoF_WeaponModelPrecached, NULL, &pick )) continue;
 		cof_weaponmodel_players[i].game = CoF_WeaponModelIndex( game );
 		cof_weaponmodel_players[i].model = CoF_WeaponModelIndex( pick.model );
-		cof_weaponmodel_players[i].sequence = pick.sequence;
+		if( CoF_WeaponModelStanding( cl->edict->v.deadflag, cl->edict->v.fuser3, FBitSet( cl->edict->v.flags, FL_DUCKING ),
+			cl->edict->v.movetype == MOVETYPE_WALK, cl->edict->v.waterlevel, SV_CoF_RetailOwnAnimation( cl )))
+			cof_weaponmodel_players[i].sequence = pick.sequence;
 		cof_weaponmodel_players[i].offhand = CoF_WeaponModelIndex( pick.offhand );
 	}
 }

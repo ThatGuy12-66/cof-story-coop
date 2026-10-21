@@ -19,16 +19,25 @@
  *   first answer wins (c_roofs2 asks both players).
  * - The intro's logos and credits (cof_logo, c_intro): shown to the activator
  *   only (Use 100A7370, the only CoFLogo sender); everyone else sees each one a
- *   frame later. */
+ *   frame later. The c_ending4 grey fade (cof_greyfade) the same (1.1.8).
+ * - 1.1.8: a trigger_once that teleports its toucher into a kill box (c_city's
+ *   flowers, the c_roofs falls) is a fall floor too (M1 findings 2 and 6); of two
+ *   trigger_once entrances to one scene the first that fires switches the others
+ *   off (M1 finding 4); a boat whose rider leaves goes back to where it started
+ *   (K6), and riders are let go before a level change (M2 finding 4); a stopped
+ *   wheelchair takes nobody (M3 finding 6); c_down's only ladder down is no
+ *   longer removed under a partner still at the top (M1 finding 8). */
 #include "common.h"
 #include "server.h"
 #include "const.h"
+#include "pm_local.h"
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_moments.h"
 
 #define COF_THINK 0x78 // CBaseEntity::m_pfnThink
+#define COF_USE 0x80 // CBaseEntity::m_pfnUse, after m_pfnThink and m_pfnTouch
 
 #define COF_CALL_SIZE 0x204
 #define COF_CALL_RANG 0xDC // byte: the ring has started
@@ -50,18 +59,41 @@
 #define COF_PL_DEATHBITS 0x5B4 // dword m_iDeathBits (cof_killplayer)
 #define COF_PL_CAMERA_MODEL 0x5AC // raw CBaseEntity*: the player's camera_model (ladder, strangle, model cutscene)
 #define COF_PL_CAMERA_HANDLE 0x388 // EHANDLE to the same model
+#define COF_PL_BOAT 0x380 // EHANDLE m_pBoat: the boat they row (Embark sets it, Disembark clears it)
+#define COF_PL_ENABLE_CONTROL 0xDEFF0 // CBasePlayer::EnableControl( BOOL ), thiscall (as sv_cof_rescue.c)
 
 #define COF_LADDER_SIZE 0x1B4
 #define COF_LADDER_CLIMBER 0x114 // raw CBasePlayer*
 #define COF_LADDER_REACH 96.0f
 #define COF_CHAIR_SIZE 0x388
+#define COF_CHAIR_DEAD 0x368 // bool m_bDead
 #define COF_CHAIR_RIDER 0x384 // raw CBasePlayer*
+// CBoat : CBaseAnimating (0x100): boattime1-4, then pExitEntity, pExitTeller and m_pPlayer, all raw (CoF_Boat.cpp)
+#define COF_BOAT_SIZE 0x11C
+#define COF_BOAT_EXIT 0x110 // raw CBaseEntity *pExitEntity: the dock Disembark sets the rider on
+#define COF_BOAT_TELLER 0x114 // raw CBaseEntity *pExitTeller: the dock last announced
+#define COF_BOAT_RIDER 0x118 // raw CBasePlayer *m_pPlayer: BoatUse takes nobody while it is set
+// CMultiManager : CBaseEntity (0xDC): STATE m_iState, m_cTargets, m_index, m_startTime, string_t m_iTargetName[16]
+#define COF_MM_SIZE 0x12C
+#define COF_MM_COUNT 0xE0 // int m_cTargets: Spawn clamps it to 16
+#define COF_MM_INDEX 0xE4 // int m_index: the next target, 0..m_cTargets
+#define COF_MM_NAMES 0xEC
+#define COF_MM_TARGETS 16
+#define COF_TRAP_DAMAGE 100.0f // a trigger_hurt doing this much kills (the traps' do 1000)
+// CBaseDelay : CBaseEntity (0xDC): float m_flDelay, string_t m_iszKillTarget, EHANDLE m_hActivator
+#define COF_DELAY_SIZE 0xEC
+#define COF_DELAY_KILLTARGET 0xE0
 
 #define COF_MOMENT_FLOORS 8
 #define COF_MOMENT_LADDERS 16
 #define COF_MOMENT_CALLS 8
 #define COF_MOMENT_PROMPTS 16
 #define COF_MOMENT_LOGOS 8
+#define COF_MOMENT_MANAGERS 128 // the most multi_managers a story map has is 70 (cm_park3)
+#define COF_MOMENT_CANDIDATES 32 // trigger_once entrances considered per map (at most 11 in a story map); a bit each
+#define COF_MOMENT_ROOTS 16
+#define COF_MOMENT_BOATS 2
+#define COF_MOMENT_FADES 8
 
 static const char cof_moment_phone[] = "inventoryitems/weapons/weapon_mobile.txt";
 
@@ -89,6 +121,18 @@ static struct { int index, serial, userid; qboolean answered, closed; } cof_mome
 static struct { int from; byte logo; } cof_moment_logos[COF_MOMENT_LOGOS];
 static int cof_moment_logo_count;
 static qboolean cof_moment_mirroring; // our own copies are not copied again
+// GreyFade messages the game sent this frame, and the client slots that got each (1.1.8).
+static struct { byte payload[2]; unsigned int sent; } cof_moment_fades[COF_MOMENT_FADES];
+static int cof_moment_fade_count;
+// What each multi_manager fires, read when a map starts (names in the game's string pool, used only then).
+static struct { const char *name; int count; const char *targets[COF_MM_TARGETS]; } cof_moment_managers[COF_MOMENT_MANAGERS];
+static int cof_moment_manager_count;
+// trigger_once entrances to one scene (siblings: a bit per entry here); fired: seen gone, its siblings switched off.
+static struct { int index, serial; unsigned int siblings; qboolean fired; } cof_moment_roots[COF_MOMENT_ROOTS];
+static int cof_moment_root_count;
+// Each boat where the map put it.
+static struct { int index, serial; vec3_t origin, angles; } cof_moment_boats[COF_MOMENT_BOATS];
+static int cof_moment_boat_count;
 
 void SV_CoF_MomentsReset( void )
 {
@@ -101,6 +145,14 @@ void SV_CoF_MomentsReset( void )
 	memset( cof_moment_prompts, 0, sizeof( cof_moment_prompts ));
 	memset( cof_moment_logos, 0, sizeof( cof_moment_logos ));
 	cof_moment_logo_count = 0;
+	memset( cof_moment_fades, 0, sizeof( cof_moment_fades ));
+	cof_moment_fade_count = 0;
+	memset( cof_moment_managers, 0, sizeof( cof_moment_managers ));
+	cof_moment_manager_count = 0;
+	memset( cof_moment_roots, 0, sizeof( cof_moment_roots ));
+	cof_moment_root_count = 0;
+	memset( cof_moment_boats, 0, sizeof( cof_moment_boats ));
+	cof_moment_boat_count = 0;
 	SV_CoF_PreferFirst( NULL );
 }
 
@@ -141,15 +193,221 @@ static void CoF_MomentSetHandle( byte *pv, int offset, edict_t *ent )
 	memcpy( pv + offset, &h, sizeof( h ));
 }
 
+// What each multi_manager fires, from its private data; one whose fields are not what the layout says is left out
+// (then nothing is decided from it).
+static void CoF_MomentManagers( void )
+{
+	int i, k, count, next;
+	string_t name;
+	cof_moment_manager_count = 0;
+	for( i = svs.maxclients + 1; i < svgame.numEntities && cof_moment_manager_count < COF_MOMENT_MANAGERS; i++ )
+	{
+		edict_t *mm = SV_EdictNum( i );
+		byte *pv;
+		if( !CoF_MomentClass( mm, "multi_manager" ) || !SV_GetString( mm->v.targetname )[0] ||
+			!( pv = SV_CoF_StoryEntityPrivate( mm, COF_MM_SIZE ))) continue;
+		memcpy( &count, pv + COF_MM_COUNT, sizeof( count ));
+		memcpy( &next, pv + COF_MM_INDEX, sizeof( next ));
+		if( count < 0 || count > COF_MM_TARGETS || next < 0 || next > count ) continue;
+		cof_moment_managers[cof_moment_manager_count].name = SV_GetString( mm->v.targetname );
+		cof_moment_managers[cof_moment_manager_count].count = 0;
+		for( k = 0; k < count; k++ )
+		{
+			memcpy( &name, pv + COF_MM_NAMES + k * sizeof( name ), sizeof( name ));
+			if( name ) cof_moment_managers[cof_moment_manager_count].targets[cof_moment_managers[cof_moment_manager_count].count++] = SV_GetString( name );
+		}
+		cof_moment_manager_count++;
+	}
+}
+
+// A multi_manager of this name fires something.
+static qboolean CoF_MomentIsManager( const char *name )
+{
+	int i;
+	for( i = 0; i < cof_moment_manager_count; i++ )
+		if( cof_moment_managers[i].count && !Q_strcmp( cof_moment_managers[i].name, name )) return true;
+	return false;
+}
+
+// A trigger aimed at target fires name: it is target, or a multi_manager of that name fires it (one step, as the
+// traps and the scene entrances are wired).
+static qboolean CoF_MomentFires( const char *target, const char *name )
+{
+	int i, k;
+	if( !name[0] ) return false;
+	if( !Q_strcmp( target, name )) return true;
+	for( i = 0; i < cof_moment_manager_count; i++ )
+	{
+		if( Q_strcmp( cof_moment_managers[i].name, target )) continue;
+		for( k = 0; k < cof_moment_managers[i].count; k++ )
+			if( !Q_strcmp( cof_moment_managers[i].targets[k], name )) return true;
+	}
+	return false;
+}
+
+// A player standing at origin touches this brush entity: the test SV_TouchLinks makes, a player's hull (the one
+// SV_HullForBsp picks for 32 x 32 x 72) against the brush's own shape, not its box. Rotated brushes never count.
+static qboolean CoF_MomentTouches( edict_t *brush, const vec3_t origin )
+{
+	static const vec3_t mins = { -16.0f, -16.0f, -36.0f };
+	model_t *mod = SV_ModelHandle( brush->v.modelindex );
+	hull_t *hull;
+	vec3_t offset, test;
+	int k;
+	if( !mod || mod->type != mod_brush || !VectorIsNull( brush->v.angles )) return false;
+	for( k = 0; k < 3; k++ )
+		if( origin[k] + mins[k] > brush->v.absmax[k] || origin[k] - mins[k] < brush->v.absmin[k] ) return false;
+	hull = &mod->hulls[1];
+	VectorSubtract( hull->clip_mins, mins, offset );
+	VectorAdd( offset, brush->v.origin, offset );
+	VectorSubtract( origin, offset, test );
+	return PM_HullPointContents( hull, hull->firstclipnode, test ) == CONTENTS_SOLID;
+}
+
+// 1.1.8 (M1 findings 2 and 6): a trigger aimed at target teleports its toucher (a cof_teleport it fires, without
+// a monster to move) to where a trigger_hurt of 100+ damage kills them: one that is on and stays so, or one the
+// same chain switches on. In single player that is the death scene of c_city's flowers and of the c_roofs and
+// c_roofs2 falls; a teleport anywhere else is left alone.
+static qboolean CoF_MomentTrap( const char *target )
+{
+	int i, j, k;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *tele = SV_EdictNum( i );
+		if( !CoF_MomentClass( tele, "cof_teleport" ) || SV_GetString( tele->v.message )[0] || !SV_GetString( tele->v.target )[0] ||
+			!CoF_MomentFires( target, SV_GetString( tele->v.targetname ))) continue;
+		for( j = svs.maxclients + 1; j < svgame.numEntities; j++ )
+		{
+			edict_t *dest = SV_EdictNum( j );
+			vec3_t landing;
+			if( !CoF_MomentClass( dest, "info_teleport_destination" ) || Q_strcmp( SV_GetString( dest->v.targetname ), SV_GetString( tele->v.target ))) continue;
+			// where cof_teleport puts a player: the destination, raised to the hull's centre and one unit up
+			VectorCopy( dest->v.origin, landing );
+			landing[2] += 37.0f;
+			for( k = svs.maxclients + 1; k < svgame.numEntities; k++ )
+			{
+				edict_t *hurt = SV_EdictNum( k );
+				qboolean on, switched;
+				if( !CoF_MomentClass( hurt, "trigger_hurt" ) || hurt->v.dmg < COF_TRAP_DAMAGE || ( hurt->v.spawnflags & 8 ) || // 8: no clients
+					!CoF_MomentTouches( hurt, landing )) continue;
+				on = hurt->v.solid == SOLID_TRIGGER;
+				switched = CoF_MomentFires( target, SV_GetString( hurt->v.targetname ));
+				if( on != switched ) return true;
+			}
+		}
+	}
+	return false;
+}
+
+static int CoF_MomentFloorAt( int index )
+{
+	int i;
+	for( i = 0; i < cof_moment_floor_count; i++ )
+		if( cof_moment_floors[i].index == index ) return i;
+	return -1;
+}
+
+// 1.1.8 (M1 finding 4): trigger_once entrances to one scene, with no name of their own (nothing switches or
+// removes them): two whose targets are one multi_manager, or one that fires the other's. c_roofs #265/#681
+// (multiroofscene: a second fire replays its 358 s and toggles env_global stater back off), c_nightmare
+// #125/#159/#293, c_intro #157/#381. Single player touches only one of them.
+static void CoF_MomentRoots( void )
+{
+	static int candidates[COF_MOMENT_CANDIDATES], entry[COF_MOMENT_CANDIDATES];
+	static unsigned int found[COF_MOMENT_CANDIDATES]; // siblings among the candidates, a bit each
+	int count = 0, i, a, b;
+	for( i = svs.maxclients + 1; i < svgame.numEntities && count < COF_MOMENT_CANDIDATES; i++ )
+	{
+		edict_t *root = SV_EdictNum( i );
+		if( !CoF_MomentClass( root, "trigger_once" ) || SV_GetString( root->v.targetname )[0] || CoF_MomentFloorAt( i ) >= 0 ||
+			!CoF_MomentIsManager( SV_GetString( root->v.target ))) continue;
+		candidates[count++] = i;
+	}
+	for( a = 0; a < count; a++ )
+	{
+		const char *mine = SV_GetString( SV_EdictNum( candidates[a] )->v.target );
+		found[a] = 0;
+		for( b = 0; b < count; b++ )
+		{
+			const char *theirs = SV_GetString( SV_EdictNum( candidates[b] )->v.target );
+			if( b != a && ( CoF_MomentFires( mine, theirs ) || CoF_MomentFires( theirs, mine ))) found[a] |= 1u << b;
+		}
+		entry[a] = -1;
+		if( !found[a] || cof_moment_root_count >= COF_MOMENT_ROOTS ) continue;
+		entry[a] = cof_moment_root_count;
+		cof_moment_roots[cof_moment_root_count].index = candidates[a];
+		cof_moment_roots[cof_moment_root_count].serial = SV_EdictNum( candidates[a] )->serialnumber;
+		cof_moment_root_count++;
+		Con_Printf( "cofstory phase=scene-entrance trigger=%d target=%s\n", candidates[a], mine );
+	}
+	for( a = 0; a < count; a++ )
+	{
+		if( entry[a] < 0 ) continue;
+		for( b = 0; b < count; b++ )
+			if(( found[a] & ( 1u << b )) && entry[b] >= 0 ) cof_moment_roots[entry[a]].siblings |= 1u << entry[b];
+	}
+}
+
+// An entrance that fired is gone (trigger_once removes itself 0.1 s later): its siblings are switched off as
+// cof_triggeron does (iuser1: CanTouch refuses every touch).
+static void CoF_MomentRootsFired( void )
+{
+	int i, j;
+	for( i = 0; i < cof_moment_root_count; i++ )
+	{
+		edict_t *root = SV_EdictNum( cof_moment_roots[i].index );
+		if( cof_moment_roots[i].fired ) continue;
+		if( SV_IsValidEdict( root ) && root->serialnumber == cof_moment_roots[i].serial && !( root->v.flags & FL_KILLME ) &&
+			!Q_strcmp( SV_GetString( root->v.classname ), "trigger_once" )) continue;
+		cof_moment_roots[i].fired = true;
+		for( j = 0; j < cof_moment_root_count; j++ )
+		{
+			edict_t *sibling = SV_EdictNum( cof_moment_roots[j].index );
+			if( !( cof_moment_roots[i].siblings & ( 1u << j )) || cof_moment_roots[j].fired ) continue;
+			cof_moment_roots[j].fired = true; // it will not fire now
+			if( !SV_IsValidEdict( sibling ) || sibling->serialnumber != cof_moment_roots[j].serial ) continue;
+			sibling->v.iuser1 = 1;
+			Con_Printf( "cofstory phase=scene-entrance-off trigger=%d fired=%d\n", cof_moment_roots[j].index, cof_moment_roots[i].index );
+		}
+	}
+}
+
+// 1.1.8 (M1 finding 8): c_down kills its ladder's only use brush (trigger_relay killladddd, killtarget ladddd) when
+// the first player reaches the bottom; a partner still at the top could never climb down. That use only takes a
+// player down from the top, so a relay's kill of a ladder use is dropped.
+static void CoF_MomentKeepLadders( void )
+{
+	int i, j;
+	string_t kill, none = 0;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *relay = SV_EdictNum( i );
+		const char *name = NULL;
+		byte *pv;
+		if( !CoF_MomentClass( relay, "trigger_relay" ) || !( pv = SV_CoF_StoryEntityPrivate( relay, COF_DELAY_SIZE ))) continue;
+		memcpy( &kill, pv + COF_DELAY_KILLTARGET, sizeof( kill ));
+		if( !kill || !( name = SV_GetString( kill ))[0] ) continue;
+		for( j = svs.maxclients + 1; j < svgame.numEntities; j++ )
+		{
+			edict_t *use = SV_EdictNum( j );
+			if( !CoF_MomentClass( use, "cof_ladder_manager_use" ) || Q_strcmp( SV_GetString( use->v.targetname ), name )) continue;
+			memcpy( pv + COF_DELAY_KILLTARGET, &none, sizeof( none ));
+			Con_Printf( "cofstory phase=ladder-kept relay=%d use=%s\n", i, name );
+			break;
+		}
+	}
+}
+
 // Fall-death floors: trigger_once entities whose target is a cof_killplayer.
 // The doctor's execution in c_attic reaches its cof_killplayer through
-// multi_managers and is not one of them.
+// multi_managers and is not one of them. 1.1.8: and death traps (CoF_MomentTrap).
 static void CoF_MomentCheckGeneration( void )
 {
 	int i, j;
 	if( cof_moment_generation == svs.spawncount ) return;
 	SV_CoF_MomentsReset();
 	cof_moment_generation = svs.spawncount;
+	CoF_MomentManagers();
 	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
 	{
 		edict_t *floor = SV_EdictNum( i );
@@ -168,6 +426,26 @@ static void CoF_MomentCheckGeneration( void )
 			Con_Printf( "cofstory phase=fall-floor trigger=%d target=%s\n", i, target );
 			break;
 		}
+		if( CoF_MomentFloorAt( i ) < 0 && cof_moment_floor_count < COF_MOMENT_FLOORS && CoF_MomentTrap( target ))
+		{
+			cof_moment_floors[cof_moment_floor_count].index = i;
+			cof_moment_floors[cof_moment_floor_count].serial = floor->serialnumber;
+			cof_moment_floors[cof_moment_floor_count].deathbits = 0;
+			cof_moment_floor_count++;
+			Con_Printf( "cofstory phase=fall-floor trigger=%d target=%s trap=1\n", i, target );
+		}
+	}
+	CoF_MomentRoots();
+	CoF_MomentKeepLadders();
+	for( i = svs.maxclients + 1; i < svgame.numEntities && cof_moment_boat_count < COF_MOMENT_BOATS; i++ )
+	{
+		edict_t *boat = SV_EdictNum( i );
+		if( !CoF_MomentClass( boat, "boat" )) continue;
+		cof_moment_boats[cof_moment_boat_count].index = i;
+		cof_moment_boats[cof_moment_boat_count].serial = boat->serialnumber;
+		VectorCopy( boat->v.origin, cof_moment_boats[cof_moment_boat_count].origin );
+		VectorCopy( boat->v.angles, cof_moment_boats[cof_moment_boat_count].angles );
+		cof_moment_boat_count++;
 	}
 }
 
@@ -471,19 +749,32 @@ void SV_CoF_MomentsCommand( sv_client_t *cl, usercmd_t *cmd )
 }
 
 // The wheelchair's rider, while it carries one: they are "the first player".
+// 1.1.8 (M3 finding 6d): after cof_stopwheelchair the empty chair stays, and
+// WheelchairUse boards anyone who uses it (it checks only that it carries
+// nobody), taking all their weapons (Embark: RemoveAllItems). A chair is made
+// carrying its rider (StartWheelchairMode), so an empty living one was stopped:
+// it takes nobody now (no use function, as SetUse( NULL )).
 static void CoF_MomentWheelchair( void )
 {
 	int i;
 	edict_t *rider = NULL;
-	for( i = svs.maxclients + 1; i < svgame.numEntities && !rider; i++ )
+	uintptr_t base = SV_CoF_StoryBase();
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
 	{
 		edict_t *chair = SV_EdictNum( i );
 		byte *pv;
-		uint32_t carried;
-		if( !CoF_MomentClass( chair, "wheelchair" ) || !CoF_MomentClient( chair->v.owner ) || !CoF_MomentAlive( chair->v.owner )) continue;
-		if( !( pv = SV_CoF_StoryEntityPrivate( chair, COF_CHAIR_SIZE ))) continue;
+		uint32_t carried, use, none = 0;
+		if( !CoF_MomentClass( chair, "wheelchair" ) || !( pv = SV_CoF_StoryEntityPrivate( chair, COF_CHAIR_SIZE ))) continue;
 		memcpy( &carried, pv + COF_CHAIR_RIDER, sizeof( carried ));
-		if( carried ) rider = chair->v.owner;
+		if( carried )
+		{
+			if( !rider && CoF_MomentClient( chair->v.owner ) && CoF_MomentAlive( chair->v.owner )) rider = chair->v.owner;
+			continue;
+		}
+		memcpy( &use, pv + COF_USE, sizeof( use ));
+		if( pv[COF_CHAIR_DEAD] || !base || use < base ) continue; // a dead chair is the rescue's; no code pointer: left alone
+		memcpy( pv + COF_USE, &none, sizeof( none ));
+		Con_Printf( "cofstory phase=wheelchair-stopped chair=%d\n", i );
 	}
 	SV_CoF_PreferFirst( rider );
 }
@@ -504,6 +795,41 @@ static void CoF_MomentDropModel( edict_t *player )
 	}
 }
 
+// A boat's rider pointers cleared, as Disembark leaves them (CoF_Boat.cpp), and the boat stopped: BoatUse takes
+// the next player who uses it. BoatThink tests the rider before use; Embark and Disembark, if one is due, return.
+static void CoF_MomentBoatFree( edict_t *boat, byte *pv )
+{
+	uint32_t none = 0;
+	memcpy( pv + COF_BOAT_RIDER, &none, sizeof( none ));
+	memcpy( pv + COF_BOAT_EXIT, &none, sizeof( none ));
+	memcpy( pv + COF_BOAT_TELLER, &none, sizeof( none ));
+	VectorClear( boat->v.velocity );
+	VectorClear( boat->v.avelocity );
+}
+
+// 1.1.8 (K6, M2 finding 3): the c_lake boat carries one player, through a raw pointer only Disembark clears. A
+// rider who leaves mid-crossing left it taken for good (and the pointer dangling once their slot was reused): it is
+// freed and put back where the map started it, on the party's shore, for a partner to row.
+static void CoF_MomentBoatDrop( sv_client_t *cl, edict_t *boat, byte *pv )
+{
+	uint32_t carried, leaver = (uint32_t)(uintptr_t)cl->edict->pvPrivateData;
+	byte *player;
+	int k, moved = 0;
+	memcpy( &carried, pv + COF_BOAT_RIDER, sizeof( carried ));
+	if( !carried || carried != leaver ) return;
+	CoF_MomentBoatFree( boat, pv );
+	if(( player = SV_CoF_StoryEntityPrivate( cl->edict, COF_PL_SIZE )) != NULL ) memset( player + COF_PL_BOAT, 0, sizeof( cof_moment_handle_t ));
+	for( k = 0; k < cof_moment_boat_count; k++ )
+	{
+		if( cof_moment_boats[k].index != NUM_FOR_EDICT( boat ) || cof_moment_boats[k].serial != boat->serialnumber ) continue;
+		VectorCopy( cof_moment_boats[k].origin, boat->v.origin );
+		VectorCopy( cof_moment_boats[k].angles, boat->v.angles );
+		SV_LinkEdict( boat, false );
+		moved = 1;
+	}
+	Con_Printf( "cofstory phase=boat-freed userid=%d boat=%d moved=%d\n", cl->userid, NUM_FOR_EDICT( boat ), moved );
+}
+
 void SV_CoF_MomentsDrop( sv_client_t *cl )
 {
 	int i;
@@ -513,6 +839,11 @@ void SV_CoF_MomentsDrop( sv_client_t *cl )
 	{
 		edict_t *ent = SV_EdictNum( i );
 		byte *pv;
+		if( cl->edict->pvPrivateData && CoF_MomentClass( ent, "boat" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_BOAT_SIZE )))
+		{
+			CoF_MomentBoatDrop( cl, ent, pv );
+			continue;
+		}
 		if( !SV_IsValidEdict( ent ) || ent->v.owner != cl->edict ) continue;
 		if( CoF_MomentClass( ent, "cof_ladder_manager" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_LADDER_SIZE )))
 		{
@@ -552,6 +883,22 @@ void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, 
 			cof_moment_logos[cof_moment_logo_count].logo = payload[0];
 			cof_moment_logo_count++;
 		}
+		return;
+	}
+	// 1.1.8 (M3 finding 7): GreyFade( byte in, byte seconds ). cof_greyfade (c_ending4 fadeoutbw) sends it to "the
+	// first player" only (the host, from a think); the book Simons send it to every player themselves.
+	if( name && !Q_strcmp( name, "GreyFade" ) && payload && size == 2 && !cof_moment_mirroring &&
+		SV_CoF_StoryCoopEnabled() && ( cl = CoF_MomentClient( to )))
+	{
+		for( i = 0; i < cof_moment_fade_count && memcmp( cof_moment_fades[i].payload, payload, 2 ); i++ );
+		if( i == cof_moment_fade_count )
+		{
+			if( i == COF_MOMENT_FADES ) return;
+			memcpy( cof_moment_fades[i].payload, payload, 2 );
+			cof_moment_fades[i].sent = 0;
+			cof_moment_fade_count++;
+		}
+		cof_moment_fades[i].sent |= 1u << (int)( cl - svs.clients );
 		return;
 	}
 	if( !name || Q_strcmp( name, "YesNo" ) || !payload || !SV_CoF_StoryCoopEnabled() || !( cl = CoF_MomentClient( to ))) return;
@@ -631,12 +978,79 @@ static void CoF_MomentLogos( void )
 	cof_moment_logo_count = 0;
 }
 
+// The grey fades the game showed some players this frame, to the others (1.1.8).
+static void CoF_MomentFades( void )
+{
+	int i, j;
+	cof_moment_mirroring = true;
+	for( i = 0; i < cof_moment_fade_count; i++ )
+	{
+		int sent = 0;
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+		{
+			sv_client_t *cl = &svs.clients[j];
+			if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || ( cof_moment_fades[i].sent & ( 1u << j ))) continue;
+			SV_CoF_SendUserMessage( cl->edict, "GreyFade", cof_moment_fades[i].payload, 2, true );
+			sent++;
+		}
+		if( sent ) Con_Printf( "cofstory phase=greyfade-shared in=%d seconds=%d to=%d\n", cof_moment_fades[i].payload[0], cof_moment_fades[i].payload[1], sent );
+	}
+	cof_moment_mirroring = false;
+	cof_moment_fade_count = 0;
+}
+
+// 1.1.8 (M2 finding 4): a level change while someone rows carries them over frozen, with the health HUD hidden and
+// nothing to row (the boat stays). Before the transition is captured every rider is let go as Disembark does it,
+// without the move to the dock: the boat's pointers cleared, their m_pBoat cleared (the game sends Boat -1), control
+// and the HUD back, the screen faded in. The boat stops where it is.
+void SV_CoF_MomentsReleaseRiders( void )
+{
+	static const byte out[2] = { 0xFF, 0xFF }; // Boat( short -1 ), as Disembark
+	int i, j, hud;
+	if( !svgame.edicts || !SV_CoF_StoryCoopEnabled() ) return;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *boat = SV_EdictNum( i );
+		sv_client_t *rider = NULL;
+		cof_moment_handle_t held;
+		byte *pv, *player = NULL;
+		uint32_t carried;
+		if( !CoF_MomentClass( boat, "boat" ) || !( pv = SV_CoF_StoryEntityPrivate( boat, COF_BOAT_SIZE ))) continue;
+		memcpy( &carried, pv + COF_BOAT_RIDER, sizeof( carried ));
+		if( !carried ) continue;
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS && !rider; j++ )
+			if( svs.clients[j].state == cs_spawned && SV_IsValidEdict( svs.clients[j].edict ) &&
+				(uint32_t)(uintptr_t)svs.clients[j].edict->pvPrivateData == carried ) rider = &svs.clients[j];
+		CoF_MomentBoatFree( boat, pv );
+		if( !rider || !( player = SV_CoF_StoryEntityPrivate( rider->edict, COF_PL_SIZE )))
+		{
+			Con_Printf( "cofstory phase=boat-released boat=%d rider=none\n", i );
+			continue;
+		}
+		memcpy( &held, player + COF_PL_BOAT, sizeof( held ));
+		if( held.edict == boat && held.serial == boat->serialnumber )
+		{
+			// on board (Embark ran): out of the boat's view, the health HUD back
+			memset( player + COF_PL_BOAT, 0, sizeof( held ));
+			memcpy( &hud, player + COF_PL_HIDEHUD, sizeof( hud ));
+			hud &= ~8;
+			memcpy( player + COF_PL_HIDEHUD, &hud, sizeof( hud ));
+			SV_CoF_SendUserMessage( rider->edict, "Boat", out, sizeof( out ), true );
+		}
+		SV_CoF_StoryCallMember( COF_PL_ENABLE_CONTROL, player, (void *)1 );
+		SV_CoF_RetailScreenFade( rider, 1.0f, 0.0f, 0, 0, 0, 0, 255 );
+		Con_Printf( "cofstory phase=boat-released boat=%d userid=%d\n", i, rider->userid );
+	}
+}
+
 void SV_CoF_MomentsFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	CoF_MomentCheckGeneration();
+	CoF_MomentRootsFired();
 	CoF_MomentWheelchair();
 	CoF_MomentLadders();
 	CoF_MomentCalls();
 	CoF_MomentLogos();
+	CoF_MomentFades();
 }

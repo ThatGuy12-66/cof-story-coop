@@ -1046,6 +1046,9 @@ qboolean SV_CoF_MapLandmark( const char *map, const char *landmark, vec3_t origi
 // (a trigger_multiple fires again every wait while the waiter stands in it)
 // has a killtarget, or shares that name with something other than an exit,
 // which it would toggle every time. Its noise or message repeating is accepted.
+// *scripted: something other than a walk-in trigger fires it by name, so who stands in it says nothing (a
+// trigger_once that removes itself, a relay). A trigger_multiple that fires it by name (36 story exits, among them
+// the c_park2/c_park3 pair) is a walk-in exit: its brush is part of the exit, as the exit's own is.
 int SV_CoF_MapExitModels( const char *map, const char *destination, const char *landmark, int *models, int max, qboolean *fires, qboolean *scripted )
 {
 	int flags, count = 0, named = 0, fired = 0, shared = 0, i;
@@ -1053,7 +1056,7 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 	char key[MAX_TOKEN], value[MAX_TOKEN], classname[MAX_TOKEN], next[MAX_TOKEN], name[MAX_TOKEN], model[MAX_TOKEN];
 	char targetname[MAX_TOKEN], target[MAX_TOKEN];
 	char names[8][64]; // the matching exits' targetnames; bit i of fired and shared is names[i]
-	qboolean extra, kills;
+	qboolean extra, kills, once;
 	if( fires ) *fires = false;
 	if( scripted ) *scripted = false;
 	if( !entities ) return 0;
@@ -1076,7 +1079,7 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 		}
 		if( Q_strcmp( classname, "trigger_changelevel" ) || Q_stricmp( next, destination ) || Q_strcmp( name, landmark )) continue;
 		if( fires && extra ) *fires = true;
-		if(( fires || scripted ) && targetname[0] )
+		if( targetname[0] )
 		{
 			// a name too long to keep, or too many: its triggers cannot be checked, so do not hold
 			if( named < (int)( sizeof( names ) / sizeof( names[0] )) && Q_strlen( targetname ) < sizeof( names[0] ))
@@ -1094,8 +1097,8 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 	while( named && ( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL )
 	{
 		if( Q_strcmp( key, "{" )) break;
-		classname[0] = targetname[0] = target[0] = 0;
-		kills = false;
+		classname[0] = targetname[0] = target[0] = model[0] = 0;
+		kills = once = false;
 		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && Q_strcmp( key, "}" ))
 		{
 			cursor = COM_ParseFile( cursor, value, sizeof( value ));
@@ -1103,14 +1106,21 @@ int SV_CoF_MapExitModels( const char *map, const char *destination, const char *
 			if( !Q_strcmp( key, "classname" )) Q_strncpy( classname, value, sizeof( classname ));
 			else if( !Q_strcmp( key, "targetname" )) Q_strncpy( targetname, value, sizeof( targetname ));
 			else if( !Q_strcmp( key, "target" )) Q_strncpy( target, value, sizeof( target ));
+			else if( !Q_strcmp( key, "model" )) Q_strncpy( model, value, sizeof( model ));
 			else if( !Q_strcmp( key, "killtarget" ) && value[0] ) kills = true;
+			else if( !Q_strcmp( key, "wait" ) && Q_atof( value ) < 0.0f ) once = true; // removes itself after firing
 		}
 		for( i = 0; i < named; i++ )
 		{
 			if( !Q_strcmp( target, names[i] ))
 			{
 				fired |= 1 << i;
-				if( scripted ) *scripted = true;
+				if( !Q_strcmp( classname, "trigger_multiple" ) && !once && model[0] == '*' )
+				{
+					// a walk-in trigger: its brush is part of the exit
+					if( count < max ) models[count++] = Q_atoi( model + 1 );
+				}
+				else if( scripted ) *scripted = true;
 				if( fires && kills ) *fires = true;
 			}
 			if( !Q_strcmp( targetname, names[i] ) && Q_strcmp( classname, "trigger_changelevel" )) shared |= 1 << i;
@@ -3048,6 +3058,10 @@ static void GAME_EXPORT pfnMessageEnd( void )
 		SV_CoF_MomentsMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 		SV_CoF_SessionMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 	}
+	// 1.1.8 (M3 finding 7): GreyFade has a fixed size, so the block above never sees it; only it is passed on here
+	// (the CoFLogo mirror there has never run live and stays as it is).
+	else if( svgame.msg_index > 0 && name && !Q_strcmp( name, "GreyFade" ))
+		SV_CoF_MomentsMessage( svgame.msg_ent, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize );
 	SV_Multicast( svgame.msg_dest, org, svgame.msg_ent, true, false );
 
 	if( svgame.msg_trace ) Con_Printf( "^3%s()\n", __func__ );

@@ -31,7 +31,12 @@ qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
 // What a story level change leaves behind (sv_cof_arrival.c): at a carried player's sign-on their HideWeapon and
 // everyone's ScoreInfo; the co-op torch as each player switched it (around the game's F, every frame); an exit the
 // party just arrived beside is not taken by standing in it (pfnChangeLevel: true, refused).
+// the level-change notice told again to a guest still signing on to the map left (sv_client.c)
+extern int sv_cof_notice_epoch;
+void SV_CoF_StoryNotices( void );
 void SV_CoF_ArrivalReset( void );
+void SV_CoF_ArrivalLanded( const sv_client_t *cl );
+qboolean SV_CoF_ArrivalTouchCounts( const sv_client_t *cl );
 void SV_CoF_ArrivalSignon( sv_client_t *cl );
 void SV_CoF_ArrivalReady( const vec3_t landmark );
 void SV_CoF_ArrivalFrame( void );

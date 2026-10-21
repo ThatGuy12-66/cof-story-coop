@@ -6,7 +6,8 @@ GPL-3.0-or-later.
   should have is sent again, at once.
 - In a merged map, a game SetFog that is not of the receiver's section's fogs is held back, and a player moving
   to another section gets that section's fog (or none) at once.
-Log: phase=fog-held userid (a section's fog kept from another), phase=fog-sent userid reason=reset|section.
+- A player's first frame in a new map gets the fog they should have (or none) at once (1.1.8).
+Log: phase=fog-held userid (a section's fog kept from another), phase=fog-sent userid reason=reset|section|arrival.
 */
 #include "common.h"
 #include "server.h"
@@ -23,7 +24,7 @@ Log: phase=fog-held userid (a section's fog kept from another), phase=fog-sent u
 #define COF_SF_FOG_FADING 0x8000
 #define COF_FOG_UNKNOWN -2
 
-static struct { int userid; qboolean replay; int section; } cof_fog_players[MAX_CLIENTS];
+static struct { int userid; qboolean replay; int section, generation; } cof_fog_players[MAX_CLIENTS];
 static qboolean cof_fog_sending;
 
 static int CoF_FogGather( cof_fog_t *out, int max )
@@ -56,6 +57,7 @@ static int CoF_FogSlot( const edict_t *to )
 		cof_fog_players[slot].userid = cl->userid;
 		cof_fog_players[slot].replay = false;
 		cof_fog_players[slot].section = COF_FOG_UNKNOWN;
+		cof_fog_players[slot].generation = -1;
 	}
 	return slot;
 }
@@ -87,29 +89,33 @@ void SV_CoF_FogFrame( void )
 		sv_client_t *cl = &svs.clients[i];
 		byte payload[COF_FOG_PAYLOAD];
 		int slot, section, wanted;
-		qboolean moved;
+		qboolean moved, arrived;
 		if( cl->state != cs_spawned || !SV_IsValidEdict( cl->edict ) || ( slot = CoF_FogSlot( cl->edict )) < 0 ) continue;
 		section = SV_CoF_PlayerSection( cl->edict );
 		moved = section >= 0 && cof_fog_players[slot].section != COF_FOG_UNKNOWN && section != cof_fog_players[slot].section;
-		if( cof_fog_players[slot].replay || moved )
+		arrived = cof_fog_players[slot].generation != svs.spawncount;
+		if( cof_fog_players[slot].replay || moved || arrived )
 		{
 			if( count < 0 ) count = CoF_FogGather( fogs, COF_FOG_MAX );
 			wanted = CoF_FogWanted( fogs, count, section, payload );
-			if( wanted || moved )
+			if( CoF_FogSend( cof_fog_players[slot].replay, moved, arrived, wanted ))
 			{
 				cof_fog_sending = true;
 				SV_CoF_SendUserMessage( cl->edict, "SetFog", payload, sizeof( payload ), true );
 				cof_fog_sending = false;
-				Con_Printf( "cofstory phase=fog-sent userid=%d reason=%s on=%d\n", cl->userid, moved ? "section" : "reset", wanted );
+				Con_Printf( "cofstory phase=fog-sent userid=%d reason=%s on=%d\n", cl->userid, moved ? "section" : arrived ? "arrival" : "reset", wanted );
 			}
 		}
 		cof_fog_players[slot].replay = false;
 		cof_fog_players[slot].section = section;
+		cof_fog_players[slot].generation = svs.spawncount;
 	}
 }
 
 void SV_CoF_FogReset( void )
 {
+	int i;
 	memset( cof_fog_players, 0, sizeof( cof_fog_players ));
+	for( i = 0; i < MAX_CLIENTS; i++ ) cof_fog_players[i].generation = -1;
 	cof_fog_sending = false;
 }

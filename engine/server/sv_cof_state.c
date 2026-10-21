@@ -1,8 +1,15 @@
 #include "common.h"
 #include "server.h"
+#include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_retail.h"
 #include "sv_cof_state.h"
+
+// CEnvGlobal : CPointEntity (0xDC): string_t m_globalstate, int m_triggermode, int m_initialstate
+#define COF_GLOBAL_SIZE 0xE8
+#define COF_GLOBAL_STATE 0xDC
+#define COF_GLOBAL_MODE 0xE0
+#define COF_GLOBAL_INITIAL 0xE4
 
 static cof_state_data_t cof_state;
 static struct
@@ -24,6 +31,24 @@ void SV_CoF_StateReset( void )
 	cof_state_sending = false;
 }
 
+// 1.1.8 (M2 finding 6, M1 finding 4): every story env_global toggles (triggermode 3) a global that starts off, and
+// single player fires each one once, to switch it on. A second fire in co-op (c_asylumb's restore_power from a
+// puzzle left open, c_roofs's scene from its other entrance) switched it back off for good: c_forest7's exit,
+// c_park3's gate. Such a toggle now only sets its global on (triggermode 1).
+static void CoF_StateGlobalOnce( edict_t *entity, int index )
+{
+	byte *pv = SV_CoF_StoryEntityPrivate( entity, COF_GLOBAL_SIZE );
+	string_t state;
+	int mode, initial, on = 1;
+	if( !pv ) return;
+	memcpy( &state, pv + COF_GLOBAL_STATE, sizeof( state ));
+	memcpy( &mode, pv + COF_GLOBAL_MODE, sizeof( mode ));
+	memcpy( &initial, pv + COF_GLOBAL_INITIAL, sizeof( initial ));
+	if( !state || mode != 3 || initial != 0 ) return;
+	memcpy( pv + COF_GLOBAL_MODE, &on, sizeof( on ));
+	Con_Printf( "cofstory phase=global-set-only entity=%d state=%s\n", index, SV_GetString( state ));
+}
+
 void SV_CoF_StateActivate( void )
 {
 	int index;
@@ -31,8 +56,14 @@ void SV_CoF_StateActivate( void )
 	for( index = svs.maxclients + 1; index < svgame.numEntities; index++ )
 	{
 		edict_t *entity = SV_EdictNum( index );
-		if( SV_IsValidEdict( entity ) && !Q_strcmp( SV_GetString( entity->v.classname ), "cof_clearitems" ) &&
-			( entity->v.spawnflags & 3 ) == 1 ) entity->v.spawnflags |= 2;
+		const char *classname;
+		if( !SV_IsValidEdict( entity )) continue;
+		classname = SV_GetString( entity->v.classname );
+		if( !Q_strcmp( classname, "cof_clearitems" ) && ( entity->v.spawnflags & 3 ) == 1 ) entity->v.spawnflags |= 2;
+		// 1.1.8 (K3): a permanent fade (8, FFADE_STAYOUT; c_roofs/c_roofs2 fadefall when one player falls) blacked out
+		// every player for good: it is its activator's alone (4), as single player sees it.
+		else if( !Q_strcmp( classname, "env_fade" ) && ( entity->v.spawnflags & 12 ) == 8 ) entity->v.spawnflags |= 4;
+		else if( !Q_strcmp( classname, "env_global" )) CoF_StateGlobalOnce( entity, index );
 	}
 }
 
@@ -187,4 +218,13 @@ qboolean SV_CoF_StateImport( const cof_state_data_t *data )
 	memcpy( &cof_state, data, sizeof( cof_state ));
 	memset( cof_state_players, 0, sizeof( cof_state_players ));
 	return true;
+}
+
+// 1.1.8 (chapter starts): a party value no player has yet. The first look at the players keeps both: a fresh
+// player's 0 never replaces a doctor weapon the party has, and three slots, once set, stay set.
+void SV_CoF_StatePreset( int doctor_weapon, int three_slots )
+{
+	if( doctor_weapon == 1 || doctor_weapon == 2 ) cof_state.values.doctor_weapon = doctor_weapon;
+	if( three_slots ) cof_state.values.three_slots = 1;
+	Con_Printf( "cofstory phase=chapter-state doctor_weapon=%d three_slots=%d\n", cof_state.values.doctor_weapon, cof_state.values.three_slots );
 }

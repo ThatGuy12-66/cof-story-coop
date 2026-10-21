@@ -861,6 +861,7 @@ void SV_SendClientMessages( void )
 		return;
 
 	SV_UpdateToReliableMessages ();
+	SV_CoF_StoryNotices(); // story co-op: a guest who missed the level-change notice is told again
 
 	// send a message to each connected client
 	for( i = 0, sv.current_client = svs.clients; i < svs.maxclients; i++, sv.current_client++ )

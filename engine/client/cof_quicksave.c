@@ -116,6 +116,10 @@ static qboolean CL_CoF_QuickMultiplayer( void )
 	if( cls.state >= ca_connected && cl.maxclients > 1 )
 		return true;
 
+	// a guest between two story maps: cl.maxclients is cleared until the next serverdata
+	if( cls.state >= ca_connected && !NET_IsLocalAddress( cls.serveradr ))
+		return true;
+
 	return false;
 }
 

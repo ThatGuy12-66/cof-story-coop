@@ -78,4 +78,13 @@ COF_FOG_FN int CoF_FogWanted( const cof_fog_t *fogs, int count, int section, byt
 	return 0;
 }
 
+// Whether a player's frame sends the fog they should have (wanted: there is one; else an off): after a ResetHUD or
+// InitHUD only a fog that is on; on a section move, either; on their first frame in a new map, either (1.1.8, E2-6:
+// a story level change sends no ResetHUD or InitHUD, and a START_ON fog went out only to the players already in;
+// an off also clears a fog the client kept from the map before).
+COF_FOG_FN int CoF_FogSend( int replay, int moved, int arrived, int wanted )
+{
+	return ( replay && wanted ) || moved || arrived;
+}
+
 #endif // SV_COF_FOG_H

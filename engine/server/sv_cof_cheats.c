@@ -123,6 +123,7 @@ typedef struct cof_latch_s
 	qboolean infstamina;
 	qboolean nodamage;
 	qboolean nodrown;
+	int userid; // whose they are: a client keeps its userid through changelevel and load, a new one gets a new one
 } cof_latch_t;
 
 // per client slot, engine memory only: it outlives changelevel and load, and
@@ -622,7 +623,17 @@ static cof_latch_t *CoF_Latch( const sv_client_t *cl )
 {
 	int slot = CoF_ClientSlot( cl );
 
-	return slot >= 0 ? &cof_latches[slot] : NULL;
+	if( slot < 0 )
+		return NULL;
+
+	// 1.1.8 (E2-9): the slot's next occupant (a leave and a join, a reconnect, a bot) starts with none of them
+	if( cof_latches[slot].userid != cl->userid )
+	{
+		memset( &cof_latches[slot], 0, sizeof( cof_latches[slot] ));
+		cof_latches[slot].userid = cl->userid;
+	}
+
+	return &cof_latches[slot];
 }
 
 static qboolean CoF_AnyLatched( const cof_latch_t *l )

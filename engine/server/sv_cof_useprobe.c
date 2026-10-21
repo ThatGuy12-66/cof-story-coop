@@ -8,7 +8,8 @@
  * fallback ranks them by (best above 0.7 wins, the first of equals). Live
  * 2026-10-19, cm_college2: from inside the screwdriver classroom both doors
  * took the player back in, the far door brush of the pair, and the log could
- * not say why. Inert unless story co-op is on and cof_story_trace is non-zero. */
+ * not say why. Inert unless cof_use_probe is non-zero (1.1.8: off by default; it went with cof_story_trace, which
+ * every release session has on, and logged 3-12 lines per door use there). */
 #include "common.h"
 #include "server.h"
 #include "sv_cof_useprobe.h"
@@ -23,6 +24,7 @@ typedef struct
 
 static cof_probe_slot_t cof_probe_last[MAX_CLIENTS];
 static int cof_probe_spawncount;
+static convar_t *cof_use_probe;
 
 static int CoF_ProbeNum( const edict_t *e )
 {
@@ -117,8 +119,12 @@ static void CoF_Probe( sv_client_t *cl, edict_t *door )
 
 void SV_CoF_UseProbeFrame( void )
 {
-	qboolean on = Cvar_VariableValue( "cof_story_trace" ) != 0.0f;
+	qboolean on;
 	int slot, i;
+
+	if( !cof_use_probe )
+		cof_use_probe = Cvar_Get( "cof_use_probe", "0", 0, "Cry of Fear story co-op: log what each door's +use met (a diagnostic); 0 off" );
+	on = cof_use_probe->value != 0.0f;
 
 	// a level change would otherwise compare against the last level's edicts
 	if( !on || cof_probe_spawncount != svs.spawncount )

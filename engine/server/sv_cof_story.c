@@ -24,6 +24,7 @@
 #include "sv_cof_sections.h"
 #include "sv_cof_testgun.h"
 #include "sv_cof_inventory12.h"
+#include "sv_cof_chapter_kit.h"
 #include "cof_abi.h"
 #if XASH_WIN32
 #include <windows.h>
@@ -290,6 +291,8 @@ void SV_CoF_StoryInit( void )
 {
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
 	Cvar_Get( "cof_build", "", 0, "story co-op: the tester build this server runs, sent as cofbuild in its info reply" );
+	Cvar_Get( "cof_chapter_start", "", 0, "story co-op: the chapter map the app started (not New game or Continue); its kit is handed out once" );
+	Cvar_Get( "cof_maps", "", 0, "story co-op: a hash of the host's merged maps, sent as cofmaps in its info reply (the app compares it before a join)" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
 	Cvar_RegisterVariable( &cof_donator );
 	SV_CoF_RetailInit();
@@ -314,6 +317,24 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_SkyInit();
 	SV_CoF_ViewInit();
 	SV_CoF_CameraModelsInit();
+}
+
+// 1.1.8 (chapter starts): the first frame of the map a chapter start loaded hands out what the story would have
+// given by then (sv_cof_chapter_kit.h), once: the cvar is cleared, so later maps, deaths and checkpoints are untouched.
+static void CoF_StoryChapterStart( void )
+{
+	const char *map = Cvar_VariableString( "cof_chapter_start" );
+	const cof_chapter_kit_t *kit;
+	int i;
+	if( !map[0] ) return;
+	kit = CoF_ChapterKit( map );
+	Con_Printf( "cofstory phase=chapter-start map=%s kit=%d\n", map, kit != NULL );
+	if( kit )
+	{
+		for( i = 0; i < COF_CHAPTER_WEAPONS && kit->weapons[i]; i++ ) SV_CoF_PartyGrant( kit->weapons[i] );
+		if( kit->doctor_weapon || kit->three_slots ) SV_CoF_StatePreset( kit->doctor_weapon, kit->three_slots );
+	}
+	Cvar_Set( "cof_chapter_start", "" );
 }
 
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
@@ -376,6 +397,7 @@ void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
 void SV_CoF_StoryFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
+	CoF_StoryChapterStart(); // before the party and state frames: they hand the kit out
 	SV_CoF_GatesFrame(); // first: the game's own rules as this frame wants them
 	SV_CoF_UseProbeFrame(); // a door just started: the player where the game's +use saw them
 	SV_CoF_RecoveryFrame();

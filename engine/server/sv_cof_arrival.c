@@ -171,6 +171,29 @@ void SV_CoF_ArrivalReady( const vec3_t landmark )
 	}
 }
 
+// The engine set this player down (a respawn, a section move): standing in an exit there is like arriving in it,
+// so a touch of it does not count until they have stepped out (1.1.8: a respawn on the entry spot, inside the exit
+// back, carried the party back a map).
+void SV_CoF_ArrivalLanded( const sv_client_t *cl )
+{
+	cof_arrival_player_t *p;
+	if( !SV_CoF_StoryCoopEnabled() || !cl || !CoF_ArrivalHuman( cl ) || !( p = CoF_ArrivalPlayer( cl ))) return;
+	p->stayed = SV_CoF_PartyInExit( cl->edict, NULL, 0 );
+	p->stay_generation = svs.spawncount;
+}
+
+// A section exit of a merged map (no exit hold): whether this player's touch counts, by the door and stayed rules
+// of sv_cof_arrival.h 3.
+qboolean SV_CoF_ArrivalTouchCounts( const sv_client_t *cl )
+{
+	cof_arrival_player_t *p;
+	double door_age;
+	if( !SV_CoF_StoryCoopEnabled() || !cl || !CoF_ArrivalHuman( cl ) || !( p = CoF_ArrivalPlayer( cl ))) return true;
+	door_age = p->door_generation == svs.spawncount ? sv.time - p->door_seen : -1.0;
+	if( SV_CoF_PartyInDoor( cl )) door_age = 0.0;
+	return CoF_ArrivalTouchCounts( door_age, p->stayed && p->stay_generation == svs.spawncount, -1.0, false );
+}
+
 // A door the player was in the middle of when the level changed: its EndSequence stays in the old map.
 static void CoF_ArrivalFinishDoor( sv_client_t *cl, byte *pv )
 {
@@ -306,7 +329,7 @@ qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark )
 	vec3_t spot;
 	int i;
 	if( !SV_CoF_StoryCoopEnabled() || COM_StringEmptyOrNULL( level ) || COM_StringEmptyOrNULL( landmark )) return false;
-	if( SV_CoF_ExitWaiter( )) return false; // a held exit: its waiter already counted
+	if( SV_CoF_ExitHeld( level, landmark )) return false; // this exit is held: its waiter already counted
 	if( !CoF_ArrivalExit( level, landmark ) || cof_arrival_exit.count <= 0 || cof_arrival_exit.fires || cof_arrival_exit.scripted )
 		return false;
 	if( arrived_age >= 0.0 && SV_CoF_LiveLandmark( landmark, spot ))
@@ -329,7 +352,7 @@ qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark )
 		if( !refused ) refused = p;
 	}
 	if( !refused ) return false; // nobody in it: a scripted change
-	if( sv.time >= refused->refused_logged + 1.0 || sv.time < refused->refused_logged )
+	if( sv.time >= refused->refused_logged + 10.0 || sv.time < refused->refused_logged ) // asked every frame
 	{
 		refused->refused_logged = sv.time;
 		reason = refused->stayed ? "arrived-inside" : "just-arrived";

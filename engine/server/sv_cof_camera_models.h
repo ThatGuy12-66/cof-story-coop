@@ -22,11 +22,14 @@ Plain C (standard library only): the offline tests share it.
 #define COF_CAMERA_MODEL_SCENE 0x5AC // CBasePlayer::pDeathScene
 
 // A camera_model the game is done with: owned by a player slot (1..maxclients; a map's own have no owner) whose player
-// is gone or whose pDeathScene is no longer this model.
-COF_CAMERA_MODELS_FN int CoF_CameraModelLeft( int owner_slot, int maxclients, int owner_present, const void *owner_scene, const void *model )
+// object is gone or whose pDeathScene is no longer this model. owner_object: 1 = the owner edict holds a player object
+// we can read (owner_scene is its pDeathScene), 0 = it holds no object, -1 = an object we cannot read (kept: only that
+// object could still point at the model). The client state does not count (1.1.8, E2-1): a player who left or is
+// still loading keeps their object, and a running model cutscene walks its raw pDeathScene.
+COF_CAMERA_MODELS_FN int CoF_CameraModelLeft( int owner_slot, int maxclients, int owner_object, const void *owner_scene, const void *model )
 {
-	if( owner_slot < 1 || owner_slot > maxclients ) return 0;
-	return !owner_present || owner_scene != model;
+	if( owner_slot < 1 || owner_slot > maxclients || owner_object < 0 ) return 0;
+	return !owner_object || owner_scene != model;
 }
 
 #endif // SV_COF_CAMERA_MODELS_H

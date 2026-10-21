@@ -1101,8 +1101,11 @@ void SV_FinalMessage( const char *message, qboolean reconnect )
 		{
 			// Keep each authenticated netchannel and userid. Generic reconnect
 			// creates a new connection and cannot safely identify saved players.
+			// The spawncount of the map left: a client acts on it once (it comes twice), and one still
+			// signing on to this map is told again from the next one (SV_CoF_StoryNotices).
+			sv_cof_notice_epoch = svs.spawncount;
 			MSG_BeginServerCmd( &msg, svc_stufftext );
-			MSG_WriteString( &msg, "cof_story_changelevel\n" );
+			MSG_WriteStringf( &msg, "cof_story_changelevel %d\n", sv_cof_notice_epoch );
 		}
 		else if( svs.maxclients <= 1 )
 		{

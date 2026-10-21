@@ -21,6 +21,7 @@ GNU General Public License for more details.
 #include "shake.h"
 #include "input.h"
 #include "eiface.h"
+#include "cof_abi.h"
 
 #if XASH_LOW_MEMORY != 2
 int CL_UPDATE_BACKUP = SINGLEPLAYER_BACKUP;
@@ -1074,7 +1075,16 @@ void CL_ParseClientData( sizebuf_t *msg, connprotocol_t proto )
 			pwd = cls.spectator_state.weapondata;
 		}
 
-		clgame.dllFuncs.pfnTxferPredictionData( ps, pps, pcd, ppcd, wd, pwd );
+		{
+			// Cry of Fear's client.dll copies its donator level after the HL fields (cof_abi.h): give it room
+			cof_clientdata_t cof_pcd, cof_ppcd;
+			cof_pcd.cd = *pcd;
+			cof_pcd.isdonator = 0;
+			cof_ppcd.cd = *ppcd;
+			cof_ppcd.isdonator = 0;
+			clgame.dllFuncs.pfnTxferPredictionData( ps, pps, &cof_pcd.cd, &cof_ppcd.cd, wd, pwd );
+			*pcd = cof_pcd.cd;
+		}
 	}
 
 	// do this after all packets read for this frame?

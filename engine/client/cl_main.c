@@ -26,6 +26,9 @@ GNU General Public License for more details.
 #include "multi_emulator.h"
 #include "cof_abi.h"
 
+// the spawncount carried by the last story level-change notice acted on (CL_CoF_StoryChangeLevel_f)
+static int cl_cof_story_epoch = -1;
+
 #define CL_CONNECTION_TIMEOUT 15.0f
 #define CL_CONNECTION_RETRIES 5
 #define CL_TEST_RETRIES       5
@@ -1501,8 +1504,7 @@ qboolean CL_CoF_MenuMapLevelChange( const char *mapname, const char *source )
 	if( COM_StringEmptyOrNULL( mapname ))
 		return false;
 
-	if( cl.maxclients > 1 )
-		return false;
+	// 1.1.8: in a co-op game too (see CL_CoF_MenuMapRedirect): the menu map is never a level to play together
 
 	Q_strncpy( name, mapname, sizeof( name ));
 	COM_StripExtension( name );
@@ -1740,10 +1742,12 @@ qboolean CL_CoF_MenuMapRedirect( const char *cmd, const char *source )
 		return false;
 
 	// Cry of Fear's own client makes the same distinction: with more than one
-	// client its menu buttons disconnect instead of loading the menu map, and
-	// a server-driven level change there is a real one.
-	if( cl.maxclients > 1 )
-		return false;
+	// client its menu buttons disconnect instead of loading the menu map. What
+	// still asks for the menu map in a co-op game is the end of the story: the
+	// credits' Continue (client.dll runs "map c_game_menu1" on every machine) and
+	// an ending door's EndGame. 1.1.8 takes those over too, so the game ends and
+	// everyone is back in the engine menu: before, the host's server restarted on
+	// the old 3D menu map as a co-op game and a guest started a local game there.
 
 	begin = cmd;
 
@@ -4189,6 +4193,7 @@ void CL_Disconnect( void )
 
 	// Cry of Fear co-op bridge: must look at cls.serveradr before it is cleared
 	CL_CoF_NoteSessionEnd();
+	cl_cof_story_epoch = -1; // another server counts its maps from the start
 
 	// Cry of Fear (cof_mp3_stop_on_map): the client's own irrKlang player is not
 	// part of the session the lines below tear down, so it has to be told. Done
@@ -4371,10 +4376,28 @@ static void CL_Reconnect_f( void )
 
 // Story transitions reuse the established connection. A generic reconnect
 // disconnects active clients and replaces the server's per-session userid.
+// The server's notice carries the spawncount of the map it left (sv_main.c, SV_FinalMessage), sent twice and,
+// to a client still signing on, again until its "new" arrives (sv_client.c, SV_CoF_StoryNotices): acted on once
+// per map left, and also while still signing on to that map (a guest loading when the party left).
 static void CL_CoF_StoryChangeLevel_f( void )
 {
 	int maxclients;
-	if( cls.state != ca_active || cls.demoplayback ) return;
+	if( cls.demoplayback ) return;
+	if( Cmd_Argc() > 1 )
+	{
+		int epoch = Q_atoi( Cmd_Argv( 1 ));
+		if( epoch == cl_cof_story_epoch ) return; // the second copy, or told again after acting
+		if( cls.state == ca_connected || cls.state == ca_validate )
+		{
+			cl_cof_story_epoch = epoch;
+			Con_Reportf( "[cof-story-transition] client was still signing on: starting again on the new map\n" );
+			CL_Reconnect( false );
+			return;
+		}
+		if( cls.state != ca_active ) return;
+		cl_cof_story_epoch = epoch;
+	}
+	else if( cls.state != ca_active ) return;
 	maxclients = cl.maxclients;
 	SCR_BeginLoadingPlaque( false );
 	CL_ClearState();

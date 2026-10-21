@@ -508,7 +508,9 @@ static void SV_ConnectClient( netadr_t from )
 	newcl->listeners = -1;
 
 	// initailize netchan
-	if( !Host_IsLocalClient( ))
+	// Cry of Fear story co-op: a listen server (the co-op host) compresses its guests' sign-on too: every client
+	// takes LZSS fragments. Only the host's own loopback client goes without.
+	if( !NET_IsLocalAddress( from ))
 		SetBits( netchan_flags, NETCHAN_USE_LZSS );
 	if( FBitSet( newcl->extensions, NET_EXT_NETCHAN_COOKIE ))
 		SetBits( netchan_flags, NETCHAN_USE_COOKIE );
@@ -1028,6 +1030,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		int remaining;
 		char temp[sizeof( s )];
 		const char *build = Cvar_VariableString( "cof_build" );
+		const char *maps = Cvar_VariableString( "cof_maps" );
 
 		SV_GetPlayerCount( &count, &bots );
 
@@ -1043,6 +1046,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		Info_SetValueForKey( s, "password", SV_HavePassword() ? "1" : "0", sizeof( s ));
 		if( build[0] ) Info_SetValueForKey( s, "cofbuild", build, sizeof( s )); // story co-op: the tester app checks it before a join
 		if( build[0] ) Info_SetValueForKeyf( s, "bots", sizeof( s ), "%i", bots ); // ...and shows the AI companions in its status
+		if( build[0] && maps[0] ) Info_SetValueForKey( s, "cofmaps", maps, sizeof( s )); // ...and the merged maps a guest needs too (1.1.8)
 
 		// write host last so we can try to cut off too long hostnames
 		// TODO: value size limit for infostrings
@@ -1648,6 +1652,34 @@ Sends the first message from the server to a connected client.
 This will be sent on the initial connection and upon each server load.
 ================
 */
+/*
+Cry of Fear story co-op: the level-change notice (SV_FinalMessage, "cof_story_changelevel <spawncount of the map
+left>") is unreliable data sent twice, and before 1.1.8 a client acted on it only in game. A guest that lost both
+copies, or was still signing on to the old map (a guest loading when the party left), waited for a map the server
+had left until the connect timeout dropped it. Each client's sign-on is noted here; one still connected after the
+change and silent on this map ("new" not sent) is told again, reliably, every two seconds.
+*/
+int sv_cof_notice_epoch = -1;
+static struct { int userid; int spawncount; double told; } cof_signon[MAX_CLIENTS];
+
+void SV_CoF_StoryNotices( void )
+{
+	int i;
+	if( sv_cof_notice_epoch < 0 || sv.state != ss_active || !SV_CoF_StoryCoopEnabled() ) return;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state != cs_connected || FBitSet( cl->flags, FCL_FAKECLIENT ) || Netchan_IsLocal( &cl->netchan )) continue;
+		if( cof_signon[i].userid == cl->userid && cof_signon[i].spawncount == svs.spawncount ) continue; // signing on here
+		if( host.realtime < cl->connection_started + 1.5 ) continue; // its "new" may be on the way
+		if( host.realtime < cof_signon[i].told + 2.0 && host.realtime >= cof_signon[i].told ) continue;
+		cof_signon[i].told = host.realtime;
+		MSG_BeginServerCmd( &cl->netchan.message, svc_stufftext );
+		MSG_WriteStringf( &cl->netchan.message, "cof_story_changelevel %d\n", sv_cof_notice_epoch );
+		Con_Printf( "cofstory phase=changelevel-told-again userid=%d epoch=%d\n", cl->userid, sv_cof_notice_epoch );
+	}
+}
+
 static qboolean SV_New_f( sv_client_t *cl )
 {
 	byte		msg_buf[MAX_INIT_MSG];
@@ -1661,6 +1693,14 @@ static qboolean SV_New_f( sv_client_t *cl )
 
 	if( cl->state != cs_connected )
 		return false;
+
+	// signing on to this map (SV_CoF_StoryNotices); a resource request from an earlier sign-on no longer counts
+	if( cl - svs.clients >= 0 && cl - svs.clients < MAX_CLIENTS )
+	{
+		cof_signon[cl - svs.clients].userid = cl->userid;
+		cof_signon[cl - svs.clients].spawncount = svs.spawncount;
+	}
+	ClearBits( cl->flags, FCL_SEND_RESOURCES );
 
 	// send the serverdata
 	SV_SendServerdata( &msg, cl );
@@ -2230,6 +2270,14 @@ SV_Begin_f
 static qboolean SV_Begin_f( sv_client_t *cl )
 {
 	qboolean cof_carried;
+
+	// Cry of Fear story co-op: a "begin" for a map the server has left (the client was spawning when the story
+	// level changed): its sign-on starts again on this map, as "spawn" does below for a stale spawncount
+	if( cl->state == cs_connected && SV_CoF_StoryCoopEnabled() && !FBitSet( cl->flags, FCL_FAKECLIENT ))
+	{
+		SV_New_f( cl );
+		return true;
+	}
 
 	// make sure client has passed connection process correctly
 	if( cl->state != cs_spawning )

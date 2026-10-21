@@ -10,6 +10,8 @@ void SV_CoF_ExitFrame( void );
 qboolean SV_CoF_ExitWarpKey( sv_client_t *cl );
 // The userid waiting at a held exit, or 0.
 int SV_CoF_ExitWaiter( void );
+// The live hold is for this exit.
+qboolean SV_CoF_ExitHeld( const char *level, const char *landmark );
 // The game's "CHANGE LEVEL:" console line, repeated every frame of a hold.
 qboolean SV_CoF_ExitQuietAlert( const char *text );
 #endif

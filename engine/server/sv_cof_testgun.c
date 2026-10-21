@@ -11,7 +11,8 @@
  * a CPR or a struggle or in the wheelchair, never before a respawn's inventory
  * is back, and only while a slot stays free for the story's items.
  * The server clock starts again at every map (sv_init), so every timer here is
- * per map. */
+ * per map. Infinite ammo for everyone is a cheat: only with sv_cheats on (1.1.8;
+ * the console is open in co-op, and the app writes sv_cheats 0). */
 #include "common.h"
 #include "server.h"
 #include "const.h"
@@ -45,6 +46,7 @@ static cof_testgun_player_t cof_testgun_players[MAX_CLIENTS];
 static int cof_testgun_generation = -1;
 static double cof_testgun_time;
 static char cof_testgun_refused[32]; // the setting last reported as not a gun
+static qboolean cof_testgun_cheats_told; // "needs sv_cheats" logged while it is asked for
 
 void SV_CoF_TestGunReset( void )
 {
@@ -52,6 +54,7 @@ void SV_CoF_TestGunReset( void )
 	cof_testgun_generation = -1;
 	cof_testgun_time = 0.0;
 	cof_testgun_refused[0] = 0;
+	cof_testgun_cheats_told = false;
 }
 
 void SV_CoF_TestGunInit( void )
@@ -68,8 +71,16 @@ static const char *CoF_TestGunName( void )
 	if( !value || !value[0] || !Q_strcmp( value, "0" ) || !Q_stricmp( value, "none" ))
 	{
 		cof_testgun_refused[0] = 0;
+		cof_testgun_cheats_told = false;
 		return NULL;
 	}
+	if( !Cvar_VariableInteger( "sv_cheats" ))
+	{
+		if( !cof_testgun_cheats_told ) Con_Printf( "cofstory phase=test-gun-refused reason=sv_cheats\n" );
+		cof_testgun_cheats_told = true;
+		return NULL;
+	}
+	cof_testgun_cheats_told = false;
 	Q_snprintf( name, sizeof( name ), "%s%s", Q_strnicmp( value, "weapon_", 7 ) ? "weapon_" : "", value );
 	for( i = 0; i < (int)ARRAYSIZE( cof_testgun_guns ); i++ )
 	{

@@ -69,6 +69,8 @@ int SV_CoF_RetailInfiniteAmmo( sv_client_t *cl, qboolean on );
 int SV_CoF_RetailCarrying( sv_client_t *cl, const char *classname );
 // Riding the c_ending4b wheelchair, which took every weapon and gave its own.
 qboolean SV_CoF_RetailInWheelchair( sv_client_t *cl );
+// Rowing the c_lake boat: m_pBoat names a live boat (the rider's own body stays frozen where they got in).
+qboolean SV_CoF_RetailInBoat( sv_client_t *cl );
 // The player's m_iFlashlightFlags (which lights are on), or -1 without a verified player.
 int SV_CoF_RetailFlashFlags( sv_client_t *cl );
 // A trigger_camera holds the player's view (m_hCurrentCamera, and the view is not the player's own).
@@ -93,10 +95,14 @@ qboolean SV_CoF_RetailRevivable( sv_client_t *cl );
 qboolean SV_CoF_RetailRevive( sv_client_t *reviver, sv_client_t *body );
 // A reviver who died mid-CPR leaves the body linked to them, refusing every later
 // CPR until it respawns: unlink such bodies. A reviver whose body came alive is
-// left in its CPR state: let it get up.
+// left in its CPR state: let it get up. A trip or knock-down whose fall flag an
+// EnableControl cleared: let it get up too (1.1.8).
 void SV_CoF_RetailCprRepair( void );
 // A hard landing holds the player down until the getting-up command.
 qboolean SV_CoF_RetailFallen( sv_client_t *cl );
+// The game plays a whole-body animation of its own on the player now (m_flSequenceOverrideTime not passed: a get-up,
+// a dodge, a CPR, a death...). False without a verified player.
+qboolean SV_CoF_RetailOwnAnimation( sv_client_t *cl );
 // One of the game's client commands, as if the player sent it ("flashlight", "tapgetup").
 qboolean SV_CoF_RetailCommand( sv_client_t *cl, const char *command );
 // The game's ClientCommand for the command already tokenized, as cl, even in a phone call or on a computer/phone

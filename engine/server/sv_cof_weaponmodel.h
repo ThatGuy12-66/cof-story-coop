@@ -136,6 +136,15 @@ static int CoF_WeaponModelPick( const char *game, int id, int right, int left,
 	return 0;
 }
 
+/* 1.1.8 (E2-5): a pick's sequence is a standing pose, sent only while the player stands (or walks) in it: alive,
+ * no fuser3 state (a knock-down, a CPR, a syringe heal, a struggle, a phone call...), not crouched, walking (not on a
+ * ladder or in noclip), not swimming, and no whole-body animation of the game's own under way (a get-up, a dodge).
+ * Otherwise the game's sequence goes out (a downed partner showed standing); the model is still swapped. */
+static int CoF_WeaponModelStanding( int deadflag, float fuser3, int ducking, int walking, int waterlevel, int game_animation )
+{
+	return deadflag == 0 && fuser3 == 0.0f && !ducking && walking && waterlevel <= 1 && !game_animation;
+}
+
 /* Every generated model the engine precaches when the file exists, by index; NULL past the end. */
 static int CoF_WeaponModelCount( void )
 {
