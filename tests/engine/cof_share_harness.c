@@ -322,6 +322,39 @@ int main( void )
 		assert( copies( 0, FUSE ) == 2 && copies( 1, FUSE ) == 2 && !strstr( console + mark, "item-found" ));
 	}
 
+	/* 1.1.8: a fuse handed over in the old map's last frame reaches the new map in the carried inventory: it is the
+	   delivery, not one more fuse for the party (the partner signs on a few frames later, the clock restarted). */
+	setup(); gain( 0, FUSE ); frame( 0.1 );
+	assert( copies( 1, FUSE ) == 1 && gives == 1 );
+	clients[0].state = clients[1].state = cs_connected; frame( 0.1 );
+	svs.spawncount++; sv.time = 1.0; frame( 0.1 );
+	clients[0].state = clients[1].state = cs_spawned;
+	{
+		size_t mark = console_length;
+		for( i = 0; i < 4; i++ ) frame( 0.1 );
+		assert( !strstr( console + mark, "item-found" ) && strstr( console + mark, "item-delivered userid=2 item=" FUSE ));
+		assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 1 && copies( 0, FUSE ) == 1 && copies( 1, FUSE ) == 1 && gives == 1 );
+	}
+
+	/* 1.1.8: a rejoiner served while the level change held their restore back (the recovery waits, the ledger does not):
+	   the restore replaces the inventory, so that give is no longer in flight. The fuse they pull next is a new one. */
+	setup(); gain( 0, FUSE ); frame( 0.1 ); frame( 0.1 );
+	clients[1].state = cs_free; frame( 0.1 );
+	clients[1].state = cs_spawned; clients[1].userid = 8; memset( inv[1], 0, sizeof( inv[1] ));
+	{
+		cof_share_archive_t archive;
+		SV_CoF_ShareExport( &archive ); /* the leaver's name, as the recovery's capture remembers it */
+		strcpy( archive.names[1], clients[1].name );
+		cof_share_saved = archive;
+	}
+	frame( 0.1 ); /* served from the empty inventory: a give in flight */
+	assert( gives == 2 && cof_share.players[1].pending == COF_SHARE_GIVE );
+	memset( inv[1], 0, sizeof( inv[1] )); strcpy( inv[1][0], FUSE ); /* the recovery's restore: what they left with */
+	SV_CoF_ShareRecovered( &clients[1] );
+	gain( 1, FUSE ); frame( 0.1 ); frame( 0.1 ); frame( 0.1 );
+	assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 1, FUSE ) == 2 && copies( 0, FUSE ) == 2 );
+	assert( strstr( console, "cofstory phase=item-found userid=8 item=" FUSE ) && !strstr( console, "item-stalled" ));
+
 	/* twelve slots: a partner whose slots 1..6 are full still gets the shared key, in slot 7 */
 	setup(); active = 12;
 	for( i = 0; i < 6; i++ ) strcpy( inv[1][i], GLOCK );

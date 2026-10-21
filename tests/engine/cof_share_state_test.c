@@ -271,6 +271,33 @@ int main( void )
 	start(); put( 0, 0, SPADE ); look(); put( 0, 1, SPADE ); look();
 	assert( s.party.count == 1 && plan( 0, 4, 1, item ) == COF_SHARE_TAKE && !strcmp( item, SPADE ));
 
+	/* 1.1.8: a give or take issued in the old map's last frame lands in the inventory the level change carries;
+	 * the first look in the new map confirms it. Forgotten, a fuse given read as one more found (the party had
+	 * three for two) and a fuse taken as one used up (the party short of one). */
+	start(); put( 0, 0, FUSE ); look(); deliver( 1, 0, FUSE, 1 );
+	put( 0, 1, FUSE ); look(); /* the second pull: the partner is owed a second copy */
+	assert( plan( 1, 5, 2, item ) == COF_SHARE_GIVE ); CoF_ShareIssued( &s, 1, COF_SHARE_GIVE, FUSE, 2 ); put( 1, 1, FUSE );
+	CoF_ShareNewMap( &s ); s.event_count = 0; look(); /* the new map, its clock restarted */
+	assert( has_event( COF_SHARE_DELIVERED, 1, FUSE ) && !has_event( COF_SHARE_FOUND, 1, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 );
+	assert( plan( 0, 4, 1.0, item ) == COF_SHARE_NONE && plan( 1, 4, 1.0, item ) == COF_SHARE_NONE );
+	/* ...a take of the copy the party no longer has, the same way */
+	CoF_ShareObserve( &s, 0, 101, 1, inv[0] ); inv[0][0][0] = 0; CoF_ShareCommand( &s, 0, CoF_ShareCommandKind( "inventoryuse" ), inv[0] );
+	assert( CoF_ShareSetCount( &s.party, FUSE ) == 1 && plan( 1, 4, 1.1, item ) == COF_SHARE_TAKE );
+	CoF_ShareIssued( &s, 1, COF_SHARE_TAKE, FUSE, 1.1 ); inv[1][1][0] = 0;
+	CoF_ShareNewMap( &s ); s.event_count = 0; look();
+	assert( has_event( COF_SHARE_REMOVED, 1, FUSE ) && !has_event( COF_SHARE_USED, 1, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 1 );
+	assert( copies( 0, FUSE ) == 1 && copies( 1, FUSE ) == 1 && plan( 0, 5, 1.0, item ) == COF_SHARE_NONE && plan( 1, 5, 1.0, item ) == COF_SHARE_NONE );
+	/* ...and one that never landed is retried at once on the new map, not backed off or reported */
+	start(); put( 0, 0, KEY ); look();
+	assert( plan( 1, 6, 900, item ) == COF_SHARE_GIVE ); CoF_ShareIssued( &s, 1, COF_SHARE_GIVE, KEY, 900 );
+	CoF_ShareNewMap( &s ); s.event_count = 0; look();
+	assert( plan( 1, 6, 1.0, item ) == COF_SHARE_GIVE && !strcmp( item, KEY ) && !has_event( COF_SHARE_STALLED, 1, KEY ));
+	/* ...while a dead player keeps theirs until the respawn's look */
+	start(); put( 0, 0, KEY ); look();
+	assert( plan( 1, 6, 900, item ) == COF_SHARE_GIVE ); CoF_ShareIssued( &s, 1, COF_SHARE_GIVE, KEY, 900 ); put( 1, 0, KEY );
+	CoF_ShareNewMap( &s ); alive[1] = 0; s.event_count = 0; look();
+	assert( has_event( COF_SHARE_DELIVERED, 1, KEY ) && !s.players[1].pending );
+
 	/* A new session starts with an empty ledger. */
 	CoF_ShareReset( &s );
 	assert( s.party.count == 0 && !s.players[0].userid );

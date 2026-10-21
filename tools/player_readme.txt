@@ -1,6 +1,33 @@
-Cry of Fear Co-op 1.1.7
+Cry of Fear Co-op 1.1.8
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.8
+A pass over the whole story for things that break with more than one player.
+- Chapter starts work. A chapter picked from the list now starts with the weapons
+  the story gives you by then: the phone for the Chapter 2 door code, guns for
+  Chapter 8 and the endings. The Chapter 7 doctor fights back (he never did on a
+  chapter start), and Chapter 5 starts where it should, not halfway through Chapter 4.
+- Shared items: the Glock flashlight attachment and the phone battery now reach every
+  player (they never did), and gates that need two fuses get both in co-op.
+- A player who misses a level change, or is still loading when everyone moves on,
+  is told again and follows, instead of timing out and getting banned.
+- Exits that start the next level when you walk in work like every other exit: the
+  game waits for the party, J goes without the stragglers, and nobody lands inside a
+  wall or bounces straight back.
+- Doors, teleports and respawns: you no longer get pulled through a door you walked
+  away from, follow a partner into a deadly drop, or respawn inside a wall.
+- On the c_lake boat everyone comes along to the dock. Someone still rowing when the
+  level changes is let out of the boat first.
+- Story scenes: the wardrobe, the grey fade in Ending 4, fades that never lifted for
+  the other players, the c_down ladder and a few others work for everyone.
+- The end of the story takes everyone back to the menu.
+- The app: a Repair button when your copy fails its check, setup can clean up after
+  itself and try again, modded game files are caught before the 5 GB copy, the J, H
+  and Enter keys keep working after Options > Use defaults, and the "No answer"
+  message mentions the Windows Firewall.
+- 1.1 to 1.1.8 can play together. Most fixes are in the host's game, so the host
+  should update.
 
 WHAT'S NEW IN 1.1.7
 - Level changes are faster for players who join. After a level change the host's
