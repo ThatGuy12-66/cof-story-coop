@@ -948,8 +948,9 @@ static void CoF_PartyFinishDoors( void )
 // info_teleport_destination at the player's new spot that a cof_teleport (a
 // scripted, activator-only move) targets. trigger_teleport and ladders are
 // excluded: the partner can walk into those themselves. A boat_exit there is
-// c_lake's boat setting its one rider on the far dock (CBoat::Disembark), and
-// the boat stays on that side: partners who waited beside the rider come too.
+// c_lake's boat setting its one rider on the far dock (CBoat::Disembark). The
+// boat carries one player and stays on that side, so no partner left behind
+// could cross: every partner comes along, wherever they are.
 static edict_t *CoF_PartyScriptedDestination( const vec3_t origin )
 {
 	int i, j;
@@ -987,6 +988,7 @@ static void CoF_PartyTeleports( void )
 		cof_party_door_t *event = &cof_party_doors[i];
 		edict_t *dest;
 		byte *pv;
+		qboolean boat;
 		if( !p->teleported ) continue;
 		p->teleported = false;
 		if( !CoF_PartySamePlayer( &p->identity, cl ) || !( pv = CoF_PartyPlayer( cl )) ||
@@ -994,6 +996,7 @@ static void CoF_PartyTeleports( void )
 		if( CoF_PartyDistanceSquared( p->teleport_from, p->teleport_to ) < COF_PARTY_TELEPORT_MIN * COF_PARTY_TELEPORT_MIN ) continue;
 		// The player may already have moved on this frame; match the landing spot.
 		if( !( dest = CoF_PartyScriptedDestination( p->teleport_to ))) continue;
+		boat = !Q_strcmp( SV_GetString( dest->v.classname ), "boat_exit" );
 		CoF_PartyEndingRelease( event );
 		memset( event, 0, sizeof( *event ));
 		event->active = event->completed = event->teleport = true;
@@ -1010,8 +1013,8 @@ static void CoF_PartyTeleports( void )
 			// A partner already beside the destination was part of the scene.
 			if( CoF_PartyDistanceSquared( other->edict->v.origin, cl->edict->v.origin ) <= COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR ) continue;
 			// Only a partner who stood beside the activator, or watched the
-			// activator's cutscene with them, is taken along.
-			if( CoF_PartyDistanceSquared( other->edict->v.origin, p->teleport_from ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR &&
+			// activator's cutscene with them, is taken along; off the boat, everyone.
+			if( !boat && CoF_PartyDistanceSquared( other->edict->v.origin, p->teleport_from ) > COF_PARTY_JOIN_NEAR * COF_PARTY_JOIN_NEAR &&
 				!SV_CoF_SceneWatching( cl->userid, other->userid )) continue;
 			event->companions[j] = cof_party_players[j].identity;
 			event->pending[j] = true;
