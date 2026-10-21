@@ -26,6 +26,8 @@ int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin );
 int SV_CoF_PlayerSection( const edict_t *ent );
 // The section of the loaded merged map at this point (-1: the map is not merged).
 int SV_CoF_PointSection( const vec3_t origin );
+// The section of the loaded merged map that is this original map (-1: the map is not merged, or not one of its maps).
+int SV_CoF_SectionOfMap( const char *map );
 // The view distance of a section's own map (its worldspawn MaxRange), or 0 when the map is not merged.
 float SV_CoF_SectionMaxRange( int section );
 #endif

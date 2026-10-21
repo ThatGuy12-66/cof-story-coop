@@ -149,4 +149,89 @@ static int CoF_BonusIsSettings( const char *name )
 	}
 	return name[i] == 0;
 }
+
+/* The game's own reading of one bit (CheckingEndingOrUnlockables, player.cpp:15310): the gate's line, counted as
+ * strtok counts it, holds its locked text: no; else its unlocked text: yes; else (or no such line): no. */
+static int CoF_BonusUnlocked( const unsigned char *text, size_t size, const cof_bonus_line_t *gate )
+{
+	size_t i = 0;
+	int line = 0;
+	if( !text || !gate ) return 0;
+	while( i < size )
+	{
+		size_t start;
+		while( i < size && text[i] == '\n' ) i++;
+		if( i >= size || !text[i] ) break;
+		start = i; line++;
+		while( i < size && text[i] != '\n' && text[i] ) i++;
+		if( line != gate->line ) continue;
+		if( CoF_BonusFind( text + start, i - start, gate->locked )) return 0;
+		return CoF_BonusFind( text + start, i - start, gate->unlocked ) != NULL;
+	}
+	return 0;
+}
+
+/* The bonus room's door opens on any of the five endings (CoF_InterDoor.cpp:248): the first five lines of the table. */
+static int CoF_BonusDoorOpen( const unsigned char *text, size_t size )
+{
+	int i;
+	for( i = 0; i < 5; i++ )
+		if( CoF_BonusUnlocked( text, size, &cof_bonus_lines[i] )) return 1;
+	return 0;
+}
+
+/* After 1.1.9 (the wardrobe key, cof_wardrobe): the outfits the wardrobe offers, as CCoFClothesMenu::Use builds them
+ * (effects.cpp:11800-11870): outfit k unlocked -> bit k; *any (the message's canseeclothes): one of them is. */
+static unsigned int CoF_WardrobeFlags( const unsigned char *text, size_t size, int *any )
+{
+	unsigned int flags = 0;
+	int k;
+	for( k = 0; k < COF_COSTUME_LINES; k++ )
+		if( CoF_BonusUnlocked( text, size, &cof_costume_lines[k] )) flags |= 1u << k;
+	if( any ) *any = flags != 0;
+	return flags;
+}
+
+/* The Clothes message that opens the menu (REG_USER_MSG( "Clothes", 7 ), player.cpp:1343), as the wardrobe sends it
+ * to its user: LONG the outfits, BYTE canseeclothes, BYTE m_iUnlockedClothes (the outfit worn), BYTE 1 (show). */
+#define COF_WARDROBE_MESSAGE 7
+static void CoF_WardrobeMessage( unsigned char *out, unsigned int flags, int any, int outfit )
+{
+	out[0] = (unsigned char)( flags & 0xFF );
+	out[1] = (unsigned char)(( flags >> 8 ) & 0xFF );
+	out[2] = (unsigned char)(( flags >> 16 ) & 0xFF );
+	out[3] = (unsigned char)(( flags >> 24 ) & 0xFF );
+	out[4] = (unsigned char)( any ? 1 : 0 );
+	out[5] = (unsigned char)( outfit & 0xFF );
+	out[6] = 1;
+}
+
+/* What cof_wardrobe does for a player: COF_WARDROBE_OPEN, or why not. The bonus room shut for this game; dead; held
+ * by the game (a camera or cutscene holds the view, a model cutscene, a ladder climb or a scene freezes them, which the
+ * game shows its own camera for); on a ladder of the plain kind; rowing the boat; or pressed again too soon. */
+enum
+{
+	COF_WARDROBE_OPEN, COF_WARDROBE_SHUT, COF_WARDROBE_DEAD, COF_WARDROBE_SCENE, COF_WARDROBE_LADDER, COF_WARDROBE_BOAT,
+	COF_WARDROBE_SOON
+};
+static int CoF_WardrobeAnswer( int room_open, int alive, int camera, int frozen, int ladder, int boat, int soon )
+{
+	if( soon ) return COF_WARDROBE_SOON;
+	if( !room_open ) return COF_WARDROBE_SHUT;
+	if( !alive ) return COF_WARDROBE_DEAD;
+	if( camera || frozen ) return COF_WARDROBE_SCENE;
+	if( ladder ) return COF_WARDROBE_LADDER;
+	if( boat ) return COF_WARDROBE_BOAT;
+	return COF_WARDROBE_OPEN;
+}
+
+/* The game's closeclothes (client.cpp:1552) is Use OFF 1 on the map's FIRST cof_clothesmenu: its posed Simon hidden
+ * and its camera's Use OFF 666, which, while the camera runs, frees every living player and gives each their own view
+ * (triggers.cpp:5556-5610; off, ShouldToggle refuses and nothing happens; a map without a wardrobe: nothing at all).
+ * The Close of a menu the key opened goes no further, so it never ends someone else's wardrobe session; unless its
+ * sender is the one a running wardrobe camera is for (they used the real wardrobe since: theirs to close). */
+static int CoF_WardrobeKeepsClose( int opened_by_key, int wardrobe_camera_user )
+{
+	return opened_by_key && !wardrobe_camera_user;
+}
 #endif

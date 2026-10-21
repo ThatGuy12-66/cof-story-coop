@@ -22,6 +22,12 @@ qboolean SV_CoF_StoryFireTargets( const char *name, void *activator, void *calle
 // LoadFileForMe, which shows the game scriptsettings.dat in the session's state.
 void SV_CoF_BonusInit( void );
 byte *SV_CoF_BonusLoadFile( const char *filename, int *pLength );
+// After 1.1.9: the bonus room is open for this game (cof_bonus_room 1, or -1 and the file opens its door); a chapter
+// start lays its items out beside the party's start (once, its first story frame); cof_wardrobe opens the wardrobe's
+// menu for whoever presses it, and the Close of that menu goes no further (client commands: true when handled).
+qboolean SV_CoF_BonusRoomOpen( void );
+void SV_CoF_BonusKitChapterStart( const char *chapter );
+qboolean SV_CoF_BonusClientCommand( sv_client_t *cl );
 // The co-op flashlight (sv_cof_light.c): cof_coop_flashlight, the host's choice, off by default. The client
 // command hook drops a player's "flashlight" (true: handled); the frame switches off a torch not allowed.
 void SV_CoF_LightInit( void );

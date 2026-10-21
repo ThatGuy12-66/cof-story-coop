@@ -103,6 +103,14 @@ int SV_CoF_PointSection( const vec3_t origin )
 	return s && origin ? CoF_SectionsAt( s, origin[2] ) : -1;
 }
 
+// The section of the loaded merged map that is this original map (-1: the map is not merged, or not one of its maps):
+// a chapter start's (cof_chapter_start names the original map; the bonus kit lies in its section).
+int SV_CoF_SectionOfMap( const char *map )
+{
+	const cof_sections_t *s = CoF_SectLoaded();
+	return s && map && map[0] ? CoF_SectionsFind( s, map ) : -1;
+}
+
 // A "play everywhere" sound (no attenuation) of a merged map is for its own section's players only: in the
 // original game nobody in another map heard it. -1: everyone as usual (attenuated, stops, sign-on, not merged).
 int SV_CoF_SoundSection( float attn, int flags, const vec3_t origin )

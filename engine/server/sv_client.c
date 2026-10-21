@@ -3240,6 +3240,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	if( SV_CoF_SceneClientCommand( cl ))
 		return;
 
+	// Cry of Fear story co-op: cof_wardrobe (O) opens the wardrobe's menu anywhere; that menu's Close goes no further
+	if( SV_CoF_BonusClientCommand( cl ))
+		return;
+
 	// Cry of Fear story co-op: inventory commands only name slots this map has
 	if( SV_CoF_Inventory12ClientCommand( cl ))
 		return;

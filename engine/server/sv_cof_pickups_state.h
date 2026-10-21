@@ -15,7 +15,10 @@ their own copy of each pickup the map placed:
   while a human present has not taken theirs; a player who joins later gets theirs (CoF_PickupWanted);
 - AI companions keep their own kit and take none (CoF_PickupRefused);
 - the session ledger keeps who took which pickup of which map, so a revisit and a checkpoint load hand nothing out
-  twice to the same player (CoF_PickupResolve, CoF_PickupLedgerSaved, CoF_PickupLedgerLoaded).
+  twice to the same player (CoF_PickupResolve, CoF_PickupLedgerSaved, CoF_PickupLedgerLoaded);
+- the bonus room's items a chapter start lays out (sv_cof_bonus_kit.h) are per-player the same way: the bonus mark
+  tells them in the world, the ledger keeps them as blocks of their own (COF_PICKUP_BONUS_BLOCK) and a copy gets the
+  kit's keys.
 
 Plain C (standard library only): the offline harness drives it as it is.
 */
@@ -35,12 +38,19 @@ Plain C (standard library only): the offline harness drives it as it is.
 // the retail respawn rules read (commented out, multiplay_gamerules.cpp:1973-2079). It is saved with the entity, so a
 // revisit or a checkpoint tells a copy from the map's own pickup.
 #define COF_PICKUP_COPY_FLAG ( 1 << 30 )
+// The bonus room's items a chapter start lays out (sv_cof_bonus_kit.h) are no block of the map's text: this mark
+// (saved with the entity like the copy mark; of the game's code only multi_manager reads bit 29, as
+// SF_MULTIMAN_TRIGCHOSEN) tells them, and the ledger keeps them as blocks COF_PICKUP_BONUS_BLOCK + the kit's item.
+#define COF_PICKUP_BONUS_FLAG ( 1 << 29 )
+#define COF_PICKUP_BONUS_BLOCK 0x10000
 // Where a pickup lies against its block: straight below it (a gun falls to the floor, FallInit; ammo is
 // MOVETYPE_TOSS too; pills DROP_TO_FLOOR), give or take a little.
 #define COF_PICKUP_NEAR 16.0f
 #define COF_PICKUP_FALL 256.0f
 
-enum { COF_PICKUP_NONE, COF_PICKUP_WEAPON, COF_PICKUP_AMMO, COF_PICKUP_PILLS };
+// COF_PICKUP_ITEM: the kit's night vision, a CItem taken by touch with +use pressed (CNightVision::MyTouch), and
+// removed at once, as pills are.
+enum { COF_PICKUP_NONE, COF_PICKUP_WEAPON, COF_PICKUP_AMMO, COF_PICKUP_PILLS, COF_PICKUP_ITEM };
 // A pickup's state on its map: nothing to hand out, one lying, waiting for a player who has not taken theirs, given up.
 enum { COF_PICKUP_OFF, COF_PICKUP_LIVE, COF_PICKUP_WAITING, COF_PICKUP_RETIRED };
 // What became of the one lying.
@@ -216,9 +226,12 @@ typedef struct
 // no take: a bonus room weapon still locked, or TMP ammo for a non-donator, removes itself on a player's first
 // update, which runs inside their command (SendInitMessages from PreThink). A full inventory or full ammo changes
 // nothing: no take. Nothing else in a command touches a lying pickup (its physics runs outside commands).
+// The kit's night vision (COF_PICKUP_ITEM) removes itself at once when taken, like pills; its unlock check removes it
+// too (CNightVision::SendInitMessage, at every player's first update), so the kit lays it out only when the line it
+// checks is unlocked (sv_cof_bonus.c): then nothing but a take removes it in a command.
 static int CoF_PickupAfterCommand( int kind, const cof_pickup_look_t *before, const cof_pickup_look_t *after )
 {
-	if( kind == COF_PICKUP_PILLS ) return after->gone ? COF_PICKUP_TAKEN : COF_PICKUP_LYING;
+	if( kind == COF_PICKUP_PILLS || kind == COF_PICKUP_ITEM ) return after->gone ? COF_PICKUP_TAKEN : COF_PICKUP_LYING;
 	if( after->gone ) return COF_PICKUP_GONE;
 	if( after->owner != before->owner || after->follow != before->follow || after->nextthink != before->nextthink )
 		return COF_PICKUP_TAKEN;

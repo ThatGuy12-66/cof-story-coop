@@ -75,6 +75,11 @@ qboolean SV_CoF_RetailInBoat( sv_client_t *cl );
 int SV_CoF_RetailFlashFlags( sv_client_t *cl );
 // A trigger_camera holds the player's view (m_hCurrentCamera, and the view is not the player's own).
 qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl );
+// A camera model is attached (m_pAttachedCamera: a model cutscene, a ladder climb, the strangle). False without a
+// verified player.
+qboolean SV_CoF_RetailAttachedCamera( sv_client_t *cl );
+// The outfit the player wears (m_iUnlockedClothes, setclothes), or -1 without a verified player.
+int SV_CoF_RetailOutfit( sv_client_t *cl );
 // Night vision on F as in single player: 1 a switch asked for, 0 refused now (a scene, the wheelchair, the game's
 // delay), -1 the player does not own it (or no verified player).
 int SV_CoF_RetailNightVision( sv_client_t *cl );

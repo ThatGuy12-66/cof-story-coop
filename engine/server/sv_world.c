@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "studio.h"
 #include "sv_cof_moments.h"
 #include "sv_cof_companion.h"
+#include "sv_cof_pickups.h"
 
 typedef struct moveclip_s
 {
@@ -562,8 +563,10 @@ static void SV_TouchLinks( edict_t *ent, areanode_t *node )
 		{
 			svgame.globals->time = sv.time;
 			// Cry of Fear story co-op: a fall-death floor kills only who fell,
-			// and the AI companion sets off no story trigger
-			if( SV_CoF_CompanionTriggerTouch( touch, ent ) || SV_CoF_MomentsTriggerTouch( touch, ent ))
+			// and the AI companion sets off no story trigger; a per-player pickup taken by touch (the bonus kit's
+			// night vision) is not there for who took theirs, as for their +use (sv_cof_pickups.c)
+			if( SV_CoF_CompanionTriggerTouch( touch, ent ) || SV_CoF_MomentsTriggerTouch( touch, ent ) ||
+				SV_CoF_PickupsBlocked( ent, touch ))
 				continue;
 			svgame.dllFuncs.pfnTouch( touch, ent );
 		}

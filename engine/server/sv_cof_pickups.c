@@ -12,6 +12,9 @@ GPL-3.0-or-later.
   no map pickup at all.
 - The ledger lives through level changes (a revisit hands nothing out twice) and goes back with a checkpoint
   (SV_CoF_PickupsCheckpointSaved/Loaded).
+- The bonus room's items a chapter start lays out (sv_cof_bonus.c, sv_cof_bonus_kit.h) are per-player too: found by
+  their bonus mark (or, all taken, by the ledger), each with a slot of its own after the map's; a copy gets the kit's
+  keys (SV_CoF_PickupsSpawnBonus, which also lays the kit out).
 cof_coop_pickups 0: the retail multiplayer rules, the first player takes the only one.
 Logs: phase=pickups (once a map), phase=pickup-taken, phase=pickup-copy, phase=pickup-gone, phase=pickups-checkpoint.
 */
@@ -20,6 +23,7 @@ Logs: phase=pickups (once a map), phase=pickup-taken, phase=pickup-copy, phase=p
 #include "sv_cof_story.h"
 #include "sv_cof_pickups.h"
 #include "sv_cof_pickups_state.h"
+#include "sv_cof_bonus_kit.h"
 
 static CVAR_DEFINE_AUTO( cof_coop_pickups, "1", 0, "Cry of Fear story co-op: every player takes their own copy of each weapon, ammo box and medicine the map placed; 0: the first player takes the only one (the retail multiplayer rules)" );
 
@@ -33,7 +37,9 @@ typedef struct
 {
 	int offset;              // the block's place in sv.worldmodel->entities
 	int block;               // its number there: the ledger's key
-	int row;                 // in cof_pickup_classes
+	int row;                 // in cof_pickup_classes (-1: the kit's night vision)
+	int kind;                // COF_PICKUP_WEAPON, AMMO, PILLS or ITEM
+	int bonus;               // 0: a block of the map's text; else the bonus kit's item + 1 (offset unused)
 	char classname[32];      // as the block names it
 	int state;               // COF_PICKUP_OFF, LIVE, WAITING or RETIRED
 	int entity, serial;      // the pickup lying, while LIVE
@@ -75,6 +81,11 @@ void SV_CoF_PickupsInit( void )
 {
 	Cvar_RegisterVariable( &cof_coop_pickups );
 	SV_CoF_PickupsReset();
+}
+
+qboolean SV_CoF_PickupsEnabled( void )
+{
+	return cof_coop_pickups.value != 0.0f;
 }
 
 // The slot of a pickup lying as this entity, or NULL: called for every entity sent and searched, so cheap.
@@ -156,7 +167,7 @@ void SV_CoF_PickupsCommand( sv_client_t *cl )
 		cof_pickup_look_t look;
 		if( slot->state != COF_PICKUP_LIVE || slot->taken ) continue;
 		CoF_PickupsLook( slot, &look );
-		if( CoF_PickupAfterCommand( cof_pickup_classes[slot->row].kind, &slot->look, &look ) != COF_PICKUP_TAKEN )
+		if( CoF_PickupAfterCommand( slot->kind, &slot->look, &look ) != COF_PICKUP_TAKEN )
 		{
 			if( !look.gone ) slot->look = look; // gone: the frame retires it
 			continue;
@@ -205,14 +216,58 @@ static void CoF_PickupsSettle( cof_pickups_slot_t *slot, unsigned int name, int 
 	Con_Printf( "cofstory phase=pickup-taken userid=%d class=%s block=%d companion=%d takers=%d\n", userid, slot->classname, slot->block, bot, entry->takers.count );
 }
 
+// One of the bonus room's items (sv_cof_bonus_kit.h) at this spot, made as the map makes the room's: the kit's keys
+// through the game's KeyValue, the bonus mark (and the copy mark for a copy), then its Spawn. NULL when the game did
+// not make it (an item with no floor under it removes itself, CItem::Spawn).
+edict_t *SV_CoF_PickupsSpawnBonus( int item, const vec3_t origin, const vec3_t angles, qboolean copy )
+{
+	char key[64], value[64], classname[32];
+	const cof_bonus_kit_item_t *kit;
+	edict_t *ent;
+	int i;
+	if( item < 0 || item >= COF_BONUS_KIT_ITEMS || !svgame.dllFuncs.pfnKeyValue || !svgame.dllFuncs.pfnSpawn ) return NULL;
+	kit = &cof_bonus_kit[item];
+	Q_strncpy( classname, kit->classname, sizeof( classname ));
+	ent = SV_CreateNamedEntity( NULL, SV_AllocString( classname ));
+	if( !SV_IsValidEdict( ent )) return NULL;
+	if( !ent->pvPrivateData )
+	{
+		SV_FreeEdict( ent );
+		return NULL;
+	}
+	for( i = 0; i + 1 < COF_BONUS_KIT_KEYS && kit->keys[i] && kit->keys[i + 1]; i += 2 )
+	{
+		KeyValueData kvd;
+		Q_strncpy( key, kit->keys[i], sizeof( key ));
+		Q_strncpy( value, kit->keys[i + 1], sizeof( value ));
+		kvd.szClassName = classname;
+		kvd.szKeyName = key;
+		kvd.szValue = value;
+		kvd.fHandled = false;
+		svgame.dllFuncs.pfnKeyValue( ent, &kvd );
+	}
+	VectorCopy( origin, ent->v.origin );
+	VectorCopy( angles, ent->v.angles );
+	SetBits( ent->v.spawnflags, COF_PICKUP_BONUS_FLAG );
+	if( copy ) SetBits( ent->v.spawnflags, COF_PICKUP_COPY_FLAG );
+	if( svgame.dllFuncs.pfnSpawn( ent ) == -1 || ent->free || FBitSet( ent->v.flags, FL_KILLME ))
+	{
+		if( !ent->free ) SV_FreeEdict( ent );
+		return NULL;
+	}
+	SV_LinkEdict( ent, false );
+	return ent;
+}
+
 // The same pickup again: the block's own keys through the game's KeyValue (as SV_ParseEdict hands them, the
 // classname first), at the spot the taken one lay, with the copy mark, then its Spawn (SV_CoF_SpawnMapEntity does
-// the same for a block found by its name; a pickup has none).
+// the same for a block found by its name; a pickup has none). A bonus kit item's: the kit's keys.
 static edict_t *CoF_PickupsSpawn( const cof_pickups_slot_t *slot )
 {
 	char key[256], value[2048], classname[32];
 	char *cursor;
 	edict_t *ent;
+	if( slot->bonus ) return SV_CoF_PickupsSpawnBonus( slot->bonus - 1, slot->origin, slot->angles, true );
 	if( !sv.worldmodel || !sv.worldmodel->entities ) return NULL;
 	cursor = sv.worldmodel->entities + slot->offset;
 	if(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) == NULL || key[0] != '{' ) return NULL;
@@ -284,6 +339,67 @@ static qboolean CoF_PickupsHeld( const edict_t *ent )
 		( SV_IsValidEdict( ent->v.aiment ) && ent->v.aiment != svgame.edicts );
 }
 
+// The bonus kit's items of this map (sv_cof_bonus_kit.h): one lying with the bonus mark (the first of each, should a
+// kit laid out with the pickups off hold several), or one the ledger knows was taken here; resolved as the map's own
+// (the one the chapter start laid out is the "map's", its copies have the copy mark). Their slots come after the map's.
+// Returns how many.
+static int CoF_PickupsFindBonus( int *states, int *copies, int *skipped )
+{
+	int lying[COF_BONUS_KIT_ITEMS], item, e, found = 0;
+	memset( lying, 0, sizeof( lying ));
+	for( e = svs.maxclients + 1; e < svgame.numEntities; e++ )
+	{
+		edict_t *ent = SV_EdictNum( e );
+		if( !SV_IsValidEdict( ent ) || FBitSet( ent->v.flags, FL_KILLME ) || !FBitSet( ent->v.spawnflags, COF_PICKUP_BONUS_FLAG ) ||
+			CoF_PickupsHeld( ent )) continue;
+		if(( item = CoF_BonusKitItem( SV_GetString( ent->v.classname ))) < 0 || lying[item] ) continue;
+		lying[item] = e;
+	}
+	for( item = 0; item < COF_BONUS_KIT_ITEMS; item++ )
+	{
+		int entry = CoF_PickupLedgerFind( &cof_pickups_ledger, cof_pickups.map, COF_PICKUP_BONUS_BLOCK + item, false ), forget = 0;
+		cof_pickup_entry_t *known = entry >= 0 ? &cof_pickups_ledger.entries[entry] : NULL;
+		edict_t *ent = lying[item] ? SV_EdictNum( lying[item] ) : NULL;
+		qboolean copy = ent && FBitSet( ent->v.spawnflags, COF_PICKUP_COPY_FLAG );
+		cof_pickups_slot_t *slot;
+		if( !ent && !known ) continue;
+		if( cof_pickups.count >= COF_PICKUP_MAX )
+		{
+			( *skipped )++;
+			continue;
+		}
+		slot = &cof_pickups.slots[cof_pickups.count++];
+		slot->offset = -1;
+		slot->block = COF_PICKUP_BONUS_BLOCK + item;
+		slot->row = CoF_PickupClass( cof_bonus_kit[item].classname );
+		slot->kind = cof_bonus_kit[item].item ? COF_PICKUP_ITEM : COF_PICKUP_WEAPON;
+		slot->bonus = item + 1;
+		slot->entry = entry;
+		Q_strncpy( slot->classname, cof_bonus_kit[item].classname, sizeof( slot->classname ));
+		slot->state = CoF_PickupResolve( ent != NULL, copy, known ? known->takers.count : 0, known ? known->retired : 0, &forget );
+		if( forget && known )
+		{
+			// the one the chapter start laid out lies here, so this world never saw it taken
+			known->takers.count = 0;
+			known->retired = 0;
+			known->saved = -1;
+		}
+		if( slot->state == COF_PICKUP_LIVE )
+		{
+			CoF_PickupsList( slot, ent );
+			if( copy ) ( *copies )++;
+		}
+		else if( slot->state == COF_PICKUP_WAITING && known )
+		{
+			VectorCopy( known->origin, slot->origin );
+			VectorCopy( known->angles, slot->angles );
+		}
+		states[slot->state]++;
+		found++;
+	}
+	return found;
+}
+
 // A map's pickups: its entity text's per-player blocks, the pickups lying in the world, paired, and the ledger.
 static void CoF_PickupsFind( void )
 {
@@ -292,7 +408,7 @@ static void CoF_PickupsFind( void )
 	int states[4] = { 0, 0, 0, 0 };
 	char key[256], value[2048];
 	char *text, *cursor;
-	int block, nlying = 0, copies = 0, skipped = 0, e, i;
+	int block, nlying = 0, copies = 0, skipped = 0, bonus, e, i;
 
 	CoF_PickupsForget();
 	cof_pickups.generation = svs.spawncount;
@@ -331,6 +447,7 @@ static void CoF_PickupsFind( void )
 		slot->offset = (int)( start - text );
 		slot->block = block;
 		slot->row = row;
+		slot->kind = cof_pickup_classes[row].kind;
 		slot->entry = -1;
 		Q_strncpy( slot->classname, classname, sizeof( slot->classname ));
 		blocks[cof_pickups.count].classid = CoF_PickupCanonical( row );
@@ -343,7 +460,9 @@ static void CoF_PickupsFind( void )
 	{
 		edict_t *ent = SV_EdictNum( e );
 		int row;
-		if( !SV_IsValidEdict( ent ) || FBitSet( ent->v.flags, FL_KILLME ) || CoF_PickupsHeld( ent )) continue;
+		// the bonus kit's are no block's (CoF_PickupsFindBonus)
+		if( !SV_IsValidEdict( ent ) || FBitSet( ent->v.flags, FL_KILLME ) || FBitSet( ent->v.spawnflags, COF_PICKUP_BONUS_FLAG ) ||
+			CoF_PickupsHeld( ent )) continue;
 		if(( row = CoF_PickupClass( SV_GetString( ent->v.classname ))) < 0 ) continue;
 		lying[nlying].classid = CoF_PickupCanonical( row );
 		lying[nlying].copy = FBitSet( ent->v.spawnflags, COF_PICKUP_COPY_FLAG ) != 0;
@@ -380,8 +499,9 @@ static void CoF_PickupsFind( void )
 		}
 		states[slot->state]++;
 	}
-	Con_Printf( "cofstory phase=pickups map=%s found=%d lying=%d copies=%d waiting=%d none=%d skipped=%d ledger=%d\n", sv.name,
-		cof_pickups.count, states[COF_PICKUP_LIVE], copies, states[COF_PICKUP_WAITING], states[COF_PICKUP_OFF], skipped, cof_pickups_ledger.count );
+	bonus = CoF_PickupsFindBonus( states, &copies, &skipped );
+	Con_Printf( "cofstory phase=pickups map=%s found=%d lying=%d copies=%d waiting=%d none=%d skipped=%d ledger=%d bonus=%d\n", sv.name,
+		cof_pickups.count, states[COF_PICKUP_LIVE], copies, states[COF_PICKUP_WAITING], states[COF_PICKUP_OFF], skipped, cof_pickups_ledger.count, bonus );
 }
 
 static qboolean CoF_PickupsOn( void )

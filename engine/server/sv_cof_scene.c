@@ -279,6 +279,24 @@ static qboolean CoF_SceneWardrobeUser( edict_t *camera, edict_t **user )
 	return true;
 }
 
+// After 1.1.9 (the wardrobe key): a running wardrobe camera of this map is this player's. The key's menu leaves its
+// Close to the game only then (sv_cof_bonus.c): the game's closeclothes ends the running wardrobe camera, whoever
+// sends it.
+qboolean SV_CoF_SceneWardrobeUser( const sv_client_t *cl )
+{
+	int i;
+	if( !cl || !SV_IsValidEdict( cl->edict )) return false;
+	CoF_SceneWardrobes();
+	for( i = 0; i < cof_scene_wardrobe_count; i++ )
+	{
+		edict_t *camera = SV_EdictNum( cof_scene_wardrobes[i].index ), *user = NULL;
+		if( !SV_IsValidEdict( camera ) || camera->serialnumber != cof_scene_wardrobes[i].serial || !camera->v.iuser1 ||
+			( camera->v.flags & FL_KILLME )) continue;
+		if( CoF_SceneWardrobeUser( camera, &user ) && user == cl->edict ) return true;
+	}
+	return false;
+}
+
 // The living, spawned client this edict is, or NULL.
 static sv_client_t *CoF_SceneLivingClient( const edict_t *ent )
 {

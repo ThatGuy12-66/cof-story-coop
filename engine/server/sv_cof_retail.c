@@ -41,6 +41,7 @@
 #define COF_RETAIL_FLASH_FLAGS    0x05D0 // int m_iFlashlightFlags: 1 phone light, 8 flashlight, 16 lit flare/book laser...
 #define COF_RETAIL_NV_NEXT        0x03EC // float m_flNextNightVisionTime
 #define COF_RETAIL_HAS_NV         0x0434 // bool m_bHasNightVision: picked up the bonus room's item_nightvision
+#define COF_RETAIL_OUTFIT         0x0424 // int m_iUnlockedClothes: the outfit worn (setclothes, client.cpp:1566)
 #define COF_RETAIL_VIEW_ENT       0x2038 // int m_iViewEntIndex
 #define COF_RETAIL_HEADSHIELD     0x2300 // int m_iHeadShieldOn: the night vision (sv_cof_light.h)
 #define COF_RETAIL_BLUR           0x1EBC // int m_iBlurActive: the story's screen blur, flipped by cof_blur (CCofBlur::Use 100A5BB0)
@@ -729,6 +730,21 @@ qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl )
 	if( !player || !CoF_RetailHandle( player + COF_RETAIL_CAMERA )) return false;
 	memcpy( &view, player + COF_RETAIL_VIEW_ENT, sizeof( view ));
 	return view && view != NUM_FOR_EDICT( cl->edict );
+}
+
+qboolean SV_CoF_RetailAttachedCamera( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	return player && CoF_RetailHandle( player + COF_RETAIL_ATTACHED_CAMERA ) != NULL;
+}
+
+int SV_CoF_RetailOutfit( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	int outfit;
+	if( !player ) return -1;
+	memcpy( &outfit, player + COF_RETAIL_OUTFIT, sizeof( outfit ));
+	return outfit;
 }
 
 // The game's single-player F (hl.dll 1001C1FB): refused in a cutscene (IsInCutscene 100E4E00: a camera holds the

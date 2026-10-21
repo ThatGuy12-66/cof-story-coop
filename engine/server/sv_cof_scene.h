@@ -12,6 +12,8 @@ qboolean SV_CoF_SceneActive( void );
 qboolean SV_CoF_SceneWatching( int owner_userid, int userid );
 void SV_CoF_SceneReset( void );
 void SV_CoF_SceneInit( void );
+// A running wardrobe camera of this map is this player's (they use the real wardrobe; the wardrobe key, sv_cof_bonus.c).
+qboolean SV_CoF_SceneWardrobeUser( const sv_client_t *cl );
 // cof_skip (Enter): any person skips the running cutscene for the party, again: watch it.
 qboolean SV_CoF_SceneClientCommand( sv_client_t *cl );
 // Physics steps the server runs this frame: cof_skip_speed while a skipped scene

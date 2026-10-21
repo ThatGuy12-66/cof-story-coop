@@ -431,6 +431,8 @@ static void CoF_StoryChapterStart( void )
 		cof_story_kit_generation = svs.spawncount;
 		cof_story_kit_until = -1; // set by the first checkpoint it holds back
 	}
+	// after 1.1.9: the bonus room's items beside the party's start, when the room is open for this game (sv_cof_bonus.c)
+	SV_CoF_BonusKitChapterStart( map );
 	Cvar_Set( "cof_chapter_start", "" );
 }
 
