@@ -1,14 +1,19 @@
-Cry of Fear Co-op 1.1.4
+Cry of Fear Co-op 1.1.5
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.5
+- Fixes a crash for the player who joins: right after a level change, the joining
+  player's game could crash if it reconnected while still loading the last level.
+- 1.1, 1.1.1, 1.1.2, 1.1.3, 1.1.4 and 1.1.5 can play together. The fix is in the
+  joining player's game, so players who join games should update.
 
 WHAT'S NEW IN 1.1.4
 - Fixes the graphics on AMD cards: the sky was drawn over the level, so you saw a grey
   wall in front of you, walls in the sky and trees floating in front of buildings.
   Cry of Fear's own graphics file keeps the sky behind the level, and on AMD cards the
   game went around it.
-- 1.1, 1.1.1, 1.1.2, 1.1.3 and 1.1.4 can play together. The fix is in each player's
-  own game, so players with an AMD card should update.
+- The fix is in each player's own game, so players with an AMD card should update.
 
 WHAT'S NEW IN 1.1.3
 - A first try at the AMD graphics problem. 1.1.4 is the real fix.

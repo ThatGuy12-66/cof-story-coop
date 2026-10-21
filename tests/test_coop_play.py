@@ -132,11 +132,11 @@ class StartTests(unittest.TestCase):
 
 
 class ReleaseTests(unittest.TestCase):
-    def test_the_release_is_1_1_4_and_updates_1_1_3(self):
-        # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics, each player's own renderer) keep 1.1's
-        # version, so 1.1 to 1.1.4 players join each other
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.1.4'))
-        self.assertGreater(play.BUILD, 8)   # 1.1.3 was build 8: its copies must be offered the update
+    def test_the_release_is_1_1_5_and_updates_1_1_4(self):
+        # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics) and 1.1.5 (a join crash) keep 1.1's
+        # version, so 1.1 to 1.1.5 players join each other
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.1.5'))
+        self.assertGreater(play.BUILD, 9)   # 1.1.4 was build 9: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
         self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')
