@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "sv_cof_companion.h"
 #include "sv_cof_party.h"
 #include "sv_cof_cmdclock.h"
+#include "sv_cof_pickups.h"
 #include "cof_abi.h"
 #include "pm_local.h"
 #include "event_flags.h"
@@ -1214,6 +1215,7 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	SV_CoF_CheatsPostThink( cl ); // Cry of Fear: re-assert what PostThink reset
 	svgame.dllFuncs.pfnCmdEnd( clent );
 	SV_CoF_GlobalsLeave( cl );
+	SV_CoF_PickupsCommand( cl ); // Cry of Fear story co-op 1.1.9: a map pickup this command took
 	if( cof_scoped ) SV_CoF_UsercmdSender( NULL );
 
 	if( !FBitSet( cl->flags, FCL_FAKECLIENT ))

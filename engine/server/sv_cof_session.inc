@@ -268,6 +268,7 @@ qboolean SV_CoF_SessionSave( const char *slot )
 	if( !CoF_SessionReplace( "save/cofcoop/latest.txt", (const byte *)slot, Q_strlen( slot )))
 		Con_Printf( "cofstory phase=session-index-failed slot=%s\n", slot );
 	Con_Printf( "cofstory phase=session-saved slot=%s map=%s bytes=%u\n", slot, sv.name, (unsigned int)size );
+	SV_CoF_PickupsCheckpointSaved( slot ); // 1.1.9: who took which map pickup, as this checkpoint holds it
 	success = true;
 done:
 	if( saved ) SaveFinish( saved );
@@ -579,6 +580,7 @@ static qboolean CoF_SessionRunLoad( void )
 	SV_ActivateServer( false );
 	CoF_TransitionResume();
 	SV_CoF_BlurCheckpointLoaded(); // the party's blur starts off (sv_cof_blur.c)
+	SV_CoF_PickupsCheckpointLoaded( cof_session_pending_slot ); // 1.1.9: the map pickups taken, as then
 	Q_strncpy( cof_session_latest, cof_session_pending_slot, sizeof( cof_session_latest ));
 	Con_Printf( "cofstory phase=session-loaded slot=%s map=%s generation=%d\n", cof_session_pending_slot, sv.name, svs.spawncount );
 	Mem_Free( cof_session_data ); cof_session_data = NULL;

@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "net_encode.h"
 #include "sv_cof_cmdclock.h"
 #include "sv_cof_story.h"
+#include "sv_cof_pickups.h"
 #include "cof_abi.h"
 
 // Cry of Fear story co-op, 1.1.9 (sv_cof_weaponmodel.c, sv_cof_camera_models.c): a rower is not sent to the others
@@ -127,6 +128,10 @@ static void SV_AddEntitiesToPacket( edict_t *pViewEnt, edict_t *pClient, client_
 			if( SV_CoF_WeaponModelHidden( pClient, e ))
 				continue;
 		}
+
+		// Cry of Fear story co-op 1.1.9: a map pickup's copy is not sent to a player who took theirs (sv_cof_pickups.c)
+		if( !SV_CoF_PickupsVisible( pClient, ent ))
+			continue;
 
 		if( FBitSet( ent->v.effects, EF_REQUEST_PHS ))
 			pset = clientphs;

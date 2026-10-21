@@ -25,6 +25,7 @@
 #include "sv_cof_testgun.h"
 #include "sv_cof_inventory12.h"
 #include "sv_cof_chapter_kit.h"
+#include "sv_cof_pickups.h"
 #include "cof_abi.h"
 #if XASH_WIN32
 #include <windows.h>
@@ -317,6 +318,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_SkyInit();
 	SV_CoF_ViewInit();
 	SV_CoF_CameraModelsInit();
+	SV_CoF_PickupsInit();
 }
 
 // 1.1.9 (I7): the chapter start's kit until every person in the game carries it; sv_cof_session.inc keeps the
@@ -509,6 +511,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_SkyFrame();
 	SV_CoF_ViewFrame();
 	SV_CoF_CameraModelsFrame();
+	SV_CoF_PickupsFrame(); // 1.1.9: map pickups taken settle, copies made, before the AI companions' commands
 	SV_CoF_CompanionFrame();
 	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
 	SV_CoF_ArrivalFrame(); // after it: the torches the host allows, as their players switched them
@@ -543,6 +546,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_SessionReset();
 	SV_CoF_ArrivalReset();
 	cof_story_kit = NULL;
+	SV_CoF_PickupsReset();
 	CoF_StoryCloseGate();
 	SV_CoF_ClearValidation();
 }

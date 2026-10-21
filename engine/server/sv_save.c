@@ -23,6 +23,7 @@ GNU General Public License for more details.
 #include "sv_cof_story.h"
 #include "sv_cof_party.h"
 #include "sv_cof_share.h"
+#include "sv_cof_pickups.h"
 #include "sv_cof_state.h"
 #include "sv_cof_recovery.h"
 #include "sv_cof_session.h"
@@ -81,6 +82,7 @@ void SV_CoF_TransitionReset( qboolean clear_history )
 		SV_CoF_RecoveryReset();
 		SV_CoF_SessionReset();
 		SV_CoF_ArrivalReset();
+		SV_CoF_PickupsReset();
 	}
 }
 

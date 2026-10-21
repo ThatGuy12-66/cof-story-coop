@@ -34,6 +34,7 @@ GNU General Public License for more details.
 #include "sv_cof_state.h"
 #include "sv_cof_session.h"
 #include "sv_cof_moments.h"
+#include "sv_cof_pickups.h"
 
 // GameAPI functions declarations
 static int GAME_EXPORT pfnModelIndex( const char *m );
@@ -1843,6 +1844,11 @@ static edict_t *GAME_EXPORT pfnFindEntityInSphere( edict_t *pStartEdict, const f
 
 		// ignore clients that not in a game
 		if( e <= svs.maxclients && !SV_ClientFromEdict( ent, true ))
+			continue;
+
+		// Cry of Fear story co-op 1.1.9: a map pickup the player whose packet or AI command runs took theirs of (or
+		// any, for an AI companion) is not there for their +use (sv_cof_pickups.c)
+		if( sv.current_client && SV_CoF_PickupsBlocked( sv.current_client->edict, ent ))
 			continue;
 
 		for( int j = 0; j < 3 && distSquared <= flRadius; j++ )
