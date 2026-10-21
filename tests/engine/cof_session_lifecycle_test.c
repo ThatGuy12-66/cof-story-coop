@@ -99,9 +99,11 @@ int main( void )
 	gate = 0; assert( !SV_CoF_SessionClientCommand( &clients[1] ));
 	assert( !SV_CoF_SessionWipe( "c_start", NULL ));
 	gate = 1; edicts[0].v.health = edicts[1].v.health = 100;
+	/* 1.1.8: a new game or a chapter start (no Continue) saves its own first checkpoint, so a team wipe there loads
+	 * this session's, not the last one of another session */
 	strcpy( cof_session_latest, "autosave" ); cof_session_generation = -1;
 	sv.time = 10; SV_CoF_SessionFrame(); sv.time = 20; SV_CoF_SessionFrame();
-	assert( saves == 3 && !cof_session_auto_needed );
+	assert( saves == 4 && !strcmp( last_slot, "autosave" ) && !cof_session_auto_needed );
 	/* a new map: the frame waits two seconds before a wipe recovery, however dead everyone is */
 	edicts[0].v.health = edicts[1].v.health = 0; loads = 0; result = 1;
 	svs.spawncount++; sv.time = 50; SV_CoF_SessionFrame(); assert( !loads );
@@ -112,7 +114,7 @@ int main( void )
 	 * is not preserved: the first autosave still happens. */
 	usable = 0; cof_session_generation = -1;
 	sv.time = 30; SV_CoF_SessionFrame(); sv.time = 40; SV_CoF_SessionFrame();
-	assert( saves == 4 && !strcmp( last_slot, "autosave" ));
+	assert( saves == 5 && !strcmp( last_slot, "autosave" ));
 	/* Continue (the tester app): the latest checkpoint once the host has joined, once */
 	loads = 0; cof_session_pending = NULL; usable = 1; result = 1; profont = 0;
 	strcpy( cof_session_latest, "autosave" ); cof_session_generation = -1;
@@ -121,6 +123,7 @@ int main( void )
 	sv.time = 103; SV_CoF_SessionFrame(); assert( !loads );  /* the host is still joining (the wipe check moves the settle to 104) */
 	clients[0].state = cs_spawned; sv.time = 105; SV_CoF_SessionFrame();
 	assert( loads == 1 && !strcmp( last_slot, "latest" ) && continue_var.value == 0 && !profont );
+	assert( saves == 5 ); /* Continue keeps the checkpoint it loads: no autosave over it first */
 	sv.time = 110; SV_CoF_SessionFrame(); assert( loads == 1 );   /* once */
 	/* refused: the host is told, and it is not retried */
 	continue_var.value = 1; result = 0; sv.time = 120; SV_CoF_SessionFrame();
