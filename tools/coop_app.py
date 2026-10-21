@@ -15,6 +15,7 @@ import webbrowser
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cofcoop import network
+from tools import app_theme as theme
 from tools import app_update
 from tools import coop_play as play
 from tools import friend_setup as setup_lib
@@ -111,11 +112,14 @@ class ProgressPanel:
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=(8, 6))
         self.status, self.elapsed = tk.StringVar(), tk.StringVar()
-        ttk.Label(row, textvariable=self.elapsed).pack(side="right")
+        ttk.Label(row, textvariable=self.elapsed, style="Faint.TLabel").pack(side="right")
         ttk.Label(row, textvariable=self.status, wraplength=580).pack(side="left", anchor="w")
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        self.box = tk.Text(frame, height=9, wrap="word", font=("Consolas", 9), state="disabled")
+        self.box = tk.Text(frame, height=9, wrap="word", font=theme.FONTS.get("mono", ("Consolas", 9)),
+                           state="disabled", background=theme.LOG_BG, foreground=theme.LOG_TEXT, relief="flat",
+                           borderwidth=0, padx=10, pady=8, highlightthickness=1, highlightbackground=theme.LINE,
+                           highlightcolor=theme.LINE, insertbackground=theme.TEXT)
         scroll = ttk.Scrollbar(frame, command=self.box.yview)
         self.box.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
@@ -148,6 +152,10 @@ class ProgressPanel:
             self.box.configure(state="disabled")
             self.box.see("end")
 
+
+# the co-op keys the main screen shows (friend_setup.COOP_KEYS binds them)
+COOP_KEYS = (("J", "join your partner"), ("Enter", "skip a cutscene for everyone"),
+             ("H", "AI companions wait or follow"))
 
 # 1.1.8 (L14.2): closing the window ends a setup or update part way (its worker thread dies with the app)
 BUSY_WARNINGS = {
@@ -192,15 +200,19 @@ class App:
         self.launching = False     # a Start or Join is checking the copy (launch)
         self.messages = queue.Queue()
         window.title("Cry of Fear Co-op")
-        window.geometry("760x560")
-        window.minsize(660, 500)
-        self.body = ttk.Frame(window, padding=20)
-        self.body.pack(fill="both", expand=True)
-        foot = ttk.Frame(window, padding=(20, 0, 20, 12))
+        window.geometry(f"840x{min(760, window.winfo_screenheight() - 80)}")
+        window.minsize(720, 600)
+        theme.apply(window)
+        theme.Header(tk, window)
+        foot = ttk.Frame(window, padding=(26, 0, 20, 10))
         foot.pack(fill="x", side="bottom")
-        ttk.Label(foot, text=footer_text()).pack(side="left")
-        ttk.Button(foot, text="Report a bug", command=report_bug).pack(side="right")
-        ttk.Button(foot, text="Open logs folder", command=self.guard(self.open_logs)).pack(side="right", padx=6)
+        ttk.Frame(window, height=1, style="Line.TFrame").pack(fill="x", side="bottom")
+        ttk.Label(foot, text=footer_text(), style="Faint.TLabel").pack(side="left")
+        ttk.Button(foot, text="Report a bug", command=report_bug, style="Ghost.TButton").pack(side="right")
+        ttk.Button(foot, text="Open logs folder", command=self.guard(self.open_logs),
+                   style="Ghost.TButton").pack(side="right", padx=4)
+        self.body = ttk.Frame(window, padding=(26, 18, 26, 14))
+        self.body.pack(fill="both", expand=True)
         window.protocol("WM_DELETE_WINDOW", self.close)
         window.after(100, self.pump)
 
@@ -208,9 +220,12 @@ class App:
     def clear(self, title, subtitle=""):
         for child in self.body.winfo_children():
             child.destroy()
-        self.ttk.Label(self.body, text=title, font=("Segoe UI", 18, "bold")).pack(anchor="w")
+        self.ttk.Label(self.body, text=title, style="Title.TLabel").pack(anchor="w")
         if subtitle:
-            self.ttk.Label(self.body, text=subtitle, wraplength=700).pack(anchor="w", pady=(4, 12))
+            self.ttk.Label(self.body, text=subtitle, style="Sub.TLabel", wraplength=740,
+                           justify="left").pack(anchor="w", pady=(4, 14))
+        else:
+            self.ttk.Frame(self.body, height=10).pack()
         return self.body
 
     def work(self, job, done, failed=None):
@@ -267,7 +282,7 @@ class App:
     def row(self, parent, label, width=16):
         holder = self.ttk.Frame(parent)
         holder.pack(fill="x", pady=3)
-        self.ttk.Label(holder, text=label, width=width).pack(side="left")
+        self.ttk.Label(holder, text=label, width=width, style="Field.TLabel").pack(side="left")
         return holder
 
     # setup and update
@@ -281,8 +296,8 @@ class App:
             holder = self.row(body, label, 18)
             ttk.Entry(holder, textvariable=var).pack(side="left", fill="x", expand=True)
             ttk.Button(holder, text="Browse…", command=lambda v=var, p=pick: p(v)).pack(side="left", padx=4)
-        button = ttk.Button(body, text="Set up")
-        button.pack(anchor="w", pady=14)
+        button = ttk.Button(body, text="Set up", style="Accent.TButton")
+        button.pack(anchor="w", pady=16)
         panel = self.progress_panel(body)
         panel.status.set("Looking for Cry of Fear in Steam…")
 
@@ -348,8 +363,8 @@ class App:
         else:
             body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
                               f"in {copy}. Your saves and settings are kept.")
-        button = ttk.Button(body, text="Repair" if repair else "Update")
-        button.pack(anchor="w", pady=14)
+        button = ttk.Button(body, text="Repair" if repair else "Update", style="Accent.TButton")
+        button.pack(anchor="w", pady=16)
         panel = self.progress_panel(body)
         report = self.reporter(panel)
 
@@ -466,11 +481,16 @@ class App:
             return
         for child in slot.winfo_children():
             child.destroy()
-        box = ttk.Frame(slot, padding=(0, 0, 0, 10))
-        box.pack(fill="x")
-        ttk.Label(box, text=f"Version {release.label} is out.", font=("Segoe UI", 11, "bold")).pack(side="left")
-        ttk.Button(box, text="What's new", command=lambda: webbrowser.open(release.page_url)).pack(side="right")
-        ttk.Button(box, text="Update now", command=self.guard(self.update_now)).pack(side="right", padx=6)
+        box = self.tk.Frame(slot, background=theme.PANEL, highlightthickness=1, highlightbackground=theme.ACCENT_LO)
+        box.pack(fill="x", pady=(0, 12))
+        self.tk.Frame(box, background=theme.ACCENT, width=3).pack(side="left", fill="y")
+        inner = ttk.Frame(box, style="Card.TFrame", padding=(14, 10, 12, 10))
+        inner.pack(side="left", fill="both", expand=True)
+        ttk.Button(inner, text="What's new", command=lambda: webbrowser.open(release.page_url)).pack(side="right")
+        ttk.Button(inner, text="Update now", command=self.guard(self.update_now),
+                   style="Accent.TButton").pack(side="right", padx=8)
+        ttk.Label(inner, text=f"Version {release.label} is out", style="Offer.TLabel").pack(anchor="w")
+        ttk.Label(inner, text="Saves and settings are kept.", style="OfferText.TLabel").pack(anchor="w")
 
     def update_now(self):
         if not self.root or self.offer is None:
@@ -501,20 +521,22 @@ class App:
         ttk = self.ttk
         self.root = Path(copy)
         self.settings = play.load_settings(self.root)
-        body = self.clear("Cry of Fear co-op", "Play the campaign together, or alone with AI companions.")
+        body = self.clear("Play the story together", "The whole campaign with friends, or alone with AI companions.")
         self.update_slot = ttk.Frame(body)
         self.update_slot.pack(fill="x")
         self.show_offer()
         holder = self.row(body, "Your name", 12)
         self.name = self.tk.StringVar(value=self.settings["name"])
         ttk.Entry(holder, textvariable=self.name, width=28).pack(side="left")
-        ttk.Frame(body, height=12).pack()
-        for text, action in (("Play solo (with AI companions)", lambda: self.show_start(solo=True)),
-                             ("Host a game", lambda: self.show_start(solo=False)),
-                             ("Join a game", self.show_join)):
-            ttk.Button(body, text=text, command=action).pack(fill="x", ipady=8, pady=4)
-        ttk.Label(body, text="In the game: J joins your partner, Enter skips a cutscene for everyone, "
-                  "H tells the AI companions to wait or follow.", wraplength=700).pack(anchor="w", pady=(14, 0))
+        ttk.Frame(body, height=8).pack()
+        for title, text, action in (
+                ("Play solo", "You and up to three AI companions, on this PC.", lambda: self.show_start(solo=True)),
+                ("Host a game", "Start the story and send your friends the join code.",
+                 lambda: self.show_start(solo=False)),
+                ("Join a game", "Paste the join code your host sent you.", self.show_join)):
+            theme.Card(self.tk, body, title, text, action)
+        theme.section(ttk, body, "In the game", top=16)
+        theme.keycaps(self.tk, body, COOP_KEYS)
         self.check_for_update()
 
     def remember(self, **values):
@@ -572,13 +594,14 @@ class App:
         ttk, tk = self.ttk, self.tk
         checkpoint = play.latest_checkpoint(self.root)
         kind = tk.StringVar(value="new")
+        theme.section(ttk, body, "Start from", top=0)
         ttk.Radiobutton(body, text="New game (the intro; Enter skips cutscenes)", variable=kind, value="new").pack(anchor="w")
         holder = ttk.Frame(body)
         holder.pack(anchor="w", fill="x")
         ttk.Radiobutton(holder, text="Chapter:", variable=kind, value="chapter").pack(side="left")
         chapter = ttk.Combobox(holder, values=[label for label, _ in play.CHAPTER_CHOICES], state="readonly", width=44)
         chapter.current(1)
-        chapter.pack(side="left", padx=6)
+        chapter.pack(side="left", padx=8, pady=2)
         chapter.bind("<<ComboboxSelected>>", lambda _: kind.set("chapter"))
         text = f"Continue: {checkpoint.label} (experimental)" if checkpoint else "Continue (no co-op checkpoint yet)"
         ttk.Radiobutton(body, text=text, variable=kind, value="continue",
@@ -597,6 +620,8 @@ class App:
         body = self.clear("Play solo" if solo else "Host a game",
                           "You and one to three AI companions, on this PC only." if solo else
                           "Friends join you with the join code shown after the game starts.")
+        buttons = ttk.Frame(body)   # packed first, at the bottom: a short window clips options, never Start
+        buttons.pack(side="bottom", anchor="w", fill="x", pady=(14, 0))
         resolve = self.start_choice(body)
         players = tk.StringVar(value=str(self.settings["players"]))
         password = tk.StringVar(value=self.settings["password"])
@@ -604,8 +629,9 @@ class App:
         companions = tk.StringVar(value=str(self.settings["companions"]))
         port = tk.StringVar(value=str(self.settings["port"]))
         bonus = tk.BooleanVar(value=self.settings["bonus_room"])
+        theme.section(ttk, body, "Options")
         ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; in Chapter 1 and the bridge)",
-                        variable=bonus).pack(anchor="w", pady=(8, 0))
+                        variable=bonus).pack(anchor="w")
         merged = tk.BooleanVar(value=self.settings["merged_maps"])
         ttk.Checkbutton(body, text="Merged maps (fewer loading screens; Continue keeps the checkpoint's own)",
                         variable=merged).pack(anchor="w")
@@ -613,14 +639,15 @@ class App:
         ttk.Checkbutton(body, text="Co-op flashlight on F (a free torch for everyone; the original has only Simon's phone)",
                         variable=torch).pack(anchor="w")
         if solo:
-            ttk.Frame(body, height=8).pack()
+            theme.section(ttk, body, "Party")
             ttk.Spinbox(self.row(body, "AI companions", 14), from_=1, to=play.MAX_COMPANIONS, textvariable=companions,
                         width=5, state="readonly").pack(side="left")
         if not solo:
-            ttk.Frame(body, height=8).pack()
+            theme.section(ttk, body, "Hosting")
             ttk.Spinbox(self.row(body, "Players", 12), from_=2, to=4, textvariable=players, width=5).pack(side="left")
-            ttk.Entry(self.row(body, "Password", 12), textvariable=password, show="*", width=28).pack(side="left")
-            ttk.Label(self.row(body, "", 12), text="(optional: friends need it to join)").pack(side="left")
+            holder = self.row(body, "Password", 12)
+            ttk.Entry(holder, textvariable=password, show="*", width=28).pack(side="left")
+            ttk.Label(holder, text="optional: friends need it to join", style="Hint.TLabel").pack(side="left", padx=10)
             ttk.Entry(self.row(body, "Port (UDP)", 12), textvariable=port, width=8).pack(side="left")
             ttk.Checkbutton(body, text="AI companions in the empty places (each makes room when a friend joins)",
                             variable=companion).pack(anchor="w", pady=4)
@@ -673,13 +700,11 @@ class App:
             start_button.configure(state="disabled")   # one start at a time while the copy is checked
             checking.set("Checking your copy…")
             self.launch(args, config, started, stopped)
-        buttons = ttk.Frame(body)
-        buttons.pack(anchor="w", pady=16)
         checking = tk.StringVar()
-        start_button = ttk.Button(buttons, text="Start", command=self.guard(start))
+        start_button = ttk.Button(buttons, text="Start", command=self.guard(start), style="Accent.TButton")
         start_button.pack(side="left")
-        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=6)
-        ttk.Label(buttons, textvariable=checking).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
+        ttk.Label(buttons, textvariable=checking, style="Hint.TLabel").pack(side="left", padx=8)
 
     def show_running(self, watch, solo):
         ttk, tk = self.ttk, self.tk
@@ -700,7 +725,11 @@ class App:
                           "Keep this window open while you host. If Windows Firewall asks about Cry of Fear (its "
                           "window can be hidden behind the game), click Allow access, or friends can't join.")
         status = tk.StringVar(value="Starting the game...")
-        ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w", pady=4)
+        state = tk.Frame(body, background=theme.PANEL, highlightthickness=1, highlightbackground=theme.LINE)
+        state.pack(fill="x", pady=(0, 6))
+        tk.Frame(state, background=theme.ACCENT, width=3).pack(side="left", fill="y")
+        tk.Label(state, textvariable=status, background=theme.PANEL, foreground=theme.TEXT, font=theme.FONTS.get("body"),
+                 wraplength=700, justify="left", anchor="w", padx=12, pady=10).pack(side="left", fill="x", expand=True)
         if not solo:
             code, address, lan, router = tk.StringVar(value="(looking…)"), tk.StringVar(), tk.StringVar(), tk.StringVar()
             for label, var in (("Join code", code), ("Internet address", address), ("Same place (LAN)", lan)):
@@ -708,7 +737,7 @@ class App:
                 ttk.Entry(holder, textvariable=var, state="readonly").pack(side="left", fill="x", expand=True)
                 ttk.Button(holder, text="Copy", command=lambda v=var: (self.window.clipboard_clear(),
                                                                       self.window.clipboard_append(v.get()))).pack(side="left", padx=4)
-            ttk.Label(body, textvariable=router, wraplength=700).pack(anchor="w", pady=8)
+            ttk.Label(body, textvariable=router, style="Hint.TLabel", wraplength=740).pack(anchor="w", pady=8)
 
             def routed(_):
                 code.set(watch.code or "(no Internet address found: use the LAN or VPN address)")
@@ -719,7 +748,7 @@ class App:
                       lambda rows: lan.set(f"{rows[0]['address']}:{watch.port}" if rows else ""), lambda _: None)
         elif previous is not None:
             self.work(release, lambda _: None, lambda _: None)
-        ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=12)
+        ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=14)
         root = self.root
 
         def loop():
@@ -770,11 +799,11 @@ class App:
             self.work(lambda: play.check_host(network.query_info(endpoint, timeout=3), password=secret,
                                               maps=self.maps_tag()), ready, refused)
         buttons = ttk.Frame(body)
-        buttons.pack(anchor="w", pady=16)
-        button = ttk.Button(buttons, text="Join", command=self.guard(join))
+        buttons.pack(anchor="w", pady=18)
+        button = ttk.Button(buttons, text="Join", command=self.guard(join), style="Accent.TButton")
         button.pack(side="left")
-        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=6)
-        ttk.Label(body, textvariable=status, wraplength=700).pack(anchor="w")
+        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
+        ttk.Label(body, textvariable=status, style="Hint.TLabel", wraplength=740).pack(anchor="w")
 
 
 def open_window(payload, exe, copy=None, update_from=None, wait=()):
@@ -782,6 +811,7 @@ def open_window(payload, exe, copy=None, update_from=None, wait=()):
     dpi_aware()
     window = tk.Tk()
     app = App(window, payload, exe)
+    theme.dark_title_bar(window)
     state = setup_lib.installed_state(update_from) if update_from else None
     if state and state["build"] < play.BUILD:
         app.show_update(update_from, auto=True, wait=wait)

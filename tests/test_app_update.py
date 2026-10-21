@@ -247,7 +247,7 @@ class UpdateWindowTests(unittest.TestCase):
             self.app.show_main(self.temp)
             self.assertNotIn("Update now", self.labels(self.app.body))
             self.app.offer_update(self.release)
-            self.assertIn("Version 1.1.2 is out.", self.labels(self.app.body))
+            self.assertIn("Version 1.1.2 is out", self.labels(self.app.body))
             self.assertIn("Update now", self.labels(self.app.body))
             self.app.show_main(self.temp)   # coming back to the main screen keeps the offer
             self.assertIn("Update now", self.labels(self.app.body))
@@ -302,7 +302,7 @@ class UpdateWindowTests(unittest.TestCase):
         with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS)):
             self.app.show_download(self.release)
             calls["failed"](up.Cancelled())
-            self.assertIn("Play solo (with AI companions)", self.labels(self.app.body))
+            self.assertIn("Play solo", self.labels(self.app.body))
             self.assertEqual(errors, [])
             self.app.show_download(self.release)
             calls["failed"](ValueError("The download is damaged. Try again."))
