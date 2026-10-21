@@ -3,7 +3,7 @@ Cry of Fear Co-op 1.1.8
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 
 WHAT'S NEW IN 1.1.8
-A pass over the whole story for things that break with more than one player.
+- A pass over the whole story for things that break with more than one player.
 - Chapter starts work. A chapter picked from the list now starts with the weapons
   the story gives you by then: the phone for the Chapter 2 door code, guns for
   Chapter 8 and the endings. The Chapter 7 doctor fights back (he never did on a
