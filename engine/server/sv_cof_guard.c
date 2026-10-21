@@ -18,5 +18,6 @@ qboolean SV_CoF_GuardClientCommand( sv_client_t *cl )
 		reason = CoF_GuardSceneRefusal( Cmd_Argv( 0 ), Cmd_Argv( 1 ), SV_CoF_RetailCameraHolds( cl ));
 	if( !reason ) return false;
 	Con_Printf( "cofstory phase=cmd-refused userid=%d cmd=%s reason=%s\n", cl->userid, Cmd_Argv( 0 ), reason );
+	if( !Q_strcmp( reason, "host-pause" )) SV_ClientPrintf( cl, "Only the host can pause a co-op game.\n" );
 	return true;
 }

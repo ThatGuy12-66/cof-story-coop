@@ -466,6 +466,7 @@ static void SV_ConnectClient( netadr_t from )
 	SV_CoF_TransitionClientDrop( newcl );
 	SV_CoF_MomentsDrop( newcl );
 	SV_CoF_RecoveryDrop( newcl );
+	if( SV_CoF_ArrivalLoading( newcl )) SV_CoF_RecoveryDropCarried( newcl ); // gone while loading a level change
 	SV_CoF_RecoveryDropDone( newcl );
 	sv.current_client = newcl;
 	frames = Mem_Realloc( host.mempool, newcl->frames, sizeof( client_frame_t ) * SV_UPDATE_BACKUP );
@@ -660,6 +661,8 @@ void SV_DropClient( sv_client_t *cl, qboolean crash )
 	SV_CoF_RescueDrop( cl );
 	SV_CoF_CompanionDrop( cl );
 	SV_CoF_RecoveryDrop( cl );
+	// Cry of Fear story co-op: gone while loading a level change (a crash, a timeout): the items carried over
+	if( SV_CoF_ArrivalLoading( cl )) SV_CoF_RecoveryDropCarried( cl );
 
 	if( !crash )
 	{

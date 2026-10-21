@@ -44,6 +44,7 @@ static struct
 	double time;
 	vec3_t landmark;
 } cof_arrival;
+static struct { int userid, generation; } cof_arrival_carried[MAX_CLIENTS];
 static struct
 {
 	int generation;
@@ -58,6 +59,7 @@ void SV_CoF_ArrivalReset( void )
 	memset( cof_arrival_scores, 0, sizeof( cof_arrival_scores ));
 	memset( &cof_arrival, 0, sizeof( cof_arrival ));
 	memset( &cof_arrival_exit, 0, sizeof( cof_arrival_exit ));
+	memset( cof_arrival_carried, 0, sizeof( cof_arrival_carried ));
 	cof_arrival.generation = -1;
 	cof_arrival_exit.generation = -1;
 }
@@ -124,6 +126,23 @@ static int CoF_ArrivalSendScore( int index, sv_client_t *to )
 		if( SV_CoF_SendUserMessage( cl->edict, "ScoreInfo", payload, sizeof( payload ), true )) sent++;
 	}
 	return sent;
+}
+
+// The restore of a player the story level change carried over (sv_save.c).
+void SV_CoF_ArrivalRestored( const sv_client_t *cl )
+{
+	int slot = CoF_ArrivalSlot( cl );
+	if( slot < 0 ) return;
+	cof_arrival_carried[slot].userid = cl->userid;
+	cof_arrival_carried[slot].generation = svs.spawncount;
+}
+
+// Carried over into this map and not signed on in it yet: dropping now leaves their items in the restored player.
+qboolean SV_CoF_ArrivalLoading( const sv_client_t *cl )
+{
+	int slot = CoF_ArrivalSlot( cl );
+	return slot >= 0 && cl->state != cs_spawned && cl->userid && cof_arrival_carried[slot].userid == cl->userid &&
+		cof_arrival_carried[slot].generation == svs.spawncount;
 }
 
 // Called by SV_Begin_f for a player the story level change carried over.

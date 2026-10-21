@@ -12,6 +12,8 @@ void SV_CoF_RecoveryReset( void );
 void SV_CoF_RecoveryFrame( void );
 void SV_CoF_RecoveryDrop( sv_client_t *cl );
 void SV_CoF_RecoveryDropDone( sv_client_t *cl );
+// A player a story level change carried over leaving before signing on in the new map: their items, kept as for a leaver.
+void SV_CoF_RecoveryDropCarried( sv_client_t *cl );
 void SV_CoF_RecoveryJoin( sv_client_t *cl );
 // The inventory a death or a rejoin took is still owed to this player.
 qboolean SV_CoF_RecoveryPending( sv_client_t *cl );

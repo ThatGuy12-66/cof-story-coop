@@ -7,6 +7,8 @@ docs/research/2026-10-18-cof-decompilation-survey.md sections 4 and 7 (the launc
   authids this engine never returns, and one `vote` fills every free vote slot, so a single yes kicks a partner.
 - `subtitleset N` and `hinttoggle` write server-wide cvars (cof_subtitlelanguage, sv_disablehints): a guest would
   change the host's own settings.
+- `pause` (Xash's pausable 1; a guest's Backspace or Pause key is bound to it): a guest froze the host's game for 14 s
+  (host log, 2026-10-20). Only the host pauses the party.
 - `unfreeze 1024`: client.dll sends it at every viewport reset (map load, HUD_VidInit; CTelephone::Initialize), which
   let a player walk out of a scene a trigger_camera holds them in. While a camera holds the view it is not needed:
   the camera's end gives every living player control back (CTriggerCamera, triggers.cpp:5565-5583, 5890-5905).
@@ -31,6 +33,7 @@ COF_GUARD_FN const char *CoF_GuardRefusal( const char *cmd, int story, int host 
 	if( !story || !cmd ) return NULL;
 	if( !strcmp( cmd, "vote" ) || !strcmp( cmd, "votekick" )) return "vote";
 	if( !host && ( !strcmp( cmd, "subtitleset" ) || !strcmp( cmd, "hinttoggle" ))) return "host-setting";
+	if( !host && !strcmp( cmd, "pause" )) return "host-pause";
 	return NULL;
 }
 

@@ -39,6 +39,9 @@ void SV_CoF_ArrivalMessage( const char *name, const byte *payload, int size );
 void SV_CoF_ArrivalCommandBegin( sv_client_t *cl );
 void SV_CoF_ArrivalCommandEnd( sv_client_t *cl );
 qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark );
+// A player this level change carried over (restored here), and whether they are still loading it (not signed on).
+void SV_CoF_ArrivalRestored( const sv_client_t *cl );
+qboolean SV_CoF_ArrivalLoading( const sv_client_t *cl );
 // The story's screen blur, one for the whole party (sv_cof_blur.c): cof_coop_shared_blur, on by default. Leaving
 // a map by a story level change, before the level is saved; a checkpoint loaded (the party starts off).
 void SV_CoF_BlurInit( void );

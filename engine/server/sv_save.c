@@ -2369,7 +2369,10 @@ static int CreateEntityTransitionList( SAVERESTOREDATA *pSaveData, int levelMask
 						{
 							int slot = pTable->id - 1;
 							if( slot >= 0 && slot < svs.maxclients && CoF_TransitionRestored( &cof_transition.tickets, svs.spawncount, slot, svs.clients[slot].userid ))
+							{
 								Con_Printf( "[cof-story-transition] phase=restore generation=%u slot=%d userid=%d map=%s origin=%.3f,%.3f,%.3f\n", svs.spawncount, slot + 1, svs.clients[slot].userid, sv.name, pent->v.origin[0], pent->v.origin[1], pent->v.origin[2] );
+								SV_CoF_ArrivalRestored( &svs.clients[slot] );
+							}
 						}
 						pTable->flags = FENTTABLE_REMOVED;
 						movedCount++;

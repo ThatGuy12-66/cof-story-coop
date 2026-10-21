@@ -70,6 +70,20 @@ void SV_CoF_RecoveryDrop( sv_client_t *cl )
 	record->userid = 0;
 }
 
+// A player a story level change carried over who leaves before signing on in the new map (a crash, a timeout while
+// loading): the restored player still holds what they carried. Without this, they came back with only the shared
+// starting weapons (host log 2026-10-20: a joiner's crash in the c_city -> c_sewer3 change).
+void SV_CoF_RecoveryDropCarried( sv_client_t *cl )
+{
+	cof_recovery_record_t *record;
+	if( !cl || cl->state == cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_CoF_StoryCoopEnabled() || !SV_IsValidEdict( cl->edict )) return;
+	SV_CoF_ShareRemember();
+	record = CoF_RecoveryRecord( cl, true );
+	if( !record ) return;
+	if( record->pending == 1 || CoF_RecoveryCapture( cl, record )) record->pending = 2;
+	record->userid = 0;
+}
+
 void SV_CoF_RecoveryDropDone( sv_client_t *cl )
 {
 	int index;
