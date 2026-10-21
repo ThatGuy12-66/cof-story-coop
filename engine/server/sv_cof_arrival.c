@@ -33,7 +33,8 @@ typedef struct
 	qboolean stayed;          // in an exit ever since the party arrived
 	int stay_generation;
 	qboolean signon;          // a story sign-on: the HUD state goes out at the next frame
-	double refused_logged;
+	int refused_generation;   // the exit this player's touch was last refused at (logged), and in which map
+	char refused_level[MAX_QPATH], refused_landmark[MAX_QPATH];
 } cof_arrival_player_t;
 
 static cof_arrival_player_t cof_arrival_players[MAX_CLIENTS];
@@ -84,6 +85,7 @@ static cof_arrival_player_t *CoF_ArrivalPlayer( const sv_client_t *cl )
 		p->userid = cl->userid;
 		p->door_generation = -1;
 		p->stay_generation = -1;
+		p->refused_generation = -1;
 	}
 	return p;
 }
@@ -319,6 +321,18 @@ static qboolean CoF_ArrivalExit( const char *level, const char *landmark )
 	return true;
 }
 
+// 1.1.9 (X4, E1 F10): a refusal is logged once per player, exit and map. The game asks every frame of the touch, and
+// an arrival idling in the exit back wrote a line every 10 s for as long as they stood there.
+static qboolean CoF_ArrivalRefusalNew( cof_arrival_player_t *p, const char *level, const char *landmark )
+{
+	if( p->refused_generation == svs.spawncount && !Q_strcmp( p->refused_level, level ) && !Q_strcmp( p->refused_landmark, landmark ))
+		return false;
+	p->refused_generation = svs.spawncount;
+	Q_strncpy( p->refused_level, level, sizeof( p->refused_level ));
+	Q_strncpy( p->refused_landmark, landmark, sizeof( p->refused_landmark ));
+	return true;
+}
+
 // pfnChangeLevel: true when the players standing in this exit do not count yet (sv_cof_arrival.h, 3).
 qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark )
 {
@@ -352,9 +366,8 @@ qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark )
 		if( !refused ) refused = p;
 	}
 	if( !refused ) return false; // nobody in it: a scripted change
-	if( sv.time >= refused->refused_logged + 10.0 || sv.time < refused->refused_logged ) // asked every frame
+	if( CoF_ArrivalRefusalNew( refused, level, landmark )) // asked every frame
 	{
-		refused->refused_logged = sv.time;
 		reason = refused->stayed ? "arrived-inside" : "just-arrived";
 		Con_Printf( "cofstory phase=exit-arrival-refused destination=%s landmark=%s userid=%d reason=%s\n", level, landmark, refused->userid, reason );
 	}

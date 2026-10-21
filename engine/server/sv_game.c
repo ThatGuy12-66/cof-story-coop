@@ -3052,15 +3052,24 @@ static void GAME_EXPORT pfnMessageEnd( void )
 		return;
 	}
 
+	// Cry of Fear story co-op: 1.1.9 (S5) a scene's fade, black-and-white, chapter title or subtitle line of one section
+	// of a merged map kept from the players in another (sv_cof_moments.c)
+	if( svgame.msg_index > 0 && SV_CoF_MomentsHeldBack( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload,
+		svgame.msg_realsize, cof_command_sender ? cof_command_sender : cof_usercmd_sender ))
+	{
+		MSG_Clear( &sv.multicast );
+		return;
+	}
+
 	if( svgame.msg_index > 0 && svgame.msg_size_index >= 0 )
 	{
 		SV_CoF_StateMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 		SV_CoF_MomentsMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 		SV_CoF_SessionMessage( svgame.msg_ent, name, sv.multicast.pData + svgame.msg_size_index + 2, svgame.msg_realsize );
 	}
-	// 1.1.8 (M3 finding 7): GreyFade has a fixed size, so the block above never sees it; only it is passed on here
-	// (the CoFLogo mirror there has never run live and stays as it is).
-	else if( svgame.msg_index > 0 && name && !Q_strcmp( name, "GreyFade" ))
+	// 1.1.8 (M3 finding 7): GreyFade has a fixed size, so the block above never sees it; only it is passed on here.
+	// 1.1.9 (S3): CoFLogo (size 1, cof_logo's only message, to its activator) too: the intro logos' mirror never ran.
+	else if( svgame.msg_index > 0 && name && ( !Q_strcmp( name, "GreyFade" ) || !Q_strcmp( name, "CoFLogo" )))
 		SV_CoF_MomentsMessage( svgame.msg_ent, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize );
 	SV_Multicast( svgame.msg_dest, org, svgame.msg_ent, true, false );
 

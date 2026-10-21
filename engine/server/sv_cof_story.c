@@ -319,6 +319,97 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_CameraModelsInit();
 }
 
+// 1.1.9 (I7): the chapter start's kit until every person in the game carries it; sv_cof_session.inc keeps the
+// checkpoints back meanwhile, COF_STORY_KIT_WAIT at most. One taken before the kit landed (the first autosave waits
+// out the opening scenes of c_basement, c_subwaysick2 and c_ending5, and the kit goes out every half second to the
+// players no scene holds) reloaded an empty-handed party after a team wipe, and the kit is handed out once: Chapter 2
+// had no phone for the c_basement door, Chapter 8 no gun for c_endingNc's kills.
+#define COF_STORY_KIT_WAIT 30.0 // from the first checkpoint it held back
+static const cof_chapter_kit_t *cof_story_kit;
+static int cof_story_kit_generation;
+static double cof_story_kit_until;
+
+qboolean SV_CoF_StoryKitDue( void ); // asked by the checkpoint save (sv_cof_session.inc)
+qboolean SV_CoF_StoryKitDue( void )
+{
+	char slots[COF_RETAIL_SLOTS][COF_RETAIL_ITEM], descriptor[COF_RETAIL_ITEM];
+	int i, w, j, missing = 0;
+	if( !cof_story_kit ) return false;
+	if( cof_story_kit_generation != svs.spawncount )
+	{
+		cof_story_kit = NULL; // another map, or a checkpoint loaded: not this start's any more
+		return false;
+	}
+	if( cof_story_kit_until < 0 ) cof_story_kit_until = sv.time + COF_STORY_KIT_WAIT;
+	for( i = 0; i < svs.maxclients && !missing; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_CoF_RetailReadSlots( cl, slots )) continue;
+		for( w = 0; w < COF_CHAPTER_WEAPONS && cof_story_kit->weapons[w] && !missing; w++ )
+		{
+			// a weapon's inventory descriptor, as the party's gifts read it (sv_cof_party.c CoF_PartyShareWeapon)
+			Q_snprintf( descriptor, sizeof( descriptor ), "inventoryitems/weapons/%s.txt", cof_story_kit->weapons[w] );
+			for( j = 0; j < COF_RETAIL_SLOTS; j++ ) if( !Q_strcmp( slots[j], descriptor )) break;
+			if( j == COF_RETAIL_SLOTS ) missing = 1;
+		}
+	}
+	if( missing && sv.time < cof_story_kit_until ) return true;
+	Con_Printf( "cofstory phase=chapter-kit-%s\n", missing ? "wait-over" : "delivered" );
+	cof_story_kit = NULL;
+	return false;
+}
+
+// 1.1.9 (C1): a story global the chapter's own scene needs, switched on the way the game does it: an env_global with
+// SF_GLOBAL_SET adds its global in its initial state when the table lacks it (CEnvGlobal::Spawn). The global table
+// keeps it (and the saves); the helper entity goes again at once.
+static void CoF_StoryGlobalOn( const char *name )
+{
+	char classname[] = "env_global", key_state[] = "globalstate", key_initial[] = "initialstate", on[] = "1", value[64];
+	KeyValueData kvd;
+	edict_t *ent;
+	if( !svgame.dllFuncs.pfnKeyValue || !svgame.dllFuncs.pfnSpawn ) return;
+	ent = SV_CreateNamedEntity( NULL, SV_AllocString( classname ));
+	if( !SV_IsValidEdict( ent )) return;
+	if( !ent->pvPrivateData )
+	{
+		SV_FreeEdict( ent );
+		return;
+	}
+	Q_strncpy( value, name, sizeof( value ));
+	kvd.szClassName = classname; kvd.szKeyName = key_state; kvd.szValue = value; kvd.fHandled = false;
+	svgame.dllFuncs.pfnKeyValue( ent, &kvd );
+	kvd.szKeyName = key_initial; kvd.szValue = on; kvd.fHandled = false;
+	svgame.dllFuncs.pfnKeyValue( ent, &kvd );
+	ent->v.spawnflags = 1; // SF_GLOBAL_SET
+	svgame.dllFuncs.pfnSpawn( ent );
+	if( !ent->free ) SV_FreeEdict( ent );
+	Con_Printf( "cofstory phase=chapter-global state=%s\n", name );
+}
+
+// 1.1.9 (I3): a player who joins or comes back after the story took the bag (c_bridge, or a chapter start past it),
+// and one a recovery restore gave an older record, is put in three-slot mode before anything is handed to them this
+// frame. The state frame (sv_cof_state.c) did it only after the party's gifts and the shared items, which could land
+// in slots 4+ first: hidden there in three-slot mode, and counted as carried, they never came again.
+static void CoF_StoryThreeSlots( void )
+{
+	static cof_state_data_t party; // the party's story values, read when someone is not in three slots
+	qboolean known = false;
+	int i;
+	for( i = 0; i < svs.maxclients; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
+			!( cl->edict->v.health > 0 ) || cl->edict->v.deadflag != DEAD_NO || SV_CoF_RetailInThreeSlots( cl )) continue;
+		if( !known )
+		{
+			SV_CoF_StateExport( &party );
+			known = true;
+		}
+		if( !party.values.three_slots ) return;
+		if( SV_CoF_RetailThreeSlots( cl )) Con_Printf( "cofstory phase=three-slots userid=%d\n", cl->userid );
+	}
+}
+
 // 1.1.8 (chapter starts): the first frame of the map a chapter start loaded hands out what the story would have
 // given by then (sv_cof_chapter_kit.h), once: the cvar is cleared, so later maps, deaths and checkpoints are untouched.
 static void CoF_StoryChapterStart( void )
@@ -333,6 +424,10 @@ static void CoF_StoryChapterStart( void )
 	{
 		for( i = 0; i < COF_CHAPTER_WEAPONS && kit->weapons[i]; i++ ) SV_CoF_PartyGrant( kit->weapons[i] );
 		if( kit->doctor_weapon || kit->three_slots ) SV_CoF_StatePreset( kit->doctor_weapon, kit->three_slots );
+		if( kit->global ) CoF_StoryGlobalOn( kit->global );
+		cof_story_kit = kit->weapons[0] ? kit : NULL;
+		cof_story_kit_generation = svs.spawncount;
+		cof_story_kit_until = -1; // set by the first checkpoint it holds back
 	}
 	Cvar_Set( "cof_chapter_start", "" );
 }
@@ -401,6 +496,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_GatesFrame(); // first: the game's own rules as this frame wants them
 	SV_CoF_UseProbeFrame(); // a door just started: the player where the game's +use saw them
 	SV_CoF_RecoveryFrame();
+	CoF_StoryThreeSlots(); // after a restore, before the party's gifts and the shared items (1.1.9, I3)
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
 	SV_CoF_RescueFrame();
@@ -446,6 +542,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_RecoveryReset();
 	SV_CoF_SessionReset();
 	SV_CoF_ArrivalReset();
+	cof_story_kit = NULL;
 	CoF_StoryCloseGate();
 	SV_CoF_ClearValidation();
 }

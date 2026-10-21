@@ -11,7 +11,8 @@
  *   nobody able to take it for 30 s its target fires once. A player who died
  *   in a call no longer keeps m_bInPhoneCall, which blocks all their commands.
  * - Ladders (cof_ladder_manager Use 1004FB50 keeps one raw climber pointer and
- *   no busy check): nobody can start a ladder someone is climbing.
+ *   no busy check): nobody can start a ladder someone is climbing. 1.1.9: the
+ *   climb's forward and back come from the usercmds too (a held key climbs on).
  * - The wheelchair (c_ending4b): the rider is "the first player", so the stop
  *   and the teleport after the boss (both first-player) find them.
  * - A player who leaves: no ladder or wheelchair keeps a pointer to them.
@@ -26,7 +27,9 @@
  *   off (M1 finding 4); a boat whose rider leaves goes back to where it started
  *   (K6), and riders are let go before a level change (M2 finding 4); a stopped
  *   wheelchair takes nobody (M3 finding 6); c_down's only ladder down is no
- *   longer removed under a partner still at the top (M1 finding 8). */
+ *   longer removed under a partner still at the top (M1 finding 8).
+ * - 1.1.9: a delayed chain started by a player who leaves goes on with the
+ *   living person nearest them (S2). */
 #include "common.h"
 #include "server.h"
 #include "const.h"
@@ -34,6 +37,10 @@
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_retail.h"
+#include "sv_cof_party.h"
+#include "sv_cof_sections.h"
+#include "sv_cof_rescue.h"
+#include "cof_strip.h"
 #include "sv_cof_moments.h"
 
 #define COF_THINK 0x78 // CBaseEntity::m_pfnThink
@@ -49,11 +56,14 @@
 #define COF_CALL_END 0x5FF90 // RVA EndCall
 #define COF_CALL_GIVE_UP 30.0
 #define COF_CALL_RETRY 3.0
+#define COF_CALL_UNANSWERED 20.0 // seconds a call rings one person before it rings another who can take it (1.1.9, AI2)
 
 #define COF_PL_SIZE 0x281C
 #define COF_PL_CALL_UI 0x1EA0 // dword: 3 = incoming-call UI
 #define COF_PL_BARS 0x1EB4 // dword: black bars
 #define COF_PL_IN_CALL 0x1EE8 // byte m_bInPhoneCall: ClientCommand ignores the player (100190BE)
+#define COF_PL_VAN_CALL 0x3A0 // int m_iPhoneNumberState: the 911/112 call's step (1, 2), not saved; PostThink ends it
+#define COF_CALL_ORPHAN 2.0 // seconds in a call that nothing will end before it is cleared (1.1.9, S19)
 #define COF_PL_HIDEHUD 0x2500 // dword m_iHideHUD
 #define COF_PL_SUICIDE 0x22E8 // float m_fNextSuicideTime (ClientKill)
 #define COF_PL_DEATHBITS 0x5B4 // dword m_iDeathBits (cof_killplayer)
@@ -61,6 +71,15 @@
 #define COF_PL_CAMERA_HANDLE 0x388 // EHANDLE to the same model
 #define COF_PL_BOAT 0x380 // EHANDLE m_pBoat: the boat they row (Embark sets it, Disembark clears it)
 #define COF_PL_ENABLE_CONTROL 0xDEFF0 // CBasePlayer::EnableControl( BOOL ), thiscall (as sv_cof_rescue.c)
+// bool m_bBossHealthBar, then string_t m_sBossBarEmpty, m_sBossBarFull, int m_iBossMaxHealth, m_iBossCurrentHealth,
+// string_t m_sBossName (A-player.md survey); Spawn clears only the first (0x100F44F4).
+#define COF_PL_BOSS_BAR 0x5F4
+#define COF_PL_BOSS_EMPTY 0x5F8
+#define COF_PL_BOSS_FULL 0x5FC
+#define COF_PL_BOSS_MAX 0x600
+#define COF_PL_BOSS_HEALTH 0x604
+#define COF_PL_BOSS_NAME 0x608
+#define COF_PL_BOSS_END 0x60C
 
 #define COF_LADDER_SIZE 0x1B4
 #define COF_LADDER_CLIMBER 0x114 // raw CBasePlayer*
@@ -79,10 +98,17 @@
 #define COF_MM_INDEX 0xE4 // int m_index: the next target, 0..m_cTargets
 #define COF_MM_NAMES 0xEC
 #define COF_MM_TARGETS 16
+// then float m_flTargetDelay[16], m_flWait, m_flMaxWait, m_sMaster, m_iMode, m_iszThreadName, m_iszLocusThread and
+// EHANDLE m_hActivator (SoHL, D/dlls/triggers.cpp:480-520; 1.1.9, S2)
+#define COF_MM_DELAYS 0x12C
+#define COF_MM_ACTIVATOR 0x184
+#define COF_MM_ACTIVATOR_SIZE 0x18C
 #define COF_TRAP_DAMAGE 100.0f // a trigger_hurt doing this much kills (the traps' do 1000)
 // CBaseDelay : CBaseEntity (0xDC): float m_flDelay, string_t m_iszKillTarget, EHANDLE m_hActivator
 #define COF_DELAY_SIZE 0xEC
+#define COF_DELAY_DELAY 0xDC
 #define COF_DELAY_KILLTARGET 0xE0
+#define COF_DELAY_ACTIVATOR 0xE4
 
 #define COF_MOMENT_FLOORS 8
 #define COF_MOMENT_LADDERS 16
@@ -94,6 +120,9 @@
 #define COF_MOMENT_ROOTS 16
 #define COF_MOMENT_BOATS 2
 #define COF_MOMENT_FADES 8
+#define COF_MOMENT_HURTS 8
+#define COF_MOMENT_CREDITS_SIZE 256
+#define COF_FADE_STAYOUT 0x0004 // ScreenFade: the colour stays until the next fade
 
 static const char cof_moment_phone[] = "inventoryitems/weapons/weapon_mobile.txt";
 
@@ -109,10 +138,13 @@ static int cof_moment_floor_count;
 static struct { vec3_t mins, maxs; int climber; } cof_moment_ladders[COF_MOMENT_LADDERS];
 static int cof_moment_ladder_count;
 static double cof_moment_ladder_told[MAX_CLIENTS];
+// 1.1.9: each climber's camera model (index, serial) and the climb keys let go since it was handed out.
+static struct { int model, serial; unsigned int armed; } cof_moment_climbs[MAX_CLIENTS];
 // next_restart: a dropped call starts again at most this often (the game may
 // drop it at once if it disagrees with us about the phone); told: the last
-// player announced as taking it, so the messages go out once per callee.
-static struct { int index, serial; double dropped_at, next_restart; qboolean fired; edict_t *told; } cof_moment_calls[COF_MOMENT_CALLS];
+// player announced as taking it, so the messages go out once per callee;
+// ringing since: who it rings and since when (1.1.9, AI2).
+static struct { int index, serial; double dropped_at, next_restart, ringing_since; qboolean fired; edict_t *told, *ringing; } cof_moment_calls[COF_MOMENT_CALLS];
 // A yes/no entity asked a player (userid), or was answered (answered set);
 // closed: answered "yes", which no later asking reopens (c_roofs2 asks every 5 s).
 static struct { int index, serial, userid; qboolean answered, closed; } cof_moment_prompts[COF_MOMENT_PROMPTS];
@@ -133,6 +165,22 @@ static int cof_moment_root_count;
 // Each boat where the map put it.
 static struct { int index, serial; vec3_t origin, angles; } cof_moment_boats[COF_MOMENT_BOATS];
 static int cof_moment_boat_count;
+// The Credits message the game last showed (cof_credits sends one to each player in one Use), its frame, and the
+// userid of each client slot that has it (1.1.9, S18).
+static struct { byte payload[COF_MOMENT_CREDITS_SIZE]; int size; double time; int userids[MAX_CLIENTS]; } cof_moment_credits;
+// Per client slot, what the last fade and black-and-white that reached them left on screen (1.1.9, S5). Kept over
+// map changes (by userid): a screen thought dark is only ever left alone.
+static struct { int userid, grey; qboolean dark; double told; } cof_moment_screens[MAX_CLIENTS];
+// What held each client slot frozen last frame: a ladder (its manager and the climb's camera model) or a boat, and
+// whether their freeze was put back once already (1.1.9, S13).
+static struct { int userid, manager, boat; uint32_t model; qboolean told; } cof_moment_held[MAX_CLIENTS];
+// Since when each client slot is in a call nothing will end (1.1.9, S19).
+static struct { int userid; double since; } cof_moment_orphans[MAX_CLIENTS];
+// Who was alive last frame, per client slot (1.1.9, S11: a respawn).
+static struct { int userid; qboolean alive; } cof_moment_lives[MAX_CLIENTS];
+// Lethal trigger_hurts the map can switch on or off, and whether each was on last frame (1.1.9, P2).
+static struct { int index, serial, solid; } cof_moment_hurts[COF_MOMENT_HURTS];
+static int cof_moment_hurt_count;
 
 void SV_CoF_MomentsReset( void )
 {
@@ -141,6 +189,7 @@ void SV_CoF_MomentsReset( void )
 	memset( cof_moment_floors, 0, sizeof( cof_moment_floors ));
 	memset( cof_moment_ladders, 0, sizeof( cof_moment_ladders ));
 	memset( cof_moment_ladder_told, 0, sizeof( cof_moment_ladder_told ));
+	memset( cof_moment_climbs, 0, sizeof( cof_moment_climbs ));
 	memset( cof_moment_calls, 0, sizeof( cof_moment_calls ));
 	memset( cof_moment_prompts, 0, sizeof( cof_moment_prompts ));
 	memset( cof_moment_logos, 0, sizeof( cof_moment_logos ));
@@ -153,6 +202,12 @@ void SV_CoF_MomentsReset( void )
 	cof_moment_root_count = 0;
 	memset( cof_moment_boats, 0, sizeof( cof_moment_boats ));
 	cof_moment_boat_count = 0;
+	memset( cof_moment_hurts, 0, sizeof( cof_moment_hurts ));
+	cof_moment_hurt_count = 0;
+	memset( cof_moment_lives, 0, sizeof( cof_moment_lives ));
+	memset( &cof_moment_credits, 0, sizeof( cof_moment_credits ));
+	memset( cof_moment_orphans, 0, sizeof( cof_moment_orphans ));
+	memset( cof_moment_held, 0, sizeof( cof_moment_held ));
 	SV_CoF_PreferFirst( NULL );
 }
 
@@ -447,6 +502,16 @@ static void CoF_MomentCheckGeneration( void )
 		VectorCopy( boat->v.angles, cof_moment_boats[cof_moment_boat_count].angles );
 		cof_moment_boat_count++;
 	}
+	for( i = svs.maxclients + 1; i < svgame.numEntities && cof_moment_hurt_count < COF_MOMENT_HURTS; i++ )
+	{
+		edict_t *hurt = SV_EdictNum( i );
+		if( !CoF_MomentClass( hurt, "trigger_hurt" ) || hurt->v.dmg < COF_TRAP_DAMAGE || ( hurt->v.spawnflags & 8 ) || // 8: no clients
+			!SV_GetString( hurt->v.targetname )[0] ) continue;
+		cof_moment_hurts[cof_moment_hurt_count].index = i;
+		cof_moment_hurts[cof_moment_hurt_count].serial = hurt->serialnumber;
+		cof_moment_hurts[cof_moment_hurt_count].solid = hurt->v.solid;
+		cof_moment_hurt_count++;
+	}
 }
 
 // Retail MP PreThink makes a player SOLID_NOT while its box overlaps another
@@ -559,19 +624,20 @@ static qboolean CoF_MomentCanAnswer( edict_t *player )
 	return CoF_MomentHasPhone( cl );
 }
 
-// Who should take a call: the one it was for, or the nearest partner who can.
-static edict_t *CoF_MomentCallee( edict_t *previous )
+// Who should take a call: the one it was for, or the nearest partner who can. keep false: never the one it was for
+// (1.1.9, AI2: it rang them unanswered too long).
+static edict_t *CoF_MomentCallee( edict_t *previous, qboolean keep )
 {
 	edict_t *best = NULL;
 	float best_distance = 0.0f;
 	int i;
-	if( previous && CoF_MomentCanAnswer( previous )) return previous;
+	if( keep && previous && CoF_MomentCanAnswer( previous )) return previous;
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		edict_t *player = svs.clients[i].edict;
 		vec3_t delta;
 		float distance = 0.0f;
-		if( !CoF_MomentCanAnswer( player )) continue;
+		if( player == previous || !CoF_MomentCanAnswer( player )) continue;
 		if( previous && SV_IsValidEdict( previous ))
 		{
 			VectorSubtract( player->v.origin, previous->v.origin, delta );
@@ -599,7 +665,8 @@ static void CoF_MomentTellCall( int slot, edict_t *callee )
 static void CoF_MomentCalls( void )
 {
 	uintptr_t base = SV_CoF_StoryBase();
-	int i, k;
+	edict_t *busy[32]; // who running calls ring or talk to (1.1.9, S19)
+	int i, k, busy_count = 0;
 	if( !base ) return;
 	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
 	{
@@ -620,6 +687,11 @@ static void CoF_MomentCalls( void )
 			if( slot >= 0 && cof_moment_calls[slot].index == i ) memset( &cof_moment_calls[slot], 0, sizeof( cof_moment_calls[slot] ));
 			continue;
 		}
+		if( call->v.nextthink > 0.0f && busy_count + 2 <= (int)( sizeof( busy ) / sizeof( busy[0] )))
+		{
+			busy[busy_count++] = CoF_MomentHandle( pv, COF_CALL_PLAYER );
+			busy[busy_count++] = CoF_MomentHandle( pv, COF_CALL_USER );
+		}
 		if( slot < 0 ) continue;
 		if( cof_moment_calls[slot].index != i )
 		{
@@ -631,18 +703,35 @@ static void CoF_MomentCalls( void )
 		if( call->v.nextthink > 0.0f )
 		{
 			cof_moment_calls[slot].dropped_at = 0.0;
-			// Still ringing for someone who cannot take it: ring a player who can.
-			if( think == base + COF_CALL_WAIT && !CoF_MomentCanAnswer( ringing ) && ( callee = CoF_MomentCallee( ringing )) != NULL )
+			if( think != base + COF_CALL_WAIT )
+			{
+				cof_moment_calls[slot].ringing = NULL; // answered: a ring after it counts from its own start
+				continue;
+			}
+			if( cof_moment_calls[slot].ringing != ringing )
+			{
+				cof_moment_calls[slot].ringing = ringing;
+				cof_moment_calls[slot].ringing_since = sv.time;
+			}
+			// Still ringing for someone who cannot take it: ring a player who can. 1.1.9 (AI2): or ringing one
+			// person unanswered for 20 s (AFK, c_park3 sophiecall): ring the nearest other who can take it.
+			if( !CoF_MomentCanAnswer( ringing )) callee = CoF_MomentCallee( ringing, true );
+			else if( sv.time - cof_moment_calls[slot].ringing_since >= COF_CALL_UNANSWERED ) callee = CoF_MomentCallee( ringing, false );
+			else callee = NULL;
+			if( callee )
 			{
 				CoF_MomentClearRing( ringing );
 				CoF_MomentSetHandle( pv, COF_CALL_PLAYER, callee );
 				pv[COF_CALL_RANG] = 0; // the new callee hears it ring
 				CoF_MomentTellCall( slot, callee );
+				cof_moment_calls[slot].ringing = callee;
+				cof_moment_calls[slot].ringing_since = sv.time;
 				Con_Printf( "cofstory phase=call-retargeted call=%s entity=%d\n", SV_GetString( call->v.targetname ), NUM_FOR_EDICT( callee ));
 			}
 			continue;
 		}
 		// The game dropped it: its think is kept but nothing is scheduled.
+		cof_moment_calls[slot].ringing = NULL;
 		if( !cof_moment_calls[slot].dropped_at )
 		{
 			cof_moment_calls[slot].dropped_at = sv.time;
@@ -652,7 +741,7 @@ static void CoF_MomentCalls( void )
 		CoF_MomentClearCall( ringing );
 		CoF_MomentClearRing( ringing );
 		if( sv.time < cof_moment_calls[slot].next_restart ) continue;
-		if(( callee = CoF_MomentCallee( ringing )) != NULL )
+		if(( callee = CoF_MomentCallee( ringing, true )) != NULL )
 		{
 			uint32_t wait = (uint32_t)( base + COF_CALL_WAIT );
 			CoF_MomentSetHandle( pv, COF_CALL_PLAYER, callee );
@@ -679,8 +768,32 @@ static void CoF_MomentCalls( void )
 	for( k = 0; k < svs.maxclients && k < MAX_CLIENTS; k++ )
 	{
 		edict_t *player = svs.clients[k].edict;
+		byte *pv = NULL;
+		int van, j;
 		if( svs.clients[k].state == cs_spawned && SV_IsValidEdict( player ) && !CoF_MomentAlive( player ))
 			CoF_MomentClearCall( player );
+		// 1.1.9 (S19): a checkpoint saved in a 911/112 call (PostThink ends it by its step, which is not saved) loads
+		// with m_bInPhoneCall and nothing to end it: all their commands were ignored for good. In a call of no
+		// running cof_phonecall and no 911/112 step for 2 s: cleared.
+		if( svs.clients[k].state != cs_spawned || !SV_IsValidEdict( player ) || !( pv = SV_CoF_StoryEntityPrivate( player, COF_PL_SIZE ))) continue;
+		memcpy( &van, pv + COF_PL_VAN_CALL, sizeof( van ));
+		for( j = 0; j < busy_count && busy[j] != player; j++ );
+		if( cof_moment_orphans[k].userid != svs.clients[k].userid )
+		{
+			cof_moment_orphans[k].userid = svs.clients[k].userid;
+			cof_moment_orphans[k].since = 0.0;
+		}
+		if( !pv[COF_PL_IN_CALL] || van || j < busy_count )
+		{
+			cof_moment_orphans[k].since = 0.0;
+			continue;
+		}
+		if( !cof_moment_orphans[k].since ) cof_moment_orphans[k].since = sv.time;
+		else if( sv.time - cof_moment_orphans[k].since >= COF_CALL_ORPHAN )
+		{
+			CoF_MomentClearCall( player );
+			cof_moment_orphans[k].since = 0.0;
+		}
 	}
 }
 
@@ -746,6 +859,57 @@ void SV_CoF_MomentsCommand( sv_client_t *cl, usercmd_t *cmd )
 		}
 		return;
 	}
+}
+
+// The camera model of the ladder this player climbs: theirs when a ladder they started (its owner) has that model
+// (Use: SET_MODEL( pDeathScene, the manager's model )); a strangle or a model cutscene has another.
+static edict_t *CoF_MomentLadderModel( edict_t *player )
+{
+	int i, j;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *model = SV_EdictNum( i );
+		if( !CoF_MomentClass( model, "camera_model" ) || model->v.owner != player || !model->v.model ) continue;
+		for( j = svs.maxclients + 1; j < svgame.numEntities; j++ )
+		{
+			edict_t *manager = SV_EdictNum( j );
+			if( CoF_MomentClass( manager, "cof_ladder_manager" ) && manager->v.owner == player && manager->v.model &&
+				!Q_stricmp( SV_GetString( manager->v.model ), SV_GetString( model->v.model )))
+				return model;
+		}
+	}
+	return NULL;
+}
+
+// 1.1.9 (ladders): a held forward or back climbs on. LadderThink reads them from the camera model's buttons
+// (pDeathScene->pev->button, CoF_Ladder.cpp), which only the reliable forwardpressed/backpressed commands set:
+// a step waited a round trip or more, and a key pressed before the client knew of the climb was never sent. The
+// climber is frozen, so SV_ParseClientMove drops their usercmd buttons after this. As with those commands, a key
+// already down when the climb began counts once it was let go (forward still held from walking to a ladder's top
+// would take the climber straight back off it).
+void SV_CoF_MomentsLadderInput( sv_client_t *cl, int buttons )
+{
+	const unsigned int keys = IN_FORWARD | IN_BACK;
+	edict_t *model;
+	int slot;
+	if( !cl || !SV_CoF_StoryCoopEnabled() || FBitSet( cl->flags, FCL_FAKECLIENT )) return;
+	slot = (int)( cl - svs.clients );
+	if( slot < 0 || slot >= MAX_CLIENTS ) return;
+	model = CoF_MomentClimbing( cl->edict ) ? CoF_MomentLadderModel( cl->edict ) : NULL;
+	if( !model )
+	{
+		cof_moment_climbs[slot].model = 0;
+		return;
+	}
+	if( cof_moment_climbs[slot].model != NUM_FOR_EDICT( model ) || cof_moment_climbs[slot].serial != model->serialnumber )
+	{
+		// a new climb: the keys down now wait to be let go
+		cof_moment_climbs[slot].model = NUM_FOR_EDICT( model );
+		cof_moment_climbs[slot].serial = model->serialnumber;
+		cof_moment_climbs[slot].armed = 0;
+	}
+	cof_moment_climbs[slot].armed |= keys & ~(unsigned int)buttons;
+	model->v.button = (int)(( (unsigned int)model->v.button & ~keys ) | ( (unsigned int)buttons & keys & cof_moment_climbs[slot].armed ));
 }
 
 // The wheelchair's rider, while it carries one: they are "the first player".
@@ -830,18 +994,84 @@ static void CoF_MomentBoatDrop( sv_client_t *cl, edict_t *boat, byte *pv )
 	Con_Printf( "cofstory phase=boat-freed userid=%d boat=%d moved=%d\n", cl->userid, NUM_FOR_EDICT( boat ), moved );
 }
 
+// A multi_manager laid out as read here: Spawn sorts its delays, so a list out of order is not the delay list.
+static qboolean CoF_MomentManagerLaidOut( const byte *pv )
+{
+	int count, k;
+	float delay, last = -100000.0f;
+	memcpy( &count, pv + COF_MM_COUNT, sizeof( count ));
+	if( count < 0 || count > COF_MM_TARGETS ) return false;
+	for( k = 0; k < count; k++ )
+	{
+		memcpy( &delay, pv + COF_MM_DELAYS + k * sizeof( delay ), sizeof( delay ));
+		if( !( delay >= last ) || delay > 100000.0f || ( delay != 0.0f && delay > -0.001f && delay < 0.001f )) return false;
+		last = delay;
+	}
+	return true;
+}
+
+// The living person nearest the leaver (never a companion), or NULL.
+static edict_t *CoF_MomentHeir( sv_client_t *leaver )
+{
+	edict_t *best = NULL;
+	float best_d = 0.0f;
+	int i;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		vec3_t delta;
+		float d;
+		if( cl == leaver || cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
+			cl->edict == leaver->edict || !CoF_MomentAlive( cl->edict )) continue;
+		VectorSubtract( cl->edict->v.origin, leaver->edict->v.origin, delta );
+		d = DotProduct( delta, delta );
+		if( !best || d < best_d ) { best = cl->edict; best_d = d; }
+	}
+	return best;
+}
+
+// 1.1.9 (S2): a delayed chain fires with the activator that started it, kept by a multi_manager in its own EHANDLE
+// (ManagerUse sets it, ManagerThink fires every target with it) and by a delayed trigger in the DelayedUse it makes
+// (CBaseDelay, DelayThink). The player who leaves stayed in them: c_ending1-4's house teleport (cof_teleport
+// teledes_tele, 27 s after its trigger) moves only a player activator, so with its toucher gone nobody left the house.
+// Such a handle (exactly the leaver's edict and serial) now names the living person nearest the leaver.
+static void CoF_MomentHandOver( sv_client_t *cl, edict_t *ent, byte *pv, int offset, edict_t **heir, qboolean *looked )
+{
+	if( CoF_MomentHandle( pv, offset ) != cl->edict ) return;
+	if( !*looked ) { *heir = CoF_MomentHeir( cl ); *looked = true; }
+	if( !*heir ) return;
+	CoF_MomentSetHandle( pv, offset, *heir );
+	Con_Printf( "cofstory phase=activator-handed userid=%d entity=%d class=%s to=%d\n", cl->userid, NUM_FOR_EDICT( ent ),
+		SV_GetString( ent->v.classname ), NUM_FOR_EDICT( *heir ));
+}
+
 void SV_CoF_MomentsDrop( sv_client_t *cl )
 {
 	int i;
 	uint32_t none = 0;
+	edict_t *heir = NULL;
+	qboolean looked = false;
 	if( !cl || !SV_IsValidEdict( cl->edict ) || !svgame.edicts || !SV_CoF_StoryCoopEnabled() ) return;
 	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
 	{
 		edict_t *ent = SV_EdictNum( i );
-		byte *pv;
+		byte *pv = NULL;
+		float delay;
 		if( cl->edict->pvPrivateData && CoF_MomentClass( ent, "boat" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_BOAT_SIZE )))
 		{
 			CoF_MomentBoatDrop( cl, ent, pv );
+			continue;
+		}
+		if( CoF_MomentClass( ent, "multi_manager" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_MM_ACTIVATOR_SIZE )) &&
+			CoF_MomentManagerLaidOut( pv ))
+		{
+			CoF_MomentHandOver( cl, ent, pv, COF_MM_ACTIVATOR, &heir, &looked );
+			continue;
+		}
+		if( CoF_MomentClass( ent, "DelayedUse" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_DELAY_SIZE )))
+		{
+			memcpy( &delay, pv + COF_DELAY_DELAY, sizeof( delay ));
+			if( delay == 0.0f ) CoF_MomentHandOver( cl, ent, pv, COF_DELAY_ACTIVATOR, &heir, &looked ); // SUB_UseTargets makes it with none
 			continue;
 		}
 		if( !SV_IsValidEdict( ent ) || ent->v.owner != cl->edict ) continue;
@@ -899,6 +1129,22 @@ void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, 
 			cof_moment_fade_count++;
 		}
 		cof_moment_fades[i].sent |= 1u << (int)( cl - svs.clients );
+		return;
+	}
+	// 1.1.9 (S18): the credits (sent once, to the players there): the first player's copy of each Use is kept.
+	if( name && !Q_strcmp( name, "Credits" ) && payload && size > 0 && !cof_moment_mirroring &&
+		SV_CoF_StoryCoopEnabled() && ( cl = CoF_MomentClient( to )))
+	{
+		// a new Use: another frame, or this player has the last one already
+		if( !cof_moment_credits.size || cof_moment_credits.time != sv.time || cof_moment_credits.userids[cl - svs.clients] == cl->userid )
+		{
+			memset( &cof_moment_credits, 0, sizeof( cof_moment_credits ));
+			if( size > COF_MOMENT_CREDITS_SIZE ) return; // not kept: nothing old is sent instead
+			memcpy( cof_moment_credits.payload, payload, size );
+			cof_moment_credits.size = size;
+			cof_moment_credits.time = sv.time;
+		}
+		cof_moment_credits.userids[cl - svs.clients] = cl->userid;
 		return;
 	}
 	if( !name || Q_strcmp( name, "YesNo" ) || !payload || !SV_CoF_StoryCoopEnabled() || !( cl = CoF_MomentClient( to ))) return;
@@ -978,6 +1224,108 @@ static void CoF_MomentLogos( void )
 	cof_moment_logo_count = 0;
 }
 
+// 1.1.9 (S18): cof_credits shows the credits (and at the end their Continue) to the players there, once: a person who
+// joined during the ending sat in its camera with none. Who has not got the last credits gets a copy of the first
+// player's (their statistics with it: the screen shows only them).
+static void CoF_MomentCredits( void )
+{
+	int j;
+	if( !cof_moment_credits.size ) return;
+	cof_moment_mirroring = true;
+	for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+	{
+		sv_client_t *cl = &svs.clients[j];
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
+			cof_moment_credits.userids[j] == cl->userid ) continue;
+		cof_moment_credits.userids[j] = cl->userid;
+		SV_CoF_SendUserMessage( cl->edict, "Credits", cof_moment_credits.payload, cof_moment_credits.size, true );
+		Con_Printf( "cofstory phase=credits-resent userid=%d\n", cl->userid );
+	}
+	cof_moment_mirroring = false;
+}
+
+// The section of a merged map a game message comes from: a scene's chain whose think runs (a multi_manager, a
+// trigger_* by its bounds when it is a brush, a delayed trigger by its activator: it has no place of its own), else the
+// player whose command or move runs; -1: not known (nothing is held then), as for any other entity's think (a phone
+// call's lines are its callee's wherever they are).
+static int CoF_MomentSourceSection( edict_t *sender )
+{
+	edict_t *thinker = SV_CoF_RescueThinker(), *activator = NULL;
+	const char *classname;
+	byte *pv = NULL;
+	vec3_t center;
+	if( thinker && SV_IsValidEdict( thinker ))
+	{
+		classname = SV_GetString( thinker->v.classname );
+		if( CoF_MomentClient( thinker )) return SV_CoF_PlayerSection( thinker );
+		if( Q_strcmp( classname, "multi_manager" ) && Q_strncmp( classname, "trigger_", 8 ) && Q_strcmp( classname, "DelayedUse" )) return -1;
+		if( !Q_strcmp( classname, "DelayedUse" ))
+		{
+			if(( pv = SV_CoF_StoryEntityPrivate( thinker, COF_DELAY_SIZE )) != NULL && ( activator = CoF_MomentHandle( pv, COF_DELAY_ACTIVATOR )) != NULL &&
+				CoF_MomentClient( activator )) return SV_CoF_PlayerSection( activator );
+			return -1;
+		}
+		if( SV_GetString( thinker->v.model )[0] == '*' )
+		{
+			VectorAdd( thinker->v.absmin, thinker->v.absmax, center );
+			VectorScale( center, 0.5f, center );
+			return SV_CoF_PointSection( center );
+		}
+		return SV_CoF_PointSection( thinker->v.origin );
+	}
+	return sender && CoF_MomentClient( sender ) ? SV_CoF_PlayerSection( sender ) : -1;
+}
+
+// 1.1.9 (S5, K4 residual): in a merged map, the fade, black-and-white, chapter title and subtitle lines the game sends
+// each player for a scene of one section (env_fade, cof_blackandwhite, cof_chapter, subtitle_main) reached the
+// players in another, another original level. They are held back from a player in another section than where they
+// come from, as a section's fog is (sv_cof_fog.c). Never what could leave a screen dark or grey: a fade reaches a player
+// whose screen a fade left dark, black-and-white off always goes; neither "Game over" nor the engine's own lines.
+qboolean SV_CoF_MomentsHeldBack( edict_t *to, int dest, const char *name, const byte *payload, int size, edict_t *sender )
+{
+	sv_client_t *cl = NULL;
+	int slot, mine = -1, source = -1, flags = 0, i;
+	qboolean fade, grey, chapter, line, held = false;
+	if( !name || !payload || cof_moment_mirroring || !SV_CoF_StoryCoopEnabled() ) return false;
+	fade = !Q_strcmp( name, "ScreenFade" ) && size == 10;
+	grey = !Q_strcmp( name, "BlackWhite" ) && size == 1;
+	chapter = !Q_strcmp( name, "Chapter" ) && size > 0;
+	line = !Q_strcmp( name, "ProFont" ) && size > 0;
+	if( !fade && !grey && !chapter && !line ) return false;
+	if( fade ) flags = payload[4] | ( payload[5] << 8 );
+	if(( dest != MSG_ONE && dest != MSG_ONE_UNRELIABLE ) || !( cl = CoF_MomentClient( to )) || cl - svs.clients >= MAX_CLIENTS )
+	{
+		// to everyone: any screen may stay dark now
+		if( fade && ( flags & COF_FADE_STAYOUT ) && dest != MSG_ONE && dest != MSG_ONE_UNRELIABLE )
+			for( i = 0; i < MAX_CLIENTS; i++ ) cof_moment_screens[i].dark = true;
+		return false;
+	}
+	slot = (int)( cl - svs.clients );
+	if( cof_moment_screens[slot].userid != cl->userid )
+	{
+		memset( &cof_moment_screens[slot], 0, sizeof( cof_moment_screens[slot] ));
+		cof_moment_screens[slot].userid = cl->userid;
+		cof_moment_screens[slot].dark = true; // not known yet
+	}
+	if( !FBitSet( cl->flags, FCL_FAKECLIENT ) && ( mine = SV_CoF_PlayerSection( to )) >= 0 &&
+		( source = CoF_MomentSourceSection( sender )) >= 0 && source != mine )
+	{
+		if( fade ) held = !cof_moment_screens[slot].dark;
+		else if( grey ) held = payload[0] && !cof_moment_screens[slot].grey;
+		else if( chapter ) held = !( size >= 10 && !memcmp( payload, "Game over", 10 ));
+		else held = !CoF_StripOwnLine( payload, size );
+		if( held && sv.time >= cof_moment_screens[slot].told )
+		{
+			cof_moment_screens[slot].told = sv.time + 2.0;
+			Con_Printf( "cofstory phase=effect-held name=%s userid=%d section=%d from=%d\n", name, cl->userid, mine, source );
+		}
+	}
+	if( held ) return true;
+	if( fade ) cof_moment_screens[slot].dark = ( flags & COF_FADE_STAYOUT ) != 0;
+	if( grey ) cof_moment_screens[slot].grey = payload[0];
+	return false;
+}
+
 // The grey fades the game showed some players this frame, to the others (1.1.8).
 static void CoF_MomentFades( void )
 {
@@ -1043,14 +1391,221 @@ void SV_CoF_MomentsReleaseRiders( void )
 	}
 }
 
+// The player whose chain switched this hurt on: the activator of a multi_manager that fires it, a living person.
+static edict_t *CoF_MomentHurtStarter( const edict_t *hurt )
+{
+	const char *name = SV_GetString( hurt->v.targetname );
+	int i, k, count;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *mm = SV_EdictNum( i ), *starter = NULL;
+		sv_client_t *cl = NULL;
+		byte *pv = NULL;
+		string_t target;
+		if( !CoF_MomentClass( mm, "multi_manager" ) || !( pv = SV_CoF_StoryEntityPrivate( mm, COF_MM_ACTIVATOR_SIZE )) ||
+			!CoF_MomentManagerLaidOut( pv )) continue;
+		memcpy( &count, pv + COF_MM_COUNT, sizeof( count ));
+		for( k = 0; k < count; k++ )
+		{
+			memcpy( &target, pv + COF_MM_NAMES + k * sizeof( target ), sizeof( target ));
+			if( target && !Q_strcmp( SV_GetString( target ), name )) break;
+		}
+		if( k == count || !( starter = CoF_MomentHandle( pv, COF_MM_ACTIVATOR )) || !( cl = CoF_MomentClient( starter )) ||
+			FBitSet( cl->flags, FCL_FAKECLIENT ) || !CoF_MomentAlive( starter )) continue;
+		return starter;
+	}
+	return NULL;
+}
+
+// 1.1.9 (P2, M2 finding 8): c_bridge's carriage trigger (trigger_once #200 -> destroyall -> multikuken2) drops the
+// carriage the party arrived in and switches the trigger_hurt tjenahaha (1000) on under it 3 s later: in single
+// player nobody can be in both places; a partner still inside died. When a lethal trigger_hurt is switched on by a
+// chain a living person started who is not inside it, everyone else inside it is set down beside the nearest living
+// person outside it. Players touch triggers only in their own moves, after this frame: none has been hurt yet. A
+// trap whose own starter stands inside (single player's death) is left alone.
+static void CoF_MomentHurts( void )
+{
+	int i, j, k;
+	for( i = 0; i < cof_moment_hurt_count; i++ )
+	{
+		edict_t *hurt = SV_EdictNum( cof_moment_hurts[i].index ), *starter = NULL;
+		int was = cof_moment_hurts[i].solid;
+		if( !CoF_MomentClass( hurt, "trigger_hurt" ) || hurt->serialnumber != cof_moment_hurts[i].serial ) continue;
+		cof_moment_hurts[i].solid = hurt->v.solid;
+		if( was == SOLID_TRIGGER || hurt->v.solid != SOLID_TRIGGER ) continue;
+		if( !( starter = CoF_MomentHurtStarter( hurt )) || CoF_MomentTouches( hurt, starter->v.origin )) continue;
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+		{
+			sv_client_t *cl = &svs.clients[j], *anchor = NULL;
+			float best = 0.0f;
+			qboolean moved;
+			if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
+				cl->edict == starter || !CoF_MomentAlive( cl->edict ) || !CoF_MomentTouches( hurt, cl->edict->v.origin )) continue;
+			for( k = 0; k < svs.maxclients && k < MAX_CLIENTS; k++ )
+			{
+				sv_client_t *other = &svs.clients[k];
+				vec3_t delta;
+				float d;
+				if( other == cl || other->state != cs_spawned || FBitSet( other->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( other->edict ) ||
+					!CoF_MomentAlive( other->edict ) || CoF_MomentTouches( hurt, other->edict->v.origin )) continue;
+				VectorSubtract( other->edict->v.origin, cl->edict->v.origin, delta );
+				d = DotProduct( delta, delta );
+				if( !anchor || d < best ) { anchor = other; best = d; }
+			}
+			if( !anchor ) continue; // the starter at least is outside: not reached
+			moved = SV_CoF_PartySectionMove( cl, anchor->edict->v.origin, anchor, NULL ) && !CoF_MomentTouches( hurt, cl->edict->v.origin );
+			Con_Printf( "cofstory phase=hurt-escaped userid=%d hurt=%d anchor=%d ok=%d\n", cl->userid, cof_moment_hurts[i].index, anchor->userid, moved );
+		}
+	}
+}
+
+// 1.1.9 (S13): a camera's end and a model cutscene's end give control back to every living player (EnableControl,
+// D/dlls/triggers.cpp FollowTarget, effects.cpp cof_mdlcutscene): a ladder climber was set free mid-climb in the
+// ladder's camera, a boat rider walked off on the shore while the boat still had them. One held last frame by the same
+// climb (its manager, the same camera model) or the same boat, now free, is frozen again; the ladder's end and
+// Disembark clear what holds them in the same think, so their own release is never undone.
+static void CoF_MomentKeepHeld( void )
+{
+	int i, j, manager[MAX_CLIENTS], boat[MAX_CLIENTS];
+	memset( manager, 0, sizeof( manager ));
+	memset( boat, 0, sizeof( boat ));
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		sv_client_t *cl = NULL;
+		byte *pv = NULL;
+		uint32_t carried;
+		if( CoF_MomentClass( ent, "cof_ladder_manager" ) && ( cl = CoF_MomentClient( ent->v.owner )) != NULL && cl - svs.clients < MAX_CLIENTS )
+			manager[cl - svs.clients] = i;
+		else if( CoF_MomentClass( ent, "boat" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_BOAT_SIZE )) != NULL )
+		{
+			memcpy( &carried, pv + COF_BOAT_RIDER, sizeof( carried ));
+			for( j = 0; carried && j < svs.maxclients && j < MAX_CLIENTS; j++ )
+			{
+				byte *player = NULL;
+				if( svs.clients[j].state != cs_spawned || !SV_IsValidEdict( svs.clients[j].edict ) ||
+					(uint32_t)(uintptr_t)svs.clients[j].edict->pvPrivateData != carried ) continue;
+				// on board: Embark set their m_pBoat (boarding's 1 s and Disembark are the boat's own)
+				if(( player = SV_CoF_StoryEntityPrivate( svs.clients[j].edict, COF_PL_SIZE )) != NULL && CoF_MomentHandle( player, COF_PL_BOAT ) == ent )
+					boat[j] = i;
+			}
+		}
+	}
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		edict_t *ent = cl->edict;
+		byte *pv = NULL;
+		uint32_t model = 0;
+		if( cl->state != cs_spawned || !SV_IsValidEdict( ent ) || !CoF_MomentAlive( ent ) || !( pv = SV_CoF_StoryEntityPrivate( ent, COF_PL_SIZE )))
+		{
+			memset( &cof_moment_held[i], 0, sizeof( cof_moment_held[i] ));
+			continue;
+		}
+		memcpy( &model, pv + COF_PL_CAMERA_MODEL, sizeof( model ));
+		if( !model ) manager[i] = 0; // no climb without the ladder's camera model
+		if( cof_moment_held[i].userid == cl->userid && !( ent->v.flags & FL_FROZEN ) &&
+			(( manager[i] && manager[i] == cof_moment_held[i].manager && model == cof_moment_held[i].model ) ||
+			( boat[i] && boat[i] == cof_moment_held[i].boat )))
+		{
+			SetBits( ent->v.flags, FL_FROZEN );
+			VectorClear( ent->v.velocity );
+			if( !cof_moment_held[i].told )
+				Con_Printf( "cofstory phase=held-refrozen userid=%d by=%s\n", cl->userid, boat[i] ? "boat" : "ladder" );
+			cof_moment_held[i].told = true;
+		}
+		if( cof_moment_held[i].userid != cl->userid || !( ent->v.flags & FL_FROZEN ) || ( !manager[i] && !boat[i] ))
+		{
+			memset( &cof_moment_held[i], 0, sizeof( cof_moment_held[i] ));
+			cof_moment_held[i].userid = cl->userid;
+			if( !( ent->v.flags & FL_FROZEN )) continue;
+		}
+		cof_moment_held[i].manager = manager[i];
+		cof_moment_held[i].model = model;
+		cof_moment_held[i].boat = boat[i];
+	}
+}
+
+// The boss a partner's bar is for, still alive.
+static qboolean CoF_MomentBossAlive( string_t name )
+{
+	int i;
+	const char *wanted = name ? SV_GetString( name ) : "";
+	for( i = svs.maxclients + 1; wanted[0] && i < svgame.numEntities; i++ )
+	{
+		edict_t *boss = SV_EdictNum( i );
+		if( SV_IsValidEdict( boss ) && !( boss->v.flags & FL_KILLME ) && boss->v.health > 0 && !Q_strcmp( SV_GetString( boss->v.targetname ), wanted ))
+			return true;
+	}
+	return false;
+}
+
+// 1.1.9 (S11): cof_bosshealthbar gives every player the bar (P+0x5F4..0x60B) and the boss's damage keeps it up for
+// each player its name is on, but Spawn clears the bar's flag and the respawn's InitHUD sends BossBar 0: a player who
+// died in a boss fight saw no bar until the boss was hit again. A respawned person gets a partner's bar back, while
+// that partner's boss lives.
+static void CoF_MomentBossBars( void )
+{
+	int i, j;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		byte *pv = NULL, *from = NULL, payload[192];
+		string_t name;
+		qboolean alive, respawned;
+		int length = 0, value, k;
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict )) continue;
+		alive = CoF_MomentAlive( cl->edict );
+		respawned = cof_moment_lives[i].userid == cl->userid && !cof_moment_lives[i].alive && alive;
+		cof_moment_lives[i].userid = cl->userid;
+		cof_moment_lives[i].alive = alive;
+		if( !respawned || !( pv = SV_CoF_StoryEntityPrivate( cl->edict, COF_PL_SIZE )) || pv[COF_PL_BOSS_BAR] ) continue;
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS && !from; j++ )
+		{
+			sv_client_t *partner = &svs.clients[j];
+			byte *ppv = NULL;
+			if( partner == cl || partner->state != cs_spawned || !SV_IsValidEdict( partner->edict ) ||
+				!( ppv = SV_CoF_StoryEntityPrivate( partner->edict, COF_PL_SIZE )) || !ppv[COF_PL_BOSS_BAR] ) continue;
+			memcpy( &name, ppv + COF_PL_BOSS_NAME, sizeof( name ));
+			if( CoF_MomentBossAlive( name )) from = ppv;
+		}
+		if( !from ) continue;
+		memcpy( pv + COF_PL_BOSS_BAR, from + COF_PL_BOSS_BAR, COF_PL_BOSS_END - COF_PL_BOSS_BAR );
+		// BossBar( byte 1, string empty, string full, short health, short max ), as UpdateClientData sends it
+		payload[length++] = 1;
+		for( k = 0; k < 2; k++ )
+		{
+			const char *tga;
+			int size;
+			memcpy( &name, pv + ( k ? COF_PL_BOSS_FULL : COF_PL_BOSS_EMPTY ), sizeof( name ));
+			tga = name ? SV_GetString( name ) : "";
+			size = (int)Q_strlen( tga ) + 1;
+			if( length + size > (int)sizeof( payload ) - 4 ) break;
+			memcpy( payload + length, tga, size );
+			length += size;
+		}
+		if( k < 2 ) continue;
+		memcpy( &value, pv + COF_PL_BOSS_HEALTH, sizeof( value ));
+		payload[length++] = (byte)( value & 0xFF ); payload[length++] = (byte)(( value >> 8 ) & 0xFF );
+		memcpy( &value, pv + COF_PL_BOSS_MAX, sizeof( value ));
+		payload[length++] = (byte)( value & 0xFF ); payload[length++] = (byte)(( value >> 8 ) & 0xFF );
+		SV_CoF_SendUserMessage( cl->edict, "BossBar", payload, length, true );
+		Con_Printf( "cofstory phase=bossbar-restored userid=%d\n", cl->userid );
+	}
+}
+
 void SV_CoF_MomentsFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	CoF_MomentCheckGeneration();
+	CoF_MomentHurts();
+	CoF_MomentBossBars();
+	CoF_MomentKeepHeld();
 	CoF_MomentRootsFired();
 	CoF_MomentWheelchair();
 	CoF_MomentLadders();
 	CoF_MomentCalls();
 	CoF_MomentLogos();
 	CoF_MomentFades();
+	CoF_MomentCredits();
 }

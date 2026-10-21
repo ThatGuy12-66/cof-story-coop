@@ -756,6 +756,120 @@ qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl )
 	return player && player[COF_RETAIL_IN_CALL];
 }
 
+// 1.1.9 (M1 9): c_subway1st1's cof_phonedisable breaks the phone of the first player only (CCofPhoneDisable::Use,
+// effects.cpp:8563-8600; docs/research/2026-10-12-endings-phone-re.md "cof_phonedisable"). The same writes for
+// another player: their weapon_mobile broken, m_iPhoneDisabled (PostThink then refuses the phone light and
+// UpdateClientData sends PhoneOff) and the broken body, which the phone shows at its next Deploy or ItemPostFrame.
+#define COF_RETAIL_PHONE_BODY     0x05CC // int m_iPhoneMessage: the phone's body (its SMS screen, the broken parts)
+#define COF_RETAIL_PHONE_DISABLED 0x1F14 // int m_iPhoneDisabled
+#define COF_RETAIL_MOBILE_ID      2      // weapon_mobile's m_iId (CMobile::GetItemInfo)
+#define COF_RETAIL_MOBILE_BROKEN  0x1F9  // bool CMobile::m_bDisabled: no SMS (trigger_cofmobile), no light switch
+#define COF_RETAIL_MOBILE_NEED    0x1FC
+
+int SV_CoF_RetailPhoneBroken( sv_client_t *cl, int *body )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	int broken;
+	if( !player ) return -1;
+	memcpy( &broken, player + COF_RETAIL_PHONE_DISABLED, sizeof( broken ));
+	if( body ) memcpy( body, player + COF_RETAIL_PHONE_BODY, sizeof( *body ));
+	return broken != 0;
+}
+
+qboolean SV_CoF_RetailBreakPhone( sv_client_t *cl, int body )
+{
+	cof_retail_carried_t carried[COF_RETAIL_CARRIED];
+	byte *player = CoF_RetailStoryPlayer( cl ), *mobile;
+	int i, n, broken = 1;
+	if( !player ) return false;
+	n = CoF_RetailCarried( player, carried, COF_RETAIL_CARRIED );
+	for( i = 0; i < n; i++ )
+	{
+		if( carried[i].id != COF_RETAIL_MOBILE_ID || Q_strcmp( SV_GetString( carried[i].ent->v.classname ), "weapon_mobile" ) ||
+			!( mobile = SV_CoF_StoryEntityPrivate( carried[i].ent, COF_RETAIL_MOBILE_NEED ))) continue;
+		mobile[COF_RETAIL_MOBILE_BROKEN] = 1;
+		memcpy( player + COF_RETAIL_PHONE_DISABLED, &broken, sizeof( broken ));
+		memcpy( player + COF_RETAIL_PHONE_BODY, &body, sizeof( body ));
+		return true;
+	}
+	return false;
+}
+
+// 1.1.9 (M2 F10, K): m_iHealthCap, which PostThink enforces (1 holds health at 80, 2 at 66); cof_maxhealthchange
+// sets it on its activator alone (effects.cpp:8997-9033), the strangle and the wheelchair clear it on one player.
+#define COF_RETAIL_HEALTH_CAP 0x060C
+
+int SV_CoF_RetailHealthCap( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	int cap;
+	if( !player ) return -1;
+	memcpy( &cap, player + COF_RETAIL_HEALTH_CAP, sizeof( cap ));
+	return cap;
+}
+
+// Set as cof_maxhealthchange does: the field, then HealthCap( byte ) to that player for their health bar.
+qboolean SV_CoF_RetailSetHealthCap( sv_client_t *cl, int cap )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	byte value;
+	if( !player || cap < 0 || cap > 2 ) return false;
+	value = (byte)cap;
+	memcpy( player + COF_RETAIL_HEALTH_CAP, &cap, sizeof( cap ));
+	SV_CoF_SendUserMessage( cl->edict, "HealthCap", &value, sizeof( value ), true );
+	return true;
+}
+
+// 1.1.9 (M2 F10, K): a cof_telephone keeps one user handle, its last opener (CCofTelephone::Use); a dial
+// (telephoneright/wrong) acts on the dialer's own m_pTelephone but answers that user: a partner who opened it later
+// got the replies, a dial after the right number fired its target again, and a user gone leaves TelephoneRight a
+// handle it uses unchecked (CoF_Telephone.cpp:112-127; docs/research/2026-10-12-endings-phone-re.md "cof_telephone").
+#define COF_RETAIL_TELEPHONE      0x0368 // EHANDLE m_pTelephone: the cof_telephone this player last opened
+#define COF_RETAIL_TELEPHONE_USER 0x00DC // cof_telephone: EHANDLE m_pPlayer, the one its replies go to
+#define COF_RETAIL_TELEPHONE_NEED 0x00E4
+
+qboolean SV_CoF_RetailTelephoneTaken( sv_client_t *cl, edict_t **user )
+{
+	byte *player = CoF_RetailStoryPlayer( cl ), *phone;
+	edict_t *ent, *by;
+	if( user ) *user = NULL;
+	if( !player || !( ent = CoF_RetailHandle( player + COF_RETAIL_TELEPHONE )) || FBitSet( ent->v.flags, FL_KILLME ) ||
+		Q_strcmp( SV_GetString( ent->v.classname ), "cof_telephone" ) || !( phone = CoF_RetailPrivate( ent, COF_RETAIL_TELEPHONE_NEED )))
+		return false;
+	by = CoF_RetailHandle( phone + COF_RETAIL_TELEPHONE_USER );
+	if( user ) *user = by;
+	return by != cl->edict;
+}
+
+// 1.1.9 (K9): c_asylumb's bar puzzle. Its solving think (CPuzzleBar::BarCheck, CoF_PuzzleBars.cpp:198-219) marks the
+// cof_puzzlebarbutton solved (iuser1 1) and lets only the first player out of the puzzle; a partner who had it open
+// kept its view and panel. Let such a player out as the game's own "boilercheck 5" does (SET_VIEW to themselves,
+// m_pPuzzleBar cleared) and close the panel (Puzzlebar 0). A handle a use after the solve set (the button only says
+// it is done then, no view) is just cleared. True when a view was given back.
+#define COF_RETAIL_PUZZLE_BAR 0x0378 // EHANDLE m_pPuzzleBar, between m_hTelescope +0x370 and m_pBoat +0x380
+
+qboolean SV_CoF_RetailPuzzleRelease( sv_client_t *cl )
+{
+	static const byte off = 0; // Puzzlebar( byte on )
+	byte *player = CoF_RetailStoryPlayer( cl );
+	edict_t *button, *view;
+	int self;
+	if( !player || !( button = CoF_RetailHandle( player + COF_RETAIL_PUZZLE_BAR )) || !button->v.iuser1 ||
+		Q_strcmp( SV_GetString( button->v.classname ), "cof_puzzlebarbutton" )) return false;
+	memset( player + COF_RETAIL_PUZZLE_BAR, 0, sizeof( edict_t * ) + sizeof( int ));
+	SV_CoF_SendUserMessage( cl->edict, "Puzzlebar", &off, sizeof( off ), true );
+	view = cl->pViewEntity;
+	// the panel's camera: the entity the button's message names (CPuzzleBarButton::Use)
+	if( !SV_IsValidEdict( view ) || !button->v.message || Q_strcmp( SV_GetString( view->v.targetname ), SV_GetString( button->v.message )))
+		return false;
+	self = NUM_FOR_EDICT( cl->edict );
+	cl->pViewEntity = NULL;
+	MSG_BeginServerCmd( &cl->netchan.message, svc_setview );
+	MSG_WriteWord( &cl->netchan.message, self );
+	memcpy( player + COF_RETAIL_VIEW_ENT, &self, sizeof( self ));
+	return true;
+}
+
 qboolean SV_CoF_RetailBlur( sv_client_t *cl, int *blur, int *trip )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );
@@ -777,6 +891,15 @@ qboolean SV_CoF_RetailReviving( sv_client_t *cl )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );
 	return player && CoF_RetailHandle( player + COF_RETAIL_CPR_TARGET ) != NULL;
+}
+
+// 1.1.9: m_fStamina (P+0x21F0, 0..100: a sprint spends it), for the AI companion's sprint; 0 when unknown.
+float SV_CoF_RetailStamina( sv_client_t *cl )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	float stamina = 0.0f;
+	if( player ) memcpy( &stamina, player + 0x21F0, sizeof( stamina ));
+	return stamina >= 0.0f && stamina <= 100.0f ? stamina : 0.0f;
 }
 
 qboolean SV_CoF_RetailRevived( sv_client_t *cl )
@@ -864,13 +987,22 @@ static qboolean CoF_RetailAskedYesNo( const edict_t *player )
 // clears it, and the player could never walk again. Held down so for a moment, not frozen, not in CPR, not asked by
 // a yes/no: set the flag and its time back, and the game's own get-up runs on the next PostThink.
 #define COF_RETAIL_FALL_GRACE 1.0
+#define COF_RETAIL_FALL_LONGEST 10.0f // the longest get-up time the game sets (a death's fall, Killed)
 static double cof_retail_fall_since[MAX_CLIENTS];
+// 1.1.9 (K2 residual): the get-up time the game last set for this fall (m_fFallingTime, never the 0 EnableControl
+// writes; a tapgetup's "now" counts), so the repair keeps it: a taller's 3 s knock-down cleared 0.2 s in got up
+// after the 1 s grace.
+static float cof_retail_fall_until[MAX_CLIENTS];
 
 static void CoF_RetailFallRepair( int i, sv_client_t *cl, byte *body )
 {
-	float fuser3 = cl->edict->v.fuser3, now = (float)sv.time;
+	float fuser3 = cl->edict->v.fuser3, now = (float)sv.time, until;
+	qboolean down = fuser3 == 1.0f || fuser3 == 2.0f;
 	if( i >= MAX_CLIENTS ) return;
-	if(( fuser3 != 1.0f && fuser3 != 2.0f ) || body[COF_RETAIL_FALL_FREEZE] || cof_retail_fall_since[i] > sv.time ||
+	if( !down || cof_retail_fall_since[i] > sv.time ) cof_retail_fall_until[i] = 0.0f; // standing, or another map's
+	memcpy( &until, body + COF_RETAIL_FALL_TIME, sizeof( until ));
+	if( down && until > 0.0f ) cof_retail_fall_until[i] = until;
+	if( !down || body[COF_RETAIL_FALL_FREEZE] || cof_retail_fall_since[i] > sv.time ||
 		CoF_RetailHandle( body + COF_RETAIL_CPR_TARGET ) || CoF_RetailHandle( body + COF_RETAIL_REVIVER ))
 	{
 		cof_retail_fall_since[i] = 0.0; // standing, a fall the game ends itself, or a CPR under way
@@ -899,8 +1031,10 @@ static void CoF_RetailFallRepair( int i, sv_client_t *cl, byte *body )
 		return;
 	}
 	if( sv.time - cof_retail_fall_since[i] <= COF_RETAIL_FALL_GRACE ) return;
+	until = cof_retail_fall_until[i];
+	if( until < now || until > now + COF_RETAIL_FALL_LONGEST ) until = now;
 	body[COF_RETAIL_FALL_FREEZE] = 1;
-	memcpy( body + COF_RETAIL_FALL_TIME, &now, sizeof( now ));
+	memcpy( body + COF_RETAIL_FALL_TIME, &until, sizeof( until ));
 	cof_retail_fall_since[i] = 0.0;
 	Con_Printf( "cofstory phase=fall-unstuck userid=%d fuser3=%d\n", cl->userid, (int)fuser3 );
 }
@@ -919,7 +1053,7 @@ void SV_CoF_RetailCprRepair( void )
 			CoF_RetailFallRepair( i, cl, body );
 			continue;
 		}
-		if( i < MAX_CLIENTS ) cof_retail_fall_since[i] = 0.0;
+		if( i < MAX_CLIENTS ) { cof_retail_fall_since[i] = 0.0; cof_retail_fall_until[i] = 0.0f; }
 		if( !body || !( by = CoF_RetailHandle( body + COF_RETAIL_REVIVER ))) continue;
 		reviver = CoF_RetailPrivate( by, COF_RETAIL_PLAYER_SIZE );
 		if( reviver && CoF_RetailAlive( by ) && CoF_RetailHandle( reviver + COF_RETAIL_CPR_TARGET ) == cl->edict ) continue;

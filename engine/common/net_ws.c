@@ -121,6 +121,8 @@ static CVAR_DEFINE( net_fakelag, "fakelag", "0", FCVAR_PRIVILEGED, "lag all inco
 static CVAR_DEFINE( net_fakeloss, "fakeloss", "0", FCVAR_PRIVILEGED, "act like we dropped the packet this % of the time." );
 static CVAR_DEFINE_AUTO( net_resolve_debug, "0", FCVAR_PRIVILEGED, "print resolve thread debug messages" );
 CVAR_DEFINE( net_clockwindow, "clockwindow", "0.5", FCVAR_PRIVILEGED, "timewindow to execute client moves" );
+// CoF story co-op 1.1.9 (N1): read by the server for a client signing on (sv_cof_signon.h, COF_SIGNON_WINDOW_DEFAULT)
+CVAR_DEFINE_AUTO( cof_signon_window, "10", FCVAR_ARCHIVE, "Cry of Fear story co-op: split pieces a joining player gets per round trip while signing on (faster level changes); 1: one at a time, as the engine does (for a VPN or a link that drops bursts)" );
 
 netadr_t			net_local;
 static netadr_t		net6_local;
@@ -2011,6 +2013,7 @@ void NET_Init( void )
 	Cvar_RegisterVariable( &net_fakeloss );
 	Cvar_RegisterVariable( &net_resolve_debug );
 	Cvar_RegisterVariable( &net_clockwindow );
+	Cvar_RegisterVariable( &cof_signon_window );
 
 	Q_snprintf( cmd, sizeof( cmd ), "%i", PORT_SERVER );
 	Cvar_FullSet( "hostport", cmd, FCVAR_READ_ONLY );

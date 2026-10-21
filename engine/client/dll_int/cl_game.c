@@ -40,6 +40,8 @@ GNU General Public License for more details.
 #include "platform/platform.h"
 #include "cof_language.h"
 #include "cof_strip.h"
+#include "cof_merged.h"
+#include "cof_levelname.h"
 
 #define MAX_LINELENGTH	80
 #define TEXT_MSGNAME	"TextMessage"
@@ -3314,8 +3316,46 @@ static const char *pfnGetGameDirectory( void )
 =============
 pfnGetLevelName
 
+CoF story co-op 1.1.9 (R2): while client.dll draws a studio model in a merged map, the original map of the local
+player's section, so its prop distance is that level's; every other caller keeps the merged file's name (the
+callers and why: cof_levelname.h).
 =============
 */
+static cof_sections_t cl_cof_sections;   // the loaded merged map's rules (large: one)
+static qboolean cl_cof_sections_ok;
+static int cl_cof_sections_count = -1;   // the servercount they were read for
+static char cl_cof_sections_map[MAX_QPATH];
+static r_studio_interface_t *cl_cof_studio;   // client.dll's own studio drawing (CL_InitStudioAPI)
+static int cl_cof_studio_depth;               // calls into it under way, in frame cl_cof_studio_frame
+static uint cl_cof_studio_frame;
+
+static const cof_sections_t *CL_CoF_LevelSections( void )
+{
+	if( cl_cof_sections_count != cl.servercount || Q_strcmp( cl_cof_sections_map, clgame.mapname ))
+	{
+		cl_cof_sections_count = cl.servercount;
+		Q_strncpy( cl_cof_sections_map, clgame.mapname, sizeof( cl_cof_sections_map ));
+		cl_cof_sections_ok = COM_CoF_LoadSections( clgame.mapname, &cl_cof_sections );
+	}
+	return cl_cof_sections_ok ? &cl_cof_sections : NULL;
+}
+
+static int CL_CoF_StudioDrawModel( int flags )
+{
+	int result;
+
+	// a frame cut short by an error (Host_AbortCurrentFrame) never came back here: start again from this frame
+	if( cl_cof_studio_depth <= 0 || cl_cof_studio_frame != host.framecount )
+	{
+		cl_cof_studio_depth = 0;
+		cl_cof_studio_frame = host.framecount;
+	}
+	cl_cof_studio_depth++;
+	result = cl_cof_studio->StudioDrawModel( flags );
+	cl_cof_studio_depth--;
+	return result;
+}
+
 static const char *pfnGetLevelName( void )
 {
 	static char	mapname[64];
@@ -3324,7 +3364,16 @@ static const char *pfnGetLevelName( void )
 	// in GoldSrc this is handled by cl.levelname field but we don't have it
 	// so emulate this behavior here
 	if( cls.state >= ca_connected && !COM_StringEmpty( clgame.mapname ))
-		Q_snprintf( mapname, sizeof( mapname ), "maps/%s.bsp", clgame.mapname );
+	{
+		const cof_sections_t *sections = CL_CoF_LevelSections();
+		const cl_entity_t *player = NULL;
+		qboolean drawing = cl_cof_studio_depth > 0 && cl_cof_studio_frame == host.framecount;
+
+		if( drawing && sections )
+			player = CL_GetLocalPlayer();
+		Q_snprintf( mapname, sizeof( mapname ), "maps/%s.bsp", CoF_LevelName( clgame.mapname, sections,
+			drawing && player != NULL, player ? player->origin[2] : 0.0 ));
+	}
 	else mapname[0] = '\0'; // not in game
 
 	return mapname;
@@ -4658,6 +4707,18 @@ static void CL_InitStudioAPI( void )
 
 	if( clgame.dllFuncs.pfnGetStudioModelInterface )
 		clgame.dllFuncs.pfnGetStudioModelInterface( STUDIO_INTERFACE_VERSION, &pStudioDraw, &gStudioAPI );
+
+	// CoF story co-op 1.1.9 (R2): client.dll's StudioDrawModel runs through CL_CoF_StudioDrawModel, so the level name
+	// it asks for while drawing can be the section's (pfnGetLevelName); its StudioDrawPlayer is called as it was
+	if( pStudioDraw && pStudioDraw != &gDefaultStudioDraw && pStudioDraw->StudioDrawModel )
+	{
+		static r_studio_interface_t cof_wrapped;
+
+		cl_cof_studio = pStudioDraw;
+		cof_wrapped = *pStudioDraw;
+		cof_wrapped.StudioDrawModel = CL_CoF_StudioDrawModel;
+		pStudioDraw = &cof_wrapped;
+	}
 
 	ref.dllFuncs.R_StudioSetDrawInterface( pStudioDraw );
 }

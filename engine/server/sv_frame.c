@@ -17,8 +17,18 @@ GNU General Public License for more details.
 #include "server.h"
 #include "const.h"
 #include "net_encode.h"
+#include "sv_cof_cmdclock.h"
 #include "sv_cof_story.h"
 #include "cof_abi.h"
+
+// Cry of Fear story co-op, 1.1.9 (sv_cof_weaponmodel.c, sv_cof_camera_models.c): a rower is not sent to the others
+// (P5); a climber is drawn on the ladder for the others, who are not sent the climber's first-person hands model; the
+// gas mask follows a wearer's head.
+qboolean SV_CoF_WeaponModelHidden( const edict_t *viewer, int e );
+qboolean SV_CoF_WeaponModelClimbing( const edict_t *viewer, int e );
+void SV_CoF_WeaponModelClimb( entity_state_t *state, const edict_t *viewer );
+int SV_CoF_WeaponModelMask( const sv_client_t *viewer, int e, entity_state_t *out );
+qboolean SV_CoF_CameraModelHiddenFor( const edict_t *viewer, const edict_t *ent );
 
 typedef struct
 {
@@ -112,11 +122,22 @@ static void SV_AddEntitiesToPacket( edict_t *pViewEnt, edict_t *pClient, client_
 
 			if( FBitSet( cl->flags, FCL_HLTV_PROXY ))
 				continue;
+
+			// story co-op (P5): a rower's body is the boat's to show, not the others'
+			if( SV_CoF_WeaponModelHidden( pClient, e ))
+				continue;
 		}
 
 		if( FBitSet( ent->v.effects, EF_REQUEST_PHS ))
 			pset = clientphs;
 		else pset = clientpvs;
+
+		// story co-op (ladders): a climber is drawn on the ladder, not where the body stands; the climber's hands model
+		// is the climber's own view only
+		if( player && SV_CoF_WeaponModelClimbing( pClient, e ))
+			pset = NULL;
+		else if( !player && SV_CoF_CameraModelHiddenFor( pClient, ent ))
+			continue;
 
 		state = &ents->entities[ents->num_entities];
 
@@ -137,6 +158,9 @@ static void SV_AddEntitiesToPacket( edict_t *pViewEnt, edict_t *pClient, client_
 					cl->num_viewents++;
 				}
 			}
+
+			// Cry of Fear story co-op (1.1.9): a person is drawn at the time their own commands reached (sv_cof_cmdclock.h)
+			if( player ) state->animtime = SV_CoF_CmdClockStamp( e, state->animtime );
 
 			// if we are full, silently discard entities
 			if( ents->num_entities < ( MAX_VISIBLE_PACKET - 1 ))
@@ -612,8 +636,17 @@ SV_WriteEntitiesToClient
 ==================
 */
 // Story co-op: the other hand of each dual-wielding player this client sees (sv_cof_weaponmodel.c).
+// 1.1.9: the gas mask of each wearer it sees, and each climber it sees drawn on the ladder.
 static void SV_CoF_WeaponModelFollowers( sv_client_t *cl, sv_ents_t *ents )
 {
+	int count = ents->num_entities;
+
+	for( int i = 0; i < count; i++ )
+	{
+		if( ents->entities[i].number >= 1 && ents->entities[i].number <= svs.maxclients )
+			SV_CoF_WeaponModelClimb( &ents->entities[i], cl->edict );
+	}
+
 	for( int e = 1; e <= svs.maxclients; e++ )
 	{
 		if( !CHECKVISBIT( ents->sended, e ) || ents->num_entities >= ( MAX_VISIBLE_PACKET - 1 ))
@@ -621,6 +654,8 @@ static void SV_CoF_WeaponModelFollowers( sv_client_t *cl, sv_ents_t *ents )
 		if( SV_CoF_WeaponModelFollower( cl, e, &ents->entities[ents->num_entities] ))
 			ents->num_entities++;
 		if( ents->num_entities < ( MAX_VISIBLE_PACKET - 1 ) && SV_CoF_WeaponModelLight( cl, e, &ents->entities[ents->num_entities] ))
+			ents->num_entities++;
+		if( ents->num_entities < ( MAX_VISIBLE_PACKET - 1 ) && SV_CoF_WeaponModelMask( cl, e, &ents->entities[ents->num_entities] ))
 			ents->num_entities++;
 	}
 }

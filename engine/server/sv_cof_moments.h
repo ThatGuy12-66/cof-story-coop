@@ -6,6 +6,8 @@ void SV_CoF_MomentsFrame( void );
 void SV_CoF_MomentsReset( void );
 // SV_RunCmd, before the game sees the command: may take +use away.
 void SV_CoF_MomentsCommand( sv_client_t *cl, usercmd_t *cmd );
+// SV_ParseClientMove, before a frozen player's buttons are dropped: a ladder climber's forward and back (1.1.9).
+void SV_CoF_MomentsLadderInput( sv_client_t *cl, int buttons );
 // SV_TouchLinks: true when the story layer handled this trigger touch itself.
 qboolean SV_CoF_MomentsTriggerTouch( edict_t *trigger, edict_t *ent );
 // SV_LinkEdict: a living player non-solid only because it stands stacked on a
@@ -17,6 +19,9 @@ void SV_CoF_MomentsDrop( sv_client_t *cl );
 qboolean SV_CoF_MomentsClientCommand( sv_client_t *cl );
 // A user message the game sent (variable-size ones, as SV_CoF_StateMessage).
 void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, int size );
+// pfnMessageEnd, before a user message goes: true when it is held back from this receiver (1.1.9, S5: a scene effect
+// of another section of a merged map). sender: the player whose client command or move runs, or NULL.
+qboolean SV_CoF_MomentsHeldBack( edict_t *to, int dest, const char *name, const byte *payload, int size, edict_t *sender );
 // Before a level change is captured: every boat rider is let go as Disembark does, without the move (1.1.8).
 void SV_CoF_MomentsReleaseRiders( void );
 #endif

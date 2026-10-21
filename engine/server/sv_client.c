@@ -3518,6 +3518,11 @@ static void SV_ParseClientMove( sv_client_t *cl, sizebuf_t *msg )
 	if( GameState->loadGame )
 		return;
 
+	// Cry of Fear story co-op (1.1.9): a ladder climber is frozen; their held forward or back climbs on
+	// (sv_cof_moments.c), read from the newest command before the buttons are dropped below
+	if( numcmds > 0 )
+		SV_CoF_MomentsLadderInput( cl, cmds[0].buttons );
+
 	// check for pause or frozen
 	// Cry of Fear death page (cof_ui_death_keep_running): the world keeps
 	// running behind GAME OVER but the player does not - CL_IsInGame() is

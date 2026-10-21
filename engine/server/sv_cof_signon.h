@@ -19,7 +19,11 @@ nothing changes: the engine's half of cl_dlmax, or cl_frmax.
 The client side needs room for a burst of pieces until its next frame reads them: the engine asks for a 256 KB
 receive queue (net_ws.c; Windows 7 gave a UDP socket 8 KB, Windows 11 gives 64 KB).
 
-Plain C: the offline tests share it.
+1.1.9 (N1): the window is the host's cvar cof_signon_window (net_ws.c, kept in config.cfg), 10 by default. A link
+that drops bursts or splits them again (a VPN with a small MTU) gets the engine's own one piece per round trip with
+cof_signon_window 1, no rebuild needed. Only the host's fragment sizes change: every 1.1.x guest takes any of them.
+
+Plain C: the offline tests share it (they see the default window).
 */
 #ifndef SV_COF_SIGNON_H
 #define SV_COF_SIGNON_H
@@ -30,10 +34,29 @@ Plain C: the offline tests share it.
 #define COF_SIGNON_FN static inline
 #endif
 
-#define COF_SIGNON_WINDOW 10        // split pieces per sign-on fragment: TCP's initial window (RFC 6928)
+#define COF_SIGNON_WINDOW_DEFAULT 10 // split pieces per sign-on fragment: TCP's initial window (RFC 6928)
+#define COF_SIGNON_WINDOW_MAX 64    // more than a fragment holds at any split size (it is capped at max_fragment)
 #define COF_SIGNON_SPLIT_HEADER 10  // SPLITPACKET: int net_id, int sequence_number, short packet_id
 #define COF_SIGNON_MIN_SPLIT 1000   // a smaller split size is a client asking for small packets: keep the engine's
 #define COF_SIGNON_SLACK 64         // netchan header (HEADER_BYTES 34), cookie, a reliable bit or two
+
+// The window a cvar value asks for: whole pieces from 1 (the engine's own fragments) to COF_SIGNON_WINDOW_MAX.
+COF_SIGNON_FN int CoF_SignonWindow( float value )
+{
+	if( !( value >= 1.0f )) // below one, or not a number
+		return 1;
+	if( value >= (float)COF_SIGNON_WINDOW_MAX )
+		return COF_SIGNON_WINDOW_MAX;
+	return (int)value;
+}
+
+#if defined( SERVER_H )
+// in the engine (sv_client.c includes server.h first): the host's cvar, registered in NET_Init
+extern convar_t cof_signon_window;
+#define COF_SIGNON_WINDOW CoF_SignonWindow( cof_signon_window.value )
+#else
+#define COF_SIGNON_WINDOW COF_SIGNON_WINDOW_DEFAULT
+#endif
 
 // The size of a reliable fragment for a client, or 0: the engine's own.
 // split: the client's split size (cl_dlmax), 0 without NET_EXT_SPLITSIZE. spawned: in game.

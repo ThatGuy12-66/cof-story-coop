@@ -19,6 +19,11 @@ static int cof_exit_models[COF_EXIT_MODELS], cof_exit_model_count;
 static char cof_exit_unholdable[COF_EXIT_NAME]; // already reported in this map
 static int cof_exit_unholdable_generation = -1;
 static int cof_exit_gone_generation = -1; // the hold was released in this map: the trigger still being touched must not start another
+// 1.1.9 (X2, E1 F8): story frames the released hold's mark has lived through, and what it was for.
+static int cof_exit_gone_frames;
+static char cof_exit_gone_level[COF_EXIT_NAME], cof_exit_gone_landmark[COF_EXIT_NAME];
+// 1.1.9 (X1): cof_exit.where holds a spot the waiter stood on (the hold began with a waiter, or they touched the exit).
+static qboolean cof_exit_where_known;
 // A second exit turned away while another hold came first: already read and
 // found holdable, so its trigger asking every frame does not read the map again.
 static char cof_exit_turned_level[COF_EXIT_NAME], cof_exit_turned_landmark[COF_EXIT_NAME];
@@ -32,6 +37,7 @@ void SV_CoF_ExitReset( void )
 	cof_exit_unholdable_generation = -1;
 	cof_exit_gone_generation = -1;
 	cof_exit_turned_generation = -1;
+	cof_exit_where_known = false;
 }
 
 // Everyone who counts, by client slot, against the exit last asked for.
@@ -153,22 +159,65 @@ qboolean SV_CoF_ExitRequest( const char *level, const char *landmark )
 		return true;
 	}
 	if( scripted ) cof_exit.walkin = 0;
+	{
+		// the state wrote cof_exit.where for this waiter (sv_cof_exit_state.h, CoF_ExitRequest)
+		const cof_exit_player_t *w = CoF_ExitFind( players, n, cof_exit.waiter );
+		if( w && ( began || w->touching )) cof_exit_where_known = true;
+		else if( began ) cof_exit_where_known = false;
+	}
 	if( began )
 		Con_Printf( "cofstory phase=exit-hold destination=%s landmark=%s waiter=%d walkin=%d missing=%d\n", map, landmark,
 			cof_exit.waiter, cof_exit.walkin, CoF_ExitMissing( players, n, cof_exit.waiter ));
 	return false;
 }
 
+static sv_client_t *CoF_ExitClient( int userid )
+{
+	int i;
+	for( i = 0; userid && i < svs.maxclients; i++ )
+		if( svs.clients[i].state == cs_spawned && svs.clients[i].userid == userid && SV_IsValidEdict( svs.clients[i].edict ))
+			return &svs.clients[i];
+	return NULL;
+}
+
+// 1.1.9 (X1, E1 F2): a hold nothing can cancel (a scripted exit such as c_apartment3's and c_apartmentsick's, fired
+// by a trigger_once, or a walk-in exit whose once-only trigger is gone) let the party go from wherever its waiter
+// stood by then; the transition carries everyone by their offset from the landmark, into a wall or an unrelated room
+// of the next map. The waiter goes back to where the exit took them first (the landmark when that spot is taken);
+// the arrival places the others beside them (SV_CoF_PartyTransitionArrive).
+static void CoF_ExitReturnWaiter( void )
+{
+	sv_client_t *cl;
+	vec3_t where, spot, d;
+	if( cof_exit.walkin || !cof_exit_where_known || !( cl = CoF_ExitClient( cof_exit.waiter )) ||
+		!( cl->edict->v.health > 0 ) || cl->edict->v.deadflag != DEAD_NO ||
+		SV_CoF_PartyInExit( cl->edict, cof_exit_models, cof_exit_model_count )) return;
+	VectorCopy( cof_exit.where, where );
+	VectorCopy( cof_exit.spot, spot );
+	VectorSubtract( cl->edict->v.origin, where, d );
+	if( DotProduct( d, d ) <= COF_EXIT_NEAR * COF_EXIT_NEAR ) return;
+	if( SV_CoF_PartySectionMove( cl, where, NULL, spot ))
+		Con_Printf( "cofstory phase=exit-waiter-returned userid=%d origin=%.3f,%.3f,%.3f\n", cl->userid,
+			cl->edict->v.origin[0], cl->edict->v.origin[1], cl->edict->v.origin[2] );
+	else Con_Printf( "cofstory phase=exit-waiter-kept userid=%d reason=no-room\n", cl->userid );
+}
+
 // Replay the held request. The transition's own capture and arrival regroup
 // (sv_cof_party.c) place a partner who is not beside the leader.
-static void CoF_ExitGo( const char *phase )
+// seen: 1 when called from this frame's SV_CoF_ExitFrame (the change runs before the next one), 0 from a command.
+static void CoF_ExitGo( const char *phase, int seen )
 {
 	char level[COF_EXIT_NAME], landmark[COF_EXIT_NAME];
 	Q_strncpy( level, cof_exit.level, sizeof( level ));
 	Q_strncpy( landmark, cof_exit.landmark, sizeof( landmark ));
 	Con_Printf( "cofstory phase=%s destination=%s landmark=%s waiter=%d waited=%.1f\n", phase, level, landmark, cof_exit.waiter, sv.time - cof_exit.began );
+	CoF_ExitReturnWaiter();
 	CoF_ExitClear( &cof_exit );
+	cof_exit_where_known = false;
 	cof_exit_gone_generation = svs.spawncount;
+	cof_exit_gone_frames = seen;
+	Q_strncpy( cof_exit_gone_level, level, sizeof( cof_exit_gone_level ));
+	Q_strncpy( cof_exit_gone_landmark, landmark, sizeof( cof_exit_gone_landmark ));
 	SV_QueueChangeLevel( level, landmark );
 }
 
@@ -202,13 +251,22 @@ void SV_CoF_ExitFrame( void )
 {
 	cof_exit_player_t players[COF_EXIT_PLAYERS];
 	int n, waiter = cof_exit.waiter;
+	// 1.1.9 (X2, E1 F8): the change a released hold queues runs before the next frame (COM_ChangeLevel), so the mark
+	// that lets the trigger still being touched through unheld is only needed until then. Still in this map a frame
+	// later, the change was refused (the 15-frame guard, landmark validation, a failed save): the mark used to stay,
+	// and every later exit of the map was taken without waiting for the party.
+	if( cof_exit_gone_generation == svs.spawncount && cof_exit_gone_frames++ > 0 )
+	{
+		Con_Printf( "cofstory phase=exit-change-refused destination=%s landmark=%s\n", cof_exit_gone_level, cof_exit_gone_landmark );
+		cof_exit_gone_generation = -1;
+	}
 	if( !cof_exit.active ) return;
 	n = CoF_ExitPlayers( players );
 	switch( CoF_ExitFrame( &cof_exit, players, n, svs.spawncount, sv.time,
 		!cof_exit_scripted && SV_CoF_PartyExitRefires( cof_exit_models, cof_exit_model_count )))
 	{
 	case COF_EXIT_READY:
-		CoF_ExitGo( "exit-ready" );
+		CoF_ExitGo( "exit-ready", 1 );
 		break;
 	case COF_EXIT_CANCELLED:
 		Con_Printf( "cofstory phase=exit-cancelled waiter=%d\n", waiter );
@@ -228,7 +286,7 @@ qboolean SV_CoF_ExitWarpKey( sv_client_t *cl )
 	if( !answer ) return false;
 	if( answer > 0 )
 	{
-		CoF_ExitGo( "exit-forced" ); // the escape hatch: leave without the partner
+		CoF_ExitGo( "exit-forced", 0 ); // the escape hatch: leave without the partner
 		return true;
 	}
 	Q_snprintf( text, sizeof( text ), "You can leave without your partner in %d second%s.", left, left == 1 ? "" : "s" );

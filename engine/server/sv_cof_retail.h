@@ -80,6 +80,17 @@ qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl );
 int SV_CoF_RetailNightVision( sv_client_t *cl );
 // On a phone call, which refuses every weapon switch.
 qboolean SV_CoF_RetailInPhoneCall( sv_client_t *cl );
+// 1.1.9: the phone broken (m_iPhoneDisabled: 1 broken, 0 whole, -1 without a verified player) and its body; break a
+// player's phone as cof_phonedisable does (false when they carry none).
+int SV_CoF_RetailPhoneBroken( sv_client_t *cl, int *body );
+qboolean SV_CoF_RetailBreakPhone( sv_client_t *cl, int body );
+// 1.1.9: the health cap (m_iHealthCap 0-2, -1 without a verified player); set it as cof_maxhealthchange does.
+int SV_CoF_RetailHealthCap( sv_client_t *cl );
+qboolean SV_CoF_RetailSetHealthCap( sv_client_t *cl, int cap );
+// 1.1.9: the cof_telephone this player opened answers someone else now (user: that one, or NULL when nobody).
+qboolean SV_CoF_RetailTelephoneTaken( sv_client_t *cl, edict_t **user );
+// 1.1.9: a player still in c_asylumb's bar puzzle after it was solved is let out; true when a view was given back.
+qboolean SV_CoF_RetailPuzzleRelease( sv_client_t *cl );
 // The story's screen blur (m_iBlurActive) and whether a morphine trip holds it; setting it, the game sends "Blur"
 // itself (UpdateClientData). False without a verified player.
 qboolean SV_CoF_RetailBlur( sv_client_t *cl, int *blur, int *trip );
@@ -89,6 +100,7 @@ qboolean SV_CoF_RetailSetBlur( sv_client_t *cl, int blur );
 qboolean SV_CoF_RetailHudInitialized( edict_t *ent );
 // CPR: doing it on someone; having it done; a body it can start on now.
 qboolean SV_CoF_RetailReviving( sv_client_t *cl );
+float SV_CoF_RetailStamina( sv_client_t *cl );
 qboolean SV_CoF_RetailRevived( sv_client_t *cl );
 qboolean SV_CoF_RetailRevivable( sv_client_t *cl );
 // Start the game's CPR (the player's own Use) on a body; true once it runs.

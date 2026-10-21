@@ -1382,6 +1382,8 @@ void CL_CoF_RendererLimitsLoad( void *module ); // cof_renderer_limits.c
 void CL_CoF_RendererLimitsUnload( void );
 void CL_CoF_StripOwn( void ); // cl_game.c: one of the engine's own lines goes on the message strip
 void CL_CoF_StripMessage( const char *name, int size, const void *payload );
+void CL_CoF_AttachCamMessage( const char *name, int size, const byte *data ); // cl_frame.c: the entity the view rides
+void CL_CoF_AttachCamForget( void );
 void CL_CoF_CoopHudInit( void ); // cof_coop_hud.c
 void CL_CoF_CoopHudLoad( void *module );
 void CL_CoF_CoopHudUnload( void );

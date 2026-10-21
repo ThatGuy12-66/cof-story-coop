@@ -12,6 +12,7 @@ docs/research/2026-10-18-cof-decompilation-survey.md sections 4 and 7 (the launc
 - `unfreeze 1024`: client.dll sends it at every viewport reset (map load, HUD_VidInit; CTelephone::Initialize), which
   let a player walk out of a scene a trigger_camera holds them in. While a camera holds the view it is not needed:
   the camera's end gives every living player control back (CTriggerCamera, triggers.cpp:5565-5583, 5890-5905).
+- 1.1.9: c_asylumb's puzzle bars once the puzzle is solved, and a telephone dial that would answer another player.
 Chat and names need nothing here: the network layer turns every '%' a client sends into '.' (net_buffer.c).
 
 Plain C (standard library only): the offline tests share it.
@@ -19,6 +20,7 @@ Plain C (standard library only): the offline tests share it.
 #ifndef SV_COF_GUARD_H
 #define SV_COF_GUARD_H
 
+#include <stdlib.h>
 #include <string.h>
 
 #if defined( _MSC_VER )
@@ -43,6 +45,35 @@ COF_GUARD_FN const char *CoF_GuardSceneRefusal( const char *cmd, const char *arg
 	if( !held || !cmd || !arg ) return NULL;
 	if( !strcmp( cmd, "unfreeze" ) && !strcmp( arg, "1024" )) return "scene-holds";
 	return NULL;
+}
+
+// 1.1.9 (K9): c_asylumb's bar puzzle. Its bars' think fires restore_power whenever all five are closed and has no
+// solved test (CPuzzleBar::BarCheck, CoF_PuzzleBars.cpp); its cof_puzzlebarbutton keeps iuser1 1 once solved. A
+// partner still in the puzzle, or the console's puzzlebara/b/c, closed bars again and toggled the boiler room's
+// lights, sound and steam back off. Once solved (solved), the bar commands are refused for the rest of the map;
+// "boilercheck 5" (leave the puzzle, client.cpp:1905-1923) stays.
+COF_GUARD_FN int CoF_GuardPuzzleCommand( const char *cmd )
+{
+	return cmd && ( !strcmp( cmd, "boilercheck" ) || !strcmp( cmd, "puzzlebara" ) || !strcmp( cmd, "puzzlebarb" ) || !strcmp( cmd, "puzzlebarc" ));
+}
+
+COF_GUARD_FN const char *CoF_GuardPuzzleRefusal( const char *cmd, const char *arg, int solved )
+{
+	if( !solved || !CoF_GuardPuzzleCommand( cmd )) return NULL;
+	if( !strcmp( cmd, "boilercheck" ) && arg && atoi( arg ) == 5 ) return NULL;
+	return "puzzle-solved";
+}
+
+// 1.1.9 (M2 F10, K): a cof_telephone answers its last opener only (CCofTelephone::Use keeps one user); a dial from
+// a player whose telephone someone else opened since (taken) is refused: they pick it up again to dial.
+COF_GUARD_FN int CoF_GuardTelephoneCommand( const char *cmd )
+{
+	return cmd && ( !strcmp( cmd, "telephoneright" ) || !strcmp( cmd, "telephonewrong" ));
+}
+
+COF_GUARD_FN const char *CoF_GuardTelephoneRefusal( const char *cmd, int taken )
+{
+	return taken && CoF_GuardTelephoneCommand( cmd ) ? "telephone-taken" : NULL;
 }
 
 #endif // SV_COF_GUARD_H

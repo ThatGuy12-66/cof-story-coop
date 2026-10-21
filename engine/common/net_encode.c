@@ -884,12 +884,49 @@ static void Delta_InitFields( void )
 	Mem_Free( afile );
 }
 
+/*
+====================
+Delta_CoF_PlayerAnimtime
+
+Cry of Fear story co-op (1.1.9, movement): remote players are drawn by the times
+their positions belong to, a player's animtime (cl_frame.c; the server's command
+clock, sv_cof_cmdclock.h). The game's delta.lst sends it in hundredths of a
+second (DT_TIMEWINDOW_8): positions 16.7 ms apart came 10 or 20 ms apart, and
+a partner sped up and slowed down. Milliseconds instead, 16 bits (32 s either
+way of the server's time). Clients decode it as the server describes it
+(svc_deltatable), older ones too.
+====================
+*/
+static void Delta_CoF_PlayerAnimtime( void )
+{
+	delta_info_t *dt = Delta_FindStruct( "entity_state_player_t" );
+
+	if( !dt || !dt->pFields )
+		return;
+
+	for( int i = 0; i < dt->numFields; i++ )
+	{
+		delta_t *pField = &dt->pFields[i];
+
+		if( !pField->name || Q_strcmp( pField->name, "animtime" ) || !FBitSet( pField->flags, DT_TIMEWINDOW_8 ))
+			continue;
+
+		ClearBits( pField->flags, DT_TIMEWINDOW_8 );
+		SetBits( pField->flags, DT_TIMEWINDOW_BIG );
+		pField->bits = 16;
+		pField->multiplier = 1000.0f;
+		pField->post_multiplier = 1.0f;
+		return;
+	}
+}
+
 void Delta_Init( void )
 {
 	// shutdown it first
 	if( delta_init ) Delta_Shutdown ();
 
 	Delta_InitFields ();	// initialize fields
+	Delta_CoF_PlayerAnimtime ();
 	delta_init = true;
 
 	delta_info_t *dt = Delta_FindStructByIndex( DT_MOVEVARS_T );

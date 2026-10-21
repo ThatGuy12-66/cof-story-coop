@@ -824,6 +824,9 @@ static void CoF_CompanionPerceive( sv_client_t *cl, sv_client_t *leader, cof_com
 	in->revived = !in->alive && SV_CoF_RetailRevived( cl );
 	in->cpr = in->alive && SV_CoF_RetailReviving( cl );
 	in->struggle = in->alive && ent->v.fuser3 == 10.0f; // the suicide struggle's animation state
+	// 1.1.9: the game's stamina and sprint flag (pev->flags bit 18, StaminaThink), for the brain's sprint
+	in->stamina = in->alive ? SV_CoF_RetailStamina( cl ) : 0.0f;
+	in->sprinting = ( ent->v.flags & ( 1 << 18 )) != 0;
 	if( SV_CoF_RetailArms( cl, arms ))
 	{
 		in->weapon = CoF_CompanionWeapon( arms->weapon );

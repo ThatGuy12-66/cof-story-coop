@@ -358,6 +358,7 @@ static qboolean CL_FindInterpolationUpdates( cl_entity_t *ent, double targettime
 	uint		imod = ent->current_position;
 	uint		i0 = (imod - 0) & HISTORY_MASK;	// curpos (lerp end)
 	uint		i1 = (imod - 1) & HISTORY_MASK;	// oldpos (lerp start)
+	uint		oldest = HISTORY_MAX;		// the oldest sample looked at (none yet)
 
 	for( uint i = 1; i < HISTORY_MAX - 1; i++ )
 	{
@@ -374,7 +375,16 @@ static qboolean CL_FindInterpolationUpdates( cl_entity_t *ent, double targettime
 			extrapolate = false;
 			break;
 		}
+
+		oldest = ( imod - i ) & HISTORY_MASK;
 	}
+
+	// Cry of Fear story co-op (1.1.9, movement): the time drawn is older than every sample (a partner just came into
+	// view or was moved, and the history was reset): hold the oldest. Drawn at the newest but one meanwhile, a partner
+	// jumped back about ex_interp once the time reached the samples. Non-players are as before: CL_InterpolateModel
+	// returns 0 while the time is older than ph1, whichever sample that is.
+	if( extrapolate && oldest != HISTORY_MAX )
+		i0 = i1 = oldest;
 
 	*ph0 = &ent->ph[i0];
 	*ph1 = &ent->ph[i1];
@@ -1089,6 +1099,111 @@ static void CL_LinkPlayers( frame_t *frame )
 }
 
 /*
+==================
+CL_CoF_AttachCamFrame
+
+Cry of Fear story co-op (1.1.9, ladders): the model a client's view rides
+(client.dll's AttachCam: a ladder's hands, a strangle, a model cutscene).
+client.dll draws it without interpolation (StudioDrawModel), at the frame sent,
+and the server moves that frame only with the rider's usercmds: on a guest the
+view stepped at packet rate, unevenly. Between packets the frame now moves on
+from the packet's (its frame at its animtime) at the sequence's rate, as
+StudioEstimateFrame does for other models. A new sequence, or the same one
+started again, starts at its packet's frame; within one it never goes back.
+The host (a local client) and demos are left as they are.
+==================
+*/
+#define CL_COF_ATTACHCAM_AHEAD 0.1 // seconds at most from the packet's frame (a late packet: hold there)
+
+typedef struct
+{
+	int	sequence;	// the sequence shown, -1: none yet
+	float	packet;		// its frame in the last packet
+	float	shown;		// the frame shown
+} cl_cof_attachcam_t;
+
+static int cl_cof_attachcam;	// the entity client.dll attached the view to (AttachCam), 0: none
+static cl_cof_attachcam_t cl_cof_attachcam_last = { -1, 0.0f, 0.0f };
+
+// frame: the packet's (0..255), dt seconds after its animtime; fps: the sequence's frames a second (its fps * framerate)
+static float CL_CoF_AttachCamEstimate( cl_cof_attachcam_t *last, int sequence, float frame, double dt, float fps, int numframes, qboolean looping )
+{
+	qboolean	same = sequence == last->sequence && ( looping || frame >= last->packet );
+	float	shown = frame;
+
+	if( !same && dt < 0.0 )
+		dt = 0.0; // a sequence starts at its packet's frame
+	dt = bound( -CL_COF_ATTACHCAM_AHEAD, dt, CL_COF_ATTACHCAM_AHEAD );
+
+	if( numframes > 1 && fps > 0.0f )
+	{
+		shown = (float)( frame + dt * fps * 256.0 / ( numframes - 1 ));
+		if( looping )
+		{
+			// round the loop, as StudioEstimateFrame
+			shown -= 256.0f * (float)(int)( shown / 256.0f );
+			if( shown < 0.0f )
+				shown += 256.0f;
+		}
+		else shown = bound( 0.0f, shown, 255.0f );
+	}
+
+	if( same )
+	{
+		float	ahead = shown - last->shown;
+
+		if( looping && ahead < -128.0f )
+			ahead += 256.0f; // round the loop
+		else if( looping && ahead > 128.0f )
+			ahead -= 256.0f;
+		if( ahead < 0.0f )
+			shown = last->shown;
+	}
+
+	last->sequence = sequence;
+	last->packet = frame;
+	last->shown = shown;
+	return shown;
+}
+
+void CL_CoF_AttachCamMessage( const char *name, int size, const byte *data )
+{
+	if( Q_strcmp( name, "AttachCam" ) || size < 2 )
+		return;
+
+	// WRITE_SHORT( entity ): client.dll lets go at 0 or less (MsgFunc_AttachCam)
+	cl_cof_attachcam = (short)( data[0] | ( data[1] << 8 ));
+	if( cl_cof_attachcam < 0 )
+		cl_cof_attachcam = 0;
+	cl_cof_attachcam_last.sequence = -1;
+}
+
+void CL_CoF_AttachCamForget( void )
+{
+	cl_cof_attachcam = 0;
+	cl_cof_attachcam_last.sequence = -1;
+}
+
+static void CL_CoF_AttachCamFrame( cl_entity_t *ent, const entity_state_t *state )
+{
+	studiohdr_t	*hdr;
+	mstudioseqdesc_t	*seq;
+
+	if( !cl_cof_attachcam || state->number != cl_cof_attachcam || cls.demoplayback || NET_IsLocalAddress( cls.netchan.remote_address ))
+		return;
+
+	if( ent->model->type != mod_studio || ( hdr = (studiohdr_t *)Mod_StudioExtradata( ent->model )) == NULL )
+		return;
+
+	if( state->sequence < 0 || state->sequence >= hdr->numseq )
+		return;
+
+	seq = (mstudioseqdesc_t *)((byte *)hdr + hdr->seqindex ) + state->sequence;
+	ent->curstate.frame = CL_CoF_AttachCamEstimate( &cl_cof_attachcam_last, state->sequence, state->frame, cl.time - state->animtime,
+		seq->fps * state->framerate, seq->numframes, FBitSet( seq->flags, STUDIO_LOOPING ) ? true : false );
+}
+
+/*
 ===============
 CL_LinkPacketEntities
 
@@ -1122,6 +1237,9 @@ static void CL_LinkPacketEntities( frame_t *frame )
 		qboolean interpolate = false;
 
 		if( !ent->model ) continue;
+
+		// Cry of Fear story co-op (1.1.9): the model a guest's view rides moves on between packets
+		CL_CoF_AttachCamFrame( ent, state );
 
 		if( ent->curstate.rendermode == kRenderNormal )
 		{

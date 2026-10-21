@@ -3967,6 +3967,7 @@ void CL_ClearState( void )
 	CL_CoF_VidRestartForget();
 	CL_CoF_DeathForget();
 	CL_CoF_SkyResetPerMap();	// cof_sky_reset_per_map: a level start the R_SetupSky hook could miss
+	CL_CoF_AttachCamForget();	// client.dll lets go of its AttachCam model on a new map too (VidInit)
 	Cvar_DirectFullSet( &cl_background, "0", FCVAR_READ_ONLY );
 	cl.maxclients = 1; // allow to drawing player in menu
 	cl.mtime[0] = cl.mtime[1] = 1.0f; // because level starts from 1.0f second

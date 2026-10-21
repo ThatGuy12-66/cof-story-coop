@@ -12,10 +12,26 @@ static qboolean cof_session_auto_needed;
 static char cof_session_latest[25];
 static char cof_session_pending_slot[25];
 static double cof_session_wipe_after;
-static int cof_session_deferred; // the reason last logged (1 cutscene, 2 ending door): once per deferral
+static int cof_session_deferred; // the reason last logged (CoF_SessionWait): once per deferral
 static convar_t *cof_continue; // the tester app's Continue: load the latest checkpoint once the host has joined
 static qboolean CoF_SessionCurrentNames( char names[32][32] );
 static qboolean CoF_SessionPreflight( const byte *archive, size_t size, cof_session_data_t *metadata );
+qboolean SV_CoF_StoryKitDue( void ); // sv_cof_story.c: a chapter start's kit not yet with every player (1.1.9, I7)
+
+// What keeps a checkpoint back right now, 0 for nothing. A running cutscene (1) or the ending door (2) freezes
+// players; a save must never hold that freeze. 1.1.9 (P6): a boat crossing (3, c_lake): the rider would be saved
+// aboard and the boat without its rider, which the boat does not save. 1.1.9 (I7): a chapter start's kit still
+// on its way (4): a team wipe would reload a party without it.
+static int CoF_SessionWait( void )
+{
+	int index;
+	if( SV_CoF_SceneActive()) return 1;
+	if( SV_CoF_PartyHolding()) return 2;
+	for( index = 0; index < svs.maxclients; index++ )
+		if( svs.clients[index].state == cs_spawned && SV_CoF_RetailInBoat( &svs.clients[index] )) return 3;
+	if( SV_CoF_StoryKitDue()) return 4;
+	return 0;
+}
 
 static byte *CoF_SessionReadFile( const char *path, size_t *size )
 {
@@ -167,16 +183,15 @@ qboolean SV_CoF_SessionSave( const char *slot )
 	char path[MAX_OSPATH], name[64];
 	char names[32][32];
 	SAVERESTOREDATA *saved = NULL;
-	int index, extension, spawned = 0;
+	int index, extension, spawned = 0, reason;
 	qboolean success = false;
 	if( !CoF_SessionSlotValid( slot ) || !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ||
 		SV_CoF_TransitionActive() || cof_session_pending || cof_session_saving || svgame.globals->pSaveData ) return false;
-	// A running cutscene or the ending door freezes players; a save must never hold that freeze.
-	if( SV_CoF_SceneActive() || SV_CoF_PartyHolding() )
+	if(( reason = CoF_SessionWait()) != 0 )
 	{
-		int reason = SV_CoF_SceneActive() ? 1 : 2;
+		static const char *reasons[] = { "", "cutscene", "ending-door", "boat", "chapter-kit" };
 		if( cof_session_deferred != reason )
-			Con_Printf( "cofstory phase=session-save-deferred slot=%s reason=%s\n", slot, reason == 1 ? "cutscene" : "ending-door" );
+			Con_Printf( "cofstory phase=session-save-deferred slot=%s reason=%s\n", slot, reasons[reason] );
 		cof_session_deferred = reason;
 		return false;
 	}
@@ -680,13 +695,17 @@ qboolean SV_CoF_SessionWipe( const char *map, const char *landmark )
 static void CoF_SessionSave_f( void )
 {
 	char slot[25];
+	int wait;
 	if( Cmd_Argc() > 2 || ( Cmd_Argc() == 2 && Q_strlen( Cmd_Argv( 1 )) >= sizeof( slot )))
 	{
 		Con_Printf( "Usage: cof_save [slot of 1-24 characters]\n" ); return;
 	}
 	Q_strncpy( slot, Cmd_Argc() > 1 ? Cmd_Argv( 1 ) : "manual", sizeof( slot ));
 	if( SV_CoF_SessionSave( slot )) return;
-	if( SV_CoF_SceneActive() || SV_CoF_PartyHolding() ) Con_Printf( "Co-op save waits: a cutscene is running. Save again when it ends.\n" );
+	wait = CoF_SessionWait();
+	if( wait == 3 ) Con_Printf( "Co-op save waits: a player is in the boat. Save again when everyone is ashore.\n" );
+	else if( wait == 4 ) Con_Printf( "Co-op save waits: the chapter's starting weapons are still being handed out. Save again in a moment.\n" );
+	else if( wait ) Con_Printf( "Co-op save waits: a cutscene is running. Save again when it ends.\n" );
 	else Con_Printf( "Co-op save refused: use a unique-name, living, fully joined story party and a slot of 1-24 lowercase letters, digits, _ or -.\n" );
 }
 

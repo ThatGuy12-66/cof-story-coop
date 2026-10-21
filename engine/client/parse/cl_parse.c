@@ -2319,6 +2319,8 @@ void CL_ParseUserMessage( sizebuf_t *msg, int svc_num, connprotocol_t proto )
 	CL_CoF_HudRemakeMessage( clgame.msg[i].name, iSize, pbuf );
 	// the engine's own message-strip lines show although subtitles are off (engine/common/cof_strip.h)
 	CL_CoF_StripMessage( clgame.msg[i].name, iSize, pbuf );
+	// Cry of Fear story co-op (1.1.9): which model the view rides, to move its frame on between packets (cl_frame.c)
+	CL_CoF_AttachCamMessage( clgame.msg[i].name, iSize, pbuf );
 	// Cry of Fear story co-op: Inventory slots 7..12 never reach client.dll
 	if( CL_CoF_Inventory12Message( clgame.msg[i].name, iSize, pbuf ))
 		return;

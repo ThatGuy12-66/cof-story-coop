@@ -24,7 +24,11 @@
  *   sight (CRoofBoss::MonsterThink 10068CD0); the c_attic doctor caches it (+0x368) and aims at, shoots and hurts
  *   only that one (CoF_DoctorBoss.cpp). Both go for a living player they see, nearest first, and keep them while
  *   they stay so. A player who leaves is taken out of every boss's raw pointer (the doctor's, the c_ending4b book
- *   Simons' +0x38C/+0x388). */
+ *   Simons' +0x38C/+0x388).
+ * - 1.1.9 (S1): the c_ending1c-3c strangle (cof_strangle Use, CoF_Strangle.cpp) takes "the first player", fired 3.5 s
+ *   after the last valve from a multi_manager's think: the host every time, wherever he was, and only that player's
+ *   attack presses end the boss. In the think that fires it, the first player is who turned the last valve to its
+ *   end, else the living person nearest the strangle. */
 #include "common.h"
 #include "server.h"
 #include "sv_cof_cheats.h"
@@ -61,6 +65,22 @@
 #define COF_RESCUE_PADLOCKS 4
 #define COF_RESCUE_AFTER_DEATH 1.0 // seconds after the victim died
 #define COF_RESCUE_AT_MOST 15.0 // seconds after the grab, whatever the animation did
+// CBaseDelay : CBaseEntity (0xDC): float m_flDelay, string_t m_iszKillTarget, EHANDLE m_hActivator. func_valve
+// (: CBaseToggle : CBaseAnimating : CBaseDelay) keeps its user there on every Use, and no more once it is done (iuser3).
+#define COF_DELAY_ACTIVATOR 0xE4
+#define COF_DELAY_SIZE 0xEC
+// CMultiManager : CBaseEntity (0xDC): STATE m_iState, m_cTargets, m_index, float m_startTime, string_t m_iTargetName[16],
+// float m_flTargetDelay[16], m_flWait, m_flMaxWait, string_t m_sMaster, int m_iMode (D/dlls/triggers.cpp:480-520).
+#define COF_MM_COUNT 0xE0
+#define COF_MM_INDEX 0xE4
+#define COF_MM_START 0xE8
+#define COF_MM_NAMES 0xEC
+#define COF_MM_DELAYS 0x12C
+#define COF_MM_MODE 0x178
+#define COF_MM_SIZE 0x17C
+#define COF_MM_TARGETS 16
+#define COF_RESCUE_VALVES 8
+#define COF_RESCUE_STRANGLES 2
 
 typedef struct
 {
@@ -77,6 +97,14 @@ static struct { int index, serial, userid; } cof_rescue_padlocks[COF_RESCUE_PADL
 // The player each roof boss goes for.
 static struct { int index, serial, userid; } cof_rescue_roof[COF_RESCUE_ROOFBOSSES];
 static int cof_rescue_generation = -1;
+// The map's valves (done: turned to its end) and the userid of who turned the last one to its end (1.1.9, S1).
+static struct { int index, serial; qboolean done; } cof_rescue_valves[COF_RESCUE_VALVES];
+static int cof_rescue_valve_count, cof_rescue_valve_turner;
+// The map's strangles (cof_strangle).
+static struct { int index, serial; } cof_rescue_strangles[COF_RESCUE_STRANGLES];
+static int cof_rescue_strangle_count;
+// The entity whose think runs now (1.1.9, S5: where a game message comes from).
+static edict_t *cof_rescue_thinker;
 
 void SV_CoF_RescueReset( void )
 {
@@ -86,6 +114,10 @@ void SV_CoF_RescueReset( void )
 	memset( cof_rescue_kills, 0, sizeof( cof_rescue_kills ));
 	memset( cof_rescue_padlocks, 0, sizeof( cof_rescue_padlocks ));
 	memset( cof_rescue_roof, 0, sizeof( cof_rescue_roof ));
+	memset( cof_rescue_valves, 0, sizeof( cof_rescue_valves ));
+	cof_rescue_valve_count = cof_rescue_valve_turner = 0;
+	memset( cof_rescue_strangles, 0, sizeof( cof_rescue_strangles ));
+	cof_rescue_strangle_count = 0;
 }
 
 static qboolean CoF_RescueClass( const edict_t *ent, const char *classname )
@@ -217,11 +249,84 @@ static edict_t *CoF_RescueDoctor( edict_t *doctor )
 	return target->edict;
 }
 
+// The cof_strangle this name is, or NULL.
+static edict_t *CoF_RescueStrangleNamed( string_t name )
+{
+	int i;
+	const char *wanted = name ? SV_GetString( name ) : "";
+	for( i = 0; wanted[0] && i < cof_rescue_strangle_count; i++ )
+	{
+		edict_t *strangle = SV_EdictNum( cof_rescue_strangles[i].index );
+		if( CoF_RescueClass( strangle, "cof_strangle" ) && strangle->serialnumber == cof_rescue_strangles[i].serial &&
+			!Q_strcmp( SV_GetString( strangle->v.targetname ), wanted )) return strangle;
+	}
+	return NULL;
+}
+
+// Who the strangle should take: who turned the last valve to its end, while alive; else the living person nearest it.
+static edict_t *CoF_RescueStrangleVictim( edict_t *strangle )
+{
+	sv_client_t *turner = cof_rescue_valve_turner ? CoF_RescueClientByUserid( cof_rescue_valve_turner ) : NULL, *best = NULL;
+	float best_d = 0.0f;
+	int i;
+	if( turner && !FBitSet( turner->flags, FCL_FAKECLIENT ) && CoF_RescueAlive( turner->edict ))
+	{
+		Con_Printf( "cofstory phase=strangle-first userid=%d reason=valve\n", turner->userid );
+		return turner->edict;
+	}
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		float d;
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) || !CoF_RescueAlive( cl->edict )) continue;
+		d = VectorDistance( strangle->v.origin, cl->edict->v.origin );
+		if( !best || d < best_d ) { best = cl; best_d = d; }
+	}
+	if( best ) Con_Printf( "cofstory phase=strangle-first userid=%d reason=nearest\n", best->userid );
+	return best ? best->edict : NULL;
+}
+
+// 1.1.9 (S1): the player a multi_manager's think should give a cof_strangle it fires now (ManagerThink fires, in
+// order, every target whose delay has come; c_ending1c-3c multisd: strangle at 3.5 s). NULL for any other think, or
+// a manager not laid out as read here (Spawn sorts the delays: a list out of order is not the delay list).
+static edict_t *CoF_RescueStrangler( edict_t *manager )
+{
+	byte *pv = SV_CoF_StoryEntityPrivate( manager, COF_MM_SIZE );
+	int count, index, mode, k;
+	float start, delay, last = -100000.0f, time;
+	string_t name;
+	edict_t *strangle = NULL;
+	if( !pv || !svgame.globals ) return NULL;
+	memcpy( &count, pv + COF_MM_COUNT, sizeof( count ));
+	memcpy( &index, pv + COF_MM_INDEX, sizeof( index ));
+	memcpy( &start, pv + COF_MM_START, sizeof( start ));
+	memcpy( &mode, pv + COF_MM_MODE, sizeof( mode ));
+	if( mode || count < 1 || count > COF_MM_TARGETS || index < 0 || index >= count ) return NULL;
+	for( k = 0; k < count; k++ )
+	{
+		memcpy( &delay, pv + COF_MM_DELAYS + k * sizeof( delay ), sizeof( delay ));
+		if( !( delay >= last ) || delay > 100000.0f || ( delay != 0.0f && delay > -0.001f && delay < 0.001f )) return NULL;
+		last = delay;
+	}
+	// a hundredth of a second early too: at worst the first player is set for a think that fires nothing of it
+	time = svgame.globals->time - start + 0.01f;
+	for( k = index; k < count && !strangle; k++ )
+	{
+		memcpy( &delay, pv + COF_MM_DELAYS + k * sizeof( delay ), sizeof( delay ));
+		if( delay > time ) break;
+		memcpy( &name, pv + COF_MM_NAMES + k * sizeof( name ), sizeof( name ));
+		strangle = CoF_RescueStrangleNamed( name );
+	}
+	return strangle ? CoF_RescueStrangleVictim( strangle ) : NULL;
+}
+
 edict_t *SV_CoF_RescueThinkFirst( edict_t *thinker )
 {
 	int i;
 	sv_client_t *solver;
 	if( !thinker || !SV_CoF_StoryCoopEnabled() ) return NULL;
+	if( cof_rescue_strangle_count && cof_rescue_generation == svs.spawncount && CoF_RescueClass( thinker, "multi_manager" ))
+		return CoF_RescueStrangler( thinker );
 	if( CoF_RescueClass( thinker, "monster_roofboss" )) return CoF_RescueRoofBoss( thinker );
 	if( CoF_RescueClass( thinker, "monster_doctorboss" )) return CoF_RescueDoctor( thinker );
 	if( !CoF_RescueClass( thinker, "item_padlock" ) || thinker->v.body != 1 ) return NULL;
@@ -336,14 +441,21 @@ edict_t *SV_CoF_RescueThinkSlotOne( edict_t *thinker )
 
 void SV_CoF_RescueThinkBegin( edict_t *thinker )
 {
+	cof_rescue_thinker = thinker;
 	SV_CoF_ThinkFirst( SV_CoF_RescueThinkFirst( thinker ));
 	SV_CoF_ThinkSlotOne( SV_CoF_RescueThinkSlotOne( thinker ));
 }
 
 void SV_CoF_RescueThinkEnd( void )
 {
+	cof_rescue_thinker = NULL;
 	SV_CoF_ThinkFirst( NULL );
 	SV_CoF_ThinkSlotOne( NULL );
+}
+
+edict_t *SV_CoF_RescueThinker( void )
+{
+	return cof_rescue_thinker;
 }
 
 void SV_CoF_RescueDrop( sv_client_t *cl )
@@ -414,6 +526,52 @@ static void CoF_RescueWheelchair( void )
 	}
 }
 
+// 1.1.9 (S1): the map's valves and strangles, found once per map (a valve done already has no turner we know of).
+static void CoF_RescueFindValves( void )
+{
+	int i;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		if( CoF_RescueClass( ent, "func_valve" ) && cof_rescue_valve_count < COF_RESCUE_VALVES )
+		{
+			cof_rescue_valves[cof_rescue_valve_count].index = i;
+			cof_rescue_valves[cof_rescue_valve_count].serial = ent->serialnumber;
+			cof_rescue_valves[cof_rescue_valve_count].done = ent->v.iuser3 != 0;
+			cof_rescue_valve_count++;
+		}
+		else if( CoF_RescueClass( ent, "cof_strangle" ) && cof_rescue_strangle_count < COF_RESCUE_STRANGLES )
+		{
+			cof_rescue_strangles[cof_rescue_strangle_count].index = i;
+			cof_rescue_strangles[cof_rescue_strangle_count].serial = ent->serialnumber;
+			cof_rescue_strangle_count++;
+		}
+	}
+}
+
+// A valve turned to its end this frame (DegreesCheck sets iuser3 and fires its target from the valve's think): the
+// player its last Use came from turned it.
+static void CoF_RescueValves( void )
+{
+	int i, j;
+	for( i = 0; i < cof_rescue_valve_count; i++ )
+	{
+		edict_t *valve = SV_EdictNum( cof_rescue_valves[i].index );
+		cof_rescue_handle_t user;
+		sv_client_t *cl = NULL;
+		if( cof_rescue_valves[i].done || !CoF_RescueClass( valve, "func_valve" ) || valve->serialnumber != cof_rescue_valves[i].serial ||
+			!valve->v.iuser3 ) continue;
+		cof_rescue_valves[i].done = true;
+		user = CoF_RescueHandleIn( valve, COF_DELAY_SIZE, COF_DELAY_ACTIVATOR );
+		if( !user.edict || !SV_IsValidEdict( user.edict ) || user.edict->serialnumber != user.serial ) continue;
+		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+			if( svs.clients[j].state == cs_spawned && svs.clients[j].edict == user.edict ) cl = &svs.clients[j];
+		if( !cl ) continue;
+		cof_rescue_valve_turner = cl->userid;
+		Con_Printf( "cofstory phase=valve-turned userid=%d valve=%d\n", cl->userid, cof_rescue_valves[i].index );
+	}
+}
+
 void SV_CoF_RescueFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
@@ -421,7 +579,9 @@ void SV_CoF_RescueFrame( void )
 	{
 		SV_CoF_RescueReset();
 		cof_rescue_generation = svs.spawncount;
+		CoF_RescueFindValves();
 	}
+	CoF_RescueValves();
 	CoF_RescueNewKills();
 	CoF_RescueRememberBosses();
 	CoF_RescueBossBack();

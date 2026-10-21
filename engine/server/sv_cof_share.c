@@ -38,6 +38,29 @@ static qboolean CoF_ShareRead( sv_client_t *cl, char slots[COF_SHARE_SLOTS][COF_
 	return true;
 }
 
+// 1.1.9 (I2): the counted items this player set down whose copy still lies in this map, for the next look. The
+// game's inventorydrop leaves an item_key owned by the dropper, its message the descriptor and armorvalue 666 until
+// it is taken (CBasePlayer::DropKeyItem; CKeyitemModel::KeyitemUse zeroes it and removes the key). Searched only
+// while such an item is set down.
+static void CoF_ShareLying( const sv_client_t *cl, int slot )
+{
+	cof_share_player_t *p = &cof_share.players[slot];
+	int i, index, bit;
+	p->lying = 0;
+	for( i = 0; i < p->set_down.count; i++ )
+	{
+		if( !( bit = CoF_ShareCountedBit( p->set_down.items[i].name ))) continue;
+		for( index = svs.maxclients + 1; index < svgame.numEntities; index++ )
+		{
+			const edict_t *ent = SV_EdictNum( index );
+			if( !SV_IsValidEdict( ent ) || FBitSet( ent->v.flags, FL_KILLME ) || ent->v.owner != cl->edict || ent->v.armorvalue != 666.0f ||
+				Q_strcmp( SV_GetString( ent->v.classname ), "item_key" ) || Q_strcmp( SV_GetString( ent->v.message ), p->set_down.items[i].name )) continue;
+			p->lying |= bit;
+			break;
+		}
+	}
+}
+
 static const char *CoF_ShareName( int userid )
 {
 	int i;
@@ -73,6 +96,7 @@ void SV_CoF_ShareCommandBegin( sv_client_t *cl )
 	int alive, slot = CoF_ShareClientSlot( cl );
 	cof_share_command_slot = -1;
 	if( slot < 0 || !SV_CoF_StoryCoopEnabled() || !CoF_ShareRead( cl, slots, &alive )) return;
+	CoF_ShareLying( cl, slot );
 	CoF_ShareObserve( &cof_share, slot, cl->userid, alive, slots );
 	cof_share_command_kind = CoF_ShareCommandKind( Cmd_Argv( 0 ));
 	cof_share_command_slot = slot;
@@ -84,7 +108,9 @@ void SV_CoF_ShareCommandEnd( sv_client_t *cl )
 	int alive, slot = CoF_ShareClientSlot( cl );
 	if( slot < 0 || slot != cof_share_command_slot ) return;
 	cof_share_command_slot = -1;
-	if( CoF_ShareRead( cl, slots, &alive )) CoF_ShareCommand( &cof_share, slot, cof_share_command_kind, slots );
+	if( !CoF_ShareRead( cl, slots, &alive )) return;
+	CoF_ShareLying( cl, slot );
+	CoF_ShareCommand( &cof_share, slot, cof_share_command_kind, slots );
 }
 
 void SV_CoF_ShareFrame( void )
@@ -110,6 +136,7 @@ void SV_CoF_ShareFrame( void )
 					CoF_ShareRead( cl, slots, &alive );
 					break;
 				}
+			CoF_ShareLying( cl, i );
 			CoF_ShareObserve( &cof_share, i, cl->userid, alive, slots );
 		}
 		// connected but not spawned (joining, or mid level change): keep what we know
@@ -137,6 +164,15 @@ void SV_CoF_ShareFrame( void )
 			Q_snprintf( text, sizeof( text ), "%s found the %s. Make room to carry it.", CoF_ShareName( CoF_ShareFinder( &cof_share, item )), nice );
 			SV_CoF_RetailProFont( cl, 5, text, true );
 			Con_Printf( "cofstory phase=item-deferred userid=%d item=%s reason=inventory-full\n", cl->userid, item );
+		}
+		// 1.1.9 (I1): the give and the take run the game's own code at once, so the inventory shows now whether they
+		// landed. Settled by this look, a pickup made before the next one is a change of its own: left to that look,
+		// a fuse found in the frame after a take of one read as no change, and the take, retried 5 s later as
+		// stalled, removed the fuse found (the party never counted it).
+		if(( action == COF_SHARE_GIVE || action == COF_SHARE_TAKE ) && CoF_ShareRead( cl, slots, &alive ))
+		{
+			CoF_ShareLying( cl, i );
+			CoF_ShareObserve( &cof_share, i, cl->userid, alive, slots );
 		}
 	}
 }

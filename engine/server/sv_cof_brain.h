@@ -87,6 +87,10 @@
 #define COF_BRAIN_FACE_TIME 1.0 // ...this long: step aside...
 #define COF_BRAIN_FACE_CLEAR 35.0f // ...until this angle
 #define COF_BRAIN_RANK_GAP 48.0f // each further bot behind the same person keeps this much more distance
+// 1.1.9: far behind it sprints, as people do (StaminaThink: sprint speed while IN_RUN is held and stamina lasts).
+#define COF_BRAIN_SPRINT_START 60.0f // stamina to set off sprinting...
+#define COF_BRAIN_SPRINT_STOP 30.0f // ...and to stop at: run out (0) it is out of breath, slow for 5 s, and a hop takes 15
+#define COF_BRAIN_SPRINT_LEVEL 16.0f // the way goes up or down more than this (stairs): no sprint (onto stairs it trips)
 
 // usercmd buttons (HLSDK in_buttons.h; the Cry of Fear meaning in the comment)
 #define COF_IN_ATTACK ( 1 << 0 ) // fire, swing, inject
@@ -95,6 +99,7 @@
 #define COF_IN_USE ( 1 << 5 )
 #define COF_IN_CANCEL ( 1 << 6 ) // +attack3: sights (one press toggles them)
 #define COF_IN_ATTACK2 ( 1 << 11 ) // a bash with a gun; the syringe on a partner
+#define COF_IN_RUN ( 1 << 12 ) // sprint (with sights up: hold the breath)
 #define COF_IN_RELOAD ( 1 << 13 )
 // Buttons the game reads as a press: a driven person's client gets each for one usercmd, then a release.
 #define COF_BRAIN_TAPS ( COF_IN_ATTACK | COF_IN_CANCEL | COF_IN_ATTACK2 | COF_IN_RELOAD )
@@ -165,6 +170,8 @@ typedef struct
 	float partner_pace; // ...or walks on that way at this speed (0: stands): then it keeps that pace
 	int crowd; // another player (not the leader) is closer than COF_BRAIN_PERSONAL...
 	float crowd_pos[3]; // ...here
+	float stamina; // the game's m_fStamina (0..100): a sprint spends it; 0 (not known) never sprints
+	int sprinting; // the game's sprint flag is on (pev->flags bit 18, StaminaThink)
 } cof_brain_input_t;
 
 typedef struct
@@ -420,6 +427,14 @@ static void CoF_BrainGo( const cof_brain_input_t *in, const float *target, float
 	wanted[0] = 0.0f;
 	CoF_BrainTurn( in->view, wanted, COF_BRAIN_TURN_RATE * in->frametime, out->angles );
 	CoF_BrainMoveToward( in->self, walk, out->angles[1], speed, out );
+	// 1.1.9: running to catch up with nothing to fight, it sprints as people do. Never in a fight (a sprinting gun
+	// cannot fire: m_iSprintState), nor with sights up (that holds the breath), off the ground or up or down the way
+	// (sprinting onto stairs trips: TripOver), and never into exhaustion (at 0 it crawls for 5 s; with the hysteresis
+	// it rests while the stamina comes back).
+	if( speed >= COF_BRAIN_RUN_SPEED && !in->threat && !in->sights && in->onground &&
+		fabsf( walk[2] - in->self[2] ) <= COF_BRAIN_SPRINT_LEVEL && fabsf( point[2] - in->self[2] ) <= COF_BRAIN_SPRINT_LEVEL &&
+		in->stamina >= ( in->sprinting ? COF_BRAIN_SPRINT_STOP : COF_BRAIN_SPRINT_START ))
+		out->buttons |= COF_IN_RUN;
 }
 
 // why: "far", "lost", "stuck", "trail" (the leader went through a door or was

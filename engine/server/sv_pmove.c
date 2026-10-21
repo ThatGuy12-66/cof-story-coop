@@ -21,6 +21,7 @@ GNU General Public License for more details.
 #include "sv_cof_moments.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_party.h"
+#include "sv_cof_cmdclock.h"
 #include "cof_abi.h"
 #include "pm_local.h"
 #include "event_flags.h"
@@ -1004,6 +1005,48 @@ static void SV_RestoreMoveInterpolant( sv_client_t *cl )
 
 /*
 ===========
+SV_CoF_CmdClockRun
+
+Cry of Fear story co-op (1.1.9, movement): each person's command clock, the time their position belongs to
+(sv_cof_cmdclock.h). It starts again on each map and for each person who takes the slot.
+===========
+*/
+static struct { double clock; int spawncount, userid; } cof_cmdclock[MAX_CLIENTS];
+
+void SV_CoF_CmdClockRun( const sv_client_t *cl, double seconds )
+{
+	int	i = (int)( cl - svs.clients );
+
+	if( i < 0 || i >= MAX_CLIENTS || FBitSet( cl->flags, FCL_FAKECLIENT ))
+		return;
+
+	if( cof_cmdclock[i].spawncount != svs.spawncount || cof_cmdclock[i].userid != cl->userid )
+	{
+		cof_cmdclock[i].clock = 0.0;
+		cof_cmdclock[i].spawncount = svs.spawncount;
+		cof_cmdclock[i].userid = cl->userid;
+	}
+
+	cof_cmdclock[i].clock = CoF_CmdClockAdvance( cof_cmdclock[i].clock, seconds, sv.time + sv.frametime );
+}
+
+float SV_CoF_CmdClockStamp( int e, float animtime )
+{
+	int	i = e - 1;
+
+	if( i < 0 || i >= svs.maxclients || i >= MAX_CLIENTS || !SV_CoF_StoryCoopEnabled( ))
+		return animtime;
+
+	// an AI companion keeps the game's stamp: its commands are made in the frame that runs them
+	if( FBitSet( svs.clients[i].flags, FCL_FAKECLIENT ) || cof_cmdclock[i].spawncount != svs.spawncount ||
+		cof_cmdclock[i].userid != svs.clients[i].userid || cof_cmdclock[i].clock <= 0.0 )
+		return animtime;
+
+	return (float)cof_cmdclock[i].clock;
+}
+
+/*
+===========
 SV_RunCmd
 ===========
 */
@@ -1078,6 +1121,7 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	frametime = ((double)ucmd->msec / 1000.0 );
 	cl->timebase += frametime;
 	cl->cmdtime += frametime;
+	SV_CoF_CmdClockRun( cl, frametime ); // Cry of Fear story co-op (1.1.9): when this person's position belongs
 
 	PM_CheckMovingGround( clent, frametime );
 

@@ -146,6 +146,25 @@ void SV_CoF_Inventory12Activate( void )
 	Con_Printf( "cofstory phase=inventory12 slots=12\n" );
 }
 
+// 1.1.9 (I10, M3): a map at six after one at twelve keeps what a person carries in slots 7..12 out of sight (the keep
+// group); nothing said so, and the items seemed lost. Told with the slot count, once a map (none in three-slot mode,
+// where only slots 1..3 show anyway).
+static void CoF_Inv12Hidden( sv_client_t *cl )
+{
+	const byte *pv;
+	uint32_t id;
+	int slot;
+	if( !cof_inv12.base || SV_CoF_RetailInThreeSlots( cl ) || !( pv = SV_CoF_StoryEntityPrivate( cl->edict, 0x2288 ))) return;
+	for( slot = 7; slot <= 12; slot++ )
+	{
+		memcpy( &id, pv + 0x21FC + slot * sizeof( id ), sizeof( id )); // inventorySlot[slot]
+		if( id ) break;
+	}
+	if( slot > 12 ) return;
+	SV_CoF_RetailProFont( cl, 5, "Six inventory slots on this map: what you carry in slots 7 to 12 is kept until twelve are back.", true );
+	Con_Printf( "cofstory phase=inventory12-hidden userid=%d\n", cl->userid );
+}
+
 void SV_CoF_Inventory12Frame( void )
 {
 	int i, slots;
@@ -165,6 +184,7 @@ void SV_CoF_Inventory12Frame( void )
 		}
 		if( cof_inv12.told[i].map == svs.spawncount && cof_inv12.told[i].userid == cl->userid && cof_inv12.told[i].slots == slots ) continue;
 		CoF_Inv12Tell( i, slots );
+		if( slots == 6 ) CoF_Inv12Hidden( cl );
 	}
 }
 

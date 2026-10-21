@@ -18,10 +18,21 @@ static struct
 	cof_story_values_t previous;
 	int notes[COF_STATE_NOTES];
 	char delivered[COF_STATE_TEXT]; // the objective the game last sent this player (Objectives)
+	int cap_known, health_cap, phone_known, phone; // 1.1.9: what the last look saw (the party values below)
+	double phone_tried;
 } cof_state_players[MAX_CLIENTS];
 static qboolean cof_state_sending;
 static edict_t *cof_state_document;
 static int cof_state_document_serial, cof_state_reader;
+// 1.1.9: party values the checkpoint does not hold (its layout stays as it is); a session starts them over.
+static int cof_state_health_cap = -1; // m_iHealthCap of the party, -1 none seen yet
+static int cof_state_phone_broken, cof_state_phone_body;
+
+static void CoF_StatePartyReset( void )
+{
+	cof_state_health_cap = -1;
+	cof_state_phone_broken = cof_state_phone_body = 0;
+}
 
 void SV_CoF_StateReset( void )
 {
@@ -29,6 +40,7 @@ void SV_CoF_StateReset( void )
 	memset( cof_state_players, 0, sizeof( cof_state_players ));
 	cof_state_document = NULL;
 	cof_state_sending = false;
+	CoF_StatePartyReset();
 }
 
 // 1.1.8 (M2 finding 6, M1 finding 4): every story env_global toggles (triggermode 3) a global that starts off, and
@@ -149,6 +161,64 @@ static void CoF_StateDeliverNotes( sv_client_t *client, int slot )
 	}
 }
 
+// 1.1.9 (M2 F10, K): cof_maxhealthchange (c_asylum1's hitbyp228/hitbyrevolver) caps the health of the answerer
+// alone, and the strangle and the wheelchair (endings) lift one player's cap. A change a player's cap shows is the
+// party's; a first look only fills in a party value nobody showed yet (each player's cap is in the checkpoint's
+// game save, so a load agrees).
+static void CoF_StateCapObserve( sv_client_t *client, int slot )
+{
+	int cap = SV_CoF_RetailHealthCap( client );
+	if( cap < 0 || cap > 2 ) return;
+	if( cof_state_players[slot].cap_known ? cap != cof_state_players[slot].health_cap : ( cof_state_health_cap < 0 && cap ))
+	{
+		cof_state_health_cap = cap;
+		Con_Printf( "cofstory phase=health-cap userid=%d cap=%d\n", client->userid, cap );
+	}
+	cof_state_players[slot].health_cap = cap;
+	cof_state_players[slot].cap_known = 1;
+}
+
+// 1.1.9 (M1 9): c_subway1st1's cof_phonedisable breaks the toucher's phone alone. A phone the game breaks is the
+// party's: every partner's breaks too, and again after a recovery hands back a whole one (an inventory from before).
+// Each player mends their own with their copy of the battery (the combine is personal, sv_cof_share_state.h); the
+// first mend ends it. Only a change seen on one living player counts: a respawn, a rejoin or a restore is neither.
+static void CoF_StatePhoneObserve( sv_client_t *client, int slot, int alive )
+{
+	int body = 0, broken = SV_CoF_RetailPhoneBroken( client, &body );
+	if( broken < 0 ) return;
+	if( cof_state_players[slot].phone_known && alive && cof_state_players[slot].alive && broken != cof_state_players[slot].phone )
+	{
+		cof_state_phone_broken = broken;
+		if( broken ) cof_state_phone_body = body;
+		Con_Printf( "cofstory phase=%s userid=%d\n", broken ? "phone-broken" : "phone-mended", client->userid );
+	}
+	cof_state_players[slot].phone = broken;
+	cof_state_players[slot].phone_known = 1;
+}
+
+static void CoF_StatePartyWrite( sv_client_t *client, int slot )
+{
+	double *tried = &cof_state_players[slot].phone_tried;
+	if( cof_state_health_cap >= 0 && cof_state_players[slot].cap_known && cof_state_players[slot].health_cap != cof_state_health_cap &&
+		SV_CoF_RetailSetHealthCap( client, cof_state_health_cap ))
+	{
+		cof_state_players[slot].health_cap = cof_state_health_cap;
+		Con_Printf( "cofstory phase=health-cap-shared userid=%d cap=%d\n", client->userid, cof_state_health_cap );
+	}
+	// a living player with a whole phone; one without a phone is looked at again once a second (a search of the edicts)
+	if( cof_state_phone_broken && cof_state_players[slot].alive && cof_state_players[slot].phone_known && !cof_state_players[slot].phone &&
+		( sv.time >= *tried || *tried - sv.time > 1.0 ))
+	{
+		if( SV_CoF_RetailBreakPhone( client, cof_state_phone_body ))
+		{
+			cof_state_players[slot].phone = 1;
+			Con_Printf( "cofstory phase=phone-shared userid=%d\n", client->userid );
+		}
+		else *tried = sv.time + 1.0;
+	}
+	if( SV_CoF_RetailPuzzleRelease( client )) Con_Printf( "cofstory phase=puzzle-released userid=%d\n", client->userid );
+}
+
 void SV_CoF_StateFrame( void )
 {
 	cof_story_values_t observed[MAX_CLIENTS];
@@ -163,6 +233,8 @@ void SV_CoF_StateFrame( void )
 		alive = client->edict->v.health > 0 && client->edict->v.deadflag == DEAD_NO;
 		CoF_StateObserve( &cof_state, &observed[slot], cof_state_players[slot].known &&
 			( !alive || cof_state_players[slot].alive ) ? &cof_state_players[slot].previous : NULL );
+		CoF_StateCapObserve( client, slot );
+		CoF_StatePhoneObserve( client, slot, alive );
 		cof_state_players[slot].alive = alive;
 		valid[slot] = 1;
 	}
@@ -180,6 +252,7 @@ void SV_CoF_StateFrame( void )
 		if( cof_state.values.three_slots && !observed[slot].three_slots && cof_state_players[slot].alive ) SV_CoF_RetailThreeSlots( client );
 		if( SV_CoF_RetailStoryRead( client, &cof_state_players[slot].previous )) cof_state_players[slot].known = 1;
 		CoF_StateDeliverNotes( client, slot );
+		CoF_StatePartyWrite( client, slot );
 	}
 }
 
@@ -217,6 +290,7 @@ qboolean SV_CoF_StateImport( const cof_state_data_t *data )
 		if( !CoF_StateNoteValid( data->notes[index].message, data->notes[index].size )) return false;
 	memcpy( &cof_state, data, sizeof( cof_state ));
 	memset( cof_state_players, 0, sizeof( cof_state_players ));
+	CoF_StatePartyReset();
 	return true;
 }
 

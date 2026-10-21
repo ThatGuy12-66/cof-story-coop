@@ -8,14 +8,19 @@
  * fallback ranks them by (best above 0.7 wins, the first of equals). Live
  * 2026-10-19, cm_college2: from inside the screwdriver classroom both doors
  * took the player back in, the far door brush of the pair, and the log could
- * not say why. Inert unless cof_use_probe is non-zero (1.1.8: off by default; it went with cof_story_trace, which
- * every release session has on, and logged 3-12 lines per door use there). */
+ * not say why. Everywhere when cof_use_probe is non-zero (1.1.8: off by default; it went with cof_story_trace, which
+ * every release session has on, and logged 3-12 lines per door use there). 1.1.9 (R1): with it 0, for the humans in
+ * c_college1 only (the map, or its section of a merged map: cm_college2), where the loop was reported, so a repeat
+ * comes with its lines. */
 #include "common.h"
 #include "server.h"
+#include "cof_merged.h"
+#include "sv_cof_sections.h"
 #include "sv_cof_useprobe.h"
 
 #define COF_PROBE_REACH 80.0f // PLAYER_SEARCH_RADIUS
 #define COF_PROBE_HITS 8
+#define COF_PROBE_MAP "c_college1"
 
 typedef struct
 {
@@ -24,7 +29,22 @@ typedef struct
 
 static cof_probe_slot_t cof_probe_last[MAX_CLIENTS];
 static int cof_probe_spawncount;
+static int cof_probe_where; // this map: 0 not c_college1, -1 c_college1 itself, else 1 + its section in the merged map
 static convar_t *cof_use_probe;
+
+// Where c_college1 is on the loaded map (cof_probe_where).
+static int CoF_ProbeWhere( void )
+{
+	cof_sections_t *s;
+	int i, where = 0;
+	if( !Q_stricmp( sv.name, COF_PROBE_MAP )) return -1;
+	if( !COM_CoF_IsMergedMap( sv.name ) || !( s = Mem_Calloc( host.mempool, sizeof( *s )))) return 0;
+	if( COM_CoF_LoadSections( sv.name, s ))
+		for( i = 0; i < s->count && !where; i++ )
+			if( !Q_stricmp( s->sec[i].map, COF_PROBE_MAP )) where = 1 + i;
+	Mem_Free( s );
+	return where;
+}
 
 static int CoF_ProbeNum( const edict_t *e )
 {
@@ -123,23 +143,29 @@ void SV_CoF_UseProbeFrame( void )
 	int slot, i;
 
 	if( !cof_use_probe )
-		cof_use_probe = Cvar_Get( "cof_use_probe", "0", 0, "Cry of Fear story co-op: log what each door's +use met (a diagnostic); 0 off" );
+		cof_use_probe = Cvar_Get( "cof_use_probe", "0", 0, "Cry of Fear story co-op: log what each door's +use met (a diagnostic); 0 only in c_college1" );
 	on = cof_use_probe->value != 0.0f;
 
 	// a level change would otherwise compare against the last level's edicts
-	if( !on || cof_probe_spawncount != svs.spawncount )
+	if( cof_probe_spawncount != svs.spawncount )
 	{
 		memset( cof_probe_last, 0, sizeof( cof_probe_last ));
 		cof_probe_spawncount = svs.spawncount;
+		cof_probe_where = CoF_ProbeWhere();
 	}
-	if( !on ) return;
+	if( !on && !cof_probe_where )
+	{
+		memset( cof_probe_last, 0, sizeof( cof_probe_last ));
+		return;
+	}
 	for( slot = 0; slot < svs.maxclients && slot < MAX_CLIENTS; slot++ )
 	{
 		sv_client_t *cl = &svs.clients[slot];
 		cof_probe_slot_t *last = &cof_probe_last[slot];
 		edict_t *held = NULL;
 
-		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ))
+		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
+			( !on && cof_probe_where > 0 && SV_CoF_PlayerSection( cl->edict ) != cof_probe_where - 1 ))
 		{
 			last->door = 0;
 			continue;

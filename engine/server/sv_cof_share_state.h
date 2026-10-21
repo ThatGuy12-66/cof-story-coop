@@ -46,6 +46,7 @@ typedef struct
 	double pending_until;
 	cof_share_backoff_t backoff[COF_SHARE_BACKOFF]; // items whose give/take never showed
 	cof_share_set_t stalled; // reported once until they go through
+	int lying; // counted items set down whose copy still lies in this map (CoF_ShareCountedBit), as the glue last saw
 } cof_share_player_t;
 
 typedef struct { int kind, slot, userid; char name[COF_SHARE_NAME]; } cof_share_event_t;
@@ -133,6 +134,14 @@ static int CoF_ShareCounted( const char *name )
 	return !strcmp( name, "inventoryitems/fuse.txt" ) || !strcmp( name, "inventoryitems/ladder1.txt" );
 }
 
+// 1.1.9 (I2): one bit per counted item, for what the glue sees of the copies a player set down (lying).
+static int CoF_ShareCountedBit( const char *name )
+{
+	if( !strcmp( name, "inventoryitems/fuse.txt" )) return 1;
+	if( !strcmp( name, "inventoryitems/ladder1.txt" )) return 2;
+	return 0;
+}
+
 static int CoF_ShareSetCount( const cof_share_set_t *set, const char *name )
 {
 	int i, n = 0;
@@ -174,11 +183,14 @@ static void CoF_ShareFound( cof_share_state_t *s, int slot, const char *name )
 }
 
 // A counted item gained outside a delivery: the copy this player set down,
-// picked back up, or one more copy for the party.
+// picked back up, or one more copy for the party. 1.1.9 (I2): while the copy
+// set down still lies in the map, the gain is another one (a c_subway2st1 fuse
+// box pulled after a drop): the party was left a fuse short, and the copy set
+// down stays set down.
 static void CoF_ShareFoundCopy( cof_share_state_t *s, int slot, const char *name )
 {
 	cof_share_player_t *p = &s->players[slot];
-	if( CoF_ShareSetRemove( &p->set_down, name ) || s->party.count >= COF_SHARE_ITEMS ) return;
+	if(( !( p->lying & CoF_ShareCountedBit( name )) && CoF_ShareSetRemove( &p->set_down, name )) || s->party.count >= COF_SHARE_ITEMS ) return;
 	CoF_ShareCopy( s->party.items[s->party.count].name, name );
 	s->party.items[s->party.count].finder = p->userid;
 	s->party.count++;

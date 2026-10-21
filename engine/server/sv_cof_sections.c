@@ -30,7 +30,6 @@ static qboolean cof_sect_loaded_ok;
 static int cof_sect_generation = -1;
 static double cof_sect_moved_at[MAX_CLIENTS];
 static double cof_sect_refused_at[MAX_CLIENTS]; // a refused move logged (once a second: it is tried every frame)
-static double cof_sect_nobody_at;               // "section-move-nobody" logged (once a second, likewise)
 static int cof_sect_alive[MAX_CLIENTS];   // userid while alive, -userid once dead (a respawn follows)
 static int cof_sect_last[MAX_CLIENTS];    // the section a player was last in, alive
 static qboolean cof_sect_entered[COF_SECT_MAX];
@@ -235,6 +234,75 @@ static qboolean CoF_SectAlive( const edict_t *e )
 	return e->v.health > 0 && e->v.deadflag == DEAD_NO;
 }
 
+// 1.1.9 (X3, E1 F3): a player standing in the section exit they came in by (moving nobody, rightly) is asked about
+// every frame. Each ask read the exit's models from the merged map's whole entity script, twice over, and logged
+// section-move-nobody once a second. The models of the exit last asked for are kept for the map (they come from
+// the map's own script, so they cannot change in it), and "nobody" is said once per idle in that exit: again only
+// after it was not asked about for COF_SECTION_QUIET seconds.
+#define COF_SECTION_QUIET 10.0
+#define COF_SECTION_NOBODY 4 // exits idled in at once that each keep their own quiet
+static struct
+{
+	qboolean known;
+	int generation;
+	char level[MAX_QPATH], landmark[MAX_QPATH];
+	int models[16], count;
+} cof_sect_exit;
+static struct
+{
+	qboolean known;
+	int generation;
+	char level[MAX_QPATH], landmark[MAX_QPATH];
+	double asked;
+} cof_sect_nobody[COF_SECTION_NOBODY];
+
+static int CoF_SectExitModels( const char *level, const char *landmark, int *models, int max )
+{
+	int count;
+	if( !landmark || Q_strlen( level ) >= sizeof( cof_sect_exit.level ) || Q_strlen( landmark ) >= sizeof( cof_sect_exit.landmark ))
+		return SV_CoF_MapExitModels( sv.name, level, landmark, models, max, NULL, NULL );
+	if( !cof_sect_exit.known || cof_sect_exit.generation != svs.spawncount || Q_strcmp( cof_sect_exit.level, level ) ||
+		Q_strcmp( cof_sect_exit.landmark, landmark ))
+	{
+		cof_sect_exit.known = true;
+		cof_sect_exit.generation = svs.spawncount;
+		Q_strncpy( cof_sect_exit.level, level, sizeof( cof_sect_exit.level ));
+		Q_strncpy( cof_sect_exit.landmark, landmark, sizeof( cof_sect_exit.landmark ));
+		cof_sect_exit.count = SV_CoF_MapExitModels( sv.name, level, landmark, cof_sect_exit.models, ARRAYSIZE( cof_sect_exit.models ), NULL, NULL );
+	}
+	count = Q_min( cof_sect_exit.count, max );
+	if( count > 0 ) memcpy( models, cof_sect_exit.models, sizeof( models[0] ) * (size_t)count );
+	return count;
+}
+
+// True when this "nobody" ask begins an idle in that exit (worth a log line).
+static qboolean CoF_SectNobodyNew( const char *level, const char *landmark )
+{
+	int i, slot = -1;
+	qboolean again;
+	if( !landmark ) landmark = "";
+	for( i = 0; i < COF_SECTION_NOBODY; i++ )
+	{
+		if( !cof_sect_nobody[i].known || cof_sect_nobody[i].generation != svs.spawncount ||
+			Q_strcmp( cof_sect_nobody[i].level, level ) || Q_strcmp( cof_sect_nobody[i].landmark, landmark )) continue;
+		again = sv.time < cof_sect_nobody[i].asked || sv.time > cof_sect_nobody[i].asked + COF_SECTION_QUIET;
+		cof_sect_nobody[i].asked = sv.time;
+		return again;
+	}
+	// a new exit: take a record of an earlier map, else the one asked about longest ago
+	for( i = 0; i < COF_SECTION_NOBODY; i++ )
+	{
+		if( !cof_sect_nobody[i].known || cof_sect_nobody[i].generation != svs.spawncount ) { slot = i; break; }
+		if( slot < 0 || cof_sect_nobody[i].asked < cof_sect_nobody[slot].asked ) slot = i;
+	}
+	cof_sect_nobody[slot].known = true;
+	cof_sect_nobody[slot].generation = svs.spawncount;
+	Q_strncpy( cof_sect_nobody[slot].level, level, sizeof( cof_sect_nobody[slot].level ));
+	Q_strncpy( cof_sect_nobody[slot].landmark, landmark, sizeof( cof_sect_nobody[slot].landmark ));
+	cof_sect_nobody[slot].asked = sv.time;
+	return true;
+}
+
 static qboolean CoF_SectMoveOne( const cof_sections_t *s, const cof_sect_route_t *r, int slot, const vec3_t landing, sv_client_t *anchor, const float *landmark )
 {
 	sv_client_t *cl = &svs.clients[slot];
@@ -265,7 +333,7 @@ static void CoF_SectMove( const cof_sections_t *s, const cof_sect_route_t *r, co
 	vec3_t src, dst, offset, landing;
 	qboolean landmarks;
 	edict_t *start = NULL;
-	count = SV_CoF_MapExitModels( sv.name, level, landmark, models, ARRAYSIZE( models ), NULL, NULL );
+	count = CoF_SectExitModels( level, landmark, models, ARRAYSIZE( models ));
 	for( i = 0; i < n; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
@@ -280,12 +348,9 @@ static void CoF_SectMove( const cof_sections_t *s, const cof_sect_route_t *r, co
 	}
 	if( !CoF_SectionMovers( p, n, movers, COF_SECTION_NEAR ))
 	{
-		// asked every frame while someone stands in the exit: logged once a second
-		if( sv.time >= cof_sect_nobody_at + 1.0 || sv.time < cof_sect_nobody_at )
-		{
-			cof_sect_nobody_at = sv.time;
+		// asked every frame while someone stands in the exit: logged once per idle there (1.1.9, X3)
+		if( CoF_SectNobodyNew( level, landmark ))
 			Con_Printf( "[cof-story-transition] phase=section-move-nobody to=%s landmark=%s\n", level, landmark ? landmark : "" );
-		}
 		return;
 	}
 	for( i = 0; i < n && anchor < 0; i++ ) if( movers[i] && p[i].in_exit ) anchor = i;
