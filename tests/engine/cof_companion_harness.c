@@ -274,6 +274,7 @@ static qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname ) { e
 static void SV_CoF_RetailSupply( sv_client_t *cl ) { supplies++; }
 static qboolean SV_CoF_RetailReviving( sv_client_t *cl ) { return reviving; }
 static qboolean SV_CoF_RetailRevived( sv_client_t *cl ) { return false; }
+static float SV_CoF_RetailStamina( sv_client_t *cl ) { return 100.0f; }
 /* as the retail layer: dead, nobody at it, not in its get-up, on the ground (with body_flicker, only every other
  * frame: a dead player's FL_ONGROUND came and went each frame live, 2026-10-17) */
 static int body_flicker;

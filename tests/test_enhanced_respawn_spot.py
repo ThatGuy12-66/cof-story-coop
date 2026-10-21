@@ -29,9 +29,12 @@ class RespawnSpotTests(unittest.TestCase):
         # (tests/engine/cof_party_harness.c has the behaviour).
         body = body_of(SERVER / 'sv_cof_party.c', 'void SV_CoF_PartyRespawned(')
         entries = body.index('SV_CoF_PartySectionMove( cl, cof_party_entry[j].origin, NULL, NULL )')
-        partner = body.index('SV_CoF_PartySectionMove( cl, partner->edict->v.origin, partner, NULL )')
+        # 1.1.9 (P4): beside the partner, or beside the c_ending4b wheelchair they ride
+        partner = body.index('if( partner && CoF_PartyMoveBeside( cl, partner ))')
         self.assertLess(entries, partner)
         self.assertLess(partner, body.index('SV_CoF_ArrivalLanded( cl );'))
+        beside = body_of(SERVER / 'sv_cof_party.c', 'static qboolean CoF_PartyMoveBeside(')
+        assert_has(self, 'return SV_CoF_PartySectionMove( cl, partner->edict->v.origin, partner, NULL );', beside)
 
     def test_the_way_in_is_recorded_at_arrivals_and_section_moves(self):
         arrive = body_of(SERVER / 'sv_cof_party.c', 'void SV_CoF_PartyTransitionArrive(')

@@ -168,8 +168,8 @@ host log. Plan: `docs/superpowers/plans/2026-10-18-decomp-fixes.md`; research: `
 
 ## Not yet handled (expected rough edges)
 
-- Some effects still reach only one player: the `c_village3` look-at, the `c_ending4` grey fade,
-  camera zooms and blur toggles.
+- Some effects still reach only one player: the `c_village3` look-at and camera zooms (the
+  `c_ending4` grey fade is shared since 1.1.8, blur toggles since 1.1.2).
 - `c_asylumb` puzzle: a guest who solves it may need to press the puzzle's close button.
 - `c_ending1c–3c` strangle: only the host's attack input finishes it.
 - Dropped weapons saved in `c_college1` come back only for the player who saved them.

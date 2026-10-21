@@ -35,6 +35,7 @@ from tools import friend_setup as setup  # noqa: E402
 
 README = ROOT / "tools/player_readme.txt"
 NOTES = ROOT / "docs/releases"
+ENGINE_STAMP = packager.enhanced.ENGINE / "engine/cof_version.h"   # the engine's on-screen "cofenhanced <version>"
 SMOKE_SOURCE = ROOT / "evidence/tester-package-20261015/smoke-source/Cry of Fear"   # a hardlink mirror of the game
 ZIP_FILES = ["CoF Story Co-op.exe", "READ ME FIRST.txt", "source-and-licences/corresponding-source.zip",
              "source-and-licences/notices/PYINSTALLER-COPYING.txt", "source-and-licences/notices/PYTHON-LICENSE.txt",
@@ -63,6 +64,15 @@ def sha(path: Path) -> str:
 
 def key(text: str) -> tuple[int, ...]:
     return tuple(int(p) for p in text.split("."))
+
+
+def engine_stamp() -> str:
+    """The version engine/cof_version.h gives the engine's stamp (on screen, in the pause menu), or ""."""
+    try:
+        found = re.search(r'#define COFE_VERSION\s+"([^"]*)"', ENGINE_STAMP.read_text(encoding="latin-1"))
+    except OSError:
+        return ""
+    return found[1] if found else ""
 
 
 class Log:
@@ -202,6 +212,9 @@ def preflight(log: Log):
     log.check(notes.is_file() and notes.read_text(encoding="utf-8").strip() != "" and tracked(notes),
               f"release notes for Discord and GitHub, committed: {notes.relative_to(ROOT)}")
     log.check(app_update.LABEL_PATTERN.fullmatch(label()) is not None, f"version label {label()} is plain numbers")
+    # 1.1.9 (R4): the engine is built with it, so a stamp left behind shows the last version in every game
+    log.check(engine_stamp() == label(), f"the engine's stamp (engine/cof_version.h) says {label()}: "
+                                         f"{engine_stamp() or 'nothing'}")
     log.check(importlib.util.find_spec("PyInstaller") is not None,
               f"PyInstaller is installed in this Python ({sys.executable})")
     try:
@@ -241,6 +254,8 @@ def check_copy(log: Log, copy: Path, report: dict, what: str) -> str:
     log.check(sha(copy / "xash.dll") == report["payload"]["xash_sha256"], f"{what}: the engine is this build's")
     log.check(sha(copy / "cryoffear/cl_dlls/hl.dll") == setup.STOCK_DLL_SHA, f"{what}: stock hl.dll")
     log.check(not any((copy / rel).exists() for rel in setup.RETIRED_FILES), f"{what}: no retired files")
+    missing = [rel for rel in setup.weapons.output_paths() if rel not in state.get("models", {})]
+    log.check(not missing, f"{what}: every generated weapon model made and recorded (1.1.9: the gas mask too) {missing}")
     cfg = (copy / "cryoffear" / play.STORY_CFG).read_text(encoding="ascii").splitlines()
     log.check(all(line in cfg for line in ("sv_cheats 0", "cof_test_gun 0", "developer 0")),
               f"{what}: the story cfg turns the test tools off")
@@ -269,6 +284,9 @@ def check_package(log: Log, out: Path, report: dict, latest: app_update.Release,
         log.check(not [n for n in setup.RETIRED_FILES if n.casefold() in members], "payload leaves out the retired files")
         engine = archive.read("cof-enhanced/files/xash.dll")
         log.check(hashlib.sha256(engine).hexdigest() == report["payload"]["xash_sha256"], "payload engine matches its record")
+        stamp = (archive.read("cof-enhanced/release.txt").decode("utf-8", "replace")
+                 if "cof-enhanced/release.txt" in archive.namelist() else "")
+        log.check(f"cofenhanced {label()}" in stamp, f"the payload's release.txt names {label()}")   # 1.1.9 (R4)
     log.check((report["payload"]["version"], report["payload"]["build"]) == (play.VERSION, play.BUILD),
               f"payload manifest {report['payload']['version']} build {report['payload']['build']}")
 

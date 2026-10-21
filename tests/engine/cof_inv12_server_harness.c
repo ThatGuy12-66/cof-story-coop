@@ -21,7 +21,12 @@ typedef int qboolean;
 #define svc_stufftext 9
 #define FBitSet(f,b) ((f)&(b))
 #define Q_strcmp strcmp
+#ifdef _WIN32
 #define Q_stricmp _stricmp
+#else
+#include <strings.h>
+#define Q_stricmp strcasecmp
+#endif
 #define Q_atoi atoi
 #define Host_IsDedicated() ( dedicated )
 #define COF_INV12_USERINFO "_cofinv" /* sv_cof_inventory12.h */
@@ -93,6 +98,13 @@ static qboolean SV_CoF_StoryCoopEnabled( void ) { return story; }
 static uintptr_t SV_CoF_StoryBase( void ) { return story ? (uintptr_t)image : 0; }
 static qboolean CL_CoF_Inventory12Ready( void ) { return host_ready; }
 static qboolean SV_CoF_RetailInThreeSlots( sv_client_t *cl ) { return three; }
+static char told_text[MAX_CLIENTS][192]; /* the last ProFont line to each client */
+static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable )
+{
+	assert( colour == 5 && reliable );
+	snprintf( told_text[cl - clients], sizeof( told_text[0] ), "%s", text );
+	return true;
+}
 static byte *SV_CoF_StoryEntityPrivate( edict_t *ent, size_t need )
 {
 	assert( need >= 0x2288 ); /* every byte read is inside the checked allocation */
@@ -220,6 +232,20 @@ int main( void )
 	assert( strstr( clients[0].netchan.message.text, "cof_inv_slots 6\n" ));
 	assert( command( "inventoryequip", "7", NULL ));
 	assert( !SV_CoF_Inventory12Refuse( "\\name\\old", false )); /* a map at six takes anyone */
+	/* 1.1.9 (I10, M3): a person who carries something in slots 7..12 is told those are kept, once a map; one with nothing
+	 * there, or in three-slot mode, is not */
+	assert( strstr( told_text[0], "slots 7 to 12 is kept" ) == NULL && !logged( "inventory12-hidden" )); /* the host carried nothing there */
+	{
+		uint32_t id = 0x1234;
+		memcpy( player_pv[0] + 0x21FC + 9 * 4, &id, sizeof( id )); /* inventorySlot[9] */
+		clients[0].netchan.message.text[0] = 0; told_text[0][0] = 0;
+		map(); SV_CoF_Inventory12Frame(); SV_CoF_Inventory12Frame();
+		assert( strstr( told_text[0], "slots 7 to 12 is kept" ) && logged( "cofstory phase=inventory12-hidden userid=1\n" ) == 1 );
+		assert( !told_text[1][0] ); /* the old client carried nothing there */
+		three = 1; map(); SV_CoF_Inventory12Frame(); three = 0;
+		assert( logged( "inventory12-hidden" ) == 1 );
+		id = 0; memcpy( player_pv[0] + 0x21FC + 9 * 4, &id, sizeof( id ));
+	}
 
 	/* six after twelve: 12 again on the next map once everyone has the screen */
 	clients[1].state = cs_free;

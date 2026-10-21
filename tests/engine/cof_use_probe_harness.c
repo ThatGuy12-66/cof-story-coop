@@ -42,7 +42,6 @@ struct edict_s
 typedef struct { int state, userid; unsigned int flags; edict_t *edict; } sv_client_t;
 typedef struct { qboolean allsolid, startsolid; float fraction; vec3_t endpos; edict_t *ent; } trace_t;
 typedef struct { float trace_fraction; edict_t *trace_ent; } globalvars_t;
-static vec3_t vec3_origin;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
 static globalvars_t globals;
 static struct { int numEntities; globalvars_t *globals; } svgame;
@@ -126,6 +125,28 @@ static trace_t SV_Move( const vec3_t start, vec3_t mins, vec3_t maxs, const vec3
 	return move_result;
 }
 
+/* 1.1.9 (R1): the map the probe is on by itself (c_college1, or its section of a merged map) */
+#include "cof_sections.h"
+static struct { char name[64]; } sv;
+static struct { void *mempool; } host;
+static int merged, load_calls, player_section[8];
+static void *Mem_Calloc( void *pool, size_t size ) { (void)pool; return calloc( 1, size ); }
+static void Mem_Free( void *p ) { free( p ); }
+static int Q_stricmp( const char *a, const char *b ) { return !CoF_SectCaseEq( a, b ); }
+static qboolean COM_CoF_IsMergedMap( const char *map ) { return merged && !strcmp( map, "cm_college2" ); }
+static qboolean COM_CoF_LoadSections( const char *map, cof_sections_t *out )
+{
+	static const char *members[] = { "c_college2", "C_College1", "c_college1dark" }; /* the case as a file may have it */
+	int i;
+	memset( out, 0, sizeof( *out ));
+	if( !COM_CoF_IsMergedMap( map )) return false;
+	load_calls++;
+	strcpy( out->name, map ); out->count = 3;
+	for( i = 0; i < 3; i++ ) strcpy( out->sec[i].map, members[i] );
+	return true;
+}
+static int SV_CoF_PlayerSection( const edict_t *ent ) { return merged ? player_section[ent - edicts] : -1; }
+
 /* ---- the unit under test ---- */
 #include "useprobe_under_test.c"
 
@@ -149,7 +170,8 @@ static void reset( void )
 	memset( clients, 0, sizeof( clients ));
 	memset( cof_probe_last, 0, sizeof( cof_probe_last ));
 	svs.maxclients = 2; svs.spawncount = 1; svs.clients = clients;
-	cof_probe_spawncount = 1;
+	cof_probe_spawncount = 1; cof_probe_where = 0;
+	sv.name[0] = 0; merged = 0; memset( player_section, 0, sizeof( player_section ));
 	svgame.numEntities = 7; svgame.globals = &globals;
 	globals.trace_fraction = 0.5f; globals.trace_ent = NULL;
 	probe_cvar.value = 1.0f; world_fraction = 1.0f;
@@ -230,6 +252,39 @@ int main( void )
 	svs.spawncount = 2;
 	SV_CoF_UseProbeFrame();
 	CHECK( strstr( console, "phase=use-probe userid=1 door=5 " ));
+
+	/* 1.1.9 (R1): with cof_use_probe 0 the probe watches c_college1 by itself, where the loop was reported */
+	reset();
+	probe_cvar.value = 0.0f;
+	strcpy( sv.name, "c_college1" ); svs.spawncount = 2;
+	edicts[5].v.owner = &edicts[1];
+	SV_CoF_UseProbeFrame();
+	CHECK( strstr( console, "phase=use-probe userid=1 door=5 " ));
+	/* any other map: nothing */
+	reset();
+	probe_cvar.value = 0.0f;
+	strcpy( sv.name, "c_college2" ); svs.spawncount = 2;
+	edicts[5].v.owner = &edicts[1];
+	SV_CoF_UseProbeFrame();
+	CHECK( IS( "" ));
+	/* a merged map with c_college1 in it (cm_college2): only the humans in that section; the sections file read once */
+	reset();
+	probe_cvar.value = 0.0f; load_calls = 0;
+	strcpy( sv.name, "cm_college2" ); merged = 1; svs.spawncount = 2;
+	player_section[1] = 0; /* in the c_college2 section */
+	edicts[5].v.owner = &edicts[1];
+	SV_CoF_UseProbeFrame();
+	CHECK( IS( "" ));
+	player_section[1] = 1; /* now in the c_college1 section, still holding the door */
+	SV_CoF_UseProbeFrame();
+	CHECK( strstr( console, "phase=use-probe userid=1 door=5 " ));
+	/* cof_use_probe 1: every section, as before */
+	clear();
+	probe_cvar.value = 1.0f; player_section[1] = 2; edicts[5].v.owner = NULL;
+	SV_CoF_UseProbeFrame();
+	edicts[5].v.owner = &edicts[1];
+	SV_CoF_UseProbeFrame();
+	CHECK( strstr( console, "phase=use-probe userid=1 door=5 " ) && load_calls == 1 );
 
 	CHECK( probe_cvar_gets == 1 ); /* made once, then read */
 	printf( "use-probe scenarios passed\n" );

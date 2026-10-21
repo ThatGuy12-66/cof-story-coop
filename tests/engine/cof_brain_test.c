@@ -77,6 +77,28 @@ int main( void )
 	scene( 60, 0 ); set3( in.leader_view, 0, 90, 0 ); think( 0 );
 	assert( out.mode == COF_BRAIN_IDLE && !out.forward && !out.side && out.angles[1] > 0 && out.angles[1] < 90 );
 
+	/* 1.1.9: far behind with nothing to fight it sprints, while the stamina lasts (the engine reads it; not known: never). */
+	scene( 400, 0 ); think( 0 ); assert( out.mode == COF_BRAIN_FOLLOW && !( out.buttons & COF_IN_RUN ));
+	scene( 400, 0 ); in.stamina = 100; think( 0 ); assert( out.mode == COF_BRAIN_FOLLOW && ( out.buttons & COF_IN_RUN ));
+	scene( 200, 0 ); in.stamina = 100; think( 0 ); assert( out.forward > 0 && !( out.buttons & COF_IN_RUN )); /* walking */
+	/* it sets off with 60 and stops at 30: never run out (out of breath it would crawl for 5 s) */
+	scene( 400, 0 ); in.stamina = 45; think( 0 ); assert( out.forward > 0 && !( out.buttons & COF_IN_RUN ));
+	in.sprinting = 1; think( 0.1 ); assert( out.buttons & COF_IN_RUN );
+	in.stamina = 25; think( 0.1 ); assert( out.forward > 0 && !( out.buttons & COF_IN_RUN ));
+	/* not up or down the way (sprinting onto stairs trips), not in the air, not with sights up (that holds the breath) */
+	scene( 400, 0 ); in.stamina = 100; set3( in.leader_pos, 400, 0, 40 ); think( 0 );
+	assert( out.forward > 0 && !( out.buttons & COF_IN_RUN ));
+	scene( 400, 0 ); in.stamina = 100; in.onground = 0; think( 0 ); assert( !( out.buttons & COF_IN_RUN ));
+	scene( 400, 0 ); in.stamina = 100; in.sights = 1; think( 0 ); assert( !( out.buttons & COF_IN_RUN ));
+	/* a threat: it fights and never sprints (a sprinting gun cannot fire), however far behind the leader it is */
+	scene( 400, 0 ); in.stamina = 100; threat( 150, 140 ); think( 0 ); assert( out.mode == COF_BRAIN_FIGHT && !( out.buttons & COF_IN_RUN ));
+	scene( 400, 0 ); in.stamina = 100; in.sprinting = 1; threat( 150, 140 );
+	in.has_gun = 1; in.weapon = COF_WEAPON_GUN; in.clip = 5; in.reserve = 10; in.pass_through = 1;
+	for( i = 0; i < 10; i++ ) { think( 0.05 ); memcpy( in.view, out.angles, sizeof( in.view )); assert( !( out.buttons & COF_IN_RUN )); }
+	/* to a downed leader it sprints too */
+	scene( 400, 0 ); in.stamina = 100; in.leader_alive = 0; in.leader_down = 1; think( 0 );
+	assert( out.mode == COF_BRAIN_REVIVE && ( out.buttons & COF_IN_RUN ));
+
 	/* Follow with slack: set off beyond 128, stop inside 80 (one threshold made a slowly
 	 * walking leader start and stop it every frame: 540 mode changes in 30 live minutes). */
 	scene( 100, 0 ); think( 0.1 ); assert( out.mode == COF_BRAIN_IDLE && !out.forward );

@@ -10,6 +10,7 @@ typedef int qboolean;
 #define true 1
 #define false 0
 #define MAX_CLIENTS 4
+#define cs_free 0
 #define cs_spawned 4
 #define FCL_FAKECLIENT 128
 #define DEAD_NO 0
@@ -19,10 +20,20 @@ typedef int qboolean;
 #define SetBits(value,bits) ((value) |= (bits))
 #define BIT(n) ( 1U << ( n ))
 #define ARRAYSIZE(x) ( sizeof( x ) / sizeof(( x )[0] ))
+#ifdef _WIN32
 #define Q_stricmp _stricmp
+#else
+#include <strings.h>
+#define Q_stricmp strcasecmp
+#endif
 #define Q_strcmp strcmp
 #define FL_FROZEN ( 1 << 12 )
 #define FL_KILLME ( 1 << 30 )
+#define FL_NOTARGET ( 1 << 7 )
+#define DAMAGE_NO 0
+#define DAMAGE_AIM 2
+#define SOLID_NOT 0
+#define SOLID_SLIDEBOX 3
 #define ss_active 2
 #define DotProduct(a,b) ((a)[0]*(b)[0]+(a)[1]*(b)[1]+(a)[2]*(b)[2])
 #define VectorSubtract(a,b,c) ((c)[0]=(a)[0]-(b)[0],(c)[1]=(a)[1]-(b)[1],(c)[2]=(a)[2]-(b)[2])
@@ -31,10 +42,10 @@ static void Q_strncpy( char *target, const char *source, size_t size ) { snprint
 typedef float vec3_t[3];
 typedef int string_t;
 /* owner: a weapon's m_pPlayer (the player object it belongs to) */
-typedef struct { int free; void *pvPrivateData, *owner; struct { float health; int deadflag, flags, spawnflags; string_t classname; vec3_t origin; } v; int inventory; } edict_t;
+typedef struct { int free, serialnumber; void *pvPrivateData, *owner; struct { float health, takedamage; int deadflag, flags, spawnflags, solid; string_t classname; vec3_t origin; } v; int inventory; } edict_t;
 typedef struct { int state, flags, userid; char name[32]; edict_t *edict; } sv_client_t;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
-static struct { int state; } sv;
+static struct { int state, loadgame; double time; } sv;
 static struct { void *pSaveData; } globals;
 static int fake_spawn( edict_t *ent );
 static struct { int numEntities; struct { int ( *pfnSpawn )( edict_t *ent ); } dllFuncs; struct { void *pSaveData; } *globals; } svgame = { 0, { fake_spawn }, ( void * )&globals };
@@ -42,7 +53,7 @@ static sv_client_t clients[2];
 static edict_t edicts[12];
 static byte player_private[2][0x2820], weapon_private[8][0x200];
 static const char *strings[] = { "", "weapon_glock", "weapon_p345", "weapon_sledgehammer", "monster_bosschainsaw", "player" };
-static int gate = 1, transition, captures, restores, fail_restore, reconciled, frees, spawns, unsafe_frees;
+static int gate = 1, transition, captures, restores, fail_restore, reconciled, frees, spawns, unsafe_frees, links;
 static char console[4096];
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
 static qboolean SV_CoF_TransitionActive( void ) { return transition; }
@@ -63,8 +74,9 @@ static void SV_FreeEdict( edict_t *entity )
 		for( o = 0x2514; o < 0x2540; o++ ) if( player_private[p][o] ) unsafe_frees++;
 		for( o = 0x3F0; o < 0x3F4; o++ ) if( player_private[p][o] ) unsafe_frees++;
 	}
-	entity->free = 1; frees++;
+	entity->free = 1; entity->serialnumber++; frees++; /* as SV_FreeEdict: an old EHANDLE no longer matches */
 }
+static void SV_LinkEdict( edict_t *entity, qboolean touch ) { (void)entity; (void)touch; links++; }
 static qboolean SV_CoF_RetailOwnsWeapon( edict_t *player, edict_t *entity )
 {
 	return SV_IsValidEdict( player ) && SV_IsValidEdict( entity ) && !FBitSet( entity->v.flags, FL_KILLME ) &&
@@ -76,7 +88,9 @@ static edict_t *SV_CreateNamedEntity( edict_t *unused, string_t classname )
 	for( i = 3; i < 12; i++ )
 		if( edicts[i].free )
 		{
+			int serial = edicts[i].serialnumber;
 			memset( &edicts[i], 0, sizeof( edicts[i] ));
+			edicts[i].serialnumber = serial;
 			edicts[i].pvPrivateData = weapon_private[i - 3]; edicts[i].v.classname = classname;
 			if( i >= svgame.numEntities ) svgame.numEntities = i + 1;
 			return &edicts[i];
@@ -112,7 +126,9 @@ static void SV_CoF_ShareRemember( void ) {}
 static void weapon( int i, string_t classname, int player, int bucket )
 {
 	void *pv = weapon_private[i - 3];
+	int serial = edicts[i].serialnumber;
 	memset( &edicts[i], 0, sizeof( edicts[i] ));
+	edicts[i].serialnumber = serial;
 	edicts[i].pvPrivateData = pv; edicts[i].owner = player_private[player]; edicts[i].v.classname = classname;
 	if( bucket >= 0 ) memcpy( player_private[player] + 0x2514 + bucket * 4, &pv, sizeof( uint32_t ));
 	if( i >= svgame.numEntities ) svgame.numEntities = i + 1;
@@ -191,7 +207,8 @@ int main( void )
 	weapon( 4, 1, 1, 0 ); edicts[2].inventory = 55;
 	edicts[1].inventory = 7; /* the host is unarmed: nothing to keep */
 	SV_CoF_RecoveryThinkBegin( &edicts[3] ); assert( captures == 1 );
-	SV_CoF_RecoveryThinkEnd(); /* a think that took nothing: the capture is dropped */
+	SV_CoF_RecoveryThinkEnd(); /* a think that took nothing: nothing handed over */
+	sv.time += 2; /* 1.1.9 (I4): a capture under a second old would be used again */
 	SV_CoF_RecoveryThinkBegin( &edicts[3] ); assert( captures == 2 );
 	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); edicts[2].inventory = 0; /* stripped */
 	console[0] = 0; SV_CoF_RecoveryThinkEnd();
@@ -211,6 +228,97 @@ int main( void )
 	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); edicts[2].inventory = 0;
 	SV_CoF_RecoveryThinkEnd(); SV_CoF_RecoveryFrame(); assert( restores == 1 );
 	edicts[2].v.flags = 0; SV_CoF_RecoveryFrame(); assert( restores == 2 && edicts[2].inventory == 55 );
+	SV_CoF_RecoveryReset();
+
+	/* 1.1.9 (I4): a capture of the same inventory less than a second old is used again: one capture a second for a
+	 * person in the boss's reach, not one per think (about ten a second, each a 4 MB save heap) */
+	for( i = 3; i < 12; i++ ) edicts[i].free = 1;
+	memset( &edicts[3], 0, sizeof( edicts[3] )); edicts[3].v.classname = 4; edicts[3].v.origin[0] = 60; svgame.numEntities = 4;
+	SV_CoF_RecoveryInit(); SV_CoF_RecoveryFrame(); captures = restores = 0;
+	edicts[2].v.flags = 0; edicts[2].v.health = 100; edicts[2].v.origin[0] = 10; edicts[2].inventory = 55;
+	memset( player_private[1] + 0x2514, 0, 0x2C ); weapon( 4, 1, 1, 0 );
+	for( i = 0; i < 10; i++ ) { sv.time = 300 + 0.1 * i; SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); }
+	assert( captures == 1 );
+	sv.time = 301.05; SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 2 ); /* over a second */
+	/* ...an inventory that changed (a slot's descriptor, a weapon bucket) is captured again at once */
+	player_private[1][0x21FC + 8] = 0x5A; sv.time = 301.1;
+	SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 3 );
+	weapon( 5, 1, 1, 1 ); sv.time = 301.2;
+	SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 4 );
+	/* ...another person in that client slot, or another map, never gets it */
+	clients[1].userid = 11; sv.time = 301.3; SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 5 );
+	svs.spawncount++; sv.time = 301.4; SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 6 );
+	/* ...a capture used again is the one handed over when the grab strips them: what they had a moment before */
+	sv.time = 301.6; SV_CoF_RecoveryThinkBegin( &edicts[3] ); assert( captures == 6 );
+	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); edicts[2].inventory = 0;
+	console[0] = 0; SV_CoF_RecoveryThinkEnd(); assert( strstr( console, "reason=grab" ));
+	edicts[2].v.health = 0; SV_CoF_RecoveryFrame(); edicts[2].v.flags = 0; edicts[2].v.health = 100; SV_CoF_RecoveryFrame();
+	assert( restores == 1 && edicts[2].inventory == 55 );
+	/* ...a think whose begin did not see the person (out of reach) hands nothing over, however young the capture */
+	weapon( 4, 1, 1, 0 ); sv.time = 302.0; SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 7 );
+	edicts[2].v.origin[0] = 400; sv.time = 302.1; SV_CoF_RecoveryThinkBegin( &edicts[3] );
+	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); console[0] = 0;
+	SV_CoF_RecoveryThinkEnd(); assert( !strstr( console, "reason=grab" ));
+	edicts[2].v.flags = 0; edicts[2].v.origin[0] = 10;
+	SV_CoF_RecoveryReset();
+
+	/* 1.1.9 (I5): a leaver's P345. (2) A player object the game never disconnected is made what ClientDisconnect makes
+	 * of one: not solid, no damage, no target. (1) The copy left is the leaver's record's: the rejoin's restore gives
+	 * the P345 back and takes the copy away while it still lies there; one a partner carries stays theirs. */
+	for( i = 3; i < 12; i++ ) edicts[i].free = 1;
+	svgame.numEntities = 3; frees = spawns = links = 0; captures = restores = 0; console[0] = 0;
+	clients[1].state = cs_spawned; clients[1].userid = 20; clients[1].flags = 0; strcpy( clients[1].name, "Partner" );
+	SV_CoF_RecoveryInit(); SV_CoF_RecoveryFrame();
+	memset( player_private[1] + 0x2514, 0, 0x2C ); memset( player_private[1] + 0x3F0, 0, 4 );
+	weapon( 3, 2, 1, 0 ); edicts[2].inventory = 64; edicts[2].v.solid = SOLID_SLIDEBOX; edicts[2].v.takedamage = DAMAGE_AIM;
+	edicts[2].v.origin[0] = 10; edicts[2].v.origin[1] = 20; edicts[2].v.origin[2] = 30;
+	SV_CoF_RecoveryDrop( &clients[1] ); SV_CoF_RecoveryDropDone( &clients[1] ); clients[1].state = cs_free;
+	assert( captures == 1 && spawns == 1 && strstr( console, "cofstory phase=weapon-left userid=20 weapon=weapon_p345" ));
+	assert( edicts[2].v.solid == SOLID_NOT && edicts[2].v.takedamage == DAMAGE_NO && FBitSet( edicts[2].v.flags, FL_NOTARGET ) && links == 1 );
+	assert( strstr( console, "cofstory phase=body-let-go userid=20" ));
+	{
+		int copy = -1;
+		for( i = 3; i < 12; i++ ) if( !edicts[i].free && edicts[i].v.classname == 2 ) copy = i;
+		assert( copy >= 0 && !edicts[copy].owner );
+		clients[1].state = cs_spawned; clients[1].userid = 21; edicts[2].inventory = 0; /* the rejoin, by name */
+		SV_CoF_RecoveryJoin( &clients[1] ); SV_CoF_RecoveryFrame();
+		assert( restores == 1 && edicts[2].inventory == 64 && edicts[copy].free );
+		assert( strstr( console, "cofstory phase=weapon-taken-back userid=21 weapon=weapon_p345" ));
+	}
+	/* ...one the host picked up meanwhile is the host's */
+	console[0] = 0; frees = spawns = 0; clients[1].userid = 22; edicts[2].v.solid = SOLID_SLIDEBOX;
+	weapon( 3, 2, 1, 0 ); edicts[2].inventory = 65;
+	SV_CoF_RecoveryDrop( &clients[1] ); SV_CoF_RecoveryDropDone( &clients[1] ); clients[1].state = cs_free;
+	{
+		int copy = -1;
+		for( i = 3; i < 12; i++ ) if( !edicts[i].free && edicts[i].v.classname == 2 ) copy = i;
+		assert( copy >= 0 && spawns == 1 );
+		edicts[copy].owner = player_private[0]; /* the host carries it */
+		clients[1].state = cs_spawned; clients[1].userid = 23; SV_CoF_RecoveryJoin( &clients[1] ); SV_CoF_RecoveryFrame();
+		assert( edicts[2].inventory == 65 && !edicts[copy].free && !strstr( console, "weapon-taken-back" ));
+		edicts[copy].free = 1;
+	}
+	/* ...a body the game disconnected (already not solid) is not linked again; nor is anything touched while a saved
+	 * game loads (the next one in the slot is given that object as it is) */
+	links = 0; edicts[2].v.solid = SOLID_NOT; SV_CoF_RecoveryDropDone( &clients[1] ); assert( !links );
+	sv.loadgame = 1; edicts[2].v.solid = SOLID_SLIDEBOX; edicts[2].v.flags = 0; edicts[2].v.takedamage = DAMAGE_AIM;
+	SV_CoF_RecoveryDropDone( &clients[1] ); assert( !links && edicts[2].v.solid == SOLID_SLIDEBOX && !FBitSet( edicts[2].v.flags, FL_NOTARGET ));
+	sv.loadgame = 0;
+	/* (3) A leave while a story level change restores the map: the copy waits for everyone to be in, then lies where
+	 * the leaver was, and is the record's like any other (here: no rejoin, so it stays) */
+	console[0] = 0; frees = spawns = 0; clients[1].userid = 24; weapon( 3, 3, 1, 0 ); edicts[2].inventory = 66;
+	edicts[2].v.origin[0] = 70;
+	transition = 1;
+	SV_CoF_RecoveryDrop( &clients[1] ); SV_CoF_RecoveryDropDone( &clients[1] ); clients[1].state = cs_free;
+	assert( frees == 1 && !spawns && strstr( console, "cofstory phase=weapon-left-later userid=24 weapon=weapon_sledgehammer" ));
+	SV_CoF_RecoveryFrame(); assert( !spawns ); /* still restoring */
+	transition = 0; SV_CoF_RecoveryFrame();
+	assert( spawns == 1 && spawned_at[0] == 70 && strstr( console, "cofstory phase=weapon-left userid=24 weapon=weapon_sledgehammer" ));
+	SV_CoF_RecoveryFrame(); assert( spawns == 1 ); /* once */
+	/* ...and a level change in between: that map's copy is not left in another */
+	clients[1].state = cs_spawned; clients[1].userid = 25; weapon( 4, 3, 1, 0 ); transition = 1; spawns = 0;
+	SV_CoF_RecoveryDrop( &clients[1] ); SV_CoF_RecoveryDropDone( &clients[1] ); clients[1].state = cs_free;
+	svs.spawncount++; transition = 0; SV_CoF_RecoveryFrame(); assert( !spawns );
 	SV_CoF_RecoveryReset();
 	puts( "recovery lifecycle scenarios passed" );
 	return 0;

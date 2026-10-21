@@ -8,7 +8,8 @@ models/null.mdl, and the police long guns are held badly by the generated Simon 
   booklaser, browning), built from the item's w_ model mesh and textures;
 * p_<gun>.mdl   grip-corrected copies of police long guns for Simon (only the item bone changes);
 * l_<item>.mdl  left-hand variants on Bip01 L Hand for the dual-wield "other hand";
-* r_<item>.mdl  right-hand lights re-aimed for the dual-wield body pose.
+* r_<item>.mdl  right-hand lights re-aimed for the dual-wield body pose;
+* h_gasmask.mdl the night vision (gas) mask on Bip01 Head, from the item's w_ model (1.1.9).
 
 Every model uses the stock bone names, so the retail client bone-merges it onto the player
 (HLSDK StudioMergeBones). Grips are solved with the HLSDK studio maths re-implemented here: the
@@ -58,6 +59,13 @@ SOURCES = {
     "models/weapons/camera/w_camera.mdl": "01e54840151049260b605d26350e64fb257173ee345530914a78c27d9a1b7d99",
     "models/weapons/booklaser/w_booklaser.mdl": "a9f9ebe24e0c30f3df7bee10ffb90676b95d114203fa3fcafe36d718d02b2284",
     "models/weapons/browning/w_browning.mdl": "002540d8473bb6d7d0838f65a0795ef2fb34c4e928e0548c448b96ad0ee0037b",
+}
+# 1.1.9: files only a cosmetic model needs, pinned the same way but optional: missing or not the stock bytes, that
+# model is left out (the manifest's "skipped" says why) and the rest is made as usual, so a modded file never blocks
+# a setup, an Update or a Repair. The night vision (gas) mask item is the source of h_gasmask (owner's copy,
+# evidence/polish-20261021).
+OPTIONAL_SOURCES = {
+    "models/items/w_nightvision.mdl": "d18f78bc1e56c03c9b899220b9a154157b78de462af76a70084c58850fa318eb",
 }
 
 
@@ -724,9 +732,92 @@ def angle_between(a, b):
     return math.degrees(math.acos(max(-1.0, min(1.0, dot(normalize(a), normalize(b))))))
 
 
+# ---------------------------------------------------------------------------------------------
+# The gas mask (1.1.9): what the other players see on a player whose night vision is on
+# ---------------------------------------------------------------------------------------------
+
+# The engine sends h_gasmask as a follow entity merged onto the wearer while m_iFlashlightFlags bit 64 (the night
+# vision fully on) is set (engine/server/sv_cof_weaponmodel.h). Its bones are the chain to Bip01 Head, named like
+# the player's (StudioMergeBones copies them), plus GASMASK under the head, whose local transform is the fit below.
+GASMASK = "h_gasmask"
+GASMASK_SOURCE = "models/items/w_nightvision.mdl"
+GASMASK_FLAG = 64
+HEAD_CHAIN = ("Bip01", "Bip01 Pelvis", "Bip01 Spine", "Bip01 Spine1", "Bip01 Spine2", "Bip01 Spine3", "Bip01 Neck",
+              "Bip01 Head")
+HEAD_ITEM_BONE = "GASMASK"  # never a player bone name, so the client keeps it ours
+
+# The fit, worked out from the real files (the owner's w_nightvision.mdl and cof_s1.mdl, evidence/polish-20261021)
+# and checked on renders of the result and by tests/test_coop_gasmask.py (RealMaskTests):
+# * the item lies on its back, resting on its rim: its two lenses (centres (-2.28, 2.09, 5.94) and (-2.29, -1.57,
+#   5.93), item model space) look up and toward +X, along (0.48, +-0.58, 0.66) each, (cos 54, 0, sin 54) together;
+#   the forehead and the head harness are toward -X, the snout, the hose and the filter canister toward +X (the
+#   canister's end faces (0.68, 0, 0.74), 6 deg below the lenses' look). It is symmetric about y = 0.26.
+# * worn, in Simon's model space in the idle pose (+X forward, +Y his left, +Z up): the lenses' look goes to +X,
+#   the item's +Y to +Y and its up (the look x +Y: toward the forehead) to +Z. So the face piece covers the face,
+#   the harness goes back round the head (inside the hood) and the canister hangs at the chest, pointing forward.
+# * Simon's eyes (cof_s1 idle, head_face.bmp texels (222, 205) and (293, 205)) are at (9.48, -1.22, 30.51) and
+#   (9.40, 1.39, 30.57): the lens midpoint goes LENS_AHEAD in front of their midpoint SIMON_EYES, at its height.
+#   Scale 1: the lenses (3.66 apart) cover eyes 2.61 apart, the face piece (7.2 wide) sits inside the hood.
+# * the GASMASK bone's transform is that placement in Bip01 Head's space: the head's idle matrix HEAD_WORLD (probe,
+#   rounded to 4 places; made rigid again) inverted, times the placement.
+HEAD_WORLD = [[0.3834, 0.9234, -0.0162, 3.9076], [-0.0109, 0.022, 0.9997, -0.0675], [0.9235, -0.3831, 0.0185, 28.2568]]
+GASMASK_LENSES = (-2.285, 0.26, 5.935)
+GASMASK_LOOK_DEGREES = 54.0
+SIMON_EYES = (9.44, 0.085, 30.54)
+LENS_AHEAD = 1.2
+GASMASK_SCALE = 1.0
+
+
+def rigid(m):
+    """A 3x4 matrix whose rotation is made orthonormal again (Gram-Schmidt on its columns), translation kept."""
+    x = normalize(tuple(m[i][0] for i in range(3)))
+    y = tuple(m[i][1] for i in range(3))
+    y = normalize(tuple(y[k] - dot(x, y) * x[k] for k in range(3)))
+    z = cross(x, y)
+    return [[x[i], y[i], z[i], m[i][3]] for i in range(3)]
+
+
+def gasmask_axes():
+    """The worn mask's forward (the lenses' look), left and up in the item's model space."""
+    look = math.radians(GASMASK_LOOK_DEGREES)
+    forward, left = (math.cos(look), 0.0, math.sin(look)), (0.0, 1.0, 0.0)
+    return forward, left, cross(forward, left)
+
+
+def gasmask_placement():
+    """Item model space (scaled by GASMASK_SCALE) -> Simon's model space in the idle pose."""
+    rows = gasmask_axes()
+    lenses = tuple(GASMASK_SCALE * c for c in GASMASK_LENSES)
+    anchor = (SIMON_EYES[0] + LENS_AHEAD, SIMON_EYES[1], SIMON_EYES[2])
+    return [list(rows[i]) + [anchor[i] - dot(rows[i], lenses)] for i in range(3)]
+
+
+def gasmask_fit():
+    """Item model space (scaled by GASMASK_SCALE) -> Bip01 Head space: the GASMASK bone's local transform."""
+    return concat(invert(rigid(HEAD_WORLD)), gasmask_placement())
+
+
+def build_gasmask(mask_data, police: Studio):
+    """h_gasmask.mdl from the stock item: its mesh (scaled) on the GASMASK bone under the head chain (defaults from
+    police1, like the p_ models' arm chain). Returns the model and its fit record for the manifest."""
+    model = Studio(mask_data)
+    parts, textures, skin = item_assets(model)
+    parts = [{**part, "verts": [tuple(GASMASK_SCALE * c for c in v) for v in part["verts"]]} for part in parts]
+    bones = []
+    for index, name in enumerate(HEAD_CHAIN):
+        bone = police.bones[police.bone(name)]
+        bones.append((name, index - 1, bone["value"], bone["scale"]))
+    bones.append((HEAD_ITEM_BONE, len(HEAD_CHAIN) - 1, bone_value(gasmask_fit()), ITEM_SCALE))
+    data = write_studio(GASMASK + ".mdl", bones, len(HEAD_CHAIN), parts, textures, skin)
+    return data, {"bone": "Bip01 Head", "scale": GASMASK_SCALE, "look_degrees": GASMASK_LOOK_DEGREES,
+                  "lenses_in_idle": [round(c, 3) for c in transform(gasmask_placement(), tuple(GASMASK_SCALE * c for c in GASMASK_LENSES))],
+                  "bone_value": [round(c, 4) for c in bone_value(gasmask_fit())]}
+
+
 def build_models(files: dict[str, bytes]):
     """files: SOURCES path -> stock bytes. Returns {cryoffear-relative path: bytes} including
-    the coop-weapons.json manifest. Refuses any source whose hash is not the pinned one."""
+    the coop-weapons.json manifest. Refuses any source whose hash is not the pinned one; an OPTIONAL_SOURCES file
+    that is missing or not pinned only leaves its model out (the manifest's "skipped")."""
     for path, expected in SOURCES.items():
         if path not in files or sha(files[path]) != expected:
             raise ValueError(f"Stock source missing or hash mismatch: {path}")
@@ -742,7 +833,7 @@ def build_models(files: dict[str, bytes]):
             raise ValueError("Model path too long for the engine")
         outputs[path] = data
         records[path] = {"sha256": sha(data), "bytes": len(data), **simon.validate_model(data),
-                         "sources": [{"path": source, "sha256": SOURCES[source]} for source in sources], **info}
+                         "sources": [{"path": source, "sha256": {**SOURCES, **OPTIONAL_SOURCES}[source]} for source in sources], **info}
 
     for name, spec in STORY_ITEMS.items():
         model = Studio(files[spec["source"]])
@@ -787,11 +878,20 @@ def build_models(files: dict[str, bytes]):
             hand=side, weapon_id=spec["id"], grip="mirrored right-hand grip" if spec["target"] == "mirror" else "dual pose",
             design_sequence={"name": DUAL_SEQUENCE, "index": SEQUENCES[DUAL_SEQUENCE]})
 
+    skipped = []
+    mask, why = optional_source(files, GASMASK_SOURCE)
+    if mask is not None:
+        data, fit = build_gasmask(mask, police)
+        add(GASMASK, data, [GASMASK_SOURCE, "models/player/police1/police1.mdl"], night_vision_flag=GASMASK_FLAG, fit=fit)
+    else:  # cosmetic: the others just see no mask (the engine precaches only the models a copy has)
+        skipped.append({"path": f"{OUTPUT_DIR}/{GASMASK}.mdl", "reason": why})
+
     manifest = {
         "generator": "tools/prepare_coop_weapons.py",
         "relative_to": "cryoffear",
         "mapping": engine_mapping(),
         "outputs": records,
+        "skipped": skipped,
         "limitations": [
             "Grips are solved for frame 0 of Simon's (cof_s1/cof_s2) pose at pitch 0 with the idle gait.",
             "Generated models are private stock-derived assets: build them on the player's machine, never ship them.",
@@ -827,12 +927,40 @@ def engine_mapping():
                      "right_hand_from": "P+0x1E74 (m_iRightWeaponID, the light or the second pistol)",
                      "left_hand_from": "P+0x1E70 (m_iLeftWeaponID, the weapon)",
                      "right": dict(sorted(right.items(), key=lambda item: int(item[0]))),
-                     "left": dict(sorted(left.items(), key=lambda item: int(item[0])))}}
+                     "left": dict(sorted(left.items(), key=lambda item: int(item[0])))},
+            "gasmask": {"model": f"{OUTPUT_DIR}/{GASMASK}.mdl", "flash_flag": GASMASK_FLAG,
+                        "while": "m_iFlashlightFlags (P+0x5D0) has the flag: a follow entity merged on Bip01 Head"}}
+
+
+def output_paths():
+    """Every model build_models makes (cryoffear-relative), for the install checks."""
+    names = list(STORY_ITEMS) + list(LONG_GUNS) + list(DUAL_ITEMS) + [GASMASK]
+    return [f"{OUTPUT_DIR}/{name}.mdl" for name in names]
+
+
+def optional_source(files, path):
+    """(the stock bytes of an OPTIONAL_SOURCES file, "") when files has them, else (None, why it is left out)."""
+    if path not in files:
+        return None, f"{path} is missing"
+    if sha(files[path]) != OPTIONAL_SOURCES[path]:
+        return None, f"{path} is not the stock file"
+    return files[path], ""
+
+
+def read_optional(root: Path) -> dict[str, bytes]:
+    """The OPTIONAL_SOURCES a cryoffear folder has (build_models checks their bytes)."""
+    found = {}
+    for path in OPTIONAL_SOURCES:
+        try:
+            found[path] = (Path(root) / path).read_bytes()
+        except OSError:
+            continue
+    return found
 
 
 def read_sources(game_dir: Path):
     root = game_dir / "cryoffear"
-    return {path: (root / path).read_bytes() for path in SOURCES}
+    return {**{path: (root / path).read_bytes() for path in SOURCES}, **read_optional(root)}
 
 
 def main(argv=None):

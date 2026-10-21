@@ -11,6 +11,7 @@ from tools import prepare_simon_models as simon
 
 GAME_ROOT = core.DEFAULT_GAME_DIR
 SOURCES_PRESENT = all((GAME_ROOT / "cryoffear" / path).exists() for path in weapons.SOURCES)
+# (1.1.9: the gas mask's fit with the real models is checked in tests/test_coop_gasmask.py)
 
 
 def angle(a, b):
@@ -90,8 +91,9 @@ class CoopWeaponModelTests(unittest.TestCase):
         return world[len(model.bones) - 1], world
 
     def test_expected_outputs_with_short_paths_and_matching_manifest(self):
-        names = set(weapons.STORY_ITEMS) | set(weapons.LONG_GUNS) | set(weapons.DUAL_ITEMS)
+        names = set(weapons.STORY_ITEMS) | set(weapons.LONG_GUNS) | set(weapons.DUAL_ITEMS) | {weapons.GASMASK}
         self.assertEqual(set(self.models), {f"models/coop/{name}.mdl" for name in names})
+        self.assertEqual(set(self.models), set(weapons.output_paths()))
         for name in ("p_axe", "p_famas", "p_lantern", "p_flare", "p_mobile", "p_camera", "p_booklaser", "p_browning",
                      "p_rifle", "p_shotgun", "l_flashlight", "l_mobile", "l_lantern", "l_flare", "l_glock"):
             self.assertIn(f"models/coop/{name}.mdl", self.models)
@@ -103,7 +105,8 @@ class CoopWeaponModelTests(unittest.TestCase):
                 record = self.manifest["outputs"][path]
                 self.assertEqual(record["sha256"], weapons.sha(data))
                 self.assertEqual(simon.validate_model(data)["sequences"], 1)
-                self.assertTrue(all(source["path"] in weapons.SOURCES for source in record["sources"]))
+                self.assertTrue(all(source["path"] in {**weapons.SOURCES, **weapons.OPTIONAL_SOURCES}
+                                    for source in record["sources"]))
                 self.assertLess(len(data), 600_000)
 
     def test_bones_merge_onto_every_simon_model_and_police1(self):
@@ -118,7 +121,9 @@ class CoopWeaponModelTests(unittest.TestCase):
             with self.subTest(path=path):
                 names = [b["name"] for b in model.bones]
                 side = "L" if path.split("/")[-1].startswith("l_") else "R"
-                self.assertEqual(names[:-1], [pattern.format(side=side) for pattern in weapons.ARM_CHAIN])
+                chain = weapons.HEAD_CHAIN if path.split("/")[-1].startswith("h_") else \
+                    [pattern.format(side=side) for pattern in weapons.ARM_CHAIN]
+                self.assertEqual(names[:-1], list(chain))
                 for player in players:
                     self.assertTrue(set(names[:-1]) <= player)
                     self.assertNotIn(names[-1], player)
@@ -131,6 +136,8 @@ class CoopWeaponModelTests(unittest.TestCase):
 
     def test_mesh_sits_in_the_hand_in_the_bind_pose(self):
         for path, model in self.models.items():
+            if path.split("/")[-1].startswith("h_"):
+                continue  # the gas mask is on the head: test_gasmask_covers_simons_face
             with self.subTest(path=path):
                 world = weapons.world_bones(model, weapons.local_pose(model, 0))
                 hand = world[len(model.bones) - 2]
@@ -237,6 +244,13 @@ class CoopWeaponModelTests(unittest.TestCase):
         del missing["models/weapons/famas/w_famas.mdl"]
         with self.assertRaisesRegex(ValueError, "missing"):
             weapons.build_models(missing)
+        # 1.1.9: the gas mask's source is optional: modded or missing, only h_gasmask is left out
+        for files in ({**self.files, weapons.GASMASK_SOURCE: b"modded"},
+                      {k: v for k, v in self.files.items() if k != weapons.GASMASK_SOURCE}):
+            outputs = weapons.build_models(files)
+            self.assertNotIn("models/coop/h_gasmask.mdl", outputs)
+            self.assertEqual(set(outputs) | {"models/coop/h_gasmask.mdl"}, set(self.outputs))
+            self.assertEqual([s["path"] for s in json.loads(outputs["coop-weapons.json"])["skipped"]], ["models/coop/h_gasmask.mdl"])
 
     def test_cli_refuses_an_output_outside_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

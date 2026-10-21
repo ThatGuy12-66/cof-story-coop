@@ -40,19 +40,25 @@ static size_t Q_strncpy( char *dst, const char *src, size_t size )
 	return n;
 }
 typedef float vec3_t[3];
-typedef struct { float health, fuser3; int deadflag, flags, spawnflags; string_t classname, target, targetname; vec3_t absmin, absmax; } entvars_t;
+typedef struct { float health, fuser3; int deadflag, flags, spawnflags, iuser1; string_t classname, target, targetname, message; vec3_t absmin, absmax; } entvars_t;
 typedef struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; } edict_t;
-typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict; } sv_client_t;
+typedef struct { int cursize; } sizebuf_t;
+typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; struct { sizebuf_t message; } netchan; } sv_client_t;
+#define svc_setview 5
+static int last_svc = -1, last_svc_word = -1; /* the last engine message to a client: its command and word */
+static void MSG_BeginServerCmd( sizebuf_t *sb, int cmd ) { sb->cursize++; last_svc = cmd; }
+static void MSG_WriteWord( sizebuf_t *sb, int word ) { sb->cursize += 2; last_svc_word = word; }
 typedef void ( *xcommand_t )( void );
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
 static struct { double time; } sv;
 static struct { struct { void ( *pfnClientCommand )( edict_t *ent ); int ( *pfnSpawn )( edict_t *ent ); void ( *pfnUse )( edict_t *ent, edict_t *player ); } dllFuncs; int numEntities; edict_t *edicts; } svgame;
 static edict_t edicts[12];
 static sv_client_t clients[2];
-static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x210], monster_private[3][0x360];
+static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x210], monster_private[3][0x360], phone_private[0xE4];
 static const char *strings[] = { "", "inventoryitems/hallkey.txt", "inventoryitems/weapons/weapon_mobile.txt", "inventoryitems/fuse.txt", "cof_document",
 	"weapon_glock", "weapon_switchblade", "weapon_syringe", "weapon_shotgun", "monster_slower", "monster_generic", "monster_sawrunner", "monster_nerd",
-	"weapon_dualweapon", "findthekey", "txtfiles/custom_objectives.txt", "txtfiles/hints.txt", "cof_yesno", "ryesno", "trigger_multiple", "boat" };
+	"weapon_dualweapon", "findthekey", "txtfiles/custom_objectives.txt", "txtfiles/hints.txt", "cof_yesno", "ryesno", "trigger_multiple", "boat",
+	"weapon_mobile", "cof_telephone", "cof_puzzlebarbutton", "deadfidafv" };
 #define STRINGS ( (int)ARRAYSIZE( strings ))
 static byte dll_image[0x217118 + 19 * 19 * 4]; /* the relationship table sits at +0x217118 */
 static int private_lookups, uses;
@@ -75,6 +81,7 @@ static size_t private_size( const void *pv )
 {
 	int i;
 	if( pv == doc_private ) return sizeof( doc_private );
+	if( pv == phone_private ) return sizeof( phone_private );
 	for( i = 0; i < 4; i++ ) if( pv == weapon_private[i] ) return sizeof( weapon_private[0] );
 	for( i = 0; i < 3; i++ ) if( pv == monster_private[i] ) return sizeof( monster_private[0] );
 	return sizeof( private_data[0] );
@@ -602,6 +609,31 @@ int main( void )
 			/* once is enough: with the flag back it is the game's again */
 			console_length = 0; console[0] = 0; sv.time += 2.0; SV_CoF_RetailCprRepair(); assert( !console[0] );
 			private_data[0][0x50C] = 0; private_data[0][0x1ED0] = 0; edicts[1].v.fuser3 = 0.0f;
+			SV_CoF_RetailCprRepair(); /* standing: the last fall is forgotten */
+			/* 1.1.9 (K2 residual): the repair keeps the get-up time the game set. A 3 s knock-down whose flag a camera's
+			 * EnableControl cleared (time 0) 0.2 s in gets up at its 3 s, not after the 1 s grace */
+			{
+				float t0 = (float)sv.time;
+				edicts[1].v.fuser3 = 2.0f; private_data[0][0x50C] = 1; private_data[0][0x1ED0] = 1; put_float( private_data[0] + 0x1ECC, t0 + 3.0f );
+				SV_CoF_RetailCprRepair();
+				sv.time += 0.2; private_data[0][0x1ED0] = 0; put_float( private_data[0] + 0x1ECC, 0.0f );
+				SV_CoF_RetailCprRepair(); sv.time += 1.1; SV_CoF_RetailCprRepair();
+				memcpy( &fall, private_data[0] + 0x1ECC, sizeof( fall ));
+				assert( private_data[0][0x1ED0] == 1 && fall == t0 + 3.0f );
+				/* cleared again; the player taps to get up (tapgetup writes the time now): up after the grace, not at 3 s */
+				sv.time += 0.1; private_data[0][0x1ED0] = 0; put_float( private_data[0] + 0x1ECC, 0.0f ); SV_CoF_RetailCprRepair();
+				put_float( private_data[0] + 0x1ECC, (float)sv.time ); SV_CoF_RetailCprRepair();
+				sv.time += 1.1; SV_CoF_RetailCprRepair();
+				memcpy( &fall, private_data[0] + 0x1ECC, sizeof( fall ));
+				assert( private_data[0][0x1ED0] == 1 && fall == (float)sv.time && fall < t0 + 3.0f );
+				/* a time past any the game sets (another map's) is never kept */
+				put_float( private_data[0] + 0x1ECC, (float)sv.time + 50.0f ); SV_CoF_RetailCprRepair();
+				private_data[0][0x1ED0] = 0; put_float( private_data[0] + 0x1ECC, 0.0f ); SV_CoF_RetailCprRepair();
+				sv.time += 1.1; SV_CoF_RetailCprRepair();
+				memcpy( &fall, private_data[0] + 0x1ECC, sizeof( fall ));
+				assert( private_data[0][0x1ED0] == 1 && fall == (float)sv.time );
+				private_data[0][0x50C] = 0; private_data[0][0x1ED0] = 0; edicts[1].v.fuser3 = 0.0f; SV_CoF_RetailCprRepair();
+			}
 			/* a trip (fuser3 1) the same; frozen by a scene it waits for the scene's end */
 			edicts[1].v.fuser3 = 1.0f; edicts[1].v.flags = FL_FROZEN;
 			SV_CoF_RetailCprRepair(); sv.time += 3.0; SV_CoF_RetailCprRepair(); assert( !private_data[0][0x1ED0] );
@@ -664,6 +696,82 @@ int main( void )
 		edicts[1].v.fuser3 = 0.0f; private_data[0][0x1ED0] = 0;
 		/* the game's own client commands */
 		assert( SV_CoF_RetailCommand( &clients[0], "flashlight" ) && !strcmp( last_command, "flashlight" ) && last_command_edict == &edicts[1] );
+	}
+
+	/* 1.1.9 (M1 9): the phone. m_iPhoneDisabled (+0x1F14) and the body (+0x5CC) read; a break writes both and the
+	 * player's weapon_mobile's m_bDisabled (+0x1F9), as cof_phonedisable does; a player without a phone: nothing */
+	{
+		int body = 0, value = 7;
+		for( i = 4; i < 12; i++ ) { edicts[i].free = 1; edicts[i].pvPrivateData = NULL; }
+		memset( private_data[0] + 0x1F14, 0, 4 ); memcpy( private_data[0] + 0x5CC, &value, 4 );
+		assert( SV_CoF_RetailPhoneBroken( &clients[0], &body ) == 0 && body == 7 );
+		assert( !SV_CoF_RetailBreakPhone( &clients[0], 0x2A ) && SV_CoF_RetailPhoneBroken( &clients[0], NULL ) == 0 );
+		weapon( 4, 0, SV_AllocString( "weapon_switchblade" ), private_data[0], 6, -1, 0 );
+		weapon( 5, 1, SV_AllocString( "weapon_mobile" ), private_data[1], 2, -1, 0 ); /* the partner's phone */
+		assert( !SV_CoF_RetailBreakPhone( &clients[0], 0x2A ) && SV_CoF_RetailPhoneBroken( &clients[0], NULL ) == 0 );
+		weapon( 6, 2, SV_AllocString( "weapon_mobile" ), private_data[0], 2, -1, 0 );
+		assert( SV_CoF_RetailBreakPhone( &clients[0], 0x2A ) && weapon_private[2][0x1F9] == 1 && !weapon_private[1][0x1F9] );
+		assert( SV_CoF_RetailPhoneBroken( &clients[0], &body ) == 1 && body == 0x2A && SV_CoF_RetailPhoneBroken( &clients[1], NULL ) == 0 );
+		clients[0].state = 0;
+		assert( SV_CoF_RetailPhoneBroken( &clients[0], &body ) == -1 && !SV_CoF_RetailBreakPhone( &clients[0], 1 ));
+		clients[0].state = cs_spawned;
+		memset( private_data[0] + 0x1F14, 0, 4 ); memset( private_data[0] + 0x5CC, 0, 4 );
+	}
+	/* 1.1.9 (M2 F10): the health cap (m_iHealthCap +0x60C) read; set as cof_maxhealthchange does, with HealthCap */
+	{
+		int cap = 2;
+		memcpy( private_data[1] + 0x60C, &cap, 4 ); assert( SV_CoF_RetailHealthCap( &clients[1] ) == 2 );
+		last_msg_name[0] = 0;
+		assert( SV_CoF_RetailSetHealthCap( &clients[0], 1 ) && SV_CoF_RetailHealthCap( &clients[0] ) == 1 );
+		assert( !strcmp( last_msg_name, "HealthCap" ) && last_msg_size == 1 && last_msg[0] == 1 && last_msg_reliable );
+		assert( !SV_CoF_RetailSetHealthCap( &clients[0], 3 ) && SV_CoF_RetailHealthCap( &clients[0] ) == 1 ); /* no such cap */
+		clients[0].state = 0;
+		assert( SV_CoF_RetailHealthCap( &clients[0] ) == -1 && !SV_CoF_RetailSetHealthCap( &clients[0], 0 ));
+		clients[0].state = cs_spawned;
+		memset( private_data[0] + 0x60C, 0, 4 ); memset( private_data[1] + 0x60C, 0, 4 );
+	}
+	/* 1.1.9: the telephone a player opened (m_pTelephone +0x368) answers its user (cof_telephone +0xDC) */
+	{
+		edict_t *user, *phone = &edicts[9];
+		memset( phone, 0, sizeof( *phone )); memset( phone_private, 0, sizeof( phone_private ));
+		phone->v.classname = SV_AllocString( "cof_telephone" ); phone->serialnumber = 3; phone->pvPrivateData = phone_private;
+		assert( !SV_CoF_RetailTelephoneTaken( &clients[0], &user ) && !user );         /* none opened */
+		handle( private_data[0] + 0x368, phone ); handle( phone_private + 0xDC, &edicts[1] );
+		assert( !SV_CoF_RetailTelephoneTaken( &clients[0], &user ) && user == &edicts[1] ); /* its user dials */
+		handle( private_data[1] + 0x368, phone ); handle( phone_private + 0xDC, &edicts[2] ); /* the partner opened it since */
+		assert( SV_CoF_RetailTelephoneTaken( &clients[0], &user ) && user == &edicts[2] );
+		assert( !SV_CoF_RetailTelephoneTaken( &clients[1], &user ));
+		edicts[2].serialnumber++;                                                       /* the partner left */
+		assert( SV_CoF_RetailTelephoneTaken( &clients[0], &user ) && !user );
+		edicts[2].serialnumber--;
+		phone->v.classname = SV_AllocString( "cof_yesno" );                               /* not a telephone */
+		assert( !SV_CoF_RetailTelephoneTaken( &clients[0], &user ));
+		handle( private_data[0] + 0x368, NULL ); handle( private_data[1] + 0x368, NULL ); phone->free = 1;
+	}
+	/* 1.1.9 (K9): c_asylumb's bar puzzle once solved (the button's iuser1): a player still in it is let out (own view,
+	 * m_iViewEntIndex, m_pPuzzleBar +0x378 cleared, Puzzlebar 0); not before the solve; a handle a use after the
+	 * solve set (no view on the puzzle) is only cleared */
+	{
+		edict_t *button = &edicts[10], *camera = &edicts[11];
+		int view = 11, field;
+		memset( button, 0, sizeof( *button )); memset( camera, 0, sizeof( *camera ));
+		button->v.classname = SV_AllocString( "cof_puzzlebarbutton" ); button->v.message = SV_AllocString( "deadfidafv" );
+		button->serialnumber = 2; camera->v.targetname = SV_AllocString( "deadfidafv" );
+		assert( !SV_CoF_RetailPuzzleRelease( &clients[1] ));                            /* in no puzzle */
+		handle( private_data[1] + 0x378, button ); clients[1].pViewEntity = camera; memcpy( private_data[1] + 0x2038, &view, 4 );
+		last_msg_name[0] = 0; last_svc = -1;
+		assert( !SV_CoF_RetailPuzzleRelease( &clients[1] ) && !last_msg_name[0] && clients[1].pViewEntity == camera && last_svc == -1 );
+		button->v.iuser1 = 1;
+		assert( SV_CoF_RetailPuzzleRelease( &clients[1] ));
+		assert( !clients[1].pViewEntity && last_svc == svc_setview && last_svc_word == 2 );
+		memcpy( &view, private_data[1] + 0x2038, 4 ); assert( view == 2 );
+		memcpy( &field, private_data[1] + 0x378, 4 ); assert( !field );
+		assert( !strcmp( last_msg_name, "Puzzlebar" ) && last_msg_size == 1 && !last_msg[0] && last_msg_reliable );
+		last_msg_name[0] = 0; assert( !SV_CoF_RetailPuzzleRelease( &clients[1] ) && !last_msg_name[0] ); /* once */
+		handle( private_data[1] + 0x378, button ); last_svc = -1;
+		assert( !SV_CoF_RetailPuzzleRelease( &clients[1] ) && last_svc == -1 && !strcmp( last_msg_name, "Puzzlebar" ));
+		memcpy( &field, private_data[1] + 0x378, 4 ); assert( !field );
+		button->free = camera->free = 1;
 	}
 
 	/* Hostility: the game's own relationship table, row the monster's class, column the player. */

@@ -17,7 +17,9 @@ int main(int argc, char **argv)
 		printf( "%s:", maps[i] ? maps[i] : "(null)" );
 		if( !kit ) { printf( " none\n" ); continue; }
 		for( w = 0; w < COF_CHAPTER_WEAPONS && kit->weapons[w]; w++ ) printf( " %s", kit->weapons[w] );
-		printf( " doctor=%d three=%d\n", kit->doctor_weapon, kit->three_slots );
+		printf( " doctor=%d three=%d", kit->doctor_weapon, kit->three_slots );
+		if( kit->global ) printf( " global=%s", kit->global ); /* 1.1.9 (C1) */
+		printf( "\n" );
 	}
 	puts( "kits printed" );
 	return 0;

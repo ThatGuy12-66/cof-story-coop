@@ -4,6 +4,24 @@ Last updated: 2026-10-21 morning: 1.1.8, the debug pass over the whole story (ch
 This is the current handoff. `AGENTS.md` requires project and delegated agents to read it.
 Older dated handoffs remain historical evidence, not authoritative current status.
 
+## Corrections to older entries (checked 2026-10-21 against the code at 1.1.8)
+
+Several older entries below still read as open but were settled later. What is true now:
+- Night-vision strobe and the merged subway's decal overflow: fixed in 1.1 (`engine/client/cof_renderer_patch.h`), NV seen live ("1.1 polish").
+- College classroom doors loop: reported once (2026-10-19 21:53, cm_college2), did not repeat later that night, the scripted repro did not reproduce it; cause unknown. The use probe now needs `cof_use_probe 1` (off by default since 1.1.8).
+- "I can't switch weapons or access the inventory" after the c_nightmare camera gift, and "the camera couldn't be added back": client.dll blocks the inventory, objectives and sprint in c_nightmare by design (`cl_dll/input.cpp` 637/857/903). Not our bug.
+- A story-given weapon that could not be equipped (slot-6 menu overlap): gone with the 12-slot grid, shipped since 1.0.
+- Dual wield "others see empty hands" and third-person weapons "proposed": implemented, both hands drawn.
+- Blur "not seen live / not in a package": shipped in 1.1.2. Grey fade: shared since 1.1.8. Enter/`cof_skip` skips scenes in co-op (seen live).
+- Intro logos `logo-shared`: the CoFLogo mirror never ran (fixed-size message) through 1.1.8.
+- ~71k ScreenFade messages to the companion in the trace: no longer traced (1.1.8). Arrivals/respawns in an exit back: refused since 1.1.6 / 1.1.8.
+- "Report a bug" destination: the public Discord since 1.0.
+- Loops started later not re-sent to a player entering a section: per-section loops handle it.
+- The solo-mode AI drive bug: unreachable from the app (`cof_companion_drive 0`).
+- The "Next steps" lists from 2026-10-14..10-19 (packages build 3/4, disposable-pair tests, `3D860BC7`, playtesters via GitHub): superseded by the app, Discord and the public releases 1.0-1.1.8.
+- Exits still held as scripted after 1.1.8: c_apartment3 `changefitta` (#291 via trigger_once #289) and c_apartmentsick `changekuk` (#412 via #446), not c_hall5/c_hall6.
+- docs/research/2026-10-12-map-chains-re.md: c_attic `teleportblack`/`deteleport1` are not inert: `CDoctorBoss::Killed` fires its target with the first player.
+
 ## Current status: story moments, polish and an AI companion implemented offline; campaign live test pending
 
 - **12-slot inventory (2026-10-14): implemented, offline-verified (172 tests OK on the final tree, mutation 14/14 caught), built (`xash.dll` `02F90A33…`, `vgui.dll` `D92A5D17…`) and installed in both disposable copies; live: not yet.** At the user's choice ("do one": merge locally) the `inventory-12` branches were fast-forward merged on 2026-10-14 and deleted: launcher `main` = `0eb673f` plus this notes commit, engine `story-coop` = `b9e0e54b` (includes the FreeVGUI submodule pointer), FreeVGUI `story-coop` = `e4a6d8c`. **Not pushed**: the private GitHub repos still hold the 2026-10-13 state. Smallest next step: the live checklist "12-slot inventory" in `docs/campaign-test-guide.md` (needs the user's go-ahead to launch). The copies no longer run the `3D860BC7…` build.
@@ -920,7 +938,7 @@ The user, after the boat question: "go through the rest of the game scripts and 
 - **Review notes** (the findings, with evidence): `/home/claude/dbg/notes/{E1,E2,E3,K,L,M1,M2,M3,CH}.md` in the cloud session that did the pass (not in this repo). E1 story flow (exits, sections, arrivals, party), E2 companions/retail/recovery, E3 client and sign-on, K entity classes, L launcher, M1/M3 map audits, M2 the remaining maps, CH chapter starts.
 - **Engine** (`tester-package`): `010c0324` (the pass), `a52071b6` (items), `cd573a67` (final review); on top of `effae680` (every partner follows the boat rider to the dock, done after 1.1.7). Highlights:
   - Level changes: `SV_FinalMessage` sends `cof_story_changelevel <spawncount>`; `SV_CoF_StoryNotices` tells a guest still signing on again every 2 s (`changelevel-told-again`); a `begin` for a map left restarts the sign-on (`SV_New_f`); guest sign-ons LZSS; the client acts once per epoch. F9 between maps stays co-op; the prediction copy has room for client.dll's donator field; `map c_game_menu1` (the credits' end) returns to the menu in co-op too.
-  - Exits: `SV_CoF_MapExitModels` counts a reusable `trigger_multiple` firer as a walk-in exit (36 story exits; only c_hall5/c_hall6's `trigger_once` stay scripted); the arrival refusal covers them; section moves no longer pull everyone during the cooldown (`CoF_SectionMovers`: occupants without activators move nobody); arrivals protected after a section move.
+  - Exits: `SV_CoF_MapExitModels` counts a reusable `trigger_multiple` firer as a walk-in exit (36 story exits; c_apartment3 `changefitta` and c_apartmentsick `changekuk`, fired by trigger_once, stay scripted); the arrival refusal covers them; section moves no longer pull everyone during the cooldown (`CoF_SectionMovers`: occupants without activators move nobody); arrivals protected after a section move.
   - Party (`sv_cof_party.c`): walk-in teleports not followed, deadly-hurt teleports never followed, placement waits out scenes, cut-off prompt repeats (3 x 10 s), respawn/arrival never in solid, shared-weapon gives back off (5 to 60 s), door companions who went their own way stay.
   - Chapter starts: the app writes `cof_chapter_start <map>` (not New game, not Continue); the first story frame grants the kit (`sv_cof_chapter_kit.h`; `SV_CoF_PartyGrant`: shared as if carried, on that map only) and presets `doctor_weapon` 2 / three slots (`SV_CoF_StatePreset`). Chapter 5 starts at `c_subwaysick2` (launcher). Logs `chapter-start`, `chapter-kit`, `chapter-state`.
   - Items: taclight and phone battery (`item_glocktaclight`/`item_phonebattery`, MyTouch needs `m_afButtonPressed & IN_USE`, P+0x22B0) now reach partners (the give presses Use for that call); fuses and ladders counted per copy; gives in flight settled across level changes and recoveries.

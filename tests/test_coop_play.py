@@ -1,10 +1,12 @@
 """The tester app's start options, checks and checkpoint reading (tools/coop_play.py)."""
+import re
 import struct
 import tempfile
 import unittest
 from pathlib import Path
 
 from cofcoop import network
+from tests.native import ENGINE_SERVER
 from tools import coop_play as play
 
 
@@ -94,6 +96,39 @@ class StartTests(unittest.TestCase):
                      'fps_max 60'):
             self.assertIn(line + '\n', cfg)
         self.assertNotIn('rcon_password', cfg)
+
+    def test_story_config_sends_movement_often_enough(self):
+        # 1.1.9: a 60 fps host sends every frame at 100 updates a second (at 60 it skipped some), so partners move
+        # smoothly; each value at the engine's limit (MAX_RATE, cl_cmdrate 100, MAX_UPDATERATE 102, MAX_EX_INTERP)
+        lines = play.story_config().splitlines()
+        for line in ('rate 100000', 'cl_cmdrate 100', 'cl_updaterate 100', 'sv_maxupdaterate 100', 'ex_interp 0.1',
+                     'fps_max 60'):
+            self.assertIn(line, lines)
+        for key in ('rate', 'cl_cmdrate', 'cl_updaterate', 'sv_maxupdaterate', 'ex_interp', 'fps_max', 'sv_fps'):
+            self.assertLessEqual(sum(line.split()[0] == key for line in lines), 1, key)
+        self.assertFalse(any(line.startswith('sv_fps') and line != 'sv_fps 0' for line in lines))  # cof_skip needs 0
+
+    def test_story_config_rates_are_engine_cvars_within_their_limits(self):
+        engine = ENGINE_SERVER.parent
+        client_h = (engine / 'client/client.h').read_text(encoding='latin-1')
+        cl_main = (engine / 'client/cl_main.c').read_text(encoding='latin-1')
+        netchan = (engine / 'common/netchan.h').read_text(encoding='latin-1')
+        sv_main = (engine / 'server/sv_main.c').read_text(encoding='latin-1')
+        value = {line.split()[0]: float(line.split()[1]) for line in play.story_config().splitlines()
+                 if line.split()[0] in ('rate', 'cl_cmdrate', 'cl_updaterate', 'sv_maxupdaterate', 'ex_interp')}
+        for name, source in (('rate', cl_main), ('cl_cmdrate', cl_main), ('cl_updaterate', cl_main),
+                             ('sv_maxupdaterate', sv_main)):
+            self.assertRegex(source, r'CVAR_DEFINE_AUTO\( %s,' % name)
+        self.assertIn('CVAR_DEFINE( cl_interp, "ex_interp",', cl_main)
+        limit = lambda text, name: float(re.search(r'#define %s\s+([0-9.]+)f' % name, text).group(1))
+        self.assertLessEqual(value['rate'], limit(netchan, 'MAX_RATE'))  # sv_client.c bounds a client's rate by it
+        self.assertLessEqual(value['cl_updaterate'], limit(client_h, 'MAX_UPDATERATE'))
+        self.assertGreaterEqual(value['cl_updaterate'], limit(client_h, 'MIN_UPDATERATE'))
+        self.assertIn('else if( cl_cmdrate.value > 100.0f )', cl_main)
+        self.assertLessEqual(value['cl_cmdrate'], 100)
+        self.assertLessEqual(value['ex_interp'], limit(client_h, 'MAX_EX_INTERP'))
+        self.assertGreaterEqual(value['ex_interp'], 1.0 / value['cl_updaterate'])  # CL_ComputeClientInterpolationAmount
+        self.assertGreaterEqual(value['sv_maxupdaterate'], value['cl_updaterate'])  # SV_CheckUpdateRate caps at it
 
     def test_join_takes_a_code_or_an_address(self):
         code = network.make_join_code(network.Endpoint('203.0.113.7', 27016))

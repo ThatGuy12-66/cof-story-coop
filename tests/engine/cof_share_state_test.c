@@ -245,6 +245,20 @@ int main( void )
 	assert( plan( 1, 5, 4, item ) == COF_SHARE_GIVE ); deliver( 1, 1, FUSE, 4 );
 	assert( plan( 1, 4, 5, item ) == COF_SHARE_NONE );
 
+	/* 1.1.9 (I2): a fuse gained while the copy set down still lies in the map (the glue saw it: lying) is one more for
+	 * the party, and the copy stays set down; once it lies there no more, the next gain is that copy picked back up. */
+	start(); put( 0, 0, FUSE ); look(); deliver( 1, 0, FUSE, 1 );
+	CoF_ShareObserve( &s, 0, 101, 1, inv[0] ); s.event_count = 0;
+	inv[0][0][0] = 0; CoF_ShareCommand( &s, 0, COF_SHARE_CMD_DROP, inv[0] );
+	assert( has_event( COF_SHARE_DROPPED, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 1 );
+	s.players[0].lying = CoF_ShareCountedBit( FUSE ); s.event_count = 0; put( 0, 1, FUSE ); look();
+	assert( has_event( COF_SHARE_FOUND, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 && s.players[0].set_down.count == 1 );
+	assert( plan( 0, 5, 2, item ) == COF_SHARE_NONE && plan( 1, 5, 2, item ) == COF_SHARE_GIVE && !strcmp( item, FUSE ));
+	s.players[0].lying = 0; s.event_count = 0; put( 0, 0, FUSE ); look(); /* the dropped one, picked back up */
+	assert( !has_event( COF_SHARE_FOUND, 0, FUSE ) && CoF_ShareSetCount( &s.party, FUSE ) == 2 && s.players[0].set_down.count == 0 );
+	/* ...a ladder's bit is its own: a fuse lying does not make a ladder gain a new one */
+	assert( CoF_ShareCountedBit( FUSE ) != CoF_ShareCountedBit( LADDER ) && CoF_ShareCountedBit( LADDER ) && !CoF_ShareCountedBit( KEY ));
+
 	/* A new session sees everyone anew: copies up to the party's count are the party's own, not new finds. */
 	start(); put( 0, 0, FUSE ); put( 0, 1, FUSE ); put( 1, 0, FUSE ); put( 1, 1, FUSE );
 	CoF_ShareReset( &s ); look();

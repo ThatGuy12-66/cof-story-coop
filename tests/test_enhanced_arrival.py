@@ -29,6 +29,15 @@ class ArrivalTests(unittest.TestCase):
             'no story arrival: counts',
         ])
 
+    def test_a_refusal_is_logged_once_per_player_exit_and_map(self):
+        # 1.1.9 (X4, E1 F10): an arrival idling in the exit back logged exit-arrival-refused every 10 s
+        helper = body_of(SERVER / 'sv_cof_arrival.c', 'static qboolean CoF_ArrivalRefusalNew(') + '\n}\n'
+        out = run_native(self, 'cof_arrival_refusal_harness.c', {'refusal_under_test.c': helper})
+        self.assertIn('arrival refusal scenarios passed', out)
+        refuses = body_of(SERVER / 'sv_cof_arrival.c', 'qboolean SV_CoF_ArrivalRefuses(')
+        self.assertLess(refuses.index('if( CoF_ArrivalRefusalNew( refused, level, landmark ))'), refuses.index('phase=exit-arrival-refused'))
+        self.assertNotIn('refused_logged', (SERVER / 'sv_cof_arrival.c').read_text(encoding='latin-1'))
+
     def test_a_carried_player_gets_the_hud_state_at_sign_on(self):
         begin = body_of(SERVER / 'sv_client.c', 'static qboolean SV_Begin_f( sv_client_t *cl )')
         assert_has(self, 'cof_carried = SV_CoF_TransitionRestoredClient( cl );', begin)

@@ -149,6 +149,19 @@ class ServerWiringTests(unittest.TestCase):
         self.assertLess(refused.index('if( sv.time < cof_sect_refused_at[slot] + 1.0 && sv.time >= cof_sect_refused_at[slot] ) return false;'),
                         refused.index('section-move-refused'))
 
+    def test_an_idle_in_a_section_exit_reads_the_map_once_and_logs_once(self):
+        # 1.1.9 (X3, E1 F3): a player idling in the exit back was asked about every frame: a full read of the merged
+        # entity script each time and a section-move-nobody line once a second
+        text = (SERVER / 'sv_cof_sections.c').read_text(encoding='latin-1')
+        start = text.index('// 1.1.9 (X3, E1 F3)')
+        end = text.index('\n}\n', text.index('static qboolean CoF_SectNobodyNew(')) + 3
+        out = run_native(self, 'cof_sections_quiet_harness.c', {'quiet_under_test.c': text[start:end]})
+        self.assertIn('section quiet scenarios passed', out)
+        move = body_of(SERVER / 'sv_cof_sections.c', 'static void CoF_SectMove(')
+        self.assertIn('count = CoF_SectExitModels( level, landmark, models, ARRAYSIZE( models ));', move)
+        self.assertNotIn('SV_CoF_MapExitModels(', move)
+        self.assertLess(move.index('if( CoF_SectNobodyNew( level, landmark ))'), move.index('phase=section-move-nobody'))
+
     def test_a_companion_carried_through_a_section_move_starts_afresh(self):
         # a teleport it had asked for before fired after the move and put it away from its person (live 2026-10-17)
         one = body_of(SERVER / 'sv_cof_sections.c', 'static qboolean CoF_SectMoveOne(')

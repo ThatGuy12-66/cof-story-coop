@@ -16,12 +16,16 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cofcoop import core
+from tools import coop_play as play
 
 REPO = core.PROJECT_ROOT / "upstream/cof-enhanced"
 ENGINE = REPO / "xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a"
 BUILD = ENGINE / "build-local-20260927"
 FROZEN = core.PROJECT_ROOT / "runtimes/enhanced/experiment-evidence/staged-binaries"
-VERSION = "0.4.0-test3"
+# 1.1.9 (R4): the release's own label, as the engine's on-screen stamp (engine/cof_version.h): it names the payload's
+# release.txt stamp, upstream's zips and installer lines and the source archive's folder, which said Enhanced's
+# "0.4.0-test3" from the first test package to 1.1.8
+VERSION = play.VERSION_LABEL.replace(" ", "")
 REVISION = 5  # playtester bundle revision; v3 has the join overflow, v4 lacks the transition fixes
 BINARY_INPUTS = {
     "CoFLaunchApp.exe": FROZEN / "CoFLaunchApp.exe",

@@ -23,7 +23,27 @@ class SignonTests(unittest.TestCase):
             'cl_dlmax 1200: 11836 bytes in 10 pieces of at most 1200',
             'cl_dlmax 64000: 63966 bytes in 2 pieces of at most 64000',
             'window 1: 0',
+            'cvar 10: 10, 1: 1, 0: 1, -3: 1, 2.9: 2, 1000: 64',
+            'cvar 1 signing on: 0',
+            'cvar 1000 signing on: 63966',
         ])
+
+    def test_the_window_is_the_hosts_cvar(self):
+        # 1.1.9 (N1): a host on a link that drops the bursts (a VPN with a small MTU) sets cof_signon_window 1 and
+        # gets the engine's own one-piece sign-on, without a rebuild; 10 by default, kept in config.cfg
+        import re
+        header = (SERVER / 'sv_cof_signon.h').read_text(encoding='latin-1')
+        net = (ENGINE / 'common/net_ws.c').read_text(encoding='latin-1')
+        default = re.search(r'#define COF_SIGNON_WINDOW_DEFAULT (\d+)', header).group(1)
+        assert_has(self, f'CVAR_DEFINE_AUTO( cof_signon_window, "{default}", FCVAR_ARCHIVE, ', net)
+        init = body_of(ENGINE / 'common/net_ws.c', 'void NET_Init( void )')
+        assert_has(self, 'Cvar_RegisterVariable( &cof_signon_window );', init)
+        engine = header[header.index('#if defined( SERVER_H )'):header.index('#endif // SV_COF_SIGNON_H')]
+        assert_has(self, 'extern convar_t cof_signon_window;', engine)
+        assert_has(self, '#define COF_SIGNON_WINDOW CoF_SignonWindow( cof_signon_window.value )', engine)
+        assert_has(self, '#else\n#define COF_SIGNON_WINDOW COF_SIGNON_WINDOW_DEFAULT\n#endif', engine)
+        client = (SERVER / 'sv_client.c').read_text(encoding='latin-1')
+        self.assertLess(client.index('#include "server.h"'), client.index('#include "sv_cof_signon.h"'))
 
     def test_the_server_uses_it_only_for_split_clients_signing_on(self):
         size = body_of(SERVER / 'sv_client.c', 'static int SV_GetFragmentSize( void *pcl, fragsize_t mode )')

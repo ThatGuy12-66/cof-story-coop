@@ -14,6 +14,7 @@ def body(text: str, start: str) -> str:
 class UseProbeTests(unittest.TestCase):
     def test_probe_against_doubles(self):
         out = run_native(self, 'cof_use_probe_harness.c', {
+            'cof_sections.h': (ENGINE_SERVER.parent / 'common/cof_sections.h').read_text(encoding='latin-1'),
             'useprobe_under_test.c': strip_includes((ENGINE_SERVER / 'sv_cof_useprobe.c').read_text()),
         })
         self.assertIn('use-probe scenarios passed', out)
@@ -23,6 +24,12 @@ class UseProbeTests(unittest.TestCase):
         source = (ENGINE_SERVER / 'sv_cof_useprobe.c').read_text()
         self.assertIn('Cvar_Get( "cof_use_probe", "0", 0,', source)
         self.assertNotIn('cof_story_trace" )', source)
+
+    def test_on_by_itself_in_c_college1_only(self):
+        """1.1.9 (R1): reported once (cm_college2, the c_college1 section), not reproduced; a repeat should log."""
+        source = (ENGINE_SERVER / 'sv_cof_useprobe.c').read_text()
+        self.assertIn('#define COF_PROBE_MAP "c_college1"', source)
+        self.assertIn('!on && cof_probe_where > 0 && SV_CoF_PlayerSection( cl->edict ) != cof_probe_where - 1', source)
 
     def test_story_frame_probes_before_the_party_moves_anyone(self):
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()

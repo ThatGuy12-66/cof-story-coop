@@ -144,6 +144,52 @@ class FriendSetupTests(unittest.TestCase):
                     friend.validate_destination(source, dest)
             self.assertEqual(friend.validate_destination(source, Path(temp) / "new"), (Path(temp) / "new").resolve())
 
+    @unittest.skipUnless(hasattr(os, "symlink"), "links")
+    def test_a_game_reached_through_a_link_is_its_real_folder(self):
+        # 1.1.9 (L14.3): a Steam library moved with a junction (the owner's own PC) was refused; links inside the
+        # game, and on the way to a destination, still are
+        with tempfile.TemporaryDirectory() as temp:
+            real, other = Path(temp) / "D" / "Cry of Fear", Path(temp) / "other.dll"
+            for rel in ("CoFLaunchApp.exe", "cryoffear/liblist.gam", "cryoffear/maps/c_game_menu1.bsp", "cryoffear/cl_dlls/hl.dll"):
+                path = real / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"fixture")
+            other.write_bytes(b"fixture")
+            (Path(temp) / "elsewhere").mkdir()
+            try:
+                os.symlink(real, Path(temp) / "via-link", target_is_directory=True)
+                os.symlink(Path(temp) / "elsewhere", Path(temp) / "dest-link", target_is_directory=True)
+            except OSError:
+                self.skipTest("no symlinks here")
+            with mock.patch.object(friend, "STOCK_DLL_SHA", hashlib.sha256(b"fixture").hexdigest()):
+                self.assertEqual(friend.validate_source(Path(temp) / "via-link"), real.resolve())
+                self.assertEqual(sorted(rel.as_posix() for rel, _ in friend.copy_plan(friend.validate_source(Path(temp) / "via-link"))),
+                                 ["CoFLaunchApp.exe", "cryoffear/cl_dlls/hl.dll", "cryoffear/liblist.gam",
+                                  "cryoffear/maps/c_game_menu1.bsp"])
+                (real / "cryoffear/cl_dlls/hl.dll").unlink()
+                os.symlink(other, real / "cryoffear/cl_dlls/hl.dll")
+                for given in (real, Path(temp) / "via-link"):
+                    with self.subTest(given=given), self.assertRaisesRegex(ValueError, "without links"):
+                        friend.validate_source(given)
+            with self.assertRaisesRegex(ValueError, "without links"):
+                friend.validate_destination(real.resolve(), Path(temp) / "dest-link" / "CoF-Story-Coop")
+
+    def test_program_files_and_onedrive_destinations_are_refused(self):
+        # 1.1.9 (L14.8): Program Files fails the writes of a player who is not an administrator, OneDrive uploads
+        # the 5 GB copy and can keep its files online only
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "original"; source.mkdir()
+            programs, onedrive = Path(temp) / "Program Files (x86)", Path(temp) / "OneDrive - Home"
+            env = {"ProgramFiles(x86)": str(programs), "OneDrive": str(onedrive), "ProgramW6432": "not absolute"}
+            with mock.patch.dict(os.environ, env):
+                for dest, words in ((programs / "CoF-Story-Coop", "outside Program Files"),
+                                    (onedrive / "Games" / "CoF-Story-Coop", "outside OneDrive")):
+                    with self.subTest(dest=dest), self.assertRaisesRegex(ValueError, words):
+                        friend.validate_destination(source, dest)
+                fine = Path(temp) / "Games" / "CoF-Story-Coop"
+                self.assertEqual(friend.validate_destination(source, fine), fine.resolve())
+                # a folder that only starts with the same letters is not inside it
+                beside = Path(temp) / "OneDrive - Home backup" / "CoF-Story-Coop"
+                self.assertEqual(friend.validate_destination(source, beside), beside.resolve())
+
     def test_source_requires_exact_stock_dll_without_modifying_it(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -236,7 +282,7 @@ class FriendSetupTests(unittest.TestCase):
     def test_the_weapon_models_are_made_with_the_simon_models(self):
         with tempfile.TemporaryDirectory() as temp:
             models = Path(temp) / "cryoffear/models"
-            for rel in friend.weapons.SOURCES:
+            for rel in list(friend.weapons.SOURCES) + list(friend.weapons.OPTIONAL_SOURCES):
                 path = models.parent / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(rel.encode())
             with mock.patch.object(friend, "build_models", return_value={"models/player/cof_s1/cof_s1.mdl": b"s"}), \
                  mock.patch.object(friend.weapons, "build_models", return_value={"models/coop/p_axe.mdl": b"a"}) as made, \
@@ -244,8 +290,30 @@ class FriendSetupTests(unittest.TestCase):
                 files = friend.generated_models(models)
             self.assertEqual(set(files), {"models/player/cof_s1/cof_s1.mdl", "models/coop/p_axe.mdl"})
             sources = made.call_args.args[0]
-            self.assertEqual(set(sources), set(friend.weapons.SOURCES))
+            # 1.1.9: and the optional ones the copy has (build_models leaves a model out when its file is not stock)
+            self.assertEqual(set(sources), set(friend.weapons.SOURCES) | set(friend.weapons.OPTIONAL_SOURCES))
             self.assertEqual(sources["models/weapons/axe/w_axe.mdl"], b"models/weapons/axe/w_axe.mdl")
+            (models.parent / friend.weapons.GASMASK_SOURCE).unlink()
+            with mock.patch.object(friend, "build_models", return_value={}), \
+                 mock.patch.object(friend.weapons, "build_models", return_value={}) as made, \
+                 mock.patch.object(friend, "costume_files", return_value=[]):
+                friend.generated_models(models)
+            self.assertEqual(set(made.call_args.args[0]), set(friend.weapons.SOURCES))  # missing: not refused
+
+    def test_a_left_out_cosmetic_model_is_one_line_in_the_log(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = {"outputs": {}, "skipped": [{"path": "models/coop/h_gasmask.mdl",
+                                                    "reason": "models/items/w_nightvision.mdl is not the stock file"}]}
+            made = {"models/coop/p_axe.mdl": b"axe", "coop-weapons.json": json.dumps(manifest).encode()}
+            steps = friend.Steps(())
+            with mock.patch.object(friend, "generated_models", return_value=made), mock.patch.object(friend, "validate_model"):
+                hashes = friend.make_models(root, steps=steps)
+            self.assertEqual(set(hashes), {"models/coop/p_axe.mdl"})
+            self.assertFalse((root / "cryoffear/models/coop/h_gasmask.mdl").exists())
+            left_out = [line for line in steps.kept if "Left out" in line]
+            self.assertEqual(len(left_out), 1)
+            self.assertIn("models/coop/h_gasmask.mdl (cosmetic): models/items/w_nightvision.mdl is not the stock file", left_out[0])
 
     def test_update_lays_the_new_engine_over_and_keeps_saves_settings_models(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -567,6 +635,31 @@ def a_copy(root: Path, **record) -> Path:
     state.update(record)
     (root / friend.INSTALLED).write_text(json.dumps(state))
     return root
+
+
+class NonAsciiPathTests(unittest.TestCase):
+    """1.1.9 (L14.7): the default copy is under %LOCALAPPDATA%, which holds the Windows user name. The app's side of a
+    copy in a folder named with letters outside ASCII (the engine's own file loading there needs a live look)."""
+    BASE = "Usuários/José Ñúñez/Иван 测试"
+
+    def test_setup_play_and_the_install_check_in_such_a_folder(self):
+        from tools import coop_play as play
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp) / self.BASE
+            base.mkdir(parents=True)
+            copy = made_copy(base)
+            state = friend.installed_state(copy)
+            self.assertEqual(state["source_game"], str((base / "retail").resolve()))
+            self.assertIn("Done.", (copy / friend.SETUP_LOG).read_text(encoding="utf-8"))
+            (copy / "story-session.log").write_text("last game\n", encoding="utf-8")
+            kept = friend.keep_previous_log(copy, "story-session.log")
+            self.assertEqual((kept.parent, kept.read_text(encoding="utf-8")), (copy / "story-logs", "last game\n"))
+            args, config = play.host_launch(copy, solo=True, name="Bob", map_name="c_intro", players=2, password="",
+                                            companions=1, port=play.DEFAULT_PORT, cont=False, video=[])
+            self.assertEqual(args[0], str(copy / "CoFLaunchApp.exe"))
+            config.encode("ascii")   # the cfgs the game reads name no path
+            root = a_copy(base / "second")
+            self.assertEqual(friend.validate_runtime(root), root.resolve())
 
 
 class RepairCheckTests(unittest.TestCase):

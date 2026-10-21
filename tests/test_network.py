@@ -364,6 +364,33 @@ class UpnpTests(unittest.TestCase):
         self.assertEqual(Gateway.mapping, existing)
         self.assertNotIn('AddPortMapping', Gateway.actions)
 
+    def test_a_mapping_a_killed_launcher_left_is_replaced(self):
+        # 1.1.9 (L14.4): after a crash or Task Manager the next Host read "UDP 27015 already has an existing router
+        # mapping", although it was this PC's own launcher mapping
+        left = {'NewInternalClient': '192.168.1.22', 'NewInternalPort': '27015',
+                'NewPortMappingDescription': 'CoF Coop 0123456789abcdef01234567', 'NewEnabled': '1',
+                'NewLeaseDuration': '3600'}
+        Gateway.mapping = dict(left)
+        mapping = network.upnp_map(27015, 2)
+        self.assertEqual(Gateway.actions[-2:], ['DeletePortMapping', 'AddPortMapping'])
+        self.assertNotEqual(mapping['description'], left['NewPortMappingDescription'])
+        self.assertEqual(Gateway.mapping['NewPortMappingDescription'], mapping['description'])
+        self.assertEqual(Gateway.mapping['NewLeaseDuration'], '86400')
+        self.assertTrue(network.upnp_unmap(mapping, 2)['removed'])
+        self.assertIsNone(Gateway.mapping)
+
+    def test_a_launcher_mapping_for_another_pc_or_port_is_untouched(self):
+        for changes in ({'NewInternalClient': '192.168.1.30'}, {'NewInternalPort': '27016'}):
+            existing = {'NewInternalClient': '192.168.1.22', 'NewInternalPort': '27015',
+                        'NewPortMappingDescription': 'CoF Coop 0123456789abcdef01234567', 'NewEnabled': '1',
+                        'NewLeaseDuration': '3600'}
+            existing.update(changes)
+            Gateway.mapping, Gateway.actions = dict(existing), []
+            with self.subTest(changes=changes), self.assertRaisesRegex(network.NetworkError, 'existing|already'):
+                network.upnp_map(27015, 2)
+            self.assertEqual(Gateway.mapping, existing)
+            self.assertNotIn('DeletePortMapping', Gateway.actions)
+
     def test_replaced_mapping_never_removed(self):
         mapping = network.upnp_map(27015, 2)
         Gateway.mapping['NewPortMappingDescription'] = 'Another program'

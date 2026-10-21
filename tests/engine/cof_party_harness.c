@@ -14,6 +14,7 @@ typedef float vec3_t[3];
 #define false 0
 #define MAX_CLIENTS 4
 #define cs_spawned 4
+#define cs_connected 2
 #define ss_active 2
 #define DEAD_NO 0
 #define MOVETYPE_WALK 3
@@ -56,7 +57,8 @@ typedef struct { qboolean allsolid,startsolid; float fraction; vec3_t endpos;
 typedef struct { char *entities; } model_t;
 static struct { int state,paused; double time; const char *name; model_t *worldmodel; char startspot[64]; } sv;
 static struct { int maxclients,spawncount; sv_client_t *clients; } svs;
-static struct { int numEntities; edict_t *edicts; } svgame;
+typedef struct { void (*pfnUse)(edict_t *used,edict_t *other); } dll_functions_t;
+static struct { int numEntities; edict_t *edicts; dll_functions_t dllFuncs; } svgame;
 static edict_t entities[32];
 static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[MAX_CLIENTS][0x2600];
@@ -71,7 +73,7 @@ static const char *strings[] = {"", "player", "weapon_mobile", "weapon_switchbla
     "info_teleport_destination", "cof_teleport", "tp-dest", "trigger_teleport",
     "trigger_changelevel", "trigger_multiple", "cl-exit", "*1", "*2",
     "endingcheck", "ending_exit4", "ending_exit3", "cof_giveitems", "boat_exit",
-    "tp-src", "trigger_hurt", "tp-dest2"};
+    "tp-src", "trigger_hurt", "tp-dest2", "wheelchair", "music/chase.mp3", "music/quiet.mp3", "", "cof_clearitems"};
 static char status_log[16384];
 static size_t status_length;
 static int gate, give_ok, give_actual, give_calls, links, blocked, narrow_direction;
@@ -82,8 +84,12 @@ static float front_only_x; /* walls everywhere short of this x: only spots past 
 static int solid_zone; static float zone_min_x,zone_max_x; /* everything ending in this x range is solid */
 static char prompts[MAX_CLIENTS][192]; /* the last ProFont line each player was sent */
 static const char *command_name=""; static int exit_key,exit_waiter,fades;
-typedef struct { float value; } convar_t;
-static convar_t respawn_delay={10};
+typedef struct { float value; char *string; } convar_t;
+static convar_t respawn_delay={10,NULL};
+static char coop_music_text[64]; /* the game's sv_coop_music: the track a respawn replays */
+static convar_t coop_music={0,coop_music_text};
+static convar_t *Cvar_FindVar(const char *name) { return !strcmp(name,"sv_coop_music") ? &coop_music : NULL; }
+static void Cvar_DirectSet(convar_t *var,const char *value) { snprintf(var->string,sizeof(coop_music_text),"%s",value); }
 static convar_t *Cvar_Get(const char *name,const char *value,int flags,const char *description) {
     assert(!strcmp(name,"cof_story_respawn_delay") && !strcmp(value,"10")); return &respawn_delay;
 }
@@ -93,7 +99,9 @@ static qboolean SV_IsValidEdict(edict_t *e) {
     return e && e>=entities && e<entities+32 && !e->free;
 }
 static edict_t *SV_EdictNum(int i) { return &entities[i]; }
+static const char *strings_music_alias; /* string 37: the game's MAKE_STRING of sv_coop_music's own text */
 static const char *SV_GetString(string_t s) {
+    if(s==37 && strings_music_alias) return strings_music_alias;
     assert(s>=0 && s<(int)ARRAYSIZE(strings)); return strings[s];
 }
 static byte *SV_CoF_StoryEntityPrivate(edict_t *e,size_t need) {
@@ -122,6 +130,14 @@ static void Con_Printf(const char *fmt,...) {
     status_length+=(size_t)n;
 }
 static void SV_LinkEdict(edict_t *e,qboolean touch) { assert(!touch); links++; }
+/* the game's cof_clearitems Use on a player: the weapon named by message leaves their inventory (effects.cpp) */
+static int clear_uses;
+static void game_use(edict_t *used,edict_t *other) {
+    int k; string_t want=used->v.message==7 ? 11 : -1, slot;
+    assert(used->v.classname==38 && other->pvPrivateData); clear_uses++;
+    for(k=1;k<13;k++) { memcpy(&slot,(byte *)other->pvPrivateData+0x21FC+k*sizeof(slot),sizeof(slot));
+        if(slot==want) { slot=0; memcpy((byte *)other->pvPrivateData+0x21FC+k*sizeof(slot),&slot,sizeof(slot)); } }
+}
 static qboolean SV_CoF_RetailProFont(sv_client_t *cl,int colour,const char *text,qboolean reliable) {
     snprintf(prompts[cl-clients],sizeof(prompts[0]),"%d:%s",colour,text); return true;
 }
@@ -163,6 +179,8 @@ static void SV_CoF_TestGunGift(sv_client_t *cl,const char *name) {
 static int companion_moved;
 static void SV_CoF_CompanionMoved(sv_client_t *cl) { companion_moved++; }
 static int arrival_landed;
+static int in_wheelchair[MAX_CLIENTS]; /* the c_ending4b wheelchair's rider (m_pWheelchair set) */
+static qboolean SV_CoF_RetailInWheelchair(sv_client_t *cl) { return in_wheelchair[cl-clients]; }
 static void SV_CoF_ArrivalLanded(const sv_client_t *cl) { arrival_landed++; }
 static int ending_fades_out,ending_fades_in;
 static qboolean SV_CoF_RetailScreenFade(sv_client_t *cl,float duration,float hold,int flags,int r,int g,int b,int a) {
@@ -195,12 +213,12 @@ static void setup(void) {
     int i;
     memset(entities,0,sizeof(entities)); memset(clients,0,sizeof(clients));
     memset(private_data,0,sizeof(private_data)); memset(prompts,0,sizeof(prompts));
-    exit_key=exit_waiter=fades=scene_watching=companion_moved=0; ending_fades_out=ending_fades_in=0; gift_log[0]=0;
+    exit_key=exit_waiter=fades=scene_watching=companion_moved=0; memset(in_wheelchair,0,sizeof(in_wheelchair)); ending_fades_out=ending_fades_in=0; gift_log[0]=0;
     gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=crowded=solid_zone=0; front_only_x=0;
     status_log[0]=0; status_length=0; sv.name="c_start";
     sv.worldmodel=&world_model; world_model.entities=NULL; sv.startspot[0]=0; has_landmark=0; section_height=0;
     sv.state=ss_active; sv.time=10; svs.clients=clients; svs.maxclients=2;
-    svs.spawncount++; svgame.edicts=entities; svgame.numEntities=12;
+    svs.spawncount++; svgame.edicts=entities; svgame.numEntities=12; svgame.dllFuncs.pfnUse=game_use; clear_uses=0;
     for(i=0;i<2;i++) {
         clients[i].state=cs_spawned; clients[i].userid=100+i;
         snprintf(clients[i].name,sizeof(clients[i].name),"Little Rascal %d",i+1);
@@ -288,6 +306,41 @@ static char script_button[]=
 static char script_killed[]=
     "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
     "{ \"classname\" \"trigger_multiple\" \"target\" \"tp-src\" \"killtarget\" \"tp-src\" \"model\" \"*3\" }\n";
+/* 1.1.9 (P1): one-shot chains (a trigger_once, a button pressed for good, multi_managers only they fire) */
+static char script_once_direct[]=
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"model\" \"*3\" \"target\" \"tp-src\" \"classname\" \"trigger_once\" }\n";
+static char script_once_chain[]=
+    "{ \"classname\" \"worldspawn\" }\n"
+    "{ \"tp-src\" \"95\" \"breakzoie2\" \"20\" \"classname\" \"multi_manager\" \"targetname\" \"mm\" }\n"
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"multi_manager\" \"targetname\" \"mm0\" \"mm#1\" \"0.5\" }\n"
+    "{ \"classname\" \"trigger_once\" \"target\" \"mm0\" \"model\" \"*3\" }\n"
+    "{ \"classname\" \"trigger_relay\" \"targetname\" \"mmkill\" \"killtarget\" \"mm\" }\n";
+static char script_button_once[]=
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"multi_manager\" \"targetname\" \"happen\" \"tp-src\" \"3\" }\n"
+    "{ \"classname\" \"func_button\" \"target\" \"happen\" \"wait\" \"-1\" \"lockedby\" \"foot\" }\n";
+static char script_not_once[5][512]={
+    /* a reusable trigger fires the multi_manager */
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"multi_manager\" \"targetname\" \"mm\" \"tp-src\" \"1\" }\n"
+    "{ \"classname\" \"trigger_multiple\" \"target\" \"mm\" \"model\" \"*3\" }\n",
+    /* a button that pops back */
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"func_button\" \"target\" \"tp-src\" \"wait\" \"1\" }\n",
+    /* a trigger_once moving with a train fires on whoever it hits (c_subway2st3 traintrigger) */
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_once\" \"target\" \"tp-src\" \"movewith\" \"bigtrain\" }\n",
+    /* multi_managers firing each other: no chain from the trigger ever settles */
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_once\" \"target\" \"mm1\" }\n"
+    "{ \"classname\" \"multi_manager\" \"targetname\" \"mm1\" \"mm2\" \"1\" }\n"
+    "{ \"classname\" \"multi_manager\" \"targetname\" \"mm2\" \"mm1\" \"1\" \"tp-src\" \"2\" }\n",
+    /* another key naming it */
+    "{ \"classname\" \"cof_teleport\" \"targetname\" \"tp-src\" \"target\" \"tp-dest\" }\n"
+    "{ \"classname\" \"trigger_once\" \"target\" \"tp-src\" }\n"
+    "{ \"classname\" \"cof_triggeron\" \"target\" \"tp-src\" }\n"};
 int main(void) {
     vec3_t before,previous;
     /* The retail classname mirror remains zero while descriptor slots work. */
@@ -1112,5 +1165,230 @@ int main(void) {
     entities[2].v.health=0; tick(0.1); entities[2].v.health=100; give_calls=0; tick(1.2); tick(1.2);
     assert(give_calls==0 && !CoF_PartyInventory(&clients[1]));
     gate=false; SV_CoF_PartyGrant("weapon_glock"); gate=true; assert(logged("chapter-kit")==1); /* story co-op only */
+    /* 1.1.9 (X5): a fresh join (a chapter start, New game, a late joiner) is set down on the map's spawn point, which
+     * can stand in the exit back: its touch of an exit there does not count until stepped out, as for an arrival. */
+    setup(); tick(0.1); arrival_landed=0; clients[1].state=3; SV_CoF_PartyPlayerReady(&clients[1],true);
+    assert(arrival_landed==0); clients[1].state=cs_spawned; tick(0.1); assert(arrival_landed==1);
+    tick(0.1); assert(arrival_landed==1);
+    setup(); tick(0.1); arrival_landed=0; SV_CoF_PartyPlayerReady(&clients[1],true); assert(arrival_landed==1);
+    /* ...a story arrival is not one (the transition's sign-on speaks for it), nor is a returning identity */
+    setup(); tick(0.1); arrival_landed=0; SV_CoF_PartyPlayerReady(&clients[1],false); tick(0.1); tick(0.1);
+    assert(arrival_landed==0);
+    /* 1.1.9 (P1): a one-way move by a one-shot chain with no scene to watch (c_apartmentsick's teleportusus after the
+     * boss) takes every living partner in the activator's section along, wherever they are: nothing can fire it again. */
+    {
+        char *scripts[3]; int k;
+        scripts[0]=script_once_direct; scripts[1]=script_once_chain; scripts[2]=script_button_once;
+        for(k=0;k<3;k++) {
+            teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=scripts[k]; teleport_to(2000); tick(0.1);
+            assert(links==1 && entities[2].v.origin[0]==2035);
+            assert(strstr(status_log,"teleport-begin userid=100 target=tp-dest companions=1 one-way=1") && !prompts[1][0]);
+        }
+    }
+    /* ...not one a reusable firer, a button that pops back, a trigger riding a train, a loop of multi_managers or
+     * another key can fire: as before (the far partner is told to press J) */
+    {
+        int k;
+        for(k=0;k<5;k++) {
+            teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_not_once[k]; teleport_to(2000); tick(0.1);
+            assert(links==0 && entities[2].v.origin[0]==-1500 && strstr(status_log,"companions=0") && !strstr(status_log,"one-way"));
+            assert(!strcmp(prompts[1],cut_off_line));
+        }
+    }
+    /* ...nor a short move (a step through a wall: the round trips of the chain audit) */
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    entities[10].v.origin[0]=300; teleport_to(300); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0") && !strstr(status_log,"one-way"));
+    /* ...nor one landing beside a live trigger_hurt that kills (a kill room: c_roofs' fall, c_subway2st3's train)... */
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    entities[12].v.classname=32; entities[12].v.solid=SOLID_TRIGGER; entities[12].v.dmg=1000; absbox(&entities[12],2200,64);
+    svgame.numEntities=13; teleport_to(2000); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0") && !strstr(status_log,"teleport-own") && !strstr(status_log,"one-way"));
+    /* ...nor one inside a scene: the camera rules decide who watched it with them */
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    clients[0].pViewEntity=&entities[9]; teleport_to(2000); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0"));
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    scene_watching=101; teleport_to(2000); tick(0.1);
+    assert(strstr(status_log,"companions=1") && !strstr(status_log,"one-way"));
+    /* ...nor a partner in another section of a merged map, nor the one waiting at a held exit */
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    section_height=1000; entities[2].v.origin[2]=1500; teleport_to(2000); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0 one-way=1") && !strcmp(prompts[1],cut_off_line));
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    exit_waiter=101; teleport_to(2000); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0 one-way=1"));
+    /* ...and the destination of a walk-in bounce too stays the bouncer's own */
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_walkin;
+    entities[12].v.classname=18; entities[12].v.target=19; svgame.numEntities=13; teleport_to(2000); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0") && !strstr(status_log,"one-way"));
+    /* a partner frozen in a scene of their own when it fires follows once free, until the wait runs out */
+    teleport_setup(-1500); entities[11].v.targetname=31; world_model.entities=script_once_direct;
+    entities[2].v.flags|=FL_FROZEN; teleport_to(2000); tick(0.1); assert(links==0 && strstr(status_log,"companions=1 one-way=1"));
+    entities[2].v.flags&=~FL_FROZEN; tick(0.1); assert(links==1 && entities[2].v.origin[0]==2035);
+    /* 1.1.9 (P3): never set down in a trigger_multiple that fires a cof_teleport (c_village3's "wrong way" bounces
+     * beside each ending room's level change): its first move would send them back alone. */
+    setup(); entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER;
+    entities[7].serialnumber=17; absbox(&entities[7],547,10); entities[8].v.classname=18; entities[8].v.targetname=31;
+    start_door(); finish_door(); tick(0.1);
+    assert(links==1 && entities[2].v.origin[0]==512-35 && entities[2].v.origin[1]==0);
+    /* ...J beside a partner standing next to one too */
+    setup(); entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],35,10);
+    entities[8].v.classname=18; entities[8].v.targetname=31; tick(0.1); entities[2].v.origin[0]=3000; warp(1);
+    assert(links==1 && entities[2].v.origin[0]==-35);
+    /* ...the ending door, whose companions keep to the opener's room: the one free spot there, else the opener's own */
+    setup(); entities[2].v.origin[0]=3000; tick(0.01);
+    entities[5].v.classname=4; entities[5].v.target=26; entities[5].v.owner=&entities[1]; entities[5].serialnumber=15;
+    entities[6].v.classname=5; entities[6].v.targetname=27; entities[6].v.origin[0]=512;
+    entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],512,60);
+    entities[8].v.classname=18; entities[8].v.targetname=31;
+    private_data[0][0x4CD]=1; private_data[0][0x4CE]=1; private_data[0][0x1EA4]=1; tick(0.1);
+    finish_door(); tick(0.1);
+    assert(entities[2].v.origin[0]==entities[1].v.origin[0] && entities[2].v.origin[1]==entities[1].v.origin[1]);
+    assert(strstr(status_log,"door-party-moved userid=101"));
+    /* ...a trigger not firing a teleport, one switched off, or one gone is no bounce */
+    {
+        int k;
+        for(k=0;k<3;k++) {
+            setup(); entities[7].v.classname=22; entities[7].v.target=k==0 ? 23 : 31; entities[7].v.solid=k==1 ? SOLID_NOT : SOLID_TRIGGER;
+            entities[7].v.flags=k==2 ? FL_KILLME : 0; absbox(&entities[7],547,10); entities[8].v.classname=18; entities[8].v.targetname=31;
+            start_door(); finish_door(); tick(0.1); assert(links==1 && entities[2].v.origin[0]==547);
+        }
+    }
+    /* 1.1.9 (P4): the c_ending4b wheelchair rider's body stays frozen where they sat down while the chair (its owner
+     * the rider) carries them about: J lands beside the chair, facing its way, never on its spot... */
+    setup(); tick(0.1); in_wheelchair[0]=1; entities[1].v.flags|=FL_FROZEN;
+    entities[9].v.classname=34; entities[9].v.owner=&entities[1]; entities[9].v.origin[0]=1000; entities[9].v.origin[2]=-36;
+    entities[9].v.angles[1]=45; entities[2].v.origin[0]=3000; warp(1);
+    assert(links==1 && entities[2].v.origin[0]==1035 && entities[2].v.angles[1]==45 && !strstr(status_log,"shared=1"));
+    setup(); tick(0.1); in_wheelchair[0]=1; entities[9].v.classname=34; entities[9].v.owner=&entities[1];
+    entities[9].v.origin[0]=1000; entities[2].v.origin[0]=3000; blocked=1; warp(1);
+    assert(links==0 && entities[2].v.origin[0]==3000 && strstr(status_log,"reason=no-room"));
+    /* ...and a chair gone (or someone else's) leaves the rider's own spot, as before */
+    setup(); tick(0.1); in_wheelchair[0]=1; entities[9].v.classname=34; entities[9].v.owner=&entities[2];
+    entities[9].v.origin[0]=1000; entities[2].v.origin[0]=3000; warp(1); assert(links==1 && entities[2].v.origin[0]==35);
+    /* ...a respawn whose way in is solid lands beside the chair, not the frozen body */
+    {
+        vec3_t in={500,0,0};
+        setup(); tick(0.1); assert(SV_CoF_PartySectionMove(&clients[1],in,NULL,NULL));
+        in_wheelchair[0]=1; entities[9].v.classname=34; entities[9].v.owner=&entities[1]; entities[9].v.origin[0]=1000;
+        entities[2].v.health=0; entities[2].v.deadflag=2; tick(0.1);
+        entities[2].v.health=100; entities[2].v.deadflag=DEAD_NO; entities[2].v.origin[0]=3000;
+        solid_zone=1; zone_min_x=400; zone_max_x=600; SV_CoF_PartyRespawned(&clients[1]); solid_zone=0;
+        assert(entities[2].v.origin[0]==1035 && strstr(status_log,"respawn-moved userid=101 beside=100"));
+    }
+    /* 1.1.9 (S6, K8): a door plays its music to its opener only; the partner it takes through hears it too, once */
+    {
+        string_t chase=35, quiet=36, track; int update; float fade=2.0f;
+        setup(); memcpy(private_data[0]+0x2310,&chase,4); private_data[0][0x231C]=1; memcpy(private_data[0]+0x2320,&fade,4);
+        memcpy(private_data[1]+0x2310,&quiet,4); start_door(); finish_door(); tick(0.1);
+        memcpy(&track,private_data[1]+0x2310,4); memcpy(&update,private_data[1]+0x2314,4); memcpy(&fade,private_data[1]+0x2320,4);
+        assert(links==1 && track==chase && private_data[1][0x231C]==1 && update==1 && fade==2.0f);
+        assert(strstr(status_log,"cofstory phase=music-shared userid=101 from=100 track=music/chase.mp3 reason=door"));
+        /* ...not restarted when they hear it already */
+        setup(); memcpy(private_data[0]+0x2310,&chase,4); memcpy(private_data[1]+0x2310,&chase,4);
+        start_door(); finish_door(); tick(0.1); memcpy(&update,private_data[1]+0x2314,4);
+        assert(links==1 && update==0 && !strstr(status_log,"music-shared"));
+        /* ...a door into a silent room silences them too, fading out over a second */
+        setup(); memcpy(private_data[1]+0x2310,&quiet,4); start_door(); finish_door(); tick(0.1);
+        memcpy(&track,private_data[1]+0x2310,4); memcpy(&update,private_data[1]+0x2314,4); memcpy(&fade,private_data[1]+0x2318,4);
+        assert(track==0 && update==1 && fade==1.0f && strstr(status_log,"track= reason=door"));
+        /* ...a scripted teleport leaves music to the script (trigger_mp3 plays to everyone) */
+        teleport_setup(64); memcpy(private_data[0]+0x2310,&chase,4); teleport_to(2000); tick(0.1);
+        memcpy(&track,private_data[1]+0x2310,4); assert(links==1 && track==0 && !strstr(status_log,"music-shared"));
+        /* a respawn hears what the nearest partner hears, not silence or a stale sv_coop_music track */
+        setup(); tick(0.1); memcpy(private_data[0]+0x2310,&quiet,4); memcpy(private_data[1]+0x2310,&chase,4);
+        SV_CoF_PartyRespawned(&clients[1]); memcpy(&track,private_data[1]+0x2310,4);
+        assert(track==quiet && strstr(status_log,"music-shared userid=101 from=100 track=music/quiet.mp3 reason=respawn"));
+        /* a story level change clears the map's sv_coop_music (the players' own music travels with them) */
+        {
+            vec3_t landmark={3000,0,0};
+            exit_setup(3000); snprintf(coop_music_text,sizeof(coop_music_text),"music/chase.mp3");
+            SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(1000,4000);
+            assert(!coop_music_text[0] && strstr(status_log,"cofstory phase=music-cleared track=music/chase.mp3"));
+            exit_setup(3000); snprintf(coop_music_text,sizeof(coop_music_text),"0"); arrive(1000,4000);
+            assert(!strcmp(coop_music_text,"0") && !strstr(status_log,"music-cleared"));
+            /* ...not while a player's track is the cvar's own text: changing it would free that under them */
+            exit_setup(3000); strings_music_alias=coop_music_text; snprintf(coop_music_text,sizeof(coop_music_text),"music/chase.mp3");
+            {string_t alias=37; memcpy(private_data[1]+0x2310,&alias,4);}
+            SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(1000,4000);
+            assert(!strcmp(coop_music_text,"music/chase.mp3") && !strstr(status_log,"music-cleared"));
+        }
+    }
+    /* 1.1.9 (S8, M1 9): c_start's removecamera (a cof_clearitems taking a weapon by classname) takes the camera
+     * c_nightmare handed out from its activator only: everyone else loses theirs too, by the same entity's Use, and
+     * it is no longer handed out (not after a death either). Here the shared weapon is the glock. */
+    setup(); entities[9].v.classname=29; entities[9].v.message=7; svs.spawncount++; tick(0.1); /* the gift map */
+    inventory(0,0,11); tick(1.2); assert(CoF_PartyInventory(&clients[1])&(1U<<2));
+    svs.spawncount++; entities[9].free=1; entities[10].v.classname=38; entities[10].v.message=7; entities[10].serialnumber=20;
+    memset(private_data[0]+0x2200,0,6*sizeof(string_t)); /* the next map: its cof_clearitems took the activator's */
+    tick(0.6); tick(0.6);
+    assert(clear_uses==1 && !(CoF_PartyInventory(&clients[1])&(1U<<2)));
+    assert(strstr(status_log,"cofstory phase=gift-withdrawn class=weapon_glock userid=100"));
+    assert(strstr(status_log,"cofstory phase=gift-cleared userid=101 class=weapon_glock"));
+    entities[1].v.health=0; entities[1].v.deadflag=2; tick(0.1); entities[1].v.health=100; entities[1].v.deadflag=DEAD_NO;
+    give_calls=0; {int k; for(k=0;k<10;k++) tick(0.6);} assert(give_calls==0 && logged("gift-withdrawn")==1);
+    /* ...not a death (the game takes everything then), nor a map without such a cof_clearitems */
+    setup(); entities[9].v.classname=29; entities[9].v.message=7; svs.spawncount++; tick(0.1);
+    inventory(0,0,11); tick(1.2); entities[10].v.classname=38; entities[10].v.message=7; svgame.numEntities=12;
+    svs.spawncount++; tick(0.1); entities[1].v.health=0; entities[1].v.deadflag=2; memset(private_data[0]+0x2200,0,6*sizeof(string_t));
+    tick(0.6); tick(0.6); assert(clear_uses==0 && !strstr(status_log,"gift-withdrawn"));
+    setup(); entities[9].v.classname=29; entities[9].v.message=7; svs.spawncount++; tick(0.1);
+    inventory(0,0,11); tick(1.2); memset(private_data[0]+0x2200,0,6*sizeof(string_t)); tick(0.6); tick(0.6);
+    assert(clear_uses==0 && !strstr(status_log,"gift-withdrawn") && CoF_PartyInventory(&clients[1])&(1U<<2));
+    /* 1.1.9 (S15, M1 9): a door whose target is an info_teleport_destination (c_subwaysick2's inter_door #34,
+     * `exitforever`): the game moves its opener there, and the partner beside them comes along as through any door;
+     * a target of another class (a camera, a menu) is still no party door */
+    {
+        int k;
+        for(k=0;k<2;k++) {
+            setup(); tick(0.01);
+            entities[5].v.classname=4; entities[5].v.target=6; entities[5].v.owner=&entities[1]; entities[5].serialnumber=15;
+            entities[6].v.classname=k==0 ? 17 : 20; entities[6].v.targetname=6; entities[6].v.origin[0]=512;
+            private_data[0][0x1EA4]=1; entities[1].v.flags|=FL_FROZEN; tick(0.1); finish_door(); tick(0.1);
+            if(k==0) assert(strstr(status_log,"door-begin userid=100 target=exit-a") && links==1 && entities[2].v.origin[0]==547);
+            else assert(!strstr(status_log,"door-begin") && links==0);
+        }
+    }
+    /* 1.1.9 (S17, M1 9): a door killed after its opener went through (c_city2's apdoor1 pair, by a trigger_once 142
+     * units past it) cuts off a partner who did not go through, who is now told how to follow... */
+    setup(); entities[2].v.origin[0]=300; start_door(); finish_door(); tick(0.1);
+    assert(links==0 && !prompts[1][0]); /* the door is still there to take */
+    entities[1].v.origin[0]=654; tick(1); assert(!prompts[1][0]);
+    entities[5].free=1; tick(0.1);
+    assert(!strcmp(prompts[1],cut_off_line) && strstr(status_log,"cofstory phase=cut-off userid=101 owner=100 kind=door-gone"));
+    tick(0.1); assert(logged("kind=door-gone")==1);
+    /* ...not one who went through with the opener, or after them, wherever they are now */
+    setup(); start_door(); finish_door(); tick(0.1); assert(links==1);
+    entities[2].v.origin[0]=-2000; entities[5].free=1; tick(0.1); assert(!prompts[1][0] && !strstr(status_log,"door-gone"));
+    setup(); entities[2].v.origin[0]=300; start_door(); finish_door(); tick(0.1); tick(1);
+    entities[5].v.owner=&entities[2]; /* the partner takes the same door after the opener */ private_data[1][0x1EA4]=1; entities[2].v.flags|=FL_FROZEN; tick(0.1);
+    private_data[1][0x1EA4]=0; entities[2].v.flags&=~FL_FROZEN; VectorCopy(entities[6].v.origin,entities[2].v.origin); entities[2].v.origin[2]=37;
+    tick(0.1); assert(strstr(status_log,"door-begin userid=101")); entities[2].v.origin[0]=-2000; entities[5].free=1; tick(0.1);
+    assert(!strstr(status_log,"door-gone"));
+    /* ...nor when another door leads to the same exit (a swap for an equivalent door), nor after the watch */
+    setup(); entities[2].v.origin[0]=300; start_door(); finish_door(); tick(0.1);
+    entities[7].v.classname=4; entities[7].v.target=6; entities[5].free=1; tick(0.1); assert(!prompts[1][0]);
+    setup(); entities[2].v.origin[0]=300; start_door(); finish_door(); tick(0.1); tick(31); entities[5].free=1; tick(0.1);
+    assert(!prompts[1][0] && !strstr(status_log,"door-gone"));
+    /* 1.1.9 (I6, M1 9): a checkpoint load starts with the starters only; a restored player carrying one of the story's
+     * gift weapons (the glock) shares it again, so a joiner or a respawn gets it */
+    setup(); inventory(0,0,11); SV_CoF_PartyPlayerReady(&clients[0],false); SV_CoF_PartyPlayerReady(&clients[1],false);
+    tick(0.1); tick(1.2);
+    assert(strstr(status_log,"cofstory phase=gift-restored userid=100 class=weapon_glock") && logged("gift-restored")==1);
+    assert(CoF_PartyInventory(&clients[1])&(1U<<2));
+    /* ...once: a glock picked up later in that map is a pickup, not a gift */
+    setup(); SV_CoF_PartyPlayerReady(&clients[0],false); SV_CoF_PartyPlayerReady(&clients[1],false); tick(0.1);
+    inventory(0,0,11); tick(1.2); tick(1.2); assert(!strstr(status_log,"gift-restored") && !(CoF_PartyInventory(&clients[1])&(1U<<2)));
+    /* ...not a story level change's restore (its gifts were learned on their maps), nor a fresh join */
+    {
+        vec3_t landmark={3000,0,0};
+        exit_setup(3000); SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(1000,4000);
+        inventory(0,0,11); clients[0].state=clients[1].state=cs_spawned;
+        SV_CoF_PartyPlayerReady(&clients[0],false); SV_CoF_PartyPlayerReady(&clients[1],false); tick(0.1); tick(1.2);
+        assert(!strstr(status_log,"gift-restored"));
+    }
+    setup(); inventory(0,0,11); SV_CoF_PartyPlayerReady(&clients[0],true); tick(0.1); tick(1.2);
+    assert(!strstr(status_log,"gift-restored"));
     puts("party scenarios passed"); return 0;
 }

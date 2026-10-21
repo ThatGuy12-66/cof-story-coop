@@ -30,11 +30,16 @@ CHAPTER_CHOICES = [(label, name) for label, name in CHAPTERS if name != NEW_GAME
 REPORT_URL = "https://discord.gg/4uwV6jmmY7"   # "Report a bug": the public Discord
 # Every game the app starts: story co-op on, the test tools off. The story trace
 # goes to the log for bug reports; the engine never draws it on screen.
+# 1.1.9: partners move smoothly with 100 updates and commands a second (a host at
+# 60 fps then sends every frame; at 60 it skipped some), the host allowing them
+# (sv_maxupdaterate, 60 by default) and 0.1 s of interpolation whatever an old
+# config.cfg holds. These are the engine's limits (rate 100000, cl_cmdrate 100,
+# cl_updaterate 102, ex_interp 0.1); fps_max stays 60 and sv_fps 0 (cof_skip).
 STORY_SETTINGS = (
     "cof_story_coop 1", "cof_story_trace 1", "sv_connect_timeout_ban 0", "sv_cheats 0", "sv_enttools_enable 0", "developer 0",
     "coop 0", "deathmatch 1", "mp_timelimit 0", "mp_fraglimit 0", "cof_test_gun 0", "fps_max 60",
-    "rate 50000", "cl_cmdrate 60", "cl_updaterate 60", "cl_forwardspeed 300", "cl_backspeed 200",
-    "cl_sidespeed 200", "+mlook",
+    "rate 100000", "cl_cmdrate 100", "cl_updaterate 100", "sv_maxupdaterate 100", "ex_interp 0.1",
+    "cl_forwardspeed 300", "cl_backspeed 200", "cl_sidespeed 200", "+mlook",
 )
 DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion": False, "password": "",
                     "bonus_room": False, "first_launch_done": False, "companions": 1, "merged_maps": True,

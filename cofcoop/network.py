@@ -590,6 +590,14 @@ def _same_mapping(remote: dict, owned: dict) -> bool:
             and remote.get('NewPortMappingDescription') == owned['description'])
 
 
+def _left_by_launcher(remote: dict, service: dict, port: int) -> bool:
+    """1.1.9 (L14.4): a mapping a launcher on this PC made for this port and could not remove (closed by a crash or
+    by Task Manager): its description, to this PC's address and port."""
+    return (remote.get('NewPortMappingDescription', '').startswith('CoF Coop ')
+            and remote.get('NewInternalClient') == service['internal_ip']
+            and remote.get('NewInternalPort') == str(port))
+
+
 def upnp_map(port: int, timeout: float = 3) -> dict:
     """Explicitly create a UDP mapping with a one-day lease; never overwrite.
 
@@ -613,7 +621,14 @@ def upnp_map(port: int, timeout: float = 3) -> dict:
                 for mapping in _OWNED_MAPPINGS.values():
                     if mapping['control_url'] == service['control_url'] and mapping['port'] == port and _same_mapping(existing, mapping):
                         return dict(mapping)
-                raise NetworkError(f'UDP {port} already has an existing router mapping. It was left unchanged; use that mapping or choose another host port.')
+                if not _left_by_launcher(existing, service, port):
+                    raise NetworkError(f'UDP {port} already has an existing router mapping. It was left unchanged; use that mapping or choose another host port.')
+                # a launcher's own leftover reads as a failure otherwise: replaced by a new one-day mapping below
+                try:
+                    _soap(service, 'DeletePortMapping', _mapping_args(port), deadline)
+                except _SoapError as exc:
+                    if exc.code != '714':   # gone already (its lease ran out)
+                        raise
             owner = secrets.token_hex(12)
             mapping = dict(service, external_ip=str(address), port=port, lease=86400, owner=owner,
                            description='CoF Coop ' + owner, protocol='UDP', reachability_verified=False)

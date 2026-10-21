@@ -29,6 +29,8 @@ typedef float vec3_t[3];
 #define FL_FROZEN (1<<12)
 #define FL_KILLME (1<<30)
 #define FCL_FAKECLIENT (1<<7)
+#define IN_FORWARD (1U<<3)
+#define IN_BACK (1U<<4)
 #define IN_USE (1<<5)
 #define COF_RETAIL_SLOTS 12
 #define COF_RETAIL_ITEM 64
@@ -36,6 +38,8 @@ typedef float vec3_t[3];
 #define Q_stricmp _stricmp
 #define Q_atoi atoi
 #define Q_snprintf snprintf
+#define Q_strlen strlen
+#define Q_strncmp strncmp
 #define SetBits(f,b) ((f)|=(b))
 #define FBitSet(f,b) ((f)&(b))
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
@@ -43,13 +47,17 @@ typedef float vec3_t[3];
 #define DotProduct(a,b) ((a)[0]*(b)[0]+(a)[1]*(b)[1]+(a)[2]*(b)[2])
 #define VectorAdd(a,b,c) ((c)[0]=(a)[0]+(b)[0],(c)[1]=(a)[1]+(b)[1],(c)[2]=(a)[2]+(b)[2])
 #define VectorClear(x) ((x)[0]=(x)[1]=(x)[2]=0)
+#define VectorScale(in,s,out) ((out)[0]=(in)[0]*(s),(out)[1]=(in)[1]*(s),(out)[2]=(in)[2]*(s))
+#define MSG_ONE 1
+#define MSG_ALL 2
+#define MSG_ONE_UNRELIABLE 8
 #define VectorIsNull(v) ((v)[0] == 0.0f && (v)[1] == 0.0f && (v)[2] == 0.0f)
 typedef struct edict_s edict_t;
 typedef struct {
-	string_t classname, target, targetname, message;
+	string_t classname, target, targetname, message, model;
 	vec3_t origin, angles, velocity, avelocity, absmin, absmax;
 	float health, nextthink, fuser3, dmg;
-	int deadflag, flags, spawnflags, iuser1, solid, modelindex;
+	int deadflag, flags, spawnflags, iuser1, solid, modelindex, button;
 	edict_t *owner;
 } entvars_t;
 /* brush models: hull 1 is the brush grown by a player's half size, so a point in it is a player touching the brush */
@@ -80,7 +88,9 @@ static const char *strings[] = { "", "player", "trigger_once", "cof_killplayer",
 	"gateinter", "cof_ladder_manager", "cof_ladder_manager_use", "lad1", "wheelchair", "camera_model", "cof_yesno",
 	"ryesno", "yesno", "multi_manager", "lad2",
 	/* 18 */ "cof_teleport", "info_teleport_destination", "trigger_hurt", "multifallheh", "teleportfall", "teleportfall2",
-	/* 24 */ "kallamig", "multiroofscene", "rsstart", "globalr", "boat", "monster", "trigger_relay", "ladddd" };
+	/* 24 */ "kallamig", "multiroofscene", "rsstart", "globalr", "boat", "monster", "trigger_relay", "ladddd",
+	/* 32 */ "DelayedUse", "gfx/vgui/boss/simon_health_empty.tga", "gfx/vgui/boss/simon_health_full.tga", "sicksimon",
+	/* 36 */ "*7", "env_fade", "models/ladder_climb.mdl", "models/strangle_simon.mdl" };
 static char log_text[16384];
 static size_t log_length;
 static int gate, kills[MAX_CLIENTS + 1], has_phone[MAX_CLIENTS], fired;
@@ -109,7 +119,9 @@ static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *t
 	snprintf( prompts[cl - clients], sizeof( prompts[0] ), "%d:%s", colour, text ); return true;
 }
 static int logos_to[MAX_CLIENTS], logo_value, fades_to[MAX_CLIENTS], boats_to[MAX_CLIENTS], faded_in[MAX_CLIENTS], links, controls_given[24];
-static byte fade_value[2];
+static int bossbars_to[MAX_CLIENTS], bossbar_size, credits_to[MAX_CLIENTS], credits_size;
+static byte credits[256];
+static byte fade_value[2], bossbar[192];
 static void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, int size );
 /* as the engine: the message goes out, and is seen by the moments hook like any other */
 static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable )
@@ -117,6 +129,8 @@ static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byt
 	assert( reliable );
 	if( !strcmp( name, "CoFLogo" )) { assert( size == 1 ); logos_to[NUM_FOR_EDICT( to ) - 1]++; logo_value = payload[0]; }
 	else if( !strcmp( name, "GreyFade" )) { assert( size == 2 ); fades_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( fade_value, payload, 2 ); }
+	else if( !strcmp( name, "Credits" )) { credits_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( credits, payload, size ); credits_size = size; }
+	else if( !strcmp( name, "BossBar" )) { bossbars_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( bossbar, payload, size ); bossbar_size = size; }
 	else { assert( !strcmp( name, "Boat" ) && size == 2 && payload[0] == 0xFF && payload[1] == 0xFF ); boats_to[NUM_FOR_EDICT( to ) - 1]++; }
 	SV_CoF_MomentsMessage( to, name, payload, size );
 	return true;
@@ -127,6 +141,23 @@ static qboolean SV_CoF_RetailScreenFade( sv_client_t *cl, float duration, float 
 	faded_in[cl - clients]++; return true;
 }
 static void SV_LinkEdict( edict_t *e, qboolean touch ) { assert( !touch ); links++; }
+/* merged maps (sv_cof_sections.c): sections stacked by height, section k from z = 1000 k; not merged: -1 */
+static int merged;
+static int SV_CoF_PointSection( const vec3_t origin ) { return merged ? ( origin[2] < 1000.0f ? 0 : 1 ) : -1; }
+static int SV_CoF_PlayerSection( const edict_t *e ) { return e ? SV_CoF_PointSection( e->v.origin ) : -1; }
+/* the entity whose think runs (sv_cof_rescue.c) */
+static edict_t *running_think;
+static edict_t *SV_CoF_RescueThinker( void ) { return running_think; }
+#include "cof_strip.h"
+/* the party's move beside a partner (sv_cof_party.c): set down 35 u from the anchor */
+static int section_moves;
+static qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor, const float *fallback )
+{
+	assert( anchor && landing == anchor->edict->v.origin && !fallback );
+	section_moves++;
+	VectorCopy( anchor->edict->v.origin, cl->edict->v.origin ); cl->edict->v.origin[0] += 35.0f;
+	return true;
+}
 /* CBasePlayer::EnableControl( TRUE ), thiscall 100DEFF0 */
 static qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg )
 {
@@ -170,7 +201,9 @@ static void setup( void )
 	for( i = 3; i < 24; i++ ) entities[i].free = 1;
 	memset( logos_to, 0, sizeof( logos_to )); logo_value = -1;
 	memset( fades_to, 0, sizeof( fades_to )); memset( boats_to, 0, sizeof( boats_to )); memset( faded_in, 0, sizeof( faded_in ));
-	memset( controls_given, 0, sizeof( controls_given )); links = 0; memset( models, 0, sizeof( models ));
+	memset( controls_given, 0, sizeof( controls_given )); links = 0; memset( models, 0, sizeof( models )); section_moves = 0;
+	memset( bossbars_to, 0, sizeof( bossbars_to )); bossbar_size = 0; memset( credits_to, 0, sizeof( credits_to )); credits_size = 0;
+	merged = 0; running_think = NULL;
 	SV_CoF_MomentsReset();
 }
 static edict_t *spawn( int i, string_t classname, string_t targetname, string_t target )
@@ -271,6 +304,25 @@ int main( void )
 	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
 	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[1] = has_phone[0] = 1; SV_CoF_MomentsFrame();
 	assert( get_handle( 14, COF_CALL_PLAYER ) == guest && !log_length );
+	/* 1.1.9 (AI2): ringing someone who can take it but does not (AFK) for 20 s: it rings the nearest other who can,
+	 * and back again 20 s later; an answer starts the count again */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
+	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[1] = has_phone[0] = 1; private_data[14][COF_CALL_RANG] = 1;
+	SV_CoF_MomentsFrame(); sv.time = 119.9; call->v.nextthink = 120.0f; SV_CoF_MomentsFrame();
+	assert( get_handle( 14, COF_CALL_PLAYER ) == guest && !log_length );
+	sv.time = 120.0; SV_CoF_MomentsFrame();
+	assert( get_handle( 14, COF_CALL_PLAYER ) == host && !private_data[14][COF_CALL_RANG] && logged( "call-retargeted call=sophiecall entity=1" ) == 1 );
+	assert( !strcmp( prompts[0], "5:Your phone is ringing. Take it out to answer." ) && !strcmp( prompts[1], "5:Little Rascal 1 is taking the call." ));
+	sv.time = 139.9; SV_CoF_MomentsFrame(); assert( get_handle( 14, COF_CALL_PLAYER ) == host );
+	sv.time = 140.0; SV_CoF_MomentsFrame(); assert( get_handle( 14, COF_CALL_PLAYER ) == guest && logged( "call-retargeted call=sophiecall entity=2" ) == 1 );
+	set_think( 14, COF_CALL_TALK ); sv.time = 150.0; SV_CoF_MomentsFrame();                   /* the guest answered */
+	set_think( 14, COF_CALL_WAIT ); sv.time = 165.0; SV_CoF_MomentsFrame();                   /* rings again later */
+	sv.time = 184.9; SV_CoF_MomentsFrame(); assert( get_handle( 14, COF_CALL_PLAYER ) == guest );
+	sv.time = 185.0; SV_CoF_MomentsFrame(); assert( get_handle( 14, COF_CALL_PLAYER ) == host );
+	/* nobody else can take it: it keeps ringing the one it rings */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
+	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[1] = 1; SV_CoF_MomentsFrame();
+	sv.time = 130.0; call->v.nextthink = 130.1f; SV_CoF_MomentsFrame(); assert( get_handle( 14, COF_CALL_PLAYER ) == guest && !log_length );
 	/* the player in a call already is not a candidate */
 	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
 	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[0] = 1; private_data[1][COF_PL_IN_CALL] = 1; SV_CoF_MomentsFrame();
@@ -313,6 +365,15 @@ int main( void )
 	assert( !private_data[2][COF_PL_IN_CALL] && logged( "call-flags-cleared entity=2" ) == 1 );
 	setup(); private_data[2][COF_PL_IN_CALL] = 1; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] ); /* alive: their call */
 
+	/* 1.1.9 (S19): a checkpoint loaded in a 911/112 call keeps m_bInPhoneCall with nothing to end it (its step, P+0x3A0,
+	 * is not saved): after 2 s with no running call naming them and no step, it is cleared. */
+	setup(); private_data[2][COF_PL_IN_CALL] = 1; guest->v.fuser3 = 5.0f; SV_CoF_MomentsFrame();
+	sv.time = 101.9; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] );
+	sv.time = 102.0; SV_CoF_MomentsFrame(); assert( !private_data[2][COF_PL_IN_CALL] && guest->v.fuser3 == 0.0f && logged( "call-flags-cleared entity=2" ) == 1 );
+	setup(); private_data[2][COF_PL_IN_CALL] = 1; value = 2; memcpy( private_data[2] + COF_PL_VAN_CALL, &value, 4 ); /* the van call runs */
+	SV_CoF_MomentsFrame(); sv.time = 110; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] );
+	setup(); private_data[2][COF_PL_IN_CALL] = 1; call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_TALK ); call->v.nextthink = 103;
+	set_handle( 14, COF_CALL_USER, guest ); SV_CoF_MomentsFrame(); sv.time = 102.5; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] );
 	/* Ladders: while the host climbs, nobody near its use brushes can start it. The climb freezes the climber and
 	 * hands them the ladder's camera model (P+0x5AC); its FL_GODMODE lasts one frame (PostThink clears it). */
 	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN;
@@ -322,9 +383,10 @@ int main( void )
 	cmd.buttons = IN_USE | 1; SV_CoF_MomentsCommand( &clients[1], &cmd );
 	assert( cmd.buttons == 1 && !strcmp( prompts[1], "5:Little Rascal 1 is climbing. Wait a moment." ) && logged( "ladder-busy userid=101 climber=100" ) == 1 );
 	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == 0 && logged( "ladder-busy" ) == 1 ); /* told once */
-	/* far away, or the climb over: +use goes through */
+	/* far away, or the climb over (LadderThink gives control back and removes the camera model in one think; 1.1.9:
+	 * control back alone is a camera's end, which S13 undoes): +use goes through */
 	guest->v.origin[0] = 900; cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
-	guest->v.origin[0] = 500; host->v.flags = 0; SV_CoF_MomentsFrame();
+	guest->v.origin[0] = 500; host->v.flags = 0; value = 0; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 ); SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
 	/* frozen for something else (no ladder camera): not a climb */
 	host->v.flags = FL_FROZEN; value = 0; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 ); SV_CoF_MomentsFrame();
@@ -334,6 +396,44 @@ int main( void )
 	value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
 	use = spawn( 16, 9, 0, 17 ); use->v.absmin[0] = 480; use->v.absmax[0] = 520; SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
+
+	/* 1.1.9: the climb reads forward and back from the ladder's camera model (LadderThink); the usercmd's own
+	 * keys reach it now, before a frozen player's buttons are dropped. A key held since the climb began counts once
+	 * let go (as the client's forwardpressed/backpressed commands); the model's other buttons are kept. */
+	{
+		edict_t *camera;
+		setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; manager->v.model = 38; host->v.flags = FL_FROZEN;
+		value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
+		camera = spawn( 18, 12, 0, 0 ); camera->v.owner = host; camera->v.model = 38; camera->v.button = 1 << 11;
+		SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD ); assert( camera->v.button == 1 << 11 ); /* held from before */
+		SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD ); assert( camera->v.button == 1 << 11 );
+		SV_CoF_MomentsLadderInput( &clients[0], 0 ); assert( camera->v.button == 1 << 11 );
+		SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD | IN_USE ); assert( camera->v.button == (int)( IN_FORWARD | ( 1 << 11 )));
+		SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD ); assert( camera->v.button == (int)( IN_FORWARD | ( 1 << 11 ))); /* held */
+		SV_CoF_MomentsLadderInput( &clients[0], IN_BACK ); assert( camera->v.button == (int)( IN_BACK | ( 1 << 11 ))); /* up at the start */
+		camera->v.button |= IN_FORWARD; /* a forwardpressed that came late, after the key was let go */
+		SV_CoF_MomentsLadderInput( &clients[0], 0 ); assert( camera->v.button == 1 << 11 );
+		/* the partner's keys are theirs */
+		SV_CoF_MomentsLadderInput( &clients[1], IN_FORWARD ); assert( camera->v.button == 1 << 11 );
+		/* a new climb (another model): keys held from before wait again */
+		camera->free = 1; camera = spawn( 19, 12, 0, 0 ); camera->v.owner = host; camera->v.model = 38;
+		SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD ); assert( !camera->v.button );
+		SV_CoF_MomentsLadderInput( &clients[0], 0 ); SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD );
+		assert( camera->v.button == (int)IN_FORWARD );
+		/* not a ladder's model (a strangle, a model cutscene; the old ladder still names the player): untouched */
+		camera->v.model = 39; camera->v.button = 0; SV_CoF_MomentsLadderInput( &clients[0], 0 ); SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD );
+		assert( !camera->v.button );
+		camera->v.model = 38; camera->v.button = (int)IN_FORWARD;
+		/* not climbing (unfrozen, or no camera model in the player's data), no story co-op, an AI companion: untouched */
+		host->v.flags = 0; SV_CoF_MomentsLadderInput( &clients[0], IN_FORWARD ); SV_CoF_MomentsLadderInput( &clients[0], 0 );
+		assert( camera->v.button == (int)IN_FORWARD );
+		host->v.flags = FL_FROZEN; value = 0; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
+		SV_CoF_MomentsLadderInput( &clients[0], 0 ); assert( camera->v.button == (int)IN_FORWARD );
+		value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
+		gate = 0; SV_CoF_MomentsLadderInput( &clients[0], 0 ); assert( camera->v.button == (int)IN_FORWARD ); gate = 1;
+		clients[0].flags = FCL_FAKECLIENT; SV_CoF_MomentsLadderInput( &clients[0], 0 ); assert( camera->v.button == (int)IN_FORWARD );
+		clients[0].flags = 0; SV_CoF_MomentsLadderInput( &clients[0], 0 ); assert( !camera->v.button );
+	}
 
 	/* The wheelchair's rider is the first player while it carries them. */
 	setup(); chair = spawn( 17, 11, 0, 0 ); chair->v.owner = guest; value = 0x1234; memcpy( private_data[17] + COF_CHAIR_RIDER, &value, 4 );
@@ -545,6 +645,207 @@ int main( void )
 		SV_CoF_MomentsFrame();
 		memcpy( &got, private_data[20] + COF_DELAY_KILLTARGET, 4 ); assert( !got && logged( "ladder-kept relay=20 use=ladddd" ) == 1 );
 		memcpy( &got, private_data[21] + COF_DELAY_KILLTARGET, 4 ); assert( got == 22 && logged( "ladder-kept" ) == 1 );
+	}
+	/* 1.1.9 (S2): c_ending1's house: trigger_once #259 -> multibokam0 -> multibokam -> multisu -> teledes_tele (a
+	 * cof_teleport moving only a player activator) 27 s later. A multi_manager keeps the activator (+0x184), a delayed
+	 * trigger's DelayedUse too (+0xE4): one naming the player who leaves now names the living person nearest them. */
+	{
+		string_t chain[] = { 22 };
+		float delay = 0.5f, early = -5.0f;
+		int two = 2;
+		edict_t *third = &entities[3];
+		setup(); svs.maxclients = 3; clients[2].state = cs_spawned; clients[2].userid = 102; clients[2].edict = third;
+		third->free = 0; third->v.classname = 1; third->v.health = 100; third->v.origin[0] = 450;
+		mm_spawn( 11, 21, 1, chain ); set_handle( 11, COF_MM_ACTIVATOR, guest );
+		mm_spawn( 12, 25, 1, chain ); set_handle( 12, COF_MM_ACTIVATOR, host );          /* the host's: kept */
+		spawn( 13, 32, 0, 22 ); set_handle( 13, COF_DELAY_ACTIVATOR, guest );
+		spawn( 14, 32, 0, 22 ); set_handle( 14, COF_DELAY_ACTIVATOR, guest ); memcpy( private_data[14] + COF_DELAY_DELAY, &delay, 4 );
+		mm_spawn( 15, 26, 1, chain ); set_handle( 15, COF_MM_ACTIVATOR, guest );
+		memcpy( private_data[15] + COF_MM_COUNT, &two, 4 ); memcpy( private_data[15] + COF_MM_DELAYS + 4, &early, 4 );
+		spawn( 16, 30, 0, 22 ); set_handle( 16, COF_DELAY_ACTIVATOR, guest );              /* a trigger_relay keeps none */
+		SV_CoF_MomentsDrop( &clients[1] );
+		assert( get_handle( 11, COF_MM_ACTIVATOR ) == third && get_handle( 12, COF_MM_ACTIVATOR ) == host );
+		assert( get_handle( 13, COF_DELAY_ACTIVATOR ) == third );
+		assert( get_handle( 14, COF_DELAY_ACTIVATOR ) == guest );   /* not one SUB_UseTargets made (its delay is 0) */
+		assert( get_handle( 15, COF_MM_ACTIVATOR ) == guest );      /* delays out of order: not the layout read here */
+		assert( get_handle( 16, COF_DELAY_ACTIVATOR ) == guest );
+		assert( logged( "activator-handed userid=101 entity=11 class=multi_manager to=3" ) == 1 );
+		assert( logged( "activator-handed userid=101 entity=13 class=DelayedUse to=3" ) == 1 && logged( "activator-handed" ) == 2 );
+		/* the nearest is dead, or a companion: the host; nobody alive: left as it was; a stale handle is not the leaver */
+		set_handle( 11, COF_MM_ACTIVATOR, guest ); third->v.health = 0; SV_CoF_MomentsDrop( &clients[1] );
+		assert( get_handle( 11, COF_MM_ACTIVATOR ) == host );
+		set_handle( 11, COF_MM_ACTIVATOR, guest ); third->v.health = 100; clients[2].flags = FCL_FAKECLIENT; SV_CoF_MomentsDrop( &clients[1] );
+		assert( get_handle( 11, COF_MM_ACTIVATOR ) == host );
+		set_handle( 11, COF_MM_ACTIVATOR, guest ); host->v.health = 0; SV_CoF_MomentsDrop( &clients[1] );
+		assert( get_handle( 11, COF_MM_ACTIVATOR ) == guest );
+		host->v.health = 100; set_handle( 11, COF_MM_ACTIVATOR, guest ); guest->serialnumber = 2; SV_CoF_MomentsDrop( &clients[1] );
+		assert( get_handle( 11, COF_MM_ACTIVATOR ) == guest );
+		guest->serialnumber = 1; gate = 0; SV_CoF_MomentsDrop( &clients[1] ); assert( get_handle( 11, COF_MM_ACTIVATOR ) == guest ); gate = 1;
+	}
+	/* 1.1.9 (P2, M2 finding 8): c_bridge: the trigger_once by the carriage starts destroyall -> multikuken2, which
+	 * switches the trigger_hurt tjenahaha (1000) on under the carriage 3 s later: a partner still inside is set down
+	 * beside the nearest living person outside it, before any move of theirs touches it. */
+	{
+		string_t hurts[] = { 24 };
+		edict_t *hurt;
+		setup(); mm_spawn( 11, 25, 1, hurts ); set_handle( 11, COF_MM_ACTIVATOR, host );
+		hurt = spawn( 14, 20, 24, 0 ); hurt->v.dmg = 1000; hurt->v.solid = SOLID_NOT; hurt->v.modelindex = 1;
+		models[1].type = mod_brush; models[1].hulls[1].firstclipnode = 1; set_vec( models[1].hulls[1].clip_mins, -16, -16, -36 );
+		set_vec( models[1].shape_min, 1800, 400, 300 ); set_vec( models[1].shape_max, 2000, 600, 450 );
+		set_vec( hurt->v.absmin, 1800, 400, 300 ); set_vec( hurt->v.absmax, 2000, 600, 450 );
+		set_vec( guest->v.origin, 1900, 500, 350 ); set_vec( host->v.origin, 1000, 500, 350 );
+		SV_CoF_MomentsFrame(); SV_CoF_MomentsFrame(); assert( !section_moves );            /* off: nothing */
+		hurt->v.solid = SOLID_TRIGGER; SV_CoF_MomentsFrame();
+		assert( section_moves == 1 && guest->v.origin[0] == 1035.0f && logged( "hurt-escaped userid=101 hurt=14 anchor=100 ok=1" ) == 1 );
+		set_vec( guest->v.origin, 1900, 500, 350 ); SV_CoF_MomentsFrame(); assert( section_moves == 1 ); /* only as it goes on */
+		hurt->v.solid = SOLID_NOT; SV_CoF_MomentsFrame(); hurt->v.solid = SOLID_TRIGGER; SV_CoF_MomentsFrame(); assert( section_moves == 2 );
+		/* the starter inside it (a trap's single-player death), a dead starter, no manager behind it, or one already
+		 * on when the map started: as retail */
+		set_vec( guest->v.origin, 1900, 500, 350 ); set_vec( host->v.origin, 1950, 500, 350 );
+		hurt->v.solid = SOLID_NOT; SV_CoF_MomentsFrame(); hurt->v.solid = SOLID_TRIGGER; SV_CoF_MomentsFrame(); assert( section_moves == 2 );
+		set_vec( host->v.origin, 1000, 500, 350 ); host->v.health = 0;
+		hurt->v.solid = SOLID_NOT; SV_CoF_MomentsFrame(); hurt->v.solid = SOLID_TRIGGER; SV_CoF_MomentsFrame(); assert( section_moves == 2 );
+		host->v.health = 100; entities[11].free = 1;
+		hurt->v.solid = SOLID_NOT; SV_CoF_MomentsFrame(); hurt->v.solid = SOLID_TRIGGER; SV_CoF_MomentsFrame(); assert( section_moves == 2 );
+		entities[11].free = 0; svs.spawncount++; SV_CoF_MomentsFrame(); assert( section_moves == 2 );
+	}
+	/* 1.1.9 (S11): a player who respawns in a boss fight gets the bar back from a partner (Spawn cleared P+0x5F4, the
+	 * respawn's InitHUD sent BossBar 0), while the partner's boss lives. */
+	{
+		string_t empty = 33, full = 34, boss_name = 35;
+		int max = 1000, health = 640;
+		edict_t *boss;
+		static const byte expected[] = { 1, 'g','f','x','/','v','g','u','i','/','b','o','s','s','/','s','i','m','o','n','_','h','e','a','l','t','h','_','e','m','p','t','y','.','t','g','a',0,
+			'g','f','x','/','v','g','u','i','/','b','o','s','s','/','s','i','m','o','n','_','h','e','a','l','t','h','_','f','u','l','l','.','t','g','a',0, 640 & 0xFF, 640 >> 8, 1000 & 0xFF, 1000 >> 8 };
+		setup(); boss = spawn( 10, 29, 35, 0 ); boss->v.health = 640;
+		private_data[1][COF_PL_BOSS_BAR] = 1; memcpy( private_data[1] + COF_PL_BOSS_EMPTY, &empty, 4 ); memcpy( private_data[1] + COF_PL_BOSS_FULL, &full, 4 );
+		memcpy( private_data[1] + COF_PL_BOSS_MAX, &max, 4 ); memcpy( private_data[1] + COF_PL_BOSS_HEALTH, &health, 4 );
+		memcpy( private_data[1] + COF_PL_BOSS_NAME, &boss_name, 4 );
+		memcpy( private_data[2] + COF_PL_BOSS_NAME, &boss_name, 4 ); /* the guest's name stays; Spawn clears only the flag */
+		SV_CoF_MomentsFrame(); guest->v.health = 0; SV_CoF_MomentsFrame(); assert( !bossbars_to[1] );
+		guest->v.health = 100; SV_CoF_MomentsFrame();
+		assert( bossbars_to[1] == 1 && !bossbars_to[0] && private_data[2][COF_PL_BOSS_BAR] == 1 && logged( "bossbar-restored userid=101" ) == 1 );
+		assert( bossbar_size == (int)sizeof( expected ) && !memcmp( bossbar, expected, sizeof( expected )));
+		memcpy( &value, private_data[2] + COF_PL_BOSS_MAX, 4 ); assert( value == 1000 );
+		SV_CoF_MomentsFrame(); assert( bossbars_to[1] == 1 ); /* once */
+		/* the boss dead (or no partner with a bar), a player who still has it, a fresh joiner: nothing */
+		private_data[2][COF_PL_BOSS_BAR] = 0; guest->v.health = 0; SV_CoF_MomentsFrame(); boss->v.health = 0; guest->v.health = 100;
+		SV_CoF_MomentsFrame(); assert( bossbars_to[1] == 1 && !private_data[2][COF_PL_BOSS_BAR] );
+		boss->v.health = 640; private_data[2][COF_PL_BOSS_BAR] = 1; guest->v.health = 0; SV_CoF_MomentsFrame(); guest->v.health = 100;
+		SV_CoF_MomentsFrame(); assert( bossbars_to[1] == 1 );
+		private_data[2][COF_PL_BOSS_BAR] = 0; guest->v.health = 0; SV_CoF_MomentsFrame(); clients[1].userid = 111; guest->v.health = 100;
+		SV_CoF_MomentsFrame(); assert( bossbars_to[1] == 1 );
+	}
+	/* 1.1.9 (S18): cof_credits sends Credits to the players there, once: a person who joins during the ending gets a
+	 * copy of the first player's last one (with its Continue); the game's own copies are not sent again. */
+	{
+		byte scroll[8] = { 1, '/', 'a', 0, 9, 9, 9, 1 }, stats[8] = { 0, '/', 'b', 0, 7, 7, 7, 0 }, other[8] = { 0, '/', 'b', 0, 5, 5, 5, 0 };
+		edict_t *third = &entities[3];
+		setup(); SV_CoF_MomentsFrame();
+		SV_CoF_MomentsMessage( host, "Credits", scroll, 8 ); SV_CoF_MomentsMessage( guest, "Credits", scroll, 8 );
+		SV_CoF_MomentsFrame(); assert( !credits_to[0] && !credits_to[1] && !logged( "credits-resent" ));
+		/* a second Use in the same frame: the last one is kept */
+		SV_CoF_MomentsMessage( host, "Credits", stats, 8 ); SV_CoF_MomentsMessage( guest, "Credits", other, 8 );
+		svs.maxclients = 3; clients[2].state = cs_spawned; clients[2].userid = 102; clients[2].edict = third;
+		third->free = 0; third->v.classname = 1; third->v.health = 100;
+		SV_CoF_MomentsFrame();
+		assert( credits_to[2] == 1 && !credits_to[0] && !credits_to[1] && credits_size == 8 && !memcmp( credits, stats, 8 ));
+		assert( logged( "credits-resent userid=102" ) == 1 );
+		SV_CoF_MomentsFrame(); assert( credits_to[2] == 1 );                                   /* once */
+		clients[2].flags = FCL_FAKECLIENT; clients[2].userid = 103; SV_CoF_MomentsFrame(); assert( credits_to[2] == 1 );
+		/* none shown in this map, or the story layer off: nothing */
+		setup(); svs.maxclients = 3; clients[2].state = cs_spawned; clients[2].userid = 102; clients[2].edict = third;
+		third->free = 0; third->v.classname = 1; third->v.health = 100; SV_CoF_MomentsFrame(); assert( !credits_to[2] );
+		gate = 0; SV_CoF_MomentsMessage( host, "Credits", stats, 8 ); gate = 1; SV_CoF_MomentsFrame(); assert( !credits_to[2] );
+		SV_CoF_MomentsMessage( host, "Credits", stats, 8 ); svs.spawncount++; SV_CoF_MomentsFrame(); assert( !credits_to[2] );
+	}
+	/* 1.1.9 (S13): a camera's or model cutscene's end gives control back to every living player: a climber in the
+	 * ladder's camera, or a boat rider, held by the same climb or boat last frame and free now, is frozen again; the
+	 * ladder's own end (its camera model gone) and Disembark (m_pBoat gone) are not undone. */
+	{
+		uint32_t model = 0x5678, none = 0, rider = (uint32_t)(uintptr_t)private_data[2];
+		edict_t *boat;
+		setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = guest; guest->v.flags = FL_FROZEN;
+		memcpy( private_data[2] + COF_PL_CAMERA_MODEL, &model, 4 ); SV_CoF_MomentsFrame();
+		guest->v.flags = 0; guest->v.velocity[0] = 50; SV_CoF_MomentsFrame();
+		assert(( guest->v.flags & FL_FROZEN ) && !guest->v.velocity[0] && logged( "held-refrozen userid=101 by=ladder" ) == 1 );
+		guest->v.flags = 0; SV_CoF_MomentsFrame(); assert(( guest->v.flags & FL_FROZEN ) && logged( "held-refrozen" ) == 1 ); /* told once */
+		guest->v.flags = 0; memcpy( private_data[2] + COF_PL_CAMERA_MODEL, &none, 4 ); SV_CoF_MomentsFrame(); /* the ladder's end */
+		assert( !( guest->v.flags & FL_FROZEN ));
+		/* another camera model (a model cutscene after the climb), or never held: left free */
+		setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = guest; guest->v.flags = FL_FROZEN;
+		memcpy( private_data[2] + COF_PL_CAMERA_MODEL, &model, 4 ); SV_CoF_MomentsFrame();
+		model = 0x9999; memcpy( private_data[2] + COF_PL_CAMERA_MODEL, &model, 4 ); guest->v.flags = 0; SV_CoF_MomentsFrame();
+		assert( !( guest->v.flags & FL_FROZEN ) && !logged( "held-refrozen" ));
+		SV_CoF_MomentsFrame(); assert( !( guest->v.flags & FL_FROZEN ));
+		/* the boat's rider, on board */
+		setup(); boat = spawn( 16, 28, 0, 0 ); memcpy( private_data[16] + COF_BOAT_RIDER, &rider, 4 ); set_handle( 2, COF_PL_BOAT, boat );
+		guest->v.flags = FL_FROZEN; SV_CoF_MomentsFrame(); guest->v.flags = 0; SV_CoF_MomentsFrame();
+		assert(( guest->v.flags & FL_FROZEN ) && logged( "held-refrozen userid=101 by=boat" ) == 1 );
+		/* Disembark: the boat lets go and m_pBoat is cleared with the control */
+		memcpy( private_data[16] + COF_BOAT_RIDER, &none, 4 ); set_handle( 2, COF_PL_BOAT, NULL ); guest->v.flags = 0;
+		SV_CoF_MomentsFrame(); assert( !( guest->v.flags & FL_FROZEN ));
+		/* boarding (no m_pBoat yet), or a dead rider: left as it is */
+		setup(); boat = spawn( 16, 28, 0, 0 ); memcpy( private_data[16] + COF_BOAT_RIDER, &rider, 4 );
+		guest->v.flags = FL_FROZEN; SV_CoF_MomentsFrame(); guest->v.flags = 0; SV_CoF_MomentsFrame(); assert( !( guest->v.flags & FL_FROZEN ));
+		set_handle( 2, COF_PL_BOAT, boat ); guest->v.flags = FL_FROZEN; SV_CoF_MomentsFrame(); guest->v.flags = 0; guest->v.health = 0;
+		SV_CoF_MomentsFrame(); assert( !( guest->v.flags & FL_FROZEN ));
+	}
+	/* 1.1.9 (S5): a merged map: the host in section 0, the guest in section 1. A scene of section 0 (a manager's think
+	 * there) shows its fade, black-and-white, chapter title and subtitles to the host only; what could leave a screen
+	 * dark or grey always goes, as do "Game over", the engine's own lines and anything of the guest's own section. */
+	{
+		byte fade_out[10] = { 0, 8, 0, 0, 1 | 4, 0, 0, 0, 0, 255 }, fade_in[10] = { 0, 8, 0, 0, 0, 0, 0, 0, 0, 255 };
+		byte bw_on = 255, bw_off = 0, chapter[] = "Chapter 3\0", over[] = "Game over\0", subtitle[] = "\5Hello?", own[64];
+		int own_size = CoF_StripPayload( own, sizeof( own ), 5, "Little Rascal 1 is taking the call." );
+		edict_t *mm, *brush, *delayed;
+		setup(); merged = 1; set_vec( host->v.origin, 0, 0, 100 ); set_vec( guest->v.origin, 0, 0, 1100 );
+		mm = spawn( 11, 16, 21, 0 ); set_vec( mm->v.origin, 50, 50, 200 ); running_think = mm;
+		/* the guest's screen is not known at first: a fade goes; then it is clear, and the next scene fade is held */
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_in, 10, NULL ));
+		assert( !SV_CoF_MomentsHeldBack( host, MSG_ONE, "ScreenFade", fade_out, 10, NULL ));
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_out, 10, NULL ));
+		assert( logged( "effect-held name=ScreenFade userid=101 section=1 from=0" ) == 1 );
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_in, 10, NULL ));       /* consistent */
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "BlackWhite", &bw_on, 1, NULL ) && !SV_CoF_MomentsHeldBack( host, MSG_ONE, "BlackWhite", &bw_on, 1, NULL ));
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "BlackWhite", &bw_off, 1, NULL ));        /* off always goes */
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", over, (int)sizeof( over ), NULL ));
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE_UNRELIABLE, "ProFont", subtitle, (int)sizeof( subtitle ), NULL ));
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ProFont", own, own_size, NULL ));        /* the engine's own line */
+		assert( logged( "effect-held" ) == 1 );                                                 /* told at most every 2 s */
+		/* a screen a fade left dark gets every fade: an unknown source (no think, no player) darkened it */
+		running_think = NULL; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_out, 10, NULL ));
+		running_think = mm; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_in, 10, NULL ));
+		/* grey left on by an unknown source: a scene's grey of another section goes too */
+		running_think = NULL; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "BlackWhite", &bw_on, 1, NULL ));
+		running_think = mm; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "BlackWhite", &bw_on, 1, NULL ));
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "BlackWhite", &bw_off, 1, NULL ));
+		/* where it comes from: a brush entity by its bounds (its origin is 0 0 0), a delayed trigger by its activator,
+		 * a player's command or move by them; the receiver's own section: as retail */
+		brush = spawn( 12, 20, 0, 0 ); brush->v.model = 36; set_vec( brush->v.absmin, 0, 0, 1050 ); set_vec( brush->v.absmax, 10, 10, 1250 );
+		running_think = brush; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		assert( SV_CoF_MomentsHeldBack( host, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		delayed = spawn( 13, 32, 0, 0 ); set_handle( 13, COF_DELAY_ACTIVATOR, host ); running_think = delayed;
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		set_handle( 13, COF_DELAY_ACTIVATOR, NULL ); assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		running_think = NULL; assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), host ));
+		/* another entity's think (a phone call's lines are its callee's): not known, as retail */
+		running_think = spawn( 14, 5, 6, 7 ); set_vec( running_think->v.origin, 0, 0, 200 );
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ProFont", subtitle, (int)sizeof( subtitle ), NULL )); running_think = NULL;
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), guest ));
+		/* to everyone, another message, a companion, a map not merged, the story layer off: as retail */
+		running_think = mm;
+		assert( !SV_CoF_MomentsHeldBack( NULL, MSG_ALL, "ProFont", subtitle, (int)sizeof( subtitle ), NULL ));
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "PlayMP3", subtitle, (int)sizeof( subtitle ), NULL ));
+		clients[1].flags = FCL_FAKECLIENT; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		clients[1].flags = 0; merged = 0; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL ));
+		merged = 1; gate = 0; assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "Chapter", chapter, (int)sizeof( chapter ), NULL )); gate = 1;
+		/* a stay-out fade to everyone: every screen may be dark, so the next fades go */
+		assert( !SV_CoF_MomentsHeldBack( NULL, MSG_ALL, "ScreenFade", fade_out, 10, NULL ));
+		assert( !SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_in, 10, NULL ));
+		assert( SV_CoF_MomentsHeldBack( guest, MSG_ONE, "ScreenFade", fade_in, 10, NULL ));
+		running_think = NULL;
 	}
 	puts( "moments scenarios passed" );
 	return 0;

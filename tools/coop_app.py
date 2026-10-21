@@ -487,6 +487,15 @@ class App:
         """setup's progress(status, fraction, line), from its worker thread to the panel on the UI thread."""
         return lambda *report: self.messages.put((lambda value: panel.show(*value), report))
 
+    def show_newer(self, copy):
+        """1.1.9 (L14.11): a copy newer than this app. Its main screen would start the newer engine with this older
+        app's settings and version check, so the copy's own app is the only way offered."""
+        self.root = Path(copy)
+        self.clear("Use the Cry of Fear Co-op shortcut",
+                   f"Your co-op copy in {copy} has a newer version than this app ({play.VERSION_LABEL}). Start it "
+                   f"from the Cry of Fear Co-op shortcut on your desktop or in the Start menu, or run "
+                   f"{setup_lib.APP_EXE} in that folder.")
+
     # main
     def show_main(self, copy):
         ttk = self.ttk
@@ -625,13 +634,19 @@ class App:
                 if warning and not messagebox.askokcancel("Continue", warning, parent=self.window):
                     return
             ais = int(companions.get() or 1)
-            count, ais = play.party_size(solo=solo, players=2 if solo else play.clean_players(players.get()),
+            wanted = 2 if solo else play.clean_players(players.get())
+            count, ais = play.party_size(solo=solo, players=wanted,
                                          companions=ais, fill=companion.get(),
                                          checkpoint_players=checkpoint.players if checkpoint else None)
             if solo and checkpoint and ais < int(companions.get() or 1):
                 messagebox.showinfo("Continue", f"This checkpoint was saved with {count} places, so {ais} AI "
                                     f"{'companion comes' if ais == 1 else 'companions come'} along this time.",
                                     parent=self.window)
+            if not solo and checkpoint and count != wanted:
+                # 1.1.9 (L14.6): Continue keeps the checkpoint's places (the engine needs them); the Players box was
+                # ignored without a word
+                messagebox.showinfo("Continue", f"This checkpoint was saved with {count} places, so the game has "
+                                    f"{count} places this time, not {wanted}.", parent=self.window)
             number = play.DEFAULT_PORT if solo else play.clean_port(port.get())
             args, config = play.host_launch(self.root, solo=solo, name=name, map_name=map_name, players=count,
                                             password=password.get(), companions=ais, port=number,
@@ -668,7 +683,17 @@ class App:
 
     def show_running(self, watch, solo):
         ttk, tk = self.ttk, self.tk
+        # 1.1.9 (L14.4): a game started again before the last one's watch saw it end: that watch would close later
+        # and remove the router mapping the new one has just taken over. It is closed first, off the UI thread.
+        previous = self.watch if self.watch is not watch else None
         self.watch = watch
+
+        def release():
+            if previous is not None:
+                try:
+                    previous.close()
+                except Exception:   # the new game's router port comes first
+                    pass
         body = self.clear("Playing solo" if solo else "Hosting",
                           "Keep this window open while you play." if solo else
                           "Send your friends the join code (and the password, if you set one). "
@@ -689,9 +714,11 @@ class App:
                 code.set(watch.code or "(no Internet address found: use the LAN or VPN address)")
                 address.set(watch.address)
                 router.set(watch.router)
-            self.work(watch.open_router, routed, lambda error: router.set(str(error)))
+            self.work(lambda: (release(), watch.open_router()), routed, lambda error: router.set(str(error)))
             self.work(network.local_addresses,
                       lambda rows: lan.set(f"{rows[0]['address']}:{watch.port}" if rows else ""), lambda _: None)
+        elif previous is not None:
+            self.work(release, lambda _: None, lambda _: None)
         ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=12)
         root = self.root
 
@@ -766,12 +793,10 @@ def open_window(payload, exe, copy=None, update_from=None, wait=()):
             app.show_setup()
         elif mode == "update":
             app.show_update(found)
+        elif mode == "newer":
+            app.show_newer(found)
         else:
             app.show_main(found)
-            if mode == "newer":
-                from tkinter import messagebox
-                messagebox.showinfo("Cry of Fear Co-op", "Your copy is newer than this package. "
-                                    "Use the Cry of Fear Co-op shortcut.", parent=window)
     window.mainloop()
 
 

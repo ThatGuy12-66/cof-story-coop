@@ -50,6 +50,15 @@ class BuilderTests(unittest.TestCase):
         for word in ("protocol", "sha256", "rcon", "console", "test build", "test package", "tester", "cheat"):
             self.assertNotIn(word, text.lower())
 
+    def test_the_engine_package_is_stamped_with_the_release(self):
+        # 1.1.9 (R4): the payload's release.txt, upstream's zip names and the source archive's folder said
+        # Enhanced's "cofenhanced 0.4.0-test3" in every release up to 1.1.8
+        self.assertEqual(builder.enhanced.VERSION, builder.play.VERSION_LABEL.replace(" ", ""))
+        source = Path(builder.enhanced.__file__).read_text(encoding="utf-8")
+        self.assertIn('f"binaries_commit={commit}\\nstamp=cofenhanced {VERSION} with story co-op\\n"', source)
+        self.assertIn('"-Version", VERSION,', source)
+        self.assertIn('\nVERSION = play.VERSION_LABEL.replace(" ", "")\n', source)
+
     def test_the_source_archive_carries_the_readme_it_ships(self):
         self.assertIn(builder.README.relative_to(builder.ROOT).as_posix(), builder.enhanced.LOCAL_SOURCES)
 

@@ -22,5 +22,10 @@ int main( void )
 	show( "cl_dlmax 1200", 1200, 0 );
 	show( "cl_dlmax 64000", 64000, 0 );
 	printf( "window 1: %d\n", CoF_SignonFragmentSize( 1400, 0, 1, MAX_FRAGMENT ));
+	/* 1.1.9 (N1): the host's cof_signon_window, as the server reads it */
+	printf( "cvar 10: %d, 1: %d, 0: %d, -3: %d, 2.9: %d, 1000: %d\n", CoF_SignonWindow( 10.0f ), CoF_SignonWindow( 1.0f ),
+		CoF_SignonWindow( 0.0f ), CoF_SignonWindow( -3.0f ), CoF_SignonWindow( 2.9f ), CoF_SignonWindow( 1000.0f ));
+	printf( "cvar 1 signing on: %d\n", CoF_SignonFragmentSize( 1400, 0, CoF_SignonWindow( 1.0f ), MAX_FRAGMENT ));
+	printf( "cvar 1000 signing on: %d\n", CoF_SignonFragmentSize( 1400, 0, CoF_SignonWindow( 1000.0f ), MAX_FRAGMENT ));
 	return 0;
 }

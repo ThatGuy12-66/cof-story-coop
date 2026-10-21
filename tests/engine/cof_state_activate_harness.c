@@ -58,6 +58,12 @@ static qboolean SV_CoF_RetailStoryWrite( sv_client_t *cl, const cof_story_values
 static qboolean SV_CoF_RetailThreeSlots( sv_client_t *cl ) { (void)cl; return false; }
 static edict_t *SV_CoF_RetailOpenDocument( sv_client_t *cl ) { (void)cl; return NULL; }
 static qboolean SV_CoF_RetailAddDocument( sv_client_t *cl, edict_t *doc ) { (void)cl; (void)doc; return false; }
+static struct { double time; } sv;
+static int SV_CoF_RetailHealthCap( sv_client_t *cl ) { (void)cl; return -1; }
+static qboolean SV_CoF_RetailSetHealthCap( sv_client_t *cl, int cap ) { (void)cl; (void)cap; return false; }
+static int SV_CoF_RetailPhoneBroken( sv_client_t *cl, int *body ) { (void)cl; (void)body; return -1; }
+static qboolean SV_CoF_RetailBreakPhone( sv_client_t *cl, int body ) { (void)cl; (void)body; return false; }
+static qboolean SV_CoF_RetailPuzzleRelease( sv_client_t *cl ) { (void)cl; return false; }
 
 #include "state_under_test.c"
 

@@ -59,14 +59,17 @@ class TextTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def run_preflight(self, readme=README, label="9.9", build=41, latest=None, notes=True):
+    def run_preflight(self, readme=README, label="9.9", build=41, latest=None, notes=True, stamp=None):
         temp = Path(tempfile.mkdtemp())
         (temp / "docs/releases").mkdir(parents=True)
         if notes:
             (temp / "docs/releases" / f"{label}.md").write_text("notes", encoding="utf-8")
         (temp / "player_readme.txt").write_text(readme, encoding="utf-8")
+        (temp / "cof_version.h").write_text(f'#define COFE_VERSION   "{label if stamp is None else stamp}"\n'
+                                            '#define COFE_MILESTONE "release"\n', encoding="latin-1")
         log = rel.Log(temp / "release.log")
         with mock.patch.object(rel.play, "VERSION_LABEL", label), mock.patch.object(rel.play, "BUILD", build), \
+                mock.patch.object(rel, "ENGINE_STAMP", temp / "cof_version.h"), \
                 mock.patch.object(rel, "README", temp / "player_readme.txt"), \
                 mock.patch.object(rel, "NOTES", temp / "docs/releases"), mock.patch.object(rel, "ROOT", temp), \
                 mock.patch.object(rel, "tracked", return_value=True), \
@@ -86,6 +89,26 @@ class PreflightTests(unittest.TestCase):
         self.assertTrue(self.run_preflight(notes=False)[1])
         self.assertTrue(self.run_preflight(readme=README.replace("WHAT'S NEW IN 9.9", "WHATS NEW"))[1])
         self.assertTrue(self.run_preflight(readme="Cry of Fear Co-op 9.8\n" + README)[1])
+
+    def test_it_refuses_an_engine_stamp_of_another_version(self):
+        # 1.1.9 (R4): the engine's on-screen stamp said cofenhanced 0.4.0-test3 up to 1.1.7
+        found, problems = self.run_preflight(stamp="9.8")
+        self.assertEqual(len(problems), 1)
+        self.assertIn("engine/cof_version.h", problems[0])
+        self.assertIn("9.8", problems[0])
+        self.assertTrue(self.run_preflight(stamp="0.4.0-test3")[1])
+
+    def test_the_package_check_reads_the_payloads_release_stamp(self):
+        import inspect
+        source = inspect.getsource(rel.check_package)
+        self.assertIn('archive.read("cof-enhanced/release.txt")', source)
+        self.assertIn('log.check(f"cofenhanced {label()}" in stamp,', source)
+
+    def test_the_engine_stamp_is_read_from_the_engine(self):
+        self.assertEqual(rel.ENGINE_STAMP, rel.packager.enhanced.ENGINE / "engine/cof_version.h")
+        self.assertIsNotNone(up.LABEL_PATTERN.fullmatch(rel.engine_stamp()))
+        with mock.patch.object(rel, "ENGINE_STAMP", Path(tempfile.mkdtemp()) / "missing.h"):
+            self.assertEqual(rel.engine_stamp(), "")
 
 
 class UntrackedTests(unittest.TestCase):

@@ -47,6 +47,16 @@ class StartTests(unittest.TestCase):
             pointer.write_text(str(Path(temp) / "gone"), encoding="utf-8")
             self.assertEqual(app.where_to_start(downloads, Path(temp) / "none", 1, pointer), ("setup", None))
 
+    def test_a_copy_in_a_folder_named_outside_ascii_is_found_again(self):
+        # 1.1.9 (L14.7): the default copy's folder holds the Windows user name; the pointer note keeps it as UTF-8
+        with tempfile.TemporaryDirectory() as temp:
+            other = Path(temp) / "Usuários" / "José Ñúñez" / "Иван 测试" / "CoF-Story-Coop"
+            installed(other, 1)
+            pointer = Path(temp) / "CoF-Story-Coop.txt"
+            app.remember_copy(other, pointer)
+            self.assertEqual(app.where_to_start(Path(temp), Path(temp) / "none", 1, pointer), ("main", other.resolve()))
+            self.assertEqual(app.where_to_start(other, Path(temp) / "none", 1, pointer), ("main", other))
+
     def test_copy_flag_takes_a_relative_path(self):
         # game_is_running compares absolute paths: a relative --copy missed this copy's game
         with mock.patch.object(app, "open_window") as window:
@@ -316,6 +326,95 @@ class WindowTests(unittest.TestCase):
         self.addCleanup(lambda: setattr(watch, "closed", True))
         self.app.show_running(watch, solo=False)
         self.assertTrue(any("Windows Firewall" in text for text in texts(self.app.body)))
+
+    def host_continue(self, places, players):
+        """Host > Continue with a checkpoint saved with places, the Players box at players: what the window said."""
+        from tkinter import messagebox
+        self.copy()
+        checkpoint = app.play.Checkpoint("slot", "c_park3", places, ("Bob", "Ann", "Sam", "Kim")[:places])
+        settings = dict(app.play.DEFAULT_SETTINGS, name="Bob", players=players)
+        with mock.patch.object(app.play, "load_settings", return_value=settings), \
+                mock.patch.object(app.play, "latest_checkpoint", return_value=checkpoint), \
+                mock.patch.object(app.play, "continue_warning", return_value=None):
+            self.app.show_main(self.app.root)
+            self.app.show_start(solo=False)
+            next(w for w in widgets(self.app.body) if w.winfo_class() == "TRadiobutton"
+                 and str(w.cget("text")).startswith("Continue:")).invoke()
+            with mock.patch.object(messagebox, "showinfo") as info:
+                button(self.app.body, "Start").invoke()
+        with mock.patch.object(app, "start_game"), mock.patch.object(app.threading, "Thread"):
+            self.jobs[-1][1](False)   # the copy's check passed: the game starts
+        self.addCleanup(setattr, self.app.watch, "closed", True)
+        return info, (self.app.root / "cryoffear" / app.play.SESSION_CFG).read_text().splitlines()
+
+    def test_continue_as_host_says_the_players_box_is_not_used(self):
+        # L14.6: Continue keeps the checkpoint's places; for a host the Players box was ignored without a word
+        info, config = self.host_continue(places=3, players=2)
+        info.assert_called_once()
+        self.assertIn("saved with 3 places", info.call_args.args[1])
+        self.assertIn("not 2", info.call_args.args[1])
+        self.assertIn("maxplayers 3", config)
+        info, config = self.host_continue(places=2, players=2)
+        info.assert_not_called()
+        self.assertIn("maxplayers 2", config)
+
+    def test_a_newer_copy_offers_only_its_own_shortcut(self):
+        # L14.11: the older app opened the main screen and started the newer engine with its own settings
+        root = self.copy(app.play.BUILD + 1)
+        self.app.show_newer(root)
+        self.assertIn("Use the Cry of Fear Co-op shortcut", texts(self.app.body))
+        shown = [w.cget("text") for w in widgets(self.app.body) if w.winfo_class() == "TButton"]
+        self.assertEqual(shown, [])
+        self.assertEqual(self.app.root, root)   # Open logs folder still works
+        with mock.patch.object(app, "where_to_start", return_value=("newer", root)), \
+                mock.patch.object(app, "App") as window_app, mock.patch("tkinter.Tk"):
+            app.open_window(Path("payload"), self.temp / "app.exe")
+        window_app.return_value.show_newer.assert_called_once_with(root)
+        window_app.return_value.show_main.assert_not_called()
+
+    def test_hosting_again_closes_the_last_watch_before_the_router(self):
+        # L14.4: a game hosted again before the last one's watch saw it end: that watch, closing later, removed
+        # the router mapping the new one had just taken over
+        self.copy()
+        calls = []
+
+        class Net:
+            NetworkError = app.network.NetworkError
+
+            @staticmethod
+            def upnp_map(port):
+                calls.append("map")
+                return {"port": port}
+
+            @staticmethod
+            def upnp_unmap(mapping):
+                calls.append("unmap")
+
+            @staticmethod
+            def discover_public_address():
+                return ""
+        old, new = (app.play.HostWatch(27015, lan_only=False, net=Net) for _ in range(2))
+        old.mapping = {"port": 27015}
+        for watch in (old, new):
+            self.addCleanup(setattr, watch, "closed", True)
+        self.app.watch = old
+        with mock.patch.object(app.threading, "Thread"):
+            self.app.show_running(new, solo=False)
+        self.assertEqual(calls, [])   # nothing on the UI thread
+        self.jobs[0][0]()
+        self.assertEqual(calls, ["unmap", "map"])
+        self.assertTrue(old.closed)
+        self.assertIs(self.app.watch, new)
+        # solo after hosting: the old watch is closed off the UI thread too
+        self.jobs.clear()
+        solo = app.play.HostWatch(27015, lan_only=True, net=Net)
+        self.addCleanup(setattr, solo, "closed", True)
+        new.mapping = {"port": 27015}
+        with mock.patch.object(app.threading, "Thread"):
+            self.app.show_running(solo, solo=True)
+        self.jobs[0][0]()
+        self.assertTrue(new.closed)
+        self.assertEqual(calls, ["unmap", "map", "unmap"])
 
     def test_join_is_off_while_it_checks(self):
         # L14.10: a second click started a second check and a second start

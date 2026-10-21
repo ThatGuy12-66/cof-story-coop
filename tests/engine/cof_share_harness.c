@@ -23,20 +23,29 @@ typedef int qboolean;
 #define Q_stricmp strcasecmp
 #endif
 static void Q_strncpy( char *target, const char *source, size_t size ) { snprintf( target, size, "%s", source ); }
-typedef struct { struct { float health; int deadflag; } v; } edict_t;
+#define FL_KILLME ( 1 << 30 )
+typedef int string_t;
+/* players are edicts[0..1]; the world's items (1.1.9, I2: a key a player dropped) are world[3..7] */
+typedef struct edict_s { int free; struct { float health, armorvalue; int deadflag, flags; string_t classname, message; struct edict_s *owner; } v; } edict_t;
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict; } sv_client_t;
 typedef void ( *xcommand_t )( void );
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
 static struct { double time; } sv;
+static struct { int numEntities; } svgame;
 static sv_client_t clients[2];
-static edict_t edicts[2];
+static edict_t edicts[2], world[8];
+static const char *strings[] = { "", "item_key", "inventoryitems/fuse.txt", "inventoryitems/hallkey.txt" };
 static char inv[2][COF_RETAIL_SLOTS][COF_RETAIL_ITEM], last_line[2][192], console[32768], command_name[32];
-static int three[2], gives, takes, refuse_give;
+static int three[2], gives, takes, refuse_give, late_give;
 static int active = 6; /* the map's slot count (SV_CoF_InventorySlots) */
 static const char *refuse_item; /* this descriptor is never taken */
+static const char *late[2]; /* a give that shows in the inventory only by the next frame (late_give) */
 static size_t console_length;
 static xcommand_t ledger;
 
+static edict_t *SV_EdictNum( int index ) { return &world[index]; }
+static qboolean SV_IsValidEdict( const edict_t *e ) { return e && !e->free; }
+static const char *SV_GetString( string_t s ) { return strings[s]; }
 static int who( sv_client_t *cl ) { return (int)( cl - clients ); }
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return true; }
 static const char *Cmd_Argv( int i ) { return i == 0 ? command_name : ""; }
@@ -67,6 +76,7 @@ static qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *d )
 	int i, p = who( cl );
 	gives++;
 	if( refuse_give || ( refuse_item && !strcmp( d, refuse_item ))) return false;
+	if( late_give ) { late[p] = d; return true; }
 	for( i = 0; i < ( three[p] ? 3 : active ); i++ ) if( !inv[p][i][0] ) { strcpy( inv[p][i], d ); return true; }
 	return false;
 }
@@ -106,7 +116,11 @@ static void setup( void )
 	memset( inv, 0, sizeof( inv ));
 	memset( three, 0, sizeof( three ));
 	memset( last_line, 0, sizeof( last_line ));
-	gives = takes = refuse_give = 0;
+	memset( world, 0, sizeof( world ));
+	for( i = 0; i < 8; i++ ) world[i].free = 1;
+	svgame.numEntities = 3;
+	gives = takes = refuse_give = late_give = 0;
+	late[0] = late[1] = NULL;
 	refuse_item = NULL;
 	console[0] = 0; console_length = 0;
 	sv.time = 10;
@@ -124,7 +138,13 @@ static void setup( void )
 	SV_CoF_ShareReset();
 	SV_CoF_ShareFrame();
 }
-static void frame( double dt ) { sv.time += dt; SV_CoF_ShareFrame(); }
+static void gain( int p, const char *d );
+static void frame( double dt )
+{
+	int p;
+	for( p = 0; p < 2; p++ ) if( late[p] ) { gain( p, late[p] ); late[p] = NULL; } /* a late give shows now */
+	sv.time += dt; SV_CoF_ShareFrame();
+}
 static void begin( int p, const char *name ) { strcpy( command_name, name ); SV_CoF_ShareCommandBegin( &clients[p] ); }
 static void end( int p ) { SV_CoF_ShareCommandEnd( &clients[p] ); }
 static int holds( int p, const char *d ) { int i; for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) return 1; return 0; }
@@ -137,6 +157,28 @@ static void use_one( int p, const char *d ) /* a fuse box (func_button, ClearOut
 	begin( p, "inventoryuse" );
 	for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) { inv[p][i][0] = 0; break; }
 	end( p );
+}
+
+/* 1.1.9 (I2): the game's inventorydrop of a key item: the slot cleared, an item_key left owned by the dropper (armorvalue
+   666, message the descriptor); returns its world index. Taking it back zeroes armorvalue and removes it. */
+static int drop_key( int p, const char *d )
+{
+	int i, k;
+	begin( p, "inventorydrop" );
+	for( i = 0; i < COF_RETAIL_SLOTS; i++ ) if( !strcmp( inv[p][i], d )) { inv[p][i][0] = 0; break; }
+	end( p );
+	for( k = 3; k < 8 && !world[k].free; k++ );
+	assert( k < 8 );
+	memset( &world[k], 0, sizeof( world[k] ));
+	world[k].v.classname = 1; world[k].v.message = !strcmp( d, "inventoryitems/fuse.txt" ) ? 2 : 3;
+	world[k].v.owner = clients[p].edict; world[k].v.armorvalue = 666.0f;
+	if( k >= svgame.numEntities ) svgame.numEntities = k + 1;
+	return k;
+}
+static void take_key( int p, int k )
+{
+	world[k].v.armorvalue = 0.0f; world[k].free = 1;
+	gain( p, strings[world[k].v.message] );
 }
 
 int main( void )
@@ -323,10 +365,13 @@ int main( void )
 	}
 
 	/* 1.1.8: a fuse handed over in the old map's last frame reaches the new map in the carried inventory: it is the
-	   delivery, not one more fuse for the party (the partner signs on a few frames later, the clock restarted). */
-	setup(); gain( 0, FUSE ); frame( 0.1 );
+	   delivery, not one more fuse for the party (the partner signs on a few frames later, the clock restarted).
+	   1.1.9 (I1): a give the inventory shows at once is settled in its own frame; this one shows only later. */
+	setup(); late_give = 1; gain( 0, FUSE ); frame( 0.1 );
+	assert( gives == 1 && cof_share.players[1].pending == COF_SHARE_GIVE );
+	late_give = 0;
+	clients[0].state = clients[1].state = cs_connected; frame( 0.1 ); /* it shows in the inventory the change carries */
 	assert( copies( 1, FUSE ) == 1 && gives == 1 );
-	clients[0].state = clients[1].state = cs_connected; frame( 0.1 );
 	svs.spawncount++; sv.time = 1.0; frame( 0.1 );
 	clients[0].state = clients[1].state = cs_spawned;
 	{
@@ -347,9 +392,10 @@ int main( void )
 		strcpy( archive.names[1], clients[1].name );
 		cof_share_saved = archive;
 	}
-	frame( 0.1 ); /* served from the empty inventory: a give in flight */
+	late_give = 1; frame( 0.1 ); late_give = 0; /* served from the empty inventory: a give in flight (1.1.9: not yet shown) */
 	assert( gives == 2 && cof_share.players[1].pending == COF_SHARE_GIVE );
 	memset( inv[1], 0, sizeof( inv[1] )); strcpy( inv[1][0], FUSE ); /* the recovery's restore: what they left with */
+	late[1] = NULL; /* ...in place of the inventory that give went into */
 	SV_CoF_ShareRecovered( &clients[1] );
 	gain( 1, FUSE ); frame( 0.1 ); frame( 0.1 ); frame( 0.1 );
 	assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 1, FUSE ) == 2 && copies( 0, FUSE ) == 2 );
@@ -361,6 +407,52 @@ int main( void )
 	gain( 0, KEY ); frame( 0.1 ); frame( 1.0 );
 	assert( !strcmp( inv[1][6], KEY ));
 	active = 6;
+
+	/* 1.1.9 (I1): the give and the take are settled by a look right after them. A partner whose second fuse copy is
+	   taken (the finder used one) and who picks a fuse up before the next look keeps it: it is one more for the party.
+	   Left to the next look, the take read as stalled (no net change) and, retried 5 s later, removed the fuse found. */
+	setup(); gain( 0, FUSE ); gain( 0, FUSE ); for( i = 0; i < 6; i++ ) frame( 0.1 );
+	assert( copies( 1, FUSE ) == 2 && CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 );
+	use_one( 0, FUSE ); frame( 0.1 ); /* the partner's second copy is taken in this frame */
+	assert( copies( 1, FUSE ) == 1 && takes == 1 && cof_share.players[1].pending == COF_SHARE_NONE );
+	gain( 1, FUSE ); /* a pickup before the next look */
+	for( i = 0; i < 80; i++ ) frame( 0.1 );
+	assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 1, FUSE ) == 2 && copies( 0, FUSE ) == 2 && takes == 1 );
+	assert( strstr( console, "cofstory phase=item-removed userid=2 item=" FUSE ) && strstr( console, "cofstory phase=item-found userid=2 item=" FUSE ));
+	assert( !strstr( console, "item-stalled" ));
+	/* ...and a give the game takes is settled the same way: delivered in its own frame, never stalled */
+	setup(); gain( 0, KEY ); frame( 0.1 );
+	assert( holds( 1, KEY ) && cof_share.players[1].pending == COF_SHARE_NONE );
+
+	/* 1.1.9 (I2): a fuse set down (inventorydrop leaves an item_key owned by the dropper) and another one gained while
+	   it still lies there (a c_subway2st1 train box): one more for the party, not that one picked back up. Picking
+	   the dropped one up later is not a new find. */
+	setup(); gain( 0, FUSE ); for( i = 0; i < 4; i++ ) frame( 0.1 );
+	assert( copies( 1, FUSE ) == 1 && CoF_ShareSetCount( &cof_share.party, FUSE ) == 1 );
+	{
+		int dropped = drop_key( 0, FUSE ), mark;
+		frame( 0.1 );
+		assert( strstr( console, "cofstory phase=item-dropped userid=1 item=" FUSE ) && copies( 0, FUSE ) == 0 );
+		gain( 0, FUSE ); for( i = 0; i < 4; i++ ) frame( 0.1 ); /* the train box's fuse */
+		assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 1, FUSE ) == 2 && copies( 0, FUSE ) == 1 );
+		assert( cof_share.players[0].set_down.count == 1 ); /* the dropped one is still theirs to pick up */
+		mark = (int)console_length;
+		take_key( 0, dropped ); for( i = 0; i < 4; i++ ) frame( 0.1 );
+		assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 0, FUSE ) == 2 && copies( 1, FUSE ) == 2 );
+		assert( !strstr( console + mark, "item-found" ) && cof_share.players[0].set_down.count == 0 && takes == 0 );
+	}
+	/* ...the copy set down picked up by the partner instead: their find, and the dropper's next fuse reads as theirs
+	   back (as before 1.1.9); the two cancel out, everyone ends with the party's two */
+	setup(); gain( 0, FUSE ); for( i = 0; i < 4; i++ ) frame( 0.1 );
+	{
+		int dropped = drop_key( 0, FUSE );
+		frame( 0.1 );
+		take_key( 1, dropped ); for( i = 0; i < 4; i++ ) frame( 0.1 );
+		assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 1, FUSE ) == 2 && copies( 0, FUSE ) == 0 );
+		gain( 0, FUSE ); for( i = 0; i < 4; i++ ) frame( 0.1 );
+		assert( CoF_ShareSetCount( &cof_share.party, FUSE ) == 2 && copies( 0, FUSE ) == 2 && copies( 1, FUSE ) == 2 );
+		assert( cof_share.players[0].set_down.count == 0 && takes == 0 );
+	}
 	puts( "share scenarios passed" );
 	return 0;
 }

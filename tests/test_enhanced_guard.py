@@ -31,6 +31,16 @@ class GuardRuleTests(unittest.TestCase):
             'unfreeze 666 held=1: -',
             'stopcomputer  held=1: -',
             'freeze 1024 held=1: -',
+            'boilercheck 2 solved=0: -',
+            'boilercheck 2 solved=1: puzzle-solved',
+            'boilercheck 5 solved=1: -',
+            'puzzlebara  solved=1: puzzle-solved',
+            'puzzlebarc  solved=0: -',
+            'boilerchecks 2 solved=1: -',
+            'telephoneright taken=1: telephone-taken',
+            'telephonewrong taken=1: telephone-taken',
+            'telephoneright taken=0: -',
+            'phonenumber taken=1: -',
         ])
 
 
@@ -44,6 +54,15 @@ class GuardWiringTests(unittest.TestCase):
         # the camera's own end gives control back (CTriggerCamera, triggers.cpp:5565-5583, 5890-5905)
         body = body_of(SERVER / 'sv_cof_guard.c', 'qboolean SV_CoF_GuardClientCommand( sv_client_t *cl )')
         assert_has(self, 'CoF_GuardSceneRefusal( Cmd_Argv( 0 ), Cmd_Argv( 1 ), SV_CoF_RetailCameraHolds( cl ))', body)
+
+    def test_puzzle_and_telephone_are_asked_of_the_game_state(self):
+        # 1.1.9 (K9): solved = c_asylumb's cof_puzzlebarbutton iuser1, set by the solving think only; the telephone's
+        # last opener (cof_telephone +0xDC) against the sender (m_pTelephone +0x368)
+        body = body_of(SERVER / 'sv_cof_guard.c', 'qboolean SV_CoF_GuardClientCommand( sv_client_t *cl )')
+        assert_has(self, 'CoF_GuardPuzzleRefusal( Cmd_Argv( 0 ), Cmd_Argv( 1 ), CoF_GuardPuzzleSolved( ))', body)
+        assert_has(self, 'CoF_GuardTelephoneRefusal( Cmd_Argv( 0 ), SV_CoF_RetailTelephoneTaken( cl, &user ))', body)
+        solved = body_of(SERVER / 'sv_cof_guard.c', 'static qboolean CoF_GuardPuzzleSolved( void )')
+        assert_has(self, 'e->v.iuser1 && !Q_strcmp( SV_GetString( e->v.classname ), "cof_puzzlebarbutton" )', solved)
 
     def test_the_host_is_the_local_human(self):
         body = body_of(SERVER / 'sv_cof_guard.c', 'qboolean SV_CoF_GuardClientCommand( sv_client_t *cl )')

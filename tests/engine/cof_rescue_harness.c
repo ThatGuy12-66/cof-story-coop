@@ -32,7 +32,7 @@ typedef struct {
 	string_t classname, targetname;
 	vec3_t origin, angles;
 	float health;
-	int deadflag, flags, body;
+	int deadflag, flags, body, iuser3;
 	edict_t *owner;
 } entvars_t;
 struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; };
@@ -47,7 +47,8 @@ static edict_t entities[ENTITIES];
 static sv_client_t clients[MAX_CLIENTS];
 static byte private_data[ENTITIES][0x2900];
 static const char *strings[] = { "", "player", "monster_bosschainsaw", "theboss", "third_person_interaction", "monster_slower",
-	"item_padlock", "wheelchair", "monster_crazybitch", "monster_roofboss", "monster_doctorboss", "monster_booksimon" };
+	"item_padlock", "wheelchair", "monster_crazybitch", "monster_roofboss", "monster_doctorboss", "monster_booksimon",
+	/* 12 */ "func_valve", "multi_manager", "cof_strangle", "strangle", "sdkam" };
 /* a clear line from one body's eyes to another's (the world only): unless hidden */
 static int hidden[ENTITIES];
 static qboolean SV_CoF_Sees( edict_t *from, edict_t *to ) { return !hidden[to - entities]; }
@@ -151,6 +152,18 @@ static void set_handle( int entity, int offset, edict_t *target, int serial )
 }
 static void frame( double dt ) { sv.time += dt; SV_CoF_RescueFrame(); }
 
+/* 1.1.9 (S1): c_ending1c's multisd (CMultiManager): sdkam at 0.5 s, strangle at 3.5 s, started at 200 */
+static void multisd( int i )
+{
+	int count = 2, index = 0, mode = 0;
+	float start = 200.0f, delays[2] = { 0.5f, 3.5f };
+	string_t names[2] = { 16, 15 };
+	spawn( i, 13, 0 );
+	memcpy( private_data[i] + 0xE0, &count, 4 ); memcpy( private_data[i] + 0xE4, &index, 4 );
+	memcpy( private_data[i] + 0xE8, &start, 4 ); memcpy( private_data[i] + 0x178, &mode, 4 );
+	memcpy( private_data[i] + 0xEC, names, sizeof( names )); memcpy( private_data[i] + 0x12C, delays, sizeof( delays ));
+}
+
 /* The chainsaw boss grabs someone: it makes the kill animation (third_person_interaction, its victim at +0x36C and
  * itself at +0x374) and removes itself without dying, so its TriggerTarget never fires. */
 static void boss_grabs( int boss, int victim )
@@ -165,6 +178,52 @@ static void boss_grabs( int boss, int victim )
 int main( void )
 {
 	edict_t *boss;
+
+	/* 1.1.9 (S1): c_ending1c-3c: four valves -> countgate -> multisd, whose think uses the cof_strangle 3.5 s later; it
+	 * takes "the first player", the host every time. In that think the first player is who turned the last valve to its
+	 * end (the valve's m_hActivator, +0xE4, kept from its last Use), else the living person nearest the strangle.
+	 * (First here: the chainsaw scenario below needs 8-byte handles, as on the x86 build.) */
+	{
+		int index = 1;
+		setup(); spawn( 6, 12, 0 ); spawn( 7, 12, 0 ); spawn( 8, 14, 15 ); entities[8].v.origin[0] = 1000; multisd( 9 );
+		entities[1].v.origin[0] = 900; entities[2].v.origin[0] = 0;
+		frame( 0.1 );
+		set_handle( 6, 0xE4, &entities[1], 1 ); entities[6].v.iuser3 = 1; frame( 0.1 );    /* the host turned one */
+		set_handle( 7, 0xE4, &entities[2], 1 ); frame( 0.1 );                            /* the guest still turning */
+		entities[7].v.iuser3 = 1; frame( 0.1 );                                          /* the guest turned the last */
+		assert( logged( "phase=valve-turned userid=100 valve=6" ) == 1 && logged( "phase=valve-turned userid=101 valve=7" ) == 1 );
+		globals.time = 200.5f; assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );  /* the camera's think: as retail */
+		memcpy( private_data[9] + 0xE4, &index, 4 );
+		globals.time = 203.4f; assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );  /* not yet */
+		globals.time = 203.5f; assert( SV_CoF_RescueThinkFirst( &entities[9] ) == &entities[2] );
+		assert( logged( "phase=strangle-first userid=101 reason=valve" ) == 1 );
+		SV_CoF_RescueThinkBegin( &entities[9] ); assert( think_first == &entities[2] ); SV_CoF_RescueThinkEnd(); assert( !think_first );
+		/* the turner is dead (or gone): the living person nearest the strangle */
+		entities[2].v.health = 0; entities[2].v.deadflag = DEAD_DEAD;
+		assert( SV_CoF_RescueThinkFirst( &entities[9] ) == &entities[1] && logged( "userid=100 reason=nearest" ) == 1 );
+		entities[1].v.health = 0; entities[1].v.deadflag = DEAD_DEAD;
+		assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );                         /* nobody: as retail */
+		/* a manager whose delays are out of order is not read; one firing no strangle, or another mode, is left alone */
+		setup(); spawn( 8, 14, 15 ); multisd( 9 ); frame( 0.1 ); memcpy( private_data[9] + 0xE4, &index, 4 ); globals.time = 203.5f;
+		assert( SV_CoF_RescueThinkFirst( &entities[9] ) == &entities[1] );                 /* no valve seen: nearest */
+		{
+			float late = 0.25f; int other = 16, mode = 1;
+			memcpy( private_data[9] + 0x130, &late, 4 ); assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );
+			late = 3.5f; memcpy( private_data[9] + 0x130, &late, 4 ); memcpy( private_data[9] + 0xF0, &other, 4 );
+			assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );
+			other = 15; memcpy( private_data[9] + 0xF0, &other, 4 ); memcpy( private_data[9] + 0x178, &mode, 4 );
+			assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );
+		}
+		/* a valve done before the map's first frame (a checkpoint) has no turner we know of; no strangle in the map: no
+		 * manager is read; not story co-op: as retail */
+		setup(); spawn( 6, 12, 0 ); set_handle( 6, 0xE4, &entities[2], 1 ); entities[6].v.iuser3 = 1; spawn( 8, 14, 15 ); multisd( 9 );
+		frame( 0.1 ); assert( !logged( "valve-turned" )); memcpy( private_data[9] + 0xE4, &index, 4 ); globals.time = 203.5f;
+		entities[1].v.origin[0] = 900; entities[8].v.origin[0] = 1000; assert( SV_CoF_RescueThinkFirst( &entities[9] ) == &entities[1] );
+		gate = 0; assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL ); gate = 1;
+		setup(); multisd( 9 ); frame( 0.1 ); memcpy( private_data[9] + 0xE4, &index, 4 ); globals.time = 203.5f;
+		assert( SV_CoF_RescueThinkFirst( &entities[9] ) == NULL );
+		globals.time = 100.0f;
+	}
 
 	/* the guest is grabbed: the host lives on, so after the victim's death the boss comes back */
 	setup(); boss = spawn( 5, 2, 3 ); boss->v.origin[0] = 300; boss->v.angles[1] = 90;

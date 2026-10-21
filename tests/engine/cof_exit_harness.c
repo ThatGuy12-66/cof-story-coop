@@ -19,6 +19,8 @@ typedef float vec3_t[3];
 #define Q_strncmp strncmp
 #define Q_snprintf snprintf
 #define VectorCopy( a, b ) memcpy(( b ), ( a ), sizeof( vec3_t ))
+#define VectorSubtract( a, b, c ) (( c )[0] = ( a )[0] - ( b )[0], ( c )[1] = ( a )[1] - ( b )[1], ( c )[2] = ( a )[2] - ( b )[2] )
+#define DotProduct( a, b ) (( a )[0] * ( b )[0] + ( a )[1] * ( b )[1] + ( a )[2] * ( b )[2] )
 #define COM_StringEmptyOrNULL( s ) ( !( s ) || !*( s ))
 static size_t Q_strncpy( char *dst, const char *src, size_t size )
 {
@@ -82,6 +84,21 @@ static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *t
 	line_count[p]++;
 	return true;
 }
+/* 1.1.9 (X1): the party code puts a player back on a spot (sv_cof_party.c); returned refuses it (no room) */
+static int moved_back, move_refused, moved_slot = -1, queued_at_move = -1;
+static float moved_to[3], moved_fallback[3];
+static qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_client_t *anchor, const float *fallback )
+{
+	assert( !anchor && fallback );
+	moved_back++;
+	moved_slot = (int)( cl - clients );
+	queued_at_move = queued;
+	VectorCopy( landing, moved_to );
+	VectorCopy( fallback, moved_fallback );
+	if( move_refused ) return false;
+	VectorCopy( landing, cl->edict->v.origin );
+	return true;
+}
 static void SV_QueueChangeLevel( const char *level, const char *landmark )
 {
 	queued++;
@@ -107,6 +124,7 @@ static void setup( void )
 	memset( lines, 0, sizeof( lines )); memset( line_count, 0, sizeof( line_count ));
 	console[0] = 0; console_length = 0;
 	queued = model_reads = 0; gate = 1; landmark_ok = 1; exit_fires = 0; exit_refires = 1;
+	moved_back = move_refused = 0; moved_slot = queued_at_move = -1;
 	exit_scripted = 0; away[0] = away[1] = 0;
 	touching[0] = 1; touching[1] = 0; touching_other[0] = touching_other[1] = 0;
 	sv.time = 100; sv.name = "c_start";
@@ -273,6 +291,49 @@ int main( void )
 	assert( !SV_CoF_ExitRequest( "c_other", "otherland" ));
 	edicts[0].v.origin[0] = 2965; tick( 0.1 );
 	assert( queued == 1 && !strcmp( queued_level, "c_start2" ));
+
+	/* 1.1.9 (X1): c_apartment3's and c_apartmentsick's exits are fired by a trigger_once, so their hold is scripted
+	   and never cancelled. The waiter walked 560 units off to fetch the partner: before the change goes, the waiter
+	   is put back where the exit took them, with the landmark as the fallback, and the change carries the party from
+	   there (the arrival places the partner beside them). */
+	setup(); exit_scripted = 1; edicts[0].v.origin[0] = 40; assert( !ask());
+	touching[0] = 0; edicts[0].v.origin[0] = 600; tick( 0.1 ); assert( queued == 0 && !moved_back );
+	edicts[1].v.origin[0] = 635; tick( 0.1 );
+	assert( queued == 1 && moved_back == 1 && moved_slot == 0 && queued_at_move == 0 );
+	assert( moved_to[0] == 40 && moved_to[1] == 0 && moved_fallback[0] == 0 && edicts[0].v.origin[0] == 40 );
+	assert( strstr( console, "cofstory phase=exit-waiter-returned userid=1 origin=40.000,0.000,0.000" ));
+	/* ...the same with J after 10 s */
+	setup(); exit_scripted = 1; edicts[0].v.origin[0] = 40; assert( !ask());
+	touching[0] = 0; edicts[0].v.origin[0] = 900; sv.time += 10.5; assert( SV_CoF_ExitWarpKey( &clients[0] ));
+	assert( queued == 1 && moved_back == 1 && edicts[0].v.origin[0] == 40 && strstr( console, "phase=exit-forced" ));
+	/* ...no room there or at the landmark: they go from where they are, as before, and it is logged */
+	setup(); exit_scripted = 1; edicts[0].v.origin[0] = 40; assert( !ask());
+	touching[0] = 0; edicts[0].v.origin[0] = 600; move_refused = 1; edicts[1].v.origin[0] = 635; tick( 0.1 );
+	assert( queued == 1 && moved_back == 1 && edicts[0].v.origin[0] == 600 );
+	assert( strstr( console, "cofstory phase=exit-waiter-kept userid=1 reason=no-room" ));
+	/* ...but not a waiter still beside that spot, or standing in the exit, nor any walk-in hold */
+	setup(); exit_scripted = 1; edicts[0].v.origin[0] = 40; assert( !ask());
+	touching[0] = 0; edicts[0].v.origin[0] = 150; edicts[1].v.origin[0] = 185; tick( 0.1 );
+	assert( queued == 1 && !moved_back );
+	setup(); exit_scripted = 1; edicts[0].v.origin[0] = 40; assert( !ask());
+	edicts[0].v.origin[0] = 600; edicts[1].v.origin[0] = 635; tick( 0.1 );
+	assert( queued == 1 && !moved_back );
+	setup(); assert( !ask()); edicts[1].v.origin[0] = 35; tick( 0.1 ); assert( queued == 1 && !moved_back );
+	/* ...nor when nobody stood anywhere for it yet (everyone dead when it was asked for) */
+	setup(); exit_scripted = 1; touching[0] = 0; edicts[0].v.health = edicts[1].v.health = 0; assert( !ask());
+	edicts[0].v.health = edicts[1].v.health = 100; edicts[0].v.origin[0] = 600; edicts[1].v.origin[0] = 635; tick( 0.1 );
+	assert( queued == 1 && !moved_back );
+
+	/* 1.1.9 (X2, E1 F8): a released hold's change runs before the next frame. Still in this map a frame later, it was
+	   refused: the trigger still asking is let through for that frame only, then this map's exits hold again. */
+	setup(); assert( !ask()); edicts[1].v.origin[0] = 35; tick( 0.1 ); assert( queued == 1 );
+	edicts[1].v.origin[0] = 3000; assert( ask() && once( "exit-hold" ));
+	tick( 0.1 ); assert( strstr( console, "cofstory phase=exit-change-refused destination=c_start2 landmark=hahaland" ));
+	assert( !ask() && SV_CoF_ExitWaiter() == 1 && strstr( strstr( console, "exit-change-refused" ), "exit-hold" ));
+	/* ...J's change is asked for between frames: the rest of that frame lets the trigger through too */
+	setup(); assert( !ask()); sv.time += 10.5; assert( SV_CoF_ExitWarpKey( &clients[0] ) && queued == 1 );
+	assert( ask()); tick( 0.1 ); assert( ask() && !strstr( console, "exit-change-refused" ));
+	tick( 0.1 ); assert( strstr( console, "exit-change-refused" ) && !ask());
 	puts( "exit scenarios passed" );
 	return 0;
 }

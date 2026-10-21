@@ -136,9 +136,11 @@ def reject_links(path: Path) -> None:
 
 
 def validate_source(path: Path) -> Path:
-    raw = Path(path).expanduser().absolute()
-    reject_links(raw)
-    root = raw.resolve()
+    # 1.1.9 (L14.3): the game folder may be reached through a link (a Steam library moved with a junction): its real
+    # folder is checked and copied. Links inside the game are still refused (here and in copy_plan), and so are
+    # links on the way to a destination (validate_destination).
+    root = Path(path).expanduser().absolute().resolve()
+    reject_links(root)
     for rel in ("CoFLaunchApp.exe", "cryoffear/liblist.gam", "cryoffear/maps/c_game_menu1.bsp", "cryoffear/cl_dlls/hl.dll"):
         item = root / rel
         reject_links(item)
@@ -159,6 +161,17 @@ def validate_destination(source: Path, path: Path) -> Path:
         raise ValueError("The separate game folder must be outside the original game.")
     if any(part.casefold() == "steamapps" for part in target.parts):
         raise ValueError("The destination must be outside Steam's managed folders.")
+    # 1.1.9 (L14.8): Program Files takes writes only from an administrator (setup and the game's saves fail), and
+    # OneDrive uploads the 5 GB copy and can leave its files online-only
+    for names, message in ((("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"),
+                            "The destination must be outside Program Files: the game could not save there."),
+                           (("OneDrive", "OneDriveConsumer", "OneDriveCommercial"),
+                            "The destination must be outside OneDrive: it would upload the 5 GB copy and can keep "
+                            "its files online only.")):
+        for name in names:
+            folder = os.environ.get(name, "")
+            if folder and Path(folder).is_absolute() and target.is_relative_to(Path(folder).resolve()):
+                raise ValueError(message)
     return target
 
 
@@ -362,7 +375,9 @@ def generated_models(models: Path) -> dict[str, bytes]:
     the Simon player models and the third-person weapon models (models/coop)."""
     files = build_models((models / "cutscene/player.mdl").read_bytes(), (models / "player/police1/police1.mdl").read_bytes(),
                          {rel: (models / "costumes" / rel).read_bytes() for rel in costume_files()})
-    files.update(weapons.build_models({rel: (models.parent / rel).read_bytes() for rel in weapons.SOURCES}))
+    # 1.1.9: and the optional sources a copy has (a cosmetic model without its stock file is left out, not refused)
+    files.update(weapons.build_models({**{rel: (models.parent / rel).read_bytes() for rel in weapons.SOURCES},
+                                       **weapons.read_optional(models.parent)}))
     return files
 
 
@@ -372,6 +387,8 @@ def make_models(root: Path, steps=None) -> dict[str, str]:
     hashes = {}
     steps.part(0, "reading your game's models")
     files = generated_models(root / "cryoffear/models")
+    for skipped in json.loads(files.get("coop-weapons.json", b"{}")).get("skipped", []):
+        steps.note(f"Left out {skipped['path']} (cosmetic): {skipped['reason']}")
     models = [rel for rel in files if rel.endswith(".mdl")]
     for number, rel in enumerate(models, 1):
         data = files[rel]

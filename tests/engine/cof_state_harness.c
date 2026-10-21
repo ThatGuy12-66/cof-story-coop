@@ -94,6 +94,67 @@ int main( void )
 		tapes = 4; memcpy( private_data[0] + 0x1EF4, &tapes, 4 ); SV_CoF_StateFrame();
 		memcpy( &tapes, private_data[1] + 0x1EF4, 4 ); assert( tapes == 4 );
 	}
+	/* 1.1.9 (M2 F10, K): the health cap is the party's. The answerer's cof_maxhealthchange reaches the partner (with
+	 * its HealthCap), a lift on one player (strangle, wheelchair) lifts everyone's, a rejoined player gets the party's;
+	 * a new session's first look with a cap fills the party in (a checkpoint from before 1.1.9) */
+	{
+		int cap = 2;
+		console_length = 0; console[0] = 0;
+		SV_CoF_StateFrame();
+		memcpy( private_data[1] + 0x60C, &cap, 4 ); last_msg_name[0] = 0;
+		SV_CoF_StateFrame();
+		memcpy( &cap, private_data[0] + 0x60C, 4 ); assert( cap == 2 && !strcmp( last_msg_name, "HealthCap" ) && last_msg[0] == 2 );
+		assert( strstr( console, "cofstory phase=health-cap userid=10 cap=2" ) && strstr( console, "phase=health-cap-shared userid=1 cap=2" ));
+		cap = 0; memcpy( private_data[0] + 0x60C, &cap, 4 ); SV_CoF_StateFrame();
+		memcpy( &cap, private_data[1] + 0x60C, 4 ); assert( cap == 0 );
+		cap = 1; memcpy( private_data[0] + 0x60C, &cap, 4 ); SV_CoF_StateFrame();
+		clients[1].userid = 11; memset( private_data[1] + 0x60C, 0, 4 ); SV_CoF_StateFrame();
+		memcpy( &cap, private_data[1] + 0x60C, 4 ); assert( cap == 1 );
+		memcpy( &cap, private_data[0] + 0x60C, 4 ); assert( cap == 1 ); /* the newcomer's fresh 0 is no change */
+		SV_CoF_StateReset(); memset( private_data[0] + 0x60C, 0, 4 ); cap = 2; memcpy( private_data[1] + 0x60C, &cap, 4 );
+		SV_CoF_StateFrame(); memcpy( &cap, private_data[0] + 0x60C, 4 ); assert( cap == 2 );
+		memset( private_data[0] + 0x60C, 0, 4 ); memset( private_data[1] + 0x60C, 0, 4 ); SV_CoF_StateReset(); SV_CoF_StateFrame();
+	}
+	/* 1.1.9 (M1 9): c_subway1st1's cof_phonedisable broke the toucher's phone alone. The party's phone breaks for
+	 * everyone (the broken body too), again when a respawn's recovery hands back an inventory from before; a mend
+	 * (the battery) ends it: the others mend their own */
+	{
+		int value, body = 0x2A;
+		console_length = 0; console[0] = 0;
+		for( value = 4; value < 12; value++ ) { edicts[value].free = 1; edicts[value].pvPrivateData = NULL; }
+		svgame.numEntities = 12;
+		weapon( 4, 0, SV_AllocString( "weapon_mobile" ), private_data[0], 2, -1, 0 );
+		weapon( 5, 1, SV_AllocString( "weapon_mobile" ), private_data[1], 2, -1, 0 );
+		SV_CoF_StateFrame();
+		weapon_private[1][0x1F9] = 1; value = 1; memcpy( private_data[1] + 0x1F14, &value, 4 ); memcpy( private_data[1] + 0x5CC, &body, 4 );
+		SV_CoF_StateFrame();
+		memcpy( &value, private_data[0] + 0x1F14, 4 ); assert( value == 1 && weapon_private[0][0x1F9] == 1 );
+		memcpy( &value, private_data[0] + 0x5CC, 4 ); assert( value == 0x2A );
+		assert( strstr( console, "cofstory phase=phone-broken userid=11" ) && strstr( console, "cofstory phase=phone-shared userid=1\n" ));
+		clients[0].edict->v.health = 0; SV_CoF_StateFrame();
+		weapon_private[0][0x1F9] = 0; value = 0; memcpy( private_data[0] + 0x1F14, &value, 4 ); /* the respawn's restore */
+		clients[0].edict->v.health = 100; SV_CoF_StateFrame();
+		memcpy( &value, private_data[0] + 0x1F14, 4 ); assert( value == 1 && weapon_private[0][0x1F9] == 1 );
+		assert( !strstr( console, "phone-mended" ));
+		weapon_private[1][0x1F9] = 0; value = 0; memcpy( private_data[1] + 0x1F14, &value, 4 ); /* the partner's battery */
+		SV_CoF_StateFrame(); SV_CoF_StateFrame();
+		memcpy( &value, private_data[1] + 0x1F14, 4 ); assert( value == 0 && !weapon_private[1][0x1F9] );
+		memcpy( &value, private_data[0] + 0x1F14, 4 ); assert( value == 1 && strstr( console, "cofstory phase=phone-mended userid=11" ));
+		weapon_private[0][0x1F9] = 0; value = 0; memcpy( private_data[0] + 0x1F14, &value, 4 ); SV_CoF_StateFrame();
+		memset( private_data[0] + 0x5CC, 0, 4 ); memset( private_data[1] + 0x5CC, 0, 4 );
+	}
+	/* 1.1.9 (K9): a player still in c_asylumb's bar puzzle once it is solved is let out by the state frame */
+	{
+		edict_t *button = &edicts[6], *camera = &edicts[7];
+		memset( button, 0, sizeof( *button )); memset( camera, 0, sizeof( *camera ));
+		button->v.classname = SV_AllocString( "cof_puzzlebarbutton" ); button->v.message = SV_AllocString( "deadfidafv" );
+		button->v.iuser1 = 1; camera->v.targetname = SV_AllocString( "deadfidafv" );
+		handle( private_data[1] + 0x378, button ); clients[1].pViewEntity = camera;
+		console_length = 0; console[0] = 0;
+		SV_CoF_StateFrame();
+		assert( !clients[1].pViewEntity && strstr( console, "cofstory phase=puzzle-released userid=11" ));
+		button->free = camera->free = 1;
+	}
 	gate = 0; observed.code = 5555; SV_CoF_RetailStoryWrite( &clients[1], &observed );
 	SV_CoF_StateFrame();
 	assert( SV_CoF_RetailStoryRead( &clients[0], &observed ) && observed.code == 9999 );

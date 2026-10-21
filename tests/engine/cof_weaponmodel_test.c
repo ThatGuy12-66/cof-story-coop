@@ -68,15 +68,78 @@ int main( void )
 	assert( CoF_WeaponModelSame( "police\\models\\weapons\\RIFLE\\p_rifle.mdl", "police/models/weapons/rifle/p_rifle.mdl" ));
 	/* 1.1.8 (E2-5): the pick's pose only while the player stands in it (deadflag, fuser3, crouched, walking,
 	 * waterlevel, a game animation under way) */
-	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 0 ));
-	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 1, 0 ));  /* wading */
-	assert( !CoF_WeaponModelStanding( 2, 0.0f, 0, 1, 0, 0 )); /* dead or downed */
-	assert( !CoF_WeaponModelStanding( 0, 2.0f, 0, 1, 0, 0 )); /* reviving, knocked down */
-	assert( !CoF_WeaponModelStanding( 0, 1.0f, 0, 1, 0, 0 )); /* tripped */
-	assert( !CoF_WeaponModelStanding( 0, 0.0f, 1, 1, 0, 0 )); /* crouched */
-	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 0, 0, 0 )); /* on a ladder */
-	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 2, 0 )); /* swimming */
-	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 1 )); /* the game's get-up, dodge... */
+	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 0, 0 ));
+	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 1, 0, 0 ));  /* wading */
+	assert( !CoF_WeaponModelStanding( 2, 0.0f, 0, 1, 0, 0, 0 )); /* dead or downed */
+	assert( !CoF_WeaponModelStanding( 0, 2.0f, 0, 1, 0, 0, 0 )); /* reviving, knocked down */
+	assert( !CoF_WeaponModelStanding( 0, 1.0f, 0, 1, 0, 0, 0 )); /* tripped */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 1, 1, 0, 0, 0 )); /* crouched */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 0, 0, 0, 0 )); /* on a ladder */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 2, 0, 0 )); /* swimming */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 1, 0 )); /* the game's get-up, dodge... */
+	/* 1.1.9 (movement 1): the game's sprint (flags bit 18 and over 10 units/s) keeps its own sequence */
+	assert( !CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 0, 1 ));
+	assert( CoF_WeaponModelSprinting( 0x40000 | 0x200, 200.0f, 0.0f ));
+	assert( CoF_WeaponModelSprinting( 0x40000, -8.0f, 8.0f ));  /* 11.3 diagonally */
+	assert( !CoF_WeaponModelSprinting( 0x40000, 6.0f, 7.0f ));  /* 9.2: the game plays its idle */
+	assert( !CoF_WeaponModelSprinting( 0x40000, 0.0f, 0.0f ));
+	assert( !CoF_WeaponModelSprinting( 0x80000 | 0x200, 250.0f, 0.0f )); /* stamina (bit 19), not sprinting */
+	assert( CoF_WeaponModelStanding( 0, 0.0f, 0, 1, 0, 0, CoF_WeaponModelSprinting( 0x80000, 250.0f, 0.0f )));
+	/* 1.1.9: the gas mask goes out with the night vision fully on (flags bit 64), alive, drawn, off any ladder */
+	assert( CoF_WeaponModelMasked( 64, 0, 0, 0 ));
+	assert( CoF_WeaponModelMasked( 64 | 16 | 1, 0, 0, 0 ));
+	assert( !CoF_WeaponModelMasked( 0, 0, 0, 0 ));    /* off, or only asked for (m_iHeadShieldOn 101) */
+	assert( !CoF_WeaponModelMasked( 1, 0, 0, 0 ));    /* the flashlight */
+	assert( !CoF_WeaponModelMasked( -1, 0, 0, 0 ));   /* no verified player */
+	assert( !CoF_WeaponModelMasked( 64, 2, 0, 0 ));   /* dead */
+	assert( !CoF_WeaponModelMasked( 64, 0, 1, 0 ));   /* not drawn */
+	assert( !CoF_WeaponModelMasked( 64, 0, 0, 1 ));   /* on a ladder */
+	/* the numbers sent with players: never an edict of the game, never one another's, for any party size */
+	{
+		static int seen[4096];
+		int maxclients, kind, slot, max_entities = 4096;
+		for( maxclients = 1; maxclients <= 32; maxclients++ )
+		{
+			memset( seen, 0, sizeof( seen ));
+			for( kind = 0; kind < COF_WEAPONMODEL_KINDS; kind++ )
+				for( slot = 0; slot < maxclients; slot++ )
+				{
+					int number = CoF_WeaponModelNumber( kind, slot, max_entities, maxclients, 900 );
+					assert( number >= 900 && number < max_entities && number > maxclients );
+					assert( !seen[number] );
+					seen[number] = 1;
+				}
+			assert( !CoF_WeaponModelNumber( 0, maxclients, max_entities, maxclients, 900 ));
+		}
+		/* the 1.1.8 formulas: the other hand at max - 1 - slot, the held light max - 1 - maxclients - slot */
+		assert( CoF_WeaponModelNumber( COF_WEAPONMODEL_OFFHAND, 2, 2048, 4, 600 ) == 2048 - 1 - 2 );
+		assert( CoF_WeaponModelNumber( COF_WEAPONMODEL_LIGHT, 2, 2048, 4, 600 ) == 2048 - 1 - 4 - 2 );
+		assert( CoF_WeaponModelNumber( COF_WEAPONMODEL_GASMASK, 2, 2048, 4, 600 ) == 2048 - 1 - 8 - 2 );
+		/* the game reached the top: none */
+		assert( !CoF_WeaponModelNumber( COF_WEAPONMODEL_GASMASK, 3, 2048, 4, 2048 - 12 + 1 ));
+		assert( CoF_WeaponModelNumber( COF_WEAPONMODEL_GASMASK, 3, 2048, 4, 2048 - 12 ) == 2048 - 12 );
+		assert( !CoF_WeaponModelNumber( COF_WEAPONMODEL_KINDS, 0, 2048, 4, 600 ));
+		assert( !CoF_WeaponModelNumber( 0, -1, 2048, 4, 600 ));
+		assert( !CoF_WeaponModelNumber( 2, 0, 10, 4, 1 )); /* would land on a player */
+	}
+	/* 1.1.9 (ladders): the climber's body: eye at the hands' view, facing along it, level */
+	{
+		const float eye[3] = { 100.0f, 50.0f, 300.0f }, ahead[3] = { 100.0f, 58.0f, 302.0f }, up[3] = { 100.0f, 50.0f, 310.0f };
+		float origin[3], heading[2];
+		assert( CoF_WeaponModelClimbPose( eye, ahead, 28.0f, origin, heading ));
+		assert( origin[0] == 100.0f && origin[1] == 50.0f && origin[2] == 272.0f );
+		assert( heading[0] == 0.0f && heading[1] == 8.0f ); /* yaw 90 */
+		assert( !CoF_WeaponModelClimbPose( eye, up, 28.0f, origin, heading )); /* straight up: the model's yaw */
+		assert( origin[2] == 272.0f );
+	}
+	/* 1.1.9 (P5): a rower's protection once out of the boat */
+	assert( CoF_WeaponModelBoatLeft( 2, 1, 0, 0 ) == COF_BOAT_RESTORE );       /* docked */
+	assert( CoF_WeaponModelBoatLeft( 2, 1, 1, 0 ) == COF_BOAT_WAIT );          /* a cutscene camera holds them */
+	assert( CoF_WeaponModelBoatLeft( 1, 1, 0, 1 ) == COF_BOAT_WAIT );          /* loading the next map */
+	assert( CoF_WeaponModelBoatLeft( 2, 1, 0, 1 ) == COF_BOAT_RESTORE_AGAIN ); /* let go for a level change */
+	assert( CoF_WeaponModelBoatLeft( 0, 1, 0, 0 ) == COF_BOAT_RESTORE );       /* dropped */
+	assert( CoF_WeaponModelBoatLeft( 2, 0, 0, 0 ) == COF_BOAT_FORGET );        /* someone else in the slot */
+	assert( CoF_WeaponModelBoatLeft( 0, 0, 0, 1 ) == COF_BOAT_FORGET );
 	/* every model the engine may precache is a generated one, short enough for a precache slot;
 	 * empty entries (a retail right hand) are skipped by the caller */
 	for( i = 0; i < CoF_WeaponModelCount(); i++ )
@@ -92,6 +155,9 @@ int main( void )
 	for( i = 0; i < COF_WEAPONMODEL_COUNT( cof_weaponmodel_dual ); i++ )
 		printf( "dual %d %s %s\n", cof_weaponmodel_dual[i].id, cof_weaponmodel_dual[i].right, cof_weaponmodel_dual[i].left );
 	printf( "dualsequence %d\n", COF_WEAPONMODEL_DUAL_SEQUENCE );
+	printf( "gasmask %s %d\n", COF_WEAPONMODEL_MASK, COF_WEAPONMODEL_MASK_ON );
+	printf( "climbsequence %d\n", COF_WEAPONMODEL_CLIMB_SEQUENCE );
+	assert( !strcmp( CoF_WeaponModelPath( CoF_WeaponModelCount() - 1 ), COF_WEAPONMODEL_MASK ));
 	printf( "weapon model scenarios passed\n" );
 	return 0;
 }

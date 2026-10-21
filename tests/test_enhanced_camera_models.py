@@ -21,6 +21,15 @@ class CameraModelTests(unittest.TestCase):
             'an owner object we cannot read: 0',
             'placed by the map (no owner): 0',
             'owned by another entity: 0',
+            "a ladder's hands, to its climber: 0",
+            "a ladder's hands, to a partner: 1",
+            'another camera model (the strangle, a cutscene), to a partner: 0',
+            'a ladder model placed by the map: 0',
+            'owned by another entity: 0',
+            'climbing: 1',
+            'the climb let go (unfrozen): 0',
+            'a newer scene: 0',
+            'not a ladder: 0',
         ])
 
 

@@ -1,5 +1,6 @@
 /* sv_cof_guard.h: client commands refused in story co-op. */
 #include <stdio.h>
+#include <stdlib.h>
 #include "guard_under_test.h"
 
 static void refusal( const char *cmd, int story, int host )
@@ -12,6 +13,18 @@ static void scene( const char *cmd, const char *arg, int held )
 {
 	const char *reason = CoF_GuardSceneRefusal( cmd, arg, held );
 	printf( "%s %s held=%d: %s\n", cmd, arg, held, reason ? reason : "-" );
+}
+
+static void puzzle( const char *cmd, const char *arg, int solved )
+{
+	const char *reason = CoF_GuardPuzzleRefusal( cmd, arg, solved );
+	printf( "%s %s solved=%d: %s\n", cmd, arg, solved, reason ? reason : "-" );
+}
+
+static void telephone( const char *cmd, int taken )
+{
+	const char *reason = CoF_GuardTelephoneRefusal( cmd, taken );
+	printf( "%s taken=%d: %s\n", cmd, taken, reason ? reason : "-" );
 }
 
 int main( void )
@@ -33,5 +46,15 @@ int main( void )
 	scene( "unfreeze", "666", 1 );
 	scene( "stopcomputer", "", 1 );  // clears only the computer state, which a scene never sets
 	scene( "freeze", "1024", 1 );
+	puzzle( "boilercheck", "2", 0 );   // 1.1.9 (K9): the bars before the solve
+	puzzle( "boilercheck", "2", 1 );   // a bar closed again after it re-fired restore_power
+	puzzle( "boilercheck", "5", 1 );   // leaving the puzzle stays
+	puzzle( "puzzlebara", "", 1 );     // the console's bar commands too
+	puzzle( "puzzlebarc", "", 0 );
+	puzzle( "boilerchecks", "2", 1 );
+	telephone( "telephoneright", 1 );  // 1.1.9: a dial for a telephone someone else opened since
+	telephone( "telephonewrong", 1 );
+	telephone( "telephoneright", 0 );  // its user dials
+	telephone( "phonenumber", 1 );     // the mobile phone's own dialling is not the telephone's
 	return 0;
 }

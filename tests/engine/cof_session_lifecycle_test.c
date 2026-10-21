@@ -12,7 +12,12 @@ typedef int qboolean;
 #define FCL_FAKECLIENT 128
 #define DEAD_NO 0
 #define FBitSet(value,bits) ((value)&(bits))
+#ifdef _WIN32
 #define Q_stricmp _stricmp
+#else
+#include <strings.h>
+#define Q_stricmp strcasecmp
+#endif
 #define Q_strcmp strcmp
 #define MAX_CLIENTS 32
 #define Q_strncmp strncmp
@@ -41,6 +46,8 @@ static void CoF_SessionLatest( void ) {}
 static int CoF_SessionUsable( const char *slot ) { return slot && slot[0] && usable; }
 static int SV_CoF_SceneActive( void ) { return 0; }
 static int SV_CoF_PartyHolding( void ) { return 0; }
+static int wait_reason; /* CoF_SessionWait: 1 cutscene, 2 ending door, 3 boat, 4 chapter kit (1.1.9) */
+static int CoF_SessionWait( void ) { return wait_reason; }
 static int SV_CoF_StoryCoopEnabled( void ) { return gate; }
 static int SV_CoF_TransitionActive( void ) { return transition; }
 static int SV_IsValidEdict( edict_t *entity ) { return entity != NULL; }
@@ -48,7 +55,15 @@ static int SV_CoF_SessionSave( const char *slot ) { saves++; Q_strncpy( last_slo
 static int SV_CoF_SessionLoad( const char *slot ) { loads++; Q_strncpy( last_slot, slot ? slot : "latest", sizeof( last_slot )); return result; }
 static int Cmd_Argc( void ) { return argc; }
 static const char *Cmd_Argv( int index ) { return index < argc ? argv[index] : ""; }
-static void Con_Printf( const char *format, ... ) {}
+#include <stdarg.h>
+static char console_line[256];
+static void Con_Printf( const char *format, ... )
+{
+	va_list args;
+	va_start( args, format );
+	vsnprintf( console_line, sizeof( console_line ), format, args );
+	va_end( args );
+}
 static void SV_ClientPrintf( sv_client_t *client, const char *format, ... ) {}
 static int SV_CoF_RetailProFont( sv_client_t *client, int colour, const char *text, int reliable ) { profont++; return 1; }
 static int revived[2];
@@ -142,5 +157,14 @@ int main( void )
 	loads = 0; clients[1].flags = 0; edicts[1].v.health = 0; revived[1] = 1;
 	assert( !SV_CoF_SessionWipe( "c_start", NULL ) && !loads );
 	revived[1] = 0; assert( SV_CoF_SessionWipe( "c_start", NULL ) && loads == 1 );
+	/* 1.1.9 (P6, I7): cof_save says why a checkpoint waits: a cutscene or the ending door, a boat crossing, a chapter
+	 * start's kit still on its way; otherwise it was refused */
+	gate = 1; result = 0; argc = 1; argv[0] = "cof_save";
+	wait_reason = 3; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "a player is in the boat" ));
+	wait_reason = 4; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "starting weapons" ));
+	wait_reason = 1; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "a cutscene is running" ));
+	wait_reason = 2; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "a cutscene is running" ));
+	wait_reason = 0; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "Co-op save refused" ));
+	result = 1;
 	puts( "session lifecycle scenarios passed" ); return 0;
 }
