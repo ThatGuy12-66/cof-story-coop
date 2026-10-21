@@ -196,7 +196,10 @@ void CL_ParseMovevars( sizebuf_t *msg )
 		R_SetupSky( clgame.movevars.skyName );
 
 	clgame.oldmovevars = clgame.movevars;
-	clgame.entities->curstate.scale = clgame.movevars.waveHeight;
+
+	// CoF: no world entity yet when a reconnect lands mid level change (see CL_ParseServerData)
+	if( clgame.entities )
+		clgame.entities->curstate.scale = clgame.movevars.waveHeight;
 
 	// keep features an actual!
 	clgame.oldmovevars.features = clgame.movevars.features = host.features;
@@ -950,7 +953,10 @@ static void CL_ParseServerData( sizebuf_t *msg, connprotocol_t proto )
 	gameui.globals->maxClients = cl.maxclients;
 	Q_strncpy( gameui.globals->maptitle, clgame.maptitle, sizeof( gameui.globals->maptitle ));
 
-	if( !cls.changelevel && !cls.changedemo )
+	// CoF: a level change keeps the edicts svc_changing or CL_CoF_StoryChangeLevel_f made, but a client that
+	// disconnected in between (a "reconnect" while it was still loading the last level) has none left,
+	// and the first movevars message wrote into edict 0 of nothing (a joining player crashed after cm_sewer3)
+	if(( !cls.changelevel && !cls.changedemo ) || !clgame.entities )
 		CL_InitEdicts( cl.maxclients ); // re-arrange edicts
 
 	// get splash name
