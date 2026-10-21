@@ -79,6 +79,15 @@ static qboolean SV_CoF_RetailReadSlots( sv_client_t *cl, char slots[COF_RETAIL_S
 	memcpy( slots, inv[who( cl )], sizeof( inv[0] ));
 	return true;
 }
+/* after 1.1.9: the bonus kit, asked once per chapter start, while cof_chapter_start still names the chapter */
+static int bonus_calls;
+static char bonus_chapter[64];
+static void SV_CoF_BonusKitChapterStart( const char *chapter )
+{
+	assert( !strcmp( chapter, cvar ));
+	bonus_calls++;
+	snprintf( bonus_chapter, sizeof( bonus_chapter ), "%s", chapter );
+}
 static qboolean SV_CoF_RetailInThreeSlots( sv_client_t *cl ) { return three[who( cl )]; }
 static qboolean SV_CoF_RetailThreeSlots( sv_client_t *cl ) { three_slot_calls++; three[who( cl )] = 1; return true; }
 
@@ -106,6 +115,7 @@ static void setup( const char *map )
 	fake_keyvalue_calls = spawns = frees = three_slot_calls = grants = presets = 0; spawned_flags = -1;
 	kv_state[0] = kv_initial[0] = 0; console[0] = 0; console_length = 0;
 	cof_story_kit = NULL;
+	bonus_calls = 0; bonus_chapter[0] = 0;
 }
 
 int main( void )
@@ -140,6 +150,17 @@ int main( void )
 	svs.spawncount--; assert( !SV_CoF_StoryKitDue());
 	/* ...New game and Continue (no chapter named) never wait */
 	setup( "" ); CoF_StoryChapterStart(); assert( !SV_CoF_StoryKitDue());
+
+	/* after 1.1.9: the bonus kit is asked for once, on the chapter start's first frame, for every chapter start (it
+	 * decides itself which get it); never again that map (the name is cleared), never on a checkpoint load, a team
+	 * wipe's reload, a revisit or Continue (a new map or generation with no chapter named) */
+	setup( "c_basement" ); CoF_StoryChapterStart();
+	assert( bonus_calls == 1 && !strcmp( bonus_chapter, "c_basement" ) && !cvar[0] );
+	CoF_StoryChapterStart(); assert( bonus_calls == 1 );
+	svs.spawncount++; CoF_StoryChapterStart(); assert( bonus_calls == 1 );
+	setup( "c_bridge" ); CoF_StoryChapterStart(); assert( bonus_calls == 1 && !strcmp( bonus_chapter, "c_bridge" ));
+	setup( "c_nightmare" ); CoF_StoryChapterStart(); assert( bonus_calls == 1 && !grants );
+	setup( "" ); CoF_StoryChapterStart(); svs.spawncount++; CoF_StoryChapterStart(); assert( !bonus_calls );
 
 	/* C2: Ending 4's partners get Ending 5's kit, in three slots */
 	setup( "c_ending4" ); CoF_StoryChapterStart(); assert( grants == 2 && presets == 1 && party_three && SV_CoF_StoryKitDue());

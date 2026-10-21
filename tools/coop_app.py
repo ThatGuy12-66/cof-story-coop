@@ -155,7 +155,7 @@ class ProgressPanel:
 
 # the co-op keys the main screen shows (friend_setup.COOP_KEYS binds them)
 COOP_KEYS = (("J", "join your partner"), ("Enter", "skip a cutscene for everyone"),
-             ("H", "AI companions wait or follow"))
+             ("H", "AI companions wait or follow"), ("O", "the wardrobe (with the bonus room)"))
 
 # 1.1.8 (L14.2): closing the window ends a setup or update part way (its worker thread dies with the app)
 BUSY_WARNINGS = {
@@ -569,7 +569,9 @@ class App:
                 if running:
                     raise ValueError("Cry of Fear is already running from this copy. Close it first.")
                 (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
-                (root / "cryoffear" / play.SESSION_CFG).write_text(config, encoding="ascii")
+                # 1.1.10: a co-op key the player's own config leaves unbound (O in a copy set up before it) works
+                (root / "cryoffear" / play.SESSION_CFG).write_text(config + setup_lib.missing_coop_binds(root),
+                                                                   encoding="ascii")
                 setup_lib.keep_previous_log(root, play.LOG)
                 start_game(root, args)
                 self.remember(name=self.name.get().strip(), first_launch_done=True)
@@ -630,7 +632,8 @@ class App:
         port = tk.StringVar(value=str(self.settings["port"]))
         bonus = tk.BooleanVar(value=self.settings["bonus_room"])
         theme.section(ttk, body, "Options")
-        ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; in Chapter 1 and the bridge)",
+        ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; a later chapter starts with them; "
+                        "O opens the wardrobe)",
                         variable=bonus).pack(anchor="w")
         merged = tk.BooleanVar(value=self.settings["merged_maps"])
         ttk.Checkbutton(body, text="Merged maps (fewer loading screens; Continue keeps the checkpoint's own)",

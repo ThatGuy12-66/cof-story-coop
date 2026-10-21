@@ -1,6 +1,17 @@
-Cry of Fear Co-op 1.1.9
+Cry of Fear Co-op 1.1.10
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.10
+- The bonus room's items at every chapter start: with "Bonus room unlocked" ticked, a
+  chapter started from the list (one that can't reach a bonus room yet) starts with the
+  FAMAS, axe, book laser, camera, night vision and the rest of the room's items on the
+  floor next to you. Everyone gets their own.
+- O opens the wardrobe anywhere while the bonus room is ticked, to change your outfit
+  without going back to the room.
+- A new look for the app: dark, with the main choices as cards.
+- 1.1 to 1.1.10 can play together. The bonus weapons come from the host's game, so the
+  host should update; everyone should update for O.
 
 WHAT'S NEW IN 1.1.9
 - Everyone gets their own weapons, ammo and medicine: when one player picks something up
@@ -157,6 +168,7 @@ Everyone needs the same version of Cry of Fear Co-op.
 Start a new game (the intro), any chapter, or Continue from the last co-op checkpoint.
 The game makes a co-op checkpoint by itself after every level change.
 Tick "Bonus room unlocked" to open the bonus room (FAMAS, axe and more) for everyone.
+Starting a later chapter lays its weapons out next to you, and O opens the wardrobe.
 Dual wield (two pistols, or a pistol and a light) works from the inventory menu.
 "Merged maps" (on by default) loads neighbouring levels as one map, so there are fewer
 loading screens. If a merged level misbehaves, the host can untick it and start that
@@ -166,6 +178,7 @@ CO-OP KEYS
 J      join your partner (when the screen says "Press J to join")
 Enter  skip a cutscene for everyone (press again to watch the rest)
 H      tell the AI companions to wait or to follow
+O      open the wardrobe (outfits) anywhere, when the bonus room is ticked
 Space  when dead: respawn next to your partner after about 10 seconds
 
 UPDATES

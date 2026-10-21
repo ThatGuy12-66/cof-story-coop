@@ -18,6 +18,10 @@ def module():
     return (SERVER / 'sv_cof_pickups.c').read_text(encoding='latin-1')
 
 
+def kit_header():
+    return strip_includes((SERVER / 'sv_cof_bonus_kit.h').read_text(encoding='latin-1'))
+
+
 class PickupRuleTests(unittest.TestCase):
     def test_who_sees_and_takes_which_copy(self):
         out = run_native(self, 'cof_pickups_state_test.c', {'pickups_state_under_test.h': state_header()})
@@ -25,7 +29,7 @@ class PickupRuleTests(unittest.TestCase):
 
     def test_the_module_against_engine_doubles(self):
         out = run_native(self, 'cof_pickups_harness.c', {
-            'pickups_under_test.c': state_header() + '\n' + strip_includes(module()),
+            'pickups_under_test.c': state_header() + '\n' + kit_header() + '\n' + strip_includes(module()),
         })
         self.assertIn('pickups scenarios passed', out)
 

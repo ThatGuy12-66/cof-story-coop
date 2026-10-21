@@ -208,8 +208,19 @@ class FriendSetupTests(unittest.TestCase):
 
     def test_controls_bind_the_coop_keys(self):
         controls = friend.default_controls()
-        for line in ('bind "j" "cof_warp"', 'bind "h" "cof_companion_order"', 'bind "ENTER" "cof_skip"'):
+        for line in ('bind "j" "cof_warp"', 'bind "h" "cof_companion_order"', 'bind "ENTER" "cof_skip"',
+                     'bind "o" "cof_wardrobe"'):
             self.assertIn(line, controls)
+
+    def test_the_wardrobe_key_is_one_the_controls_leave_free(self):
+        # after 1.1.9: O opens the wardrobe; K (the candidate) is the voice key, and no other key had O
+        binds = re.findall(r'bind "([^"]+)" "([^"]+)"', friend.default_controls())
+        self.assertEqual([key for key, command in binds if command == "cof_wardrobe"], ["o"])
+        self.assertEqual([command for key, command in binds if key == "o"], ["cof_wardrobe"])
+        self.assertIn(("k", "+voicerecord"), binds)
+        self.assertEqual(len({key for key, _ in binds}), len(binds))
+        self.assertIn(("o", "cof_wardrobe"), friend.COOP_KEYS)
+        self.assertIn(("cof_wardrobe", "Wardrobe (costumes)"), friend.COOP_ACTIONS)
 
     def test_each_game_keeps_the_previous_log(self):
         # The engine opens -log files with "w+": without moving the last one aside,
@@ -833,6 +844,24 @@ KB_DEF = b'"w"\t\t"+forward"\r\n"h"\t\t"+hint"\r\n// a comment\r\n\r\nSPACE +jum
 KB_ACT = b'"blank"\t\t"Movement"\r\n"+forward"\t\t"Move forward"\r\n"cof_skip"\t\t"Skip"'
 
 
+class MissingCoopBindTests(unittest.TestCase):
+    def test_only_unbound_coop_keys_are_bound_for_the_session(self):
+        # 1.1.10: a copy set up before O existed keeps its config.cfg; a key bound to anything else stays the player's
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(friend.missing_coop_binds(root), "")   # no config yet: the game's defaults apply
+            (root / "cryoffear").mkdir()
+            (root / "cryoffear/config.cfg").write_text('bind "j" "cof_warp"\nbind "H" "cof_companion_order"\n'
+                                                       'bind ENTER cof_skip\nbind "KP_ENTER" "cof_skip"\n'
+                                                       'name "Bob"\n', encoding="ascii")
+            self.assertEqual(friend.missing_coop_binds(root), 'bind "o" "cof_wardrobe"\n')
+            (root / "cryoffear/config.cfg").write_text('bind "o" "+voicerecord"\nbind "j" "cof_warp"\n',
+                                                       encoding="ascii")
+            missing = friend.missing_coop_binds(root)
+            self.assertNotIn('"o"', missing)
+            self.assertIn('bind "h" "cof_companion_order"', missing)
+
+
 class CoopKeyListTests(unittest.TestCase):
     """1.1.8 (L6): Options > Keybinds > Use defaults binds kb_def.lst, which had no J, H or Enter."""
 
@@ -849,11 +878,13 @@ class CoopKeyListTests(unittest.TestCase):
             notes = []
             friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
             kb_def, kb_act = (shell / "kb_def.lst").read_bytes(), (shell / "kb_act.lst").read_bytes()
-            # j, ENTER and KP_ENTER added; h keeps the list's own command
-            self.assertEqual(kb_def, KB_DEF + b'"j"\t\t"cof_warp"\r\n"ENTER"\t\t"cof_skip"\r\n"KP_ENTER"\t\t"cof_skip"\r\n')
+            # j, ENTER, KP_ENTER and o added; h keeps the list's own command
+            self.assertEqual(kb_def, KB_DEF + b'"j"\t\t"cof_warp"\r\n"ENTER"\t\t"cof_skip"\r\n"KP_ENTER"\t\t"cof_skip"\r\n'
+                                              b'"o"\t\t"cof_wardrobe"\r\n')
             # cof_skip is in the menu already; the file had no last line ending
             self.assertEqual(kb_act, KB_ACT + b'\r\n"cof_warp"\t\t"Join your partner (co-op)"\r\n'
-                                              b'"cof_companion_order"\t\t"AI companions: wait or follow"\r\n')
+                                              b'"cof_companion_order"\t\t"AI companions: wait or follow"\r\n'
+                                              b'"cof_wardrobe"\t\t"Wardrobe (costumes)"\r\n')
             self.assertEqual(len(notes), 2)
             friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
             self.assertEqual(((shell / "kb_def.lst").read_bytes(), (shell / "kb_act.lst").read_bytes()), (kb_def, kb_act))

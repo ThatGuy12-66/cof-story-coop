@@ -81,11 +81,82 @@ static void Table( const cof_bonus_line_t *table, int count )
 	}
 }
 
+/* After 1.1.9: the engine's own reading of a bit is the game's (Read above) on every line of both tables */
+static void SameReading( const unsigned char *text, size_t size )
+{
+	int i;
+	for( i = 0; i < COF_BONUS_LINES; i++ )
+		assert( CoF_BonusUnlocked( text, size, &cof_bonus_lines[i] ) == ( Read( text, size, cof_bonus_lines[i].line, cof_bonus_lines[i].locked, cof_bonus_lines[i].unlocked ) == 1 ));
+	for( i = 0; i < COF_COSTUME_LINES; i++ )
+		assert( CoF_BonusUnlocked( text, size, &cof_costume_lines[i] ) == ( Read( text, size, cof_costume_lines[i].line, cof_costume_lines[i].locked, cof_costume_lines[i].unlocked ) == 1 ));
+}
+
+/* the bonus kit's checks and the wardrobe key (cof_wardrobe) */
+static void KitAndWardrobe( void )
+{
+	unsigned char synth[4096], message[COF_WARDROBE_MESSAGE];
+	size_t length;
+	unsigned int flags;
+	int any = -1, i;
+	static const unsigned char odd[] = "\n\n-\n-\nz3,4rj)4b!9g7vgi4x5a\n"; /* line 3 (ending 5) unlocked: the door opens */
+	/* the door opens on any ending; a file of nothing but locked lines or no file at all keeps it shut */
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 1, 1 );
+	assert( CoF_BonusDoorOpen( synth, length )); SameReading( synth, length );
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 0, 0 );
+	assert( !CoF_BonusDoorOpen( synth, length )); SameReading( synth, length );
+	assert( !CoF_BonusDoorOpen( NULL, 0 ) && !CoF_BonusUnlocked( NULL, 0, &cof_bonus_lines[0] ) && !CoF_BonusUnlocked( synth, length, NULL ));
+	assert( CoF_BonusDoorOpen( odd, sizeof( odd ) - 1 )); SameReading( odd, sizeof( odd ) - 1 );
+	/* a line holding both texts reads locked, as the game reads it; the terminator ends the file */
+	{
+		unsigned char both[256];
+		int n = snprintf( (char *)both, sizeof( both ), "-\n-\n%s %s\n", cof_bonus_lines[4].unlocked, cof_bonus_lines[4].locked );
+		assert( !CoF_BonusUnlocked( both, (size_t)n, &cof_bonus_lines[4] )); SameReading( both, (size_t)n );
+		n = snprintf( (char *)both, sizeof( both ), "-\n-%c\n%s\n", 0, cof_bonus_lines[4].unlocked );
+		assert( !CoF_BonusUnlocked( both, (size_t)n, &cof_bonus_lines[4] )); SameReading( both, (size_t)n );
+	}
+	/* one ending: the door opens, the room's own items keep their own lines */
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 0, 0 );
+	CoF_BonusRewriteTable( synth, length, &cof_bonus_lines[1], 1, 1 );
+	assert( CoF_BonusDoorOpen( synth, length ) && !CoF_BonusUnlocked( synth, length, CoF_BonusLine( 39 ))); SameReading( synth, length );
+
+	/* the wardrobe's outfits: bit k for line 51 + k, canseeclothes when any is open (CCoFClothesMenu::Use) */
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 0, 1 );
+	assert( CoF_WardrobeFlags( synth, length, &any ) == 0xFFF && any == 1 );
+	length = CoF_BonusSynthesize( synth, sizeof( synth ), 1, 0 );
+	assert( CoF_WardrobeFlags( synth, length, &any ) == 0 && any == 0 );
+	CoF_BonusRewriteTable( synth, length, &cof_costume_lines[2], 1, 1 );   /* the Hello Kitty suit */
+	CoF_BonusRewriteTable( synth, length, &cof_costume_lines[11], 1, 1 );  /* the custom hoodie */
+	flags = CoF_WardrobeFlags( synth, length, &any );
+	assert( flags == ( 4u | 0x800u ) && any == 1 && CoF_WardrobeFlags( synth, length, NULL ) == flags );
+	for( i = 0; i < COF_COSTUME_LINES; i++ )
+		assert( !!( flags & ( 1u << i )) == ( Read( synth, length, cof_costume_lines[i].line, cof_costume_lines[i].locked, cof_costume_lines[i].unlocked ) == 1 ));
+	/* the message: LONG (little-endian, as WRITE_LONG) the outfits, BYTE canseeclothes, BYTE the outfit worn, BYTE 1 */
+	memset( message, 0xAA, sizeof( message ));
+	CoF_WardrobeMessage( message, 0x804u, 1, 3 );
+	assert( COF_WARDROBE_MESSAGE == 7 );
+	assert( message[0] == 0x04 && message[1] == 0x08 && message[2] == 0 && message[3] == 0 && message[4] == 1 && message[5] == 3 && message[6] == 1 );
+	CoF_WardrobeMessage( message, 0x12345678u, 0, 12 );
+	assert( message[0] == 0x78 && message[1] == 0x56 && message[2] == 0x34 && message[3] == 0x12 && message[4] == 0 && message[5] == 12 && message[6] == 1 );
+	/* cof_wardrobe's answer: open only with the room open, alive, free; a second press within the wait: nothing */
+	assert( CoF_WardrobeAnswer( 1, 1, 0, 0, 0, 0, 0 ) == COF_WARDROBE_OPEN );
+	assert( CoF_WardrobeAnswer( 0, 1, 0, 0, 0, 0, 0 ) == COF_WARDROBE_SHUT );
+	assert( CoF_WardrobeAnswer( 1, 0, 0, 0, 0, 0, 0 ) == COF_WARDROBE_DEAD );
+	assert( CoF_WardrobeAnswer( 1, 1, 1, 0, 0, 0, 0 ) == COF_WARDROBE_SCENE && CoF_WardrobeAnswer( 1, 1, 0, 1, 0, 0, 0 ) == COF_WARDROBE_SCENE );
+	assert( CoF_WardrobeAnswer( 1, 1, 0, 0, 1, 0, 0 ) == COF_WARDROBE_LADDER );
+	assert( CoF_WardrobeAnswer( 1, 1, 0, 0, 0, 1, 0 ) == COF_WARDROBE_BOAT );
+	assert( CoF_WardrobeAnswer( 1, 1, 0, 0, 0, 0, 1 ) == COF_WARDROBE_SOON && CoF_WardrobeAnswer( 0, 0, 1, 1, 1, 1, 1 ) == COF_WARDROBE_SOON );
+	assert( CoF_WardrobeAnswer( 0, 0, 1, 1, 1, 1, 0 ) == COF_WARDROBE_SHUT && CoF_WardrobeAnswer( 1, 0, 1, 1, 1, 1, 0 ) == COF_WARDROBE_DEAD );
+	/* the Close of the key's menu goes no further, unless its sender uses the real wardrobe's running camera now */
+	assert( CoF_WardrobeKeepsClose( 1, 0 ) && !CoF_WardrobeKeepsClose( 1, 1 ) && !CoF_WardrobeKeepsClose( 0, 0 ) && !CoF_WardrobeKeepsClose( 0, 1 ));
+}
+
 int main( void )
 {
 	unsigned char *real, *before, synth[4096];
 	size_t size, length;
 	int i;
+
+	KitAndWardrobe();
 
 	Table( cof_bonus_lines, COF_BONUS_LINES );
 	Table( cof_costume_lines, COF_COSTUME_LINES );
@@ -113,7 +184,9 @@ int main( void )
 	{
 		before = malloc( size ); memcpy( before, real, size );
 		assert( All( real, size, cof_bonus_lines, COF_BONUS_LINES, 0 ) && All( real, size, cof_costume_lines, COF_COSTUME_LINES, 0 ));
+		SameReading( real, size ); assert( !CoF_BonusDoorOpen( real, size ) && CoF_WardrobeFlags( real, size, NULL ) == 0 );
 		assert( CoF_BonusRewrite( real, size, 1 ) == COF_BONUS_LINES && All( real, size, cof_bonus_lines, COF_BONUS_LINES, 1 ));
+		SameReading( real, size ); assert( CoF_BonusDoorOpen( real, size ));
 		Untouched( before, real, size, cof_bonus_lines, COF_BONUS_LINES );
 		assert( CoF_BonusRewrite( real, size, 0 ) == COF_BONUS_LINES && !memcmp( before, real, size ));
 		assert( CoF_BonusRewrite( real, size, 0 ) == 0 ); /* already so */
@@ -129,7 +202,9 @@ int main( void )
 	{
 		before = malloc( size ); memcpy( before, real, size );
 		assert( All( real, size, cof_bonus_lines, COF_BONUS_LINES, 1 ));
+		SameReading( real, size ); assert( CoF_BonusDoorOpen( real, size ));
 		assert( CoF_BonusRewrite( real, size, 0 ) == COF_BONUS_LINES && All( real, size, cof_bonus_lines, COF_BONUS_LINES, 0 ));
+		SameReading( real, size ); assert( !CoF_BonusDoorOpen( real, size ));
 		Untouched( before, real, size, cof_bonus_lines, COF_BONUS_LINES );
 		free( before ); free( real );
 		puts( "unlocked file checked" );

@@ -484,11 +484,141 @@ static void switched_off_and_failures( void )
 	assert( !logged( "pickup-taken" ));
 }
 
+/* After 1.1.9: the bonus room's items a chapter start lays out (sv_cof_bonus_kit.h). No block of the map's text: the
+ * bonus mark tells them, the ledger keeps them as blocks COF_PICKUP_BONUS_BLOCK + the kit's item. */
+static int bonus_copy_of( const char *classname )
+{
+	int e, found = 0;
+	for( e = svs.maxclients + 1; e < svgame.numEntities; e++ )
+		if( !entities[e].free && !( entities[e].v.flags & FL_KILLME ) && !strcmp( SV_GetString( entities[e].v.classname ), classname ) &&
+			( entities[e].v.spawnflags & COF_PICKUP_COPY_FLAG ) && ( entities[e].v.spawnflags & COF_PICKUP_BONUS_FLAG ))
+			found = e;
+	return found;
+}
+
+static void the_bonus_kit( void )
+{
+	static const float famas_at[3] = { 400, 0, 0 }, nv_at[3] = { 440, 0, 0 }, mp5_at[3] = { 480, 0, 0 }, angles[3] = { 0, 56, 0 };
+	edict_t *famas, *nv, *mp5, *made;
+	int f, n, copy, e;
+	setup();
+	/* the chapter start lays the kit out (the map's own FAMAS lies at the very same spot: each keeps its own) */
+	famas = SV_CoF_PickupsSpawnBonus( 0, famas_at, angles, false );
+	nv = SV_CoF_PickupsSpawnBonus( 4, nv_at, angles, false );
+	mp5 = SV_CoF_PickupsSpawnBonus( 5, mp5_at, angles, false );
+	assert( famas && nv && mp5 && !SV_CoF_PickupsSpawnBonus( 6, famas_at, angles, false ) && !SV_CoF_PickupsSpawnBonus( -1, famas_at, angles, false ));
+	f = NUM_FOR_EDICT( famas ); n = NUM_FOR_EDICT( nv );
+	assert( famas->v.spawnflags == COF_PICKUP_BONUS_FLAG && !strcmp( keys_seen[f], "rendercolor=0 0 0;frags=-1;" ) && famas->v.frags == -1.0f );
+	assert( famas->v.origin[0] == 400.0f && famas->v.angles[1] == 56.0f && !strcmp( keys_seen[n], "frags=-1;" ));
+	/* the room's camera keeps its unlock check (spawnflags 1), with the mark */
+	made = SV_CoF_PickupsSpawnBonus( 3, mp5_at, angles, true );
+	assert( made && made->v.spawnflags == ( 1 | COF_PICKUP_BONUS_FLAG | COF_PICKUP_COPY_FLAG ));
+	SV_FreeEdict( made );
+	frame();
+	assert( logged( "phase=pickups map=c_test found=8 lying=8 copies=0 waiting=0 none=0 skipped=0 ledger=0 bonus=3" ) == 1 );
+	assert( sees( host(), f ) && sees( guest(), f ) && !refused( host(), f ) && refused( bot(), f ));
+	assert( !refused( host(), FAMAS ) && refused( bot(), FAMAS )); /* the map's own FAMAS is still its block's */
+
+	/* the host takes the kit's FAMAS: the guest's copy, with the kit's keys and both marks, where it lay */
+	taken_as_gun( f, host());
+	command( 0 );
+	frame();
+	assert( logged( "phase=pickup-taken userid=11 class=weapon_famas block=65536 companion=0 takers=1" ) == 1 );
+	copy = bonus_copy_of( "weapon_famas" );
+	assert( copy && copy != f && copy != FAMAS && !strcmp( keys_seen[copy], "rendercolor=0 0 0;frags=-1;" ));
+	assert( entities[copy].v.spawnflags == ( COF_PICKUP_BONUS_FLAG | COF_PICKUP_COPY_FLAG ) && entities[copy].v.origin[0] == 400.0f );
+	assert( !sees( host(), copy ) && sees( guest(), copy ) && refused( host(), copy ) && !refused( guest(), copy ) && refused( bot(), copy ));
+
+	/* the night vision: a CItem taken with +use (or by touch with +use pressed) and removed at once: a take */
+	removed( n );
+	command( 1 );
+	frame();
+	assert( logged( "phase=pickup-taken userid=12 class=item_nightvision block=65540 companion=0 takers=1" ) == 1 );
+	e = bonus_copy_of( "item_nightvision" );
+	assert( e && sees( host(), e ) && !sees( guest(), e ) && refused( guest(), e ) && !refused( host(), e ) && !strcmp( keys_seen[e], "frags=-1;" ));
+	SV_FreeEdict( &entities[n] );
+	removed( e );
+	command( 0 );
+	frame();
+	SV_FreeEdict( &entities[e] );
+	frame();
+	assert( !bonus_copy_of( "item_nightvision" )); /* everyone here has one */
+	/* the MP5 removes itself in the host's first update (no donator level 2-4): gone for good, no copy */
+	removed( NUM_FOR_EDICT( mp5 ));
+	command( 0 );
+	frame();
+	assert( logged( "phase=pickup-gone class=weapon_mp5 block=65541 reason=removed" ) == 1 && !bonus_copy_of( "weapon_mp5" ));
+
+	/* a late joiner: theirs of each, hidden from those who took one */
+	player( 3, "Late", 14, 0 );
+	frame();
+	e = bonus_copy_of( "item_nightvision" );
+	assert( e && sees( &entities[4], e ) && !sees( host(), e ) && !sees( guest(), e ));
+	assert( logged( "phase=pickup-copy class=weapon_famas block=65536" ) == 1 ); /* the guest's FAMAS still lies */
+	clients[3].state = 0;
+	SV_CoF_PickupsCheckpointSaved( "autosave" );
+
+	/* a revisit: the snapshot holds the guest's FAMAS copy and the late joiner's night vision, both marked */
+	load_map();
+	place( 20, "weapon_famas", famas_at )->v.spawnflags = COF_PICKUP_BONUS_FLAG | COF_PICKUP_COPY_FLAG;
+	place( 21, "item_nightvision", nv_at )->v.spawnflags = COF_PICKUP_BONUS_FLAG | COF_PICKUP_COPY_FLAG;
+	frame();
+	assert( logged( "phase=pickups map=c_test found=7 lying=7 copies=2 waiting=0" ) == 1 && logged( "bonus=2\n" ) == 1 );
+	assert( !sees( host(), 20 ) && sees( guest(), 20 ) && !sees( host(), 21 ) && !sees( guest(), 21 ) && refused( guest(), 21 ));
+	/* the guest takes theirs; a team wipe reloads the checkpoint: that take is undone, the copy the guest's again */
+	taken_as_gun( 20, guest());
+	command( 1 );
+	frame();
+	assert( logged( "class=weapon_famas block=65536 companion=0 takers=2" ) == 1 );
+	SV_CoF_PickupsCheckpointLoaded( "autosave" );
+	load_map();
+	place( 20, "weapon_famas", famas_at )->v.spawnflags = COF_PICKUP_BONUS_FLAG | COF_PICKUP_COPY_FLAG;
+	frame();
+	assert( !sees( host(), 20 ) && sees( guest(), 20 ) && !refused( guest(), 20 ));
+	/* everyone took the FAMAS, nothing lies: the next visit makes none, the ledger still knows the kit's FAMAS */
+	taken_as_gun( 20, guest());
+	command( 1 );
+	frame();
+	load_map();
+	frame();
+	assert( !bonus_copy_of( "weapon_famas" ) && logged( "found=7 lying=5 copies=0 waiting=2 none=0" ) == 1 );
+	player( 3, "Late", 14, 0 );
+	frame();
+	e = bonus_copy_of( "weapon_famas" );
+	assert( e && sees( &entities[4], e ) && !sees( host(), e ) && !sees( guest(), e ) && !strcmp( keys_seen[e], "rendercolor=0 0 0;frags=-1;" ));
+	clients[3].state = 0;
+	/* Continue after a restart: the ledger forgets, a copy lying is anyone's */
+	SV_CoF_PickupsCheckpointLoaded( "other" );
+	load_map();
+	place( 22, "weapon_famas", famas_at )->v.spawnflags = COF_PICKUP_BONUS_FLAG | COF_PICKUP_COPY_FLAG;
+	frame();
+	assert( sees( host(), 22 ) && !refused( host(), 22 ) && refused( bot(), 22 ));
+	/* nothing marked lying and nothing in the ledger: no slot for the kit at all (a map no chapter started on) */
+	SV_CoF_PickupsReset();
+	load_map();
+	frame();
+	assert( logged( "ledger=0 bonus=0" ) >= 1 );
+
+	/* a kit laid out with the pickups off (a set each), the pickups on again: the first of each is the slot, the
+	 * others ordinary pickups the AI companion is not kept from */
+	setup();
+	cof_coop_pickups.value = 0.0f;
+	famas = SV_CoF_PickupsSpawnBonus( 0, famas_at, angles, false );
+	made = SV_CoF_PickupsSpawnBonus( 0, nv_at, angles, false );
+	frame();
+	assert( !refused( bot(), NUM_FOR_EDICT( famas )) && !refused( bot(), NUM_FOR_EDICT( made )));
+	cof_coop_pickups.value = 1.0f;
+	frame();
+	assert( refused( bot(), NUM_FOR_EDICT( famas )) && !refused( bot(), NUM_FOR_EDICT( made )));
+	assert( logged( "bonus=1\n" ) == 1 );
+}
+
 int main( void )
 {
 	a_fresh_map();
 	a_revisit_and_checkpoints();
 	switched_off_and_failures();
+	the_bonus_kit();
 	printf( "pickups scenarios passed\n" );
 	return 0;
 }

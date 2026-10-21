@@ -414,16 +414,19 @@ def default_controls() -> str:
              "TAB": "+inventory", "b": "+objectives", "f": "flashlight", "z": "weapontoggle",
              "MOUSE1": "+attack", "MOUSE2": "+attack3", "MOUSE3": "+attack2", "ESCAPE": "cancelselect",
              "1": "quicksel 1", "2": "quicksel 2", "3": "quicksel 3", "y": "messagemode", "k": "+voicerecord",
-             "j": "cof_warp", "h": "cof_companion_order", "ENTER": "cof_skip", "KP_ENTER": "cof_skip"}
+             "j": "cof_warp", "h": "cof_companion_order", "ENTER": "cof_skip", "KP_ENTER": "cof_skip",
+             "o": "cof_wardrobe"}
     return "\n".join(f'bind "{key}" "{value}"' for key, value in binds.items()) + "\n"
 
 
 # 1.1.8 (L6): the co-op keys of default_controls, also in the game's default key list (Options > Keybinds > Use
 # defaults binds kb_def.lst, which had none of them, so J, the way out of every strand, was lost) and in its list of
 # actions (kb_act.lst: the Keybinds menu shows and rebinds only those).
-COOP_KEYS = (("j", "cof_warp"), ("h", "cof_companion_order"), ("ENTER", "cof_skip"), ("KP_ENTER", "cof_skip"))
+# After 1.1.9: O opens the wardrobe (cof_wardrobe) anywhere while the bonus room is open; K stays the voice key.
+COOP_KEYS = (("j", "cof_warp"), ("h", "cof_companion_order"), ("ENTER", "cof_skip"), ("KP_ENTER", "cof_skip"),
+             ("o", "cof_wardrobe"))
 COOP_ACTIONS = (("cof_warp", "Join your partner (co-op)"), ("cof_companion_order", "AI companions: wait or follow"),
-                ("cof_skip", "Skip a cutscene for everyone"))
+                ("cof_skip", "Skip a cutscene for everyone"), ("cof_wardrobe", "Wardrobe (costumes)"))
 _KEY_LIST_TOKEN = r'(?:"[^"\r\n]*"|[^\s"]+)'
 _KEY_LIST_LINE = re.compile(rf'\s*(?://.*)?|\s*({_KEY_LIST_TOKEN})\s+({_KEY_LIST_TOKEN})\s*(?://.*)?')
 
@@ -453,8 +456,23 @@ def _add_key_list_lines(path: Path, pairs, taken) -> int:
     return len(added)
 
 
+_BOUND_KEY = re.compile(r'^\s*bind\s+"?([^"\s]+)"?', re.I | re.M)
+
+
+def missing_coop_binds(root: Path) -> str:
+    """Bind lines for the co-op keys the player's config.cfg leaves unbound, for the session cfg (1.1.10): a copy set
+    up before a key was added (O, the wardrobe) keeps its config.cfg through updates, so the key would do nothing
+    until Options > Keybinds > Use defaults. A key the player bound to anything else is left alone."""
+    try:
+        text = (Path(root) / "cryoffear/config.cfg").read_bytes().decode("latin-1")
+    except OSError:
+        return ""
+    bound = {key.lower() for key in _BOUND_KEY.findall(text)}
+    return "".join(f'bind "{key}" "{command}"\n' for key, command in COOP_KEYS if key.lower() not in bound)
+
+
 def add_coop_keys(root: Path, steps=None) -> None:
-    """J, H and Enter in the copy's default key list and the co-op commands in its list of actions (setup and
+    """J, H, Enter and O in the copy's default key list and the co-op commands in its list of actions (setup and
     update; the files come from the game or the engine payload, and an update may have put the plain ones back).
     A key the list already gives another command keeps it; the player's own binds (config.cfg) are not touched."""
     steps = steps or Steps(())
