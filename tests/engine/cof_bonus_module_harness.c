@@ -69,7 +69,7 @@ static char strings[64][64];
 static int string_count = 1;
 static char log_text[32768], argv0[64];
 static size_t log_length;
-static int gate = 1, pickups = 1, merged, outfit = 5, boat[MAX_CLIENTS], attached[MAX_CLIENTS], camera_holds[MAX_CLIENTS], wardrobe_user = -1;
+static int h_gate = 1, pickups = 1, merged, h_outfit = 5, h_boat[MAX_CLIENTS], attached[MAX_CLIENTS], camera_holds[MAX_CLIENTS], wardrobe_user = -1;
 static convar_t *bonus_cvar, *costume_cvar;
 static convar_t cvars[2];
 static unsigned char file_text[4096];
@@ -111,7 +111,7 @@ static byte *COM_LoadFileForMe( const char *name, int *length )
 	return data;
 }
 static void COM_FreeFile( void *data ) { if( data ) { free( data ); files_open--; } }
-static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
+static qboolean SV_CoF_StoryCoopEnabled( void ) { return h_gate; }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= entities && e < entities + ENTITIES && !e->free; }
 static edict_t *SV_EdictNum( int i ) { return i >= 0 && i < ENTITIES ? &entities[i] : NULL; }
 static int NUM_FOR_EDICT( const edict_t *e ) { return (int)( e - entities ); }
@@ -204,8 +204,8 @@ static edict_t *SV_CoF_PickupsSpawnBonus( int item, const float *origin, const f
 }
 static qboolean SV_CoF_RetailCameraHolds( sv_client_t *cl ) { return camera_holds[cl - clients]; }
 static qboolean SV_CoF_RetailAttachedCamera( sv_client_t *cl ) { return attached[cl - clients]; }
-static qboolean SV_CoF_RetailInBoat( sv_client_t *cl ) { return boat[cl - clients]; }
-static int SV_CoF_RetailOutfit( sv_client_t *cl ) { (void)cl; return outfit; }
+static qboolean SV_CoF_RetailInBoat( sv_client_t *cl ) { return h_boat[cl - clients]; }
+static int SV_CoF_RetailOutfit( sv_client_t *cl ) { (void)cl; return h_outfit; }
 static char profont[256];
 static int profonts;
 static qboolean SV_CoF_RetailProFont( sv_client_t *cl, int colour, const char *text, qboolean reliable )
@@ -264,7 +264,7 @@ static void setup( void )
 	for( i = 0; i < ENTITIES; i++ ) entities[i].free = 1;
 	entities[0].free = 0;
 	memset( clients, 0, sizeof( clients ));
-	memset( boat, 0, sizeof( boat )); memset( attached, 0, sizeof( attached )); memset( camera_holds, 0, sizeof( camera_holds ));
+	memset( h_boat, 0, sizeof( h_boat )); memset( attached, 0, sizeof( attached )); memset( camera_holds, 0, sizeof( camera_holds ));
 	memset( spawned, 0, sizeof( spawned )); nspawned = spawn_fails = 0;
 	log_text[0] = 0; log_length = 0; profont[0] = 0; profonts = sends = 0; send_ok = 1; sent_to = NULL;
 	files_open = 0; /* a file the switch makes (none in the game folder) is freed too: counted from here */
@@ -272,7 +272,7 @@ static void setup( void )
 	svs.maxclients = 4; svs.clients = clients; svs.spawncount++;
 	svgame.numEntities = svs.maxclients + 1;
 	sv.state = ss_active; sv.time = 10.0; strcpy( sv.name, "cm_basement" );
-	gate = 1; pickups = 1; merged = 0; outfit = 5; wardrobe_user = -1;
+	h_gate = 1; pickups = 1; merged = 0; h_outfit = 5; wardrobe_user = -1;
 	SV_CoF_BonusInit();
 	bonus_cvar = &cvars[0]; costume_cvar = &cvars[1];
 	bonus_cvar->value = 1.0f; costume_cvar->value = 1.0f; /* the app writes cof_bonus_room 1 with the room ticked */
@@ -361,7 +361,7 @@ static void kit_decided_by_the_room( void )
 	setup(); SV_CoF_BonusKitChapterStart( "c_bridge" ); SV_CoF_BonusKitChapterStart( "c_start" ); SV_CoF_BonusKitChapterStart( "c_nightmare" );
 	assert( !nspawned && logged( "result=own-room" ) == 3 );
 	/* not story co-op, or no chapter: nothing, not a line */
-	setup(); gate = 0; SV_CoF_BonusKitChapterStart( "c_basement" ); gate = 1; SV_CoF_BonusKitChapterStart( "" );
+	setup(); h_gate = 0; SV_CoF_BonusKitChapterStart( "c_basement" ); h_gate = 1; SV_CoF_BonusKitChapterStart( "" );
 	assert( !nspawned && !log_length );
 	/* no info_player_start */
 	setup(); entities[10].free = 1;
@@ -440,7 +440,7 @@ static void the_wardrobe_key( void )
 	wardrobe( host, "cof_warp", false );
 
 	/* outfits as the file says (cof_costumes -1, nothing unlocked): none, canseeclothes 0 */
-	sv.time += 2.0; costume_cvar->value = -1.0f; outfit = 0;
+	sv.time += 2.0; costume_cvar->value = -1.0f; h_outfit = 0;
 	wardrobe( host, "cof_wardrobe", true );
 	assert( sends == 5 && sent[0] == 0 && sent[1] == 0 && sent[4] == 0 && sent[5] == 0 && sent[6] == 1 );
 	costume_cvar->value = 1.0f;
@@ -460,7 +460,7 @@ static void the_wardrobe_key( void )
 	sv.time += 2.0; host->edict->v.flags = FL_FROZEN; wardrobe( host, "cof_wardrobe", true ); host->edict->v.flags = 0;
 	assert( logged( "reason=scene" ) == 4 && profonts == 4 && !strcmp( profont, "The wardrobe cannot be opened right now." ));
 	sv.time += 2.0; host->edict->v.movetype = MOVETYPE_FLY; wardrobe( host, "cof_wardrobe", true ); host->edict->v.movetype = MOVETYPE_WALK;
-	sv.time += 2.0; boat[0] = 1; wardrobe( host, "cof_wardrobe", true ); boat[0] = 0;
+	sv.time += 2.0; h_boat[0] = 1; wardrobe( host, "cof_wardrobe", true ); h_boat[0] = 0;
 	assert( logged( "reason=ladder" ) == 1 && logged( "reason=boat" ) == 1 );
 	sv.time += 2.0; bonus_cvar->value = 0.0f; wardrobe( host, "cof_wardrobe", true ); bonus_cvar->value = 1.0f;
 	assert( logged( "reason=shut" ) == 1 && strstr( profont, "bonus room is shut" ));
@@ -481,7 +481,7 @@ static void the_wardrobe_key( void )
 	guest->userid = 99;
 	wardrobe( guest, "closeclothes", false );
 	/* not story co-op, or no map running: the commands are not ours */
-	gate = 0; wardrobe( host, "cof_wardrobe", false ); gate = 1;
+	h_gate = 0; wardrobe( host, "cof_wardrobe", false ); h_gate = 1;
 	sv.state = 1; wardrobe( host, "cof_wardrobe", false ); sv.state = ss_active;
 }
 
