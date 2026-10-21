@@ -1,6 +1,36 @@
-Cry of Fear Co-op 1.1.8
+Cry of Fear Co-op 1.1.9
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.1.9
+- Everyone gets their own weapons, ammo and medicine: when one player picks something up
+  that the level placed, the others can still pick up their own. Story items like keys
+  and fuses are shared as before.
+- Other players see your gas mask (the night vision mask) when you wear it. Setup and
+  Update make the mask model on your PC; if that game file is modded, only the mask is
+  left out.
+- Ladders: other players see you climbing instead of a floating pair of hands, and
+  climbing is smoother for players who join. Holding W when you grab a ladder works.
+- Other players move more smoothly: more updates, no jumping back when someone comes
+  into view, steadier running, and sprinting shows whatever you hold. AI companions
+  sprint to catch up.
+- On the c_lake boat the rower's body no longer stands on the shore.
+- Story: the Chapter 8 strangle goes to the player who turned the last valve, leaving
+  during the ending house scene no longer traps everyone, the intro logos show for
+  everyone, partners get out of the falling carriage in c_bridge, one-way teleports
+  bring partners along, and two exits in the apartment levels no longer strand the
+  party. Effects in merged levels stay with the players they are for.
+- The asylum puzzle, the broken phone, the asylum telephone and the max health change
+  now work for everyone.
+- Items: fuses are counted right in every case, a player who leaves holding the P345 or
+  sledgehammer no longer duplicates or loses it, and chapter starts keep their weapons
+  through an early checkpoint reload. Chapter 4 no longer needs the end of Chapter 3
+  replayed, and Ending 4 partners get weapons.
+- The app: setup works with a Steam folder reached through a link and refuses Program
+  Files and OneDrive, a router port left open by a crash is cleaned up, and a newer copy
+  tells you to use its shortcut.
+- 1.1 to 1.1.9 can play together. Most fixes are in the host's game, so the host should
+  update; everyone should update to see the gas mask and get the smoother movement.
 
 WHAT'S NEW IN 1.1.8
 - A pass over the whole story for things that break with more than one player.
@@ -149,8 +179,9 @@ Delete the CoF-Story-Coop folder (%LOCALAPPDATA%\CoF-Story-Coop unless you chose
 another place) and the two "Cry of Fear Co-op" shortcuts.
 
 KNOWN ISSUES
-- At the college, the doors of the classroom where you find the screwdriver can keep
-  bringing you back into the same room. If it happens to you, please report it.
+- At the college, the doors of the classroom where you find the screwdriver once kept
+  bringing a player back into the same room (reported once, not seen since). If it happens
+  to you, please report it on Discord with your log: this version records what those doors did.
 
 REPORTING BUGS
 Join the Discord: https://discord.gg/4uwV6jmmY7 ("Report a bug" in the app opens it).
