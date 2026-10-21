@@ -460,7 +460,7 @@ _BOUND_KEY = re.compile(r'^\s*bind\s+"?([^"\s]+)"?', re.I | re.M)
 
 
 def missing_coop_binds(root: Path) -> str:
-    """Bind lines for the co-op keys the player's config.cfg leaves unbound, for the session cfg (1.1.10): a copy set
+    """Bind lines for the co-op keys the player's config.cfg leaves unbound, for the session cfg (1.2.0): a copy set
     up before a key was added (O, the wardrobe) keeps its config.cfg through updates, so the key would do nothing
     until Options > Keybinds > Use defaults. A key the player bound to anything else is left alone."""
     try:

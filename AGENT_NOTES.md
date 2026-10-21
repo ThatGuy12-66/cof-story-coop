@@ -969,7 +969,7 @@ The user, after 1.1.8 went up: "Now I want to do all polish items, get it workin
 - **Published 2026-10-21 ~09:26 PT** with `release.py build` (`--source "D:\Offload\CoF-evidence\tester-package-20261015\smoke-source\Cry of Fear"`, `COF_GASMASK_FILES` = `evidence/polish-20261021/models-for-fit`; full suite 691 OK, fresh install and the 1.1.8 -> 1.1.9 update check passed) then `release.py publish`: GitHub `v1.1.9` latest, `release.json` build 14. Zip `CC2EECBC…`, 111,285,446 bytes, MD5 `3F189223…`. Evidence `evidence/release-1.1.9/`.
 - **ModDB not added yet**: saving the file form (from the GitHub URL, preview as 1.1.7) was blocked twice by moddb.com's Cloudflare firewall ("submitting a certain word or phrase…", Ray IDs `a4e1a1eda9b8d254`, `a4e1a45a3ac2d254`); nothing was saved. The text was `evidence/release-1.1.9/moddb-text.txt` (with its two semicolons made periods on the second try). Left to the owner.
 
-## 1.1.10: the bonus room at every chapter start, the wardrobe key, the app's look (2026-10-21)
+## 1.2.0: the bonus room at every chapter start, the wardrobe key, the app's look (2026-10-21)
 
 The user: "How do we put the bonus room in each chapter so even if you start at a later chapter, you can still access it?" On the wardrobe: "the wardrobe is just a door." Then: "Yeah, do it. And then make the launcher also look better. Like, I want it to not look like so default."
 

@@ -569,7 +569,7 @@ class App:
                 if running:
                     raise ValueError("Cry of Fear is already running from this copy. Close it first.")
                 (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
-                # 1.1.10: a co-op key the player's own config leaves unbound (O in a copy set up before it) works
+                # 1.2.0: a co-op key the player's own config leaves unbound (O in a copy set up before it) works
                 (root / "cryoffear" / play.SESSION_CFG).write_text(config + setup_lib.missing_coop_binds(root),
                                                                    encoding="ascii")
                 setup_lib.keep_previous_log(root, play.LOG)

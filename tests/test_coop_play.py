@@ -180,8 +180,8 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.1.10 (the bonus kit) keep 1.1's version, so 1.1 to 1.1.10 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.1.10'))
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit) keep 1.1's version, so 1.1 to 1.2.0 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.2.0'))
         self.assertGreater(play.BUILD, 14)   # 1.1.9 was build 14: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):

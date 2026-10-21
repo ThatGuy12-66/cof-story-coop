@@ -1,8 +1,8 @@
-Cry of Fear Co-op 1.1.10
+Cry of Fear Co-op 1.2.0
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 
-WHAT'S NEW IN 1.1.10
+WHAT'S NEW IN 1.2.0
 - The bonus room's items at every chapter start: with "Bonus room unlocked" ticked, a
   chapter started from the list (one that can't reach a bonus room yet) starts with the
   FAMAS, axe, book laser, camera, night vision and the rest of the room's items on the
@@ -10,7 +10,7 @@ WHAT'S NEW IN 1.1.10
 - O opens the wardrobe anywhere while the bonus room is ticked, to change your outfit
   without going back to the room.
 - A new look for the app: dark, with the main choices as cards.
-- 1.1 to 1.1.10 can play together. The bonus weapons come from the host's game, so the
+- 1.1 to 1.2.0 can play together. The bonus weapons come from the host's game, so the
   host should update; everyone should update for O.
 
 WHAT'S NEW IN 1.1.9

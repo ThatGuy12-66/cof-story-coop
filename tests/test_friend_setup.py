@@ -846,7 +846,7 @@ KB_ACT = b'"blank"\t\t"Movement"\r\n"+forward"\t\t"Move forward"\r\n"cof_skip"\t
 
 class MissingCoopBindTests(unittest.TestCase):
     def test_only_unbound_coop_keys_are_bound_for_the_session(self):
-        # 1.1.10: a copy set up before O existed keeps its config.cfg; a key bound to anything else stays the player's
+        # 1.2.0: a copy set up before O existed keeps its config.cfg; a key bound to anything else stays the player's
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             self.assertEqual(friend.missing_coop_binds(root), "")   # no config yet: the game's defaults apply

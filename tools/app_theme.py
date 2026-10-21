@@ -1,4 +1,4 @@
-"""The app's look (1.1.10): a dark theme over ttk's clam, a header drawn on a canvas, cards for the main choices and
+"""The app's look (1.2.0): a dark theme over ttk's clam, a header drawn on a canvas, cards for the main choices and
 key caps for the co-op keys. Only Tk and fonts every Windows 10/11 PC has (Bahnschrift, Segoe UI, Consolas); other
 systems fall back to Tk's defaults. Nothing here decides anything: tools/coop_app.py builds the screens."""
 from __future__ import annotations
