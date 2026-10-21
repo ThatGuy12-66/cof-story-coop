@@ -392,9 +392,13 @@ static int CoF_SharePlan( cof_share_state_t *s, int slot, int free_slots, double
 	if( p->pending )
 	{
 		if( now < p->pending_until ) return COF_SHARE_NONE;
-		// Never confirmed: this item backs off and is reported once; the rest go on.
-		CoF_ShareBackoff( p, p->pending_name, now + COF_SHARE_RETRY );
-		if( CoF_ShareSetAdd( &p->stalled, p->pending_name, 0 )) CoF_ShareEvent( s, COF_SHARE_STALLED, slot, p->pending_name );
+		// Never confirmed: this item backs off and is reported once; the rest go on. One carried over a level
+		// change (pending_until -1, CoF_ShareNewMap) had its look: it is simply retried.
+		if( p->pending_until >= 0 )
+		{
+			CoF_ShareBackoff( p, p->pending_name, now + COF_SHARE_RETRY );
+			if( CoF_ShareSetAdd( &p->stalled, p->pending_name, 0 )) CoF_ShareEvent( s, COF_SHARE_STALLED, slot, p->pending_name );
+		}
 		p->pending = COF_SHARE_NONE;
 	}
 	for( i = 0; i < COF_SHARE_SLOTS; i++ ) // a second copy of one item
@@ -449,16 +453,19 @@ static void CoF_ShareIssued( cof_share_state_t *s, int slot, int action, const c
 }
 
 // A new map restarts the server clock, so timers from the previous map would
-// hold the queue for as long as that map took. Anything still in flight is
-// settled by the next look (a landed give reads as picked back up, a landed
-// take as used up), so it is simply forgotten.
+// hold the queue for as long as that map took. 1.1.8: a give or take issued in
+// the old map's last frame landed in the inventory the level change carries, and
+// the player's first look in the new map has not seen it yet. Forgotten, it read
+// as found or used up: harmless for a key (the party has it, or not), but a
+// fuse or ladder copy was added to or taken from the whole party. It stays in
+// flight until that look (the plan runs after it); one that did not land is then
+// retried at once (pending_until -1: no backoff, no stall report).
 static void CoF_ShareNewMap( cof_share_state_t *s )
 {
 	int i;
 	for( i = 0; i < COF_SHARE_PLAYERS; i++ )
 	{
-		s->players[i].pending = COF_SHARE_NONE;
-		s->players[i].pending_until = 0;
+		s->players[i].pending_until = -1;
 		memset( s->players[i].backoff, 0, sizeof( s->players[i].backoff ));
 	}
 }

@@ -157,6 +157,10 @@ void SV_CoF_ShareRecovered( sv_client_t *cl )
 	if( !CoF_ShareRead( cl, slots, &alive )) return;
 	cof_share.players[slot].userid = cl->userid;
 	cof_share.players[slot].alive = alive;
+	// 1.1.8: the restore replaced the whole inventory, so a give or take issued before it (a rejoiner served while
+	// a level change still held the restore back) can no longer land: left in flight, the next fuse picked up
+	// read as that give, and the plan then took it away again.
+	cof_share.players[slot].pending = COF_SHARE_NONE;
 	CoF_ShareStoryOnly( cof_share.players[slot].held, slots );
 	for( index = 0; index < COF_SHARE_PLAYERS; index++ )
 		if( !Q_stricmp( cof_share_saved.names[index], cl->name )) cof_share.players[slot].set_down = cof_share_saved.dropped[index];

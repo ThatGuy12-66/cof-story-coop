@@ -16,6 +16,8 @@
 #define COF_RETAIL_THREE_SLOTS 0x1E9C // bool m_bThreeSlots: only slots 1..3 usable
 #define COF_RETAIL_PLAYER_NEED ( COF_RETAIL_INVENTORY + ( COF_RETAIL_SLOTS + 1 ) * sizeof( string_t ))
 #define COF_RETAIL_CACHE       128
+#define COF_RETAIL_PRESSED     0x22B0 // int m_afButtonPressed: the buttons newly down in this PreThink (player.h order, docs/research/2026-10-12-companion-weapons-items-re.md)
+#define COF_RETAIL_PRESSED_USE ( 1 << 5 ) // IN_USE
 
 // Documents (docs/research/2026-09-30-hl-documents-story-state-re.md, project repo)
 #define COF_RETAIL_PLAYER_SIZE 0x281C // the whole CBasePlayer
@@ -242,8 +244,20 @@ qboolean SV_CoF_RetailInThreeSlots( sv_client_t *cl )
 qboolean SV_CoF_RetailGiveItem( sv_client_t *cl, const char *descriptor )
 {
 	const cof_retail_item_t *item = CoF_RetailItem( descriptor );
+	byte *player;
+	int pressed, press;
+	qboolean taken;
 	if( !item || !CoF_RetailPlayer( cl )) return false;
-	return SV_CoF_StoryGiveItemEx( cl, item->classname, descriptor );
+	// 1.1.8: the taclight and the phone battery are CItems (item_glocktaclight, item_phonebattery): their MyTouch
+	// takes the item only on a fresh +use press (m_afButtonPressed & IN_USE, items.cpp CGlockTacLight/CPhoneBattery),
+	// which a give never was, so a partner never got either. The press is made for the give and put back after it.
+	if( !( player = CoF_RetailStoryPlayer( cl ))) return SV_CoF_StoryGiveItemEx( cl, item->classname, descriptor );
+	memcpy( &pressed, player + COF_RETAIL_PRESSED, sizeof( pressed ));
+	press = pressed | COF_RETAIL_PRESSED_USE;
+	memcpy( player + COF_RETAIL_PRESSED, &press, sizeof( press ));
+	taken = SV_CoF_StoryGiveItemEx( cl, item->classname, descriptor );
+	if(( player = CoF_RetailStoryPlayer( cl )) != NULL ) memcpy( player + COF_RETAIL_PRESSED, &pressed, sizeof( pressed ));
+	return taken;
 }
 
 // The game's ClientCommand for the tokenized command, as this player even in a phone call or on the computer or
