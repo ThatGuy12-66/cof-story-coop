@@ -1,13 +1,17 @@
-Cry of Fear Co-op 1.1.3
+Cry of Fear Co-op 1.1.4
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 
+WHAT'S NEW IN 1.1.4
+- Fixes the graphics on AMD cards: the sky was drawn over the level, so you saw a grey
+  wall in front of you, walls in the sky and trees floating in front of buildings.
+  Cry of Fear's own graphics file keeps the sky behind the level, and on AMD cards the
+  game went around it.
+- 1.1, 1.1.1, 1.1.2, 1.1.3 and 1.1.4 can play together. The fix is in each player's
+  own game, so players with an AMD card should update.
+
 WHAT'S NEW IN 1.1.3
-- Fixes wrong textures on some graphics cards (reported on an AMD Radeon RX 5500): the
-  sky showing walls, or a grey wall drawn in front of you. On those cards the game and
-  the renderer gave textures the same numbers, so one overwrote the other.
-- 1.1, 1.1.1, 1.1.2 and 1.1.3 can play together. This fix is in each player's own
-  game, so whoever saw the problem should update.
+- A first try at the AMD graphics problem. 1.1.4 is the real fix.
 
 WHAT'S NEW IN 1.1.2
 - No more getting stuck blind. Some levels blur the screen for a while and clear it
@@ -32,7 +36,7 @@ WHAT'S NEW IN 1.1
   copied, the models and maps being made, and the time so far. The same lines are kept
   in cof-story-setup.log in the co-op copy.
 Coming from 1.0, 1.1 or 1.1.1? Run the new "CoF Story Co-op.exe" and click "Update".
-On 1.1.2 the app offers this update itself when it opens.
+On 1.1.2 or newer the app offers this update itself when it opens.
 
 YOU NEED
 - Windows 10 or 11, and Cry of Fear installed from Steam (it's free). Keep Steam running.
