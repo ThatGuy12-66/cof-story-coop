@@ -53,6 +53,18 @@ class ArrivalTests(unittest.TestCase):
         self.assertLess(check, source.index('if( svs.spawncount == last_spawncount )'))
         self.assertLess(check, source.index('if( !SV_CoF_ExitRequest( level, landname ))'))
 
+    def test_a_player_gone_while_loading_keeps_what_they_carried(self):
+        # a joiner who crashed loading c_sewer3 came back with only the shared starting weapons
+        drop = body_of(SERVER / 'sv_client.c', 'void SV_DropClient( sv_client_t *cl, qboolean crash )')
+        carried = drop.index('if( SV_CoF_ArrivalLoading( cl )) SV_CoF_RecoveryDropCarried( cl );')
+        self.assertLess(drop.index('SV_CoF_RecoveryDrop( cl );'), carried)
+        self.assertLess(carried, drop.index('SV_CoF_RecoveryDropDone( cl );'))
+        save = (SERVER / 'sv_save.c').read_text(encoding='latin-1')
+        assert_has(self, 'SV_CoF_ArrivalRestored( &svs.clients[slot] );', save)
+        recovery = body_of(SERVER / 'sv_cof_recovery.c', 'void SV_CoF_RecoveryDropCarried( sv_client_t *cl )')
+        assert_has(self, 'cl->state == cs_spawned', recovery)
+        assert_has(self, 'CoF_RecoveryCapture( cl, record )', recovery)
+
     def test_ready_and_frame_and_reset_are_wired(self):
         save = (SERVER / 'sv_save.c').read_text(encoding='latin-1')
         assert_has(self, 'SV_CoF_ArrivalReady( cof_transition.destination_origin );', save)

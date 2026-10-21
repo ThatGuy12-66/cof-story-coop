@@ -13,8 +13,14 @@ WHAT'S NEW IN 1.1.6
   step out first.
 - A player who was going through a door when the level changed is no longer stuck
   frozen and invisible in the next level.
-- 1.1 to 1.1.6 can play together. The fixes are in the host's game, so the host
-  should update.
+- Only the host can pause a co-op game. A guest's Backspace or Pause key used to
+  freeze everyone.
+- The save sounds play again. Setup left the game's sound/save folder out of every
+  copy; updating adds it back.
+- If your game crashes or times out while loading a level change, you get your items
+  back when you rejoin, instead of only the starting weapons.
+- 1.1 to 1.1.6 can play together. Most fixes are in the host's game, so the host
+  should update; the save sounds come back for everyone who updates.
 
 WHAT'S NEW IN 1.1.5
 - Fixes a crash for the player who joins: right after a level change, the joining

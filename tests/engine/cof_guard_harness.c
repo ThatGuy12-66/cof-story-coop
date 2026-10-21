@@ -24,6 +24,9 @@ int main( void )
 	refusal( "hinttoggle", 1, 0 );  // the host's server-wide hints
 	refusal( "say", 1, 0 );
 	refusal( "Vote", 1, 0 );        // the game compares case-sensitively: not its command
+	refusal( "pause", 1, 0 );       // a guest's Backspace froze the host's game
+	refusal( "pause", 1, 1 );       // the host pauses the party
+	refusal( "pause", 0, 0 );
 	scene( "unfreeze", "1024", 1 );  // a viewport reset's unfreeze while a camera holds the player
 	scene( "unfreeze", "1024", 0 );  // a panel closing (telephone, yes/no, save)
 	scene( "unfreeze", "512", 1 );   // the computer's own

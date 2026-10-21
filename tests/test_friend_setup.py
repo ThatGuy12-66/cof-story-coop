@@ -71,18 +71,39 @@ class FriendSetupTests(unittest.TestCase):
             files = {"cryoffear/maps/c_start.bsp": b"map", "cryoffear/maps/c_cof_city.cfg": b"campaign",
                      "cryoffear/skill.cfg": b"stock gameplay balance",
                      "cryoffear/Save/slot.sav": b"save", "cryoffear/config.cfg": b"private settings",
+                     "cryoffear/sound/save/save_yes.wav": b"the game's save sound", "SAVE/slot.hl1": b"save",
+                     "cryoffear/SAVE/cofcoop/latest.txt": b"save", "logs/today.txt": b"log",
                      "cryoffear/userconfig.cfg.cofcoop-backup-1": b"private password",
                      "cryoffear/maps/c_start.ent": b"fixture", "qconsole.log": b"private RCON",
                      "state/settings.json": b"secret", "cryoffear/models/player/cof_s2/cof_s2.mdl": b"old"}
             for rel, data in files.items():
                 path = source / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
             plan = friend.copy_plan(source)
-            self.assertEqual({rel.as_posix() for rel, _ in plan}, {"cryoffear/maps/c_start.bsp", "cryoffear/maps/c_cof_city.cfg", "cryoffear/skill.cfg"})
+            self.assertEqual({rel.as_posix() for rel, _ in plan}, {"cryoffear/maps/c_start.bsp", "cryoffear/maps/c_cof_city.cfg", "cryoffear/skill.cfg",
+                                                                 "cryoffear/sound/save/save_yes.wav"})
             friend.copy_assets(source, destination, plan)
             for rel, _ in plan:
                 self.assertEqual((destination / rel).read_bytes(), files[rel.as_posix()])
             for rel, data in files.items():
                 self.assertEqual((source / rel).read_bytes(), data)
+
+    def test_an_update_adds_the_save_sounds_an_older_setup_left_out(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source, root = Path(temp) / "retail", Path(temp) / "copy"
+            for rel, data in {"cryoffear/sound/save/save_yes.wav": b"yes", "cryoffear/sound/save/save_no.wav": b"no",
+                              "cryoffear/SAVE/slot.sav": b"their save", "cryoffear/maps/c_start.bsp": b"map"}.items():
+                path = source / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+            (root / "cryoffear/sound/save").mkdir(parents=True)
+            (root / "cryoffear/sound/save/save_no.wav").write_bytes(b"kept")
+            notes = []
+            steps = mock.Mock(note=notes.append)
+            self.assertEqual(friend.restore_left_out(root, str(source), steps), 1)
+            self.assertEqual((root / "cryoffear/sound/save/save_yes.wav").read_bytes(), b"yes")
+            self.assertEqual((root / "cryoffear/sound/save/save_no.wav").read_bytes(), b"kept")
+            self.assertFalse((root / "cryoffear/SAVE").exists())
+            self.assertFalse((root / "cryoffear/maps").exists())
+            self.assertEqual(friend.restore_left_out(root, str(Path(temp) / "gone"), steps), 0)
+            self.assertIn("left out", notes[0])
 
     def test_fresh_destination_stays_outside_source_and_steam(self):
         with tempfile.TemporaryDirectory() as temp:

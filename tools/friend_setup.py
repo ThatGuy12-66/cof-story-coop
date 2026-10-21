@@ -28,6 +28,7 @@ from tools.prepare_simon_models import build_models, costume_files, validate_mod
 
 STOCK_DLL_SHA = "0036b91c01e92ed205513f52563053a55a66a32d257efb5f476b8f1f3dde0e63"
 EXCLUDED_DIRS = {"save", "saves", "logs", "screenshots", "downloads", "download", "cof-enhanced", "cof-enhanced-backup", "experiment-evidence", ".git", "__pycache__"}
+ANYWHERE_DIRS = {".git", "__pycache__"}   # the others only at the game root or directly in a game folder (SAVE, cryoffear/SAVE)
 EXCLUDED_FILES = {"config.cfg", "userconfig.cfg", "autoexec.cfg", "server.cfg", "listenserver.cfg", "gameinfo.txt", "mapcycle.txt", "motd.txt", "console.log", "qconsole.log", "steam_appid.txt"}
 EXCLUDED_SUFFIXES = {".sav", ".hl1", ".hl2", ".hl3", ".log", ".dem", ".ent", ".orig", ".bak", ".tmp", ".dmp", ".pdb"}
 APP_EXE = "CoF Story Co-op.exe"
@@ -159,9 +160,17 @@ def validate_destination(source: Path, path: Path) -> Path:
     return target
 
 
+def excluded_dir(name: str, depth: int) -> bool:
+    """A folder of personal state or tooling at this depth (0: the game root). Saves and logs are only left out at the
+    root or directly in a game folder: the game's own sounds sit in cryoffear/sound/save (the save sounds), which a
+    rule for every folder named save left out of every copy before 1.1.6."""
+    name = name.casefold()
+    return name in ANYWHERE_DIRS or (name in EXCLUDED_DIRS and depth <= 1)
+
+
 def should_copy(relative: Path) -> bool:
     parts = [part.casefold() for part in relative.parts]
-    if any(part in EXCLUDED_DIRS for part in parts[:-1]):
+    if any(excluded_dir(part, depth) for depth, part in enumerate(parts[:-1])):
         return False
     name = parts[-1]
     if name in EXCLUDED_FILES or relative.suffix.casefold() in EXCLUDED_SUFFIXES:
@@ -183,7 +192,8 @@ def copy_plan(source: Path) -> list[tuple[Path, int]]:
     result = []
     for directory, dirs, files in os.walk(source, followlinks=False):
         current = Path(directory)
-        dirs[:] = [name for name in dirs if name.casefold() not in EXCLUDED_DIRS]
+        depth = len(current.relative_to(source).parts)
+        dirs[:] = [name for name in dirs if not excluded_dir(name, depth)]
         for name in dirs:
             reject_links(current / name)
         for name in files:
@@ -546,6 +556,30 @@ def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcu
     return destination
 
 
+def restore_left_out(root: Path, source_game: str, steps) -> int:
+    """Game files an older setup left out (cryoffear/sound/save, under the old rule for folders named save), copied
+    from the game the copy was made from when they are missing. Nothing in the copy is replaced."""
+    source = Path(source_game) if source_game else None
+    if not source or not (source / "cryoffear").is_dir():
+        return 0
+    restored = 0
+    try:
+        for relative, _ in copy_plan(source):
+            parts = [part.casefold() for part in relative.parts[:-1]]
+            if not any(part in EXCLUDED_DIRS for part in parts) or (root / relative).exists():
+                continue
+            target = root / relative
+            reject_links(target.parent)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / relative, target)
+            restored += 1
+    except (OSError, ValueError) as error:
+        steps.note(f"Some game files could not be added from {source}: {error}")
+    if restored:
+        steps.note(f"Added {restored} game file{'' if restored == 1 else 's'} an older setup left out (the save sounds)")
+    return restored
+
+
 def update(root: Path, payload: Path, *, exe: Path, progress=lambda *_: None, shortcuts=True) -> Path:
     """Lay a newer package over a copy made by this app: saves, settings and models stay. progress as for setup;
     the lines go on in the copy's setup log."""
@@ -578,6 +612,7 @@ def update_copy(root: Path, payload: Path, exe: Path, shortcuts: bool, steps: St
     if digest_file(root / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
     ensure_entity_limit(root)
+    restore_left_out(root, state.get("source_game", ""), steps)
     steps.start("Making the Simon and weapon models")
     models = make_models(root, steps=steps)
     steps.start("Making the inventory art")
