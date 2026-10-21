@@ -401,6 +401,19 @@ int main(void) {
     SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1);
     assert(strstr(status_log,"teleport-begin userid=100 target=boat_exit companions=1"));
     assert(links==1 && entities[2].v.origin[0]==2035);
+    /* ...and so does a partner who wandered off while the rider rowed: the boat stays on the far side. */
+    setup(); entities[10].v.classname=30; entities[10].v.origin[0]=2000; entities[10].v.origin[2]=0;
+    entities[2].v.origin[0]=-1500; tick(0.1);
+    VectorCopy(entities[1].v.origin,before); entities[1].v.origin[0]=2000;
+    SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1);
+    assert(strstr(status_log,"teleport-begin userid=100 target=boat_exit companions=1"));
+    assert(links==1 && entities[2].v.origin[0]==2035);
+    /* A cof_teleport still leaves a partner who was elsewhere: they can walk into it themselves. */
+    setup(); entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+    entities[11].v.classname=18; entities[11].v.target=19; entities[2].v.origin[0]=-1500; tick(0.1);
+    VectorCopy(entities[1].v.origin,before); entities[1].v.origin[0]=2000;
+    SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1);
+    assert(links==0 && strstr(status_log,"companions=0"));
     /* A walk-in trigger_teleport destination is not followed. */
     setup(); entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
     entities[11].v.classname=20; entities[11].v.target=19; entities[2].v.origin[0]=64; tick(0.1);
