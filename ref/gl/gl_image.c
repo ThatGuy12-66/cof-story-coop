@@ -16,6 +16,7 @@ GNU General Public License for more details.
 #include <stdarg.h>
 #include "gl_local.h"
 #include "crclib.h"
+#include "gl_cof_texnames.h"
 
 #define TEXTURES_HASH_SIZE	(MAX_TEXTURES >> 2)
 
@@ -1216,6 +1217,27 @@ static gl_texture_t *GL_TextureForName( const char *name )
 
 /*
 ================
+GL_CoF_NameTaken
+
+a slot holds this name, or GL already knows it (gl_cof_texnames.h)
+================
+*/
+static int GL_CoF_NameTaken( unsigned int name, void *ctx )
+{
+	if( name < MAX_TEXTURES && gl_textures[name].texnum != 0 )
+		return true;
+
+	for( uint i = 0; i < gl_numTextures; i++ )
+	{
+		if( gl_textures[i].texnum == name )
+			return true;
+	}
+
+	return pglIsTexture( name ) ? true : false;
+}
+
+/*
+================
 GL_AllocTexture
 ================
 */
@@ -1235,6 +1257,25 @@ static gl_texture_t *GL_AllocTexture( const char *name, texFlags_t flags )
 		while( texnum >= SKYBOX_BASE_NUM && texnum <= SKYBOX_BASE_NUM + SKYBOX_MAX_SIDES );
 	}
 	else texnum = tr.skyboxbasenum;
+
+	// CoF: client.dll binds engine textures by their slot number, and names its own from 1 << 25 without asking GL;
+	// a driver offering names past the highest in use lands the engine in those (gl_cof_texnames.h)
+	if( !skyboxhack && texnum >= MAX_TEXTURES )
+	{
+		static qboolean reported;
+		const GLuint offered = texnum;
+		const GLuint slot = CoF_SlotTextureName( MAX_TEXTURES, SKYBOX_BASE_NUM, SKYBOX_BASE_NUM + SKYBOX_MAX_SIDES, GL_CoF_NameTaken, NULL );
+
+		if( slot )
+		{
+			texnum = slot;
+			if( !reported )
+			{
+				gEngfuncs.Con_Printf( "[cof-textures] the driver offered texture name %u, past the %d slots client.dll binds by number: engine textures take their slot number instead\n", offered, MAX_TEXTURES );
+				reported = true;
+			}
+		}
+	}
 
 	// try to match texture slot and texture handle because of buggy games
 	if( texnum >= MAX_TEXTURES || gl_textures[texnum].texnum != 0 )
