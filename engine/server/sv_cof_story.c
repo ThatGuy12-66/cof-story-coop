@@ -393,6 +393,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_CameraModelsFrame();
 	SV_CoF_CompanionFrame();
 	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
+	SV_CoF_ArrivalFrame(); // after it: the torches the host allows, as their players switched them
 	SV_CoF_BlurFrame(); // a story blur flipped for one player is everyone's
 	SV_CoF_TestGunFrame();
 	SV_CoF_ExitFrame();
@@ -422,6 +423,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_StateReset();
 	SV_CoF_RecoveryReset();
 	SV_CoF_SessionReset();
+	SV_CoF_ArrivalReset();
 	CoF_StoryCloseGate();
 	SV_CoF_ClearValidation();
 }

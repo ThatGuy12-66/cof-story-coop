@@ -79,6 +79,7 @@ void SV_CoF_TransitionReset( qboolean clear_history )
 		SV_CoF_StateReset();
 		SV_CoF_RecoveryReset();
 		SV_CoF_SessionReset();
+		SV_CoF_ArrivalReset();
 	}
 }
 
@@ -90,6 +91,7 @@ static void CoF_TransitionResume( void )
 	MSG_BeginServerCmd( &sv.reliable_datagram, svc_setpause );
 	MSG_WriteOneBit( &sv.reliable_datagram, false );
 	Con_Printf( "[cof-story-transition] phase=ready generation=%u map=%s\n", cof_transition.tickets.epoch, sv.name );
+	SV_CoF_ArrivalReady( cof_transition.destination_origin ); // who stands in an exit as the party starts here
 	SV_CoF_TransitionReset( false );
 }
 

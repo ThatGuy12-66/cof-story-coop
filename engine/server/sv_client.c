@@ -2216,15 +2216,20 @@ SV_Begin_f
 */
 static qboolean SV_Begin_f( sv_client_t *cl )
 {
+	qboolean cof_carried;
+
 	// make sure client has passed connection process correctly
 	if( cl->state != cs_spawning )
 		return false;
 
 	// now client is spawned
+	cof_carried = SV_CoF_TransitionRestoredClient( cl );
 	cl->state = cs_spawned;
 	cl->connecttime = host.realtime;
 	SetBits( cl->flags, FCL_HOLD_FIRST_DATAGRAM );
 	SV_CoF_TransitionClientReady( cl );
+	// Cry of Fear story co-op: the HUD state a level change left behind on this client (sv_cof_arrival.c)
+	if( cof_carried ) SV_CoF_ArrivalSignon( cl );
 
 	return true;
 }
@@ -3234,9 +3239,11 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 		SV_CoF_TraceCommand( cl );
 		SV_CoF_StateCommandBegin( cl );
 		SV_CoF_ShareCommandBegin( cl );
+		SV_CoF_ArrivalCommandBegin( cl ); // F: the co-op torch switches from what the player has (sv_cof_arrival.c)
 		SV_CoF_CommandSender( cl->state == cs_spawned && SV_CoF_StoryCoopEnabled() ? cl->edict : NULL );
 		SV_CoF_GlobalsEnter( cl ); // the game's one-player globals are the sender's
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
+		SV_CoF_ArrivalCommandEnd( cl );
 		SV_CoF_CommandSender( NULL );
 		// Cry of Fear story co-op: deploy the dual weapon the game just built
 		if( SV_CoF_StoryCoopEnabled() && !Q_strcmp( Cmd_Argv( 0 ), "inventorydualwield" ))

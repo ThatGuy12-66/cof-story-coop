@@ -28,6 +28,17 @@ void SV_CoF_LightInit( void );
 void SV_CoF_LightFrame( void );
 qboolean SV_CoF_CoopFlashlightAllowed( void );
 qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
+// What a story level change leaves behind (sv_cof_arrival.c): at a carried player's sign-on their HideWeapon and
+// everyone's ScoreInfo; the co-op torch as each player switched it (around the game's F, every frame); an exit the
+// party just arrived beside is not taken by standing in it (pfnChangeLevel: true, refused).
+void SV_CoF_ArrivalReset( void );
+void SV_CoF_ArrivalSignon( sv_client_t *cl );
+void SV_CoF_ArrivalReady( const vec3_t landmark );
+void SV_CoF_ArrivalFrame( void );
+void SV_CoF_ArrivalMessage( const char *name, const byte *payload, int size );
+void SV_CoF_ArrivalCommandBegin( sv_client_t *cl );
+void SV_CoF_ArrivalCommandEnd( sv_client_t *cl );
+qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark );
 // The story's screen blur, one for the whole party (sv_cof_blur.c): cof_coop_shared_blur, on by default. Leaving
 // a map by a story level change, before the level is saved; a checkpoint loaded (the party starts off).
 void SV_CoF_BlurInit( void );

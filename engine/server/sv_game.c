@@ -1547,6 +1547,9 @@ static void GAME_EXPORT pfnChangeLevel( const char *level, const char *landmark 
 	// Cry of Fear merged story maps: a door between two sections of this map moves the players there now
 	// (no exit hold, no load); before the one-change-per-map guard, which it must not use up
 	if( SV_CoF_SectionChangeLevel( level, landmark )) return;
+	// Cry of Fear story co-op: the exit behind a party that just arrived is not taken by standing in it
+	// (sv_cof_arrival.c); asked every frame of the touch, so it goes once they step out and back in
+	if( SV_CoF_ArrivalRefuses( level, landmark )) return;
 
 	// make sure we don't issue two changelevels
 	if( svs.spawncount == last_spawncount )
@@ -3013,6 +3016,10 @@ static void GAME_EXPORT pfnMessageEnd( void )
 		MSG_Clear( &sv.multicast );
 		return;
 	}
+
+	// Cry of Fear story co-op: the scoreboard values the torch's ScoreInfo repeats (sv_cof_arrival.c); only read
+	if( svgame.msg_index > 0 && SV_CoF_StoryCoopEnabled( ))
+		SV_CoF_ArrivalMessage( name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize );
 
 	// Cry of Fear story co-op: a section's fog kept from another section's players (sv_cof_fog.c)
 	if( svgame.msg_index > 0 && SV_CoF_FogMessage( svgame.msg_ent, svgame.msg_dest, name, sv.multicast.pData + cof_msg_payload, svgame.msg_realsize ))
