@@ -85,6 +85,32 @@ int main( void )
 		SV_CoF_StateMessage( clients[0].edict, "Objectives", (byte *)plain, sizeof( plain ) - 1 );
 		SV_CoF_StateFrame(); memcpy( &file, private_data[1] + 0x420, 4 ); assert( !file );
 	}
+	/* The popup: cof_objective's showobjective is one global that the first PostThink sending the objective clears,
+	 * so a partner sent the mirrored objective got it without the popup. The engine sets isNew for that player once. */
+	{
+		static const byte shown[] = "gotothepark\0txtfiles/hints.txt\0\1";
+		byte quiet[] = "gotothepark\0txtfiles/hints.txt\0\0", other[] = "somethingelse\0txtfiles/hints.txt\0\0";
+		const size_t at = sizeof( quiet ) - 2;
+		SV_CoF_StateMessage( clients[0].edict, "Objectives", (byte *)shown, sizeof( shown ) - 1 );
+		SV_CoF_StateMessage( clients[1].edict, "Objectives", quiet, sizeof( quiet ) - 1 ); assert( quiet[at] == 1 );
+		quiet[at] = 0; SV_CoF_StateMessage( clients[1].edict, "Objectives", quiet, sizeof( quiet ) - 1 ); assert( quiet[at] == 0 ); /* once */
+		quiet[at] = 0; SV_CoF_StateMessage( clients[0].edict, "Objectives", quiet, sizeof( quiet ) - 1 ); assert( quiet[at] == 0 ); /* the sender saw it */
+		SV_CoF_StateMessage( clients[1].edict, "Objectives", other, sizeof( other ) - 1 ); assert( other[sizeof( other ) - 2] == 0 ); /* never popped up */
+	}
+	/* The story's control hints (cof_hint: c_start's tutorial) reach their trigger's activator only: the party gets each
+	 * once, at the next frame. A weapon's own hints stay the player's. */
+	{
+		static const byte quick[] = "quickslots\0txtfiles/hints.txt", sights[] = "ironsights\0txtfiles/hints.txt"; /* both strings' ends sent */
+		SV_CoF_StateMessage( clients[0].edict, "ControlHint", (byte *)quick, sizeof( quick ) );
+		last_msg_name[0] = 0; SV_CoF_StateFrame();
+		assert( !strcmp( last_msg_name, "ControlHint" ) && !strcmp( (const char *)last_msg, "quickslots" ) && last_msg_reliable );
+		assert( !strcmp( (const char *)last_msg + 11, "txtfiles/hints.txt" ) && last_msg_size == (int)sizeof( quick ) );
+		last_msg_name[0] = 0; SV_CoF_StateFrame(); assert( !last_msg_name[0] ); /* once */
+		SV_CoF_StateMessage( clients[1].edict, "ControlHint", (byte *)quick, sizeof( quick ) ); /* the partner's own trigger later */
+		last_msg_name[0] = 0; SV_CoF_StateFrame(); assert( !last_msg_name[0] ); /* both had it */
+		SV_CoF_StateMessage( clients[0].edict, "ControlHint", (byte *)sights, sizeof( sights ) );
+		last_msg_name[0] = 0; SV_CoF_StateFrame(); assert( !last_msg_name[0] ); /* the Glock's own */
+	}
 	/* Tape saves on the hardest difficulty: the cassette gives its five tapes to its picker only (CoF_KeyItem), and
 	 * each save takes one from the saver: the party's tapes are one count. */
 	{

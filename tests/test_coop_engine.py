@@ -61,10 +61,46 @@ class CoopEngineTests(unittest.TestCase):
         if not HL_DLL.is_file() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
             self.skipTest('the retail Cry of Fear 1.6 hl.dll is not installed locally')
         self.assertEqual(file_bytes(HL_DLL, rva, 6), stock)
-        # the dual weapon is deployed through the game's own SwitchWeapon after the command
+        # the dual weapon is deployed through the game's own SwitchWeapon after the command, only one the command
+        # built: the player's dual weapons before it are noted first
         client = (ENGINE_SERVER / 'sv_client.c').read_text()
-        after = client[client.index('svgame.dllFuncs.pfnClientCommand( cl->edict );'):]
-        self.assertIn('SV_CoF_RetailDualDeploy( cl )', after[:600])
+        call = client.index('svgame.dllFuncs.pfnClientCommand( cl->edict );')
+        before = client[client.rindex('fullupdate = !Q_strcmp( Cmd_Argv( 0 ), "fullupdate" );', 0, call):call]
+        noted = before.index('if( dual ) SV_CoF_RetailDualSeen( cl, &dual_seen );')
+        self.assertLess(before.index('dual = SV_CoF_StoryCoopEnabled() && SV_CoF_RetailDualCommand( Cmd_Argv( 0 ));'), noted)
+        self.assertLess(noted, before.index('SV_CoF_GlobalsEnter( cl );'))
+        self.assertIn('if( dual ) SV_CoF_RetailDualDeploy( cl, &dual_seen );', client[call:call + 600])
+
+    def test_quick_dual_wield_gates_match_the_retail_dll(self):
+        # the quick-slot double tap: QuickSelectItem's refusal (jnz after IsMultiplayer at 100F087F) and the
+        # CheckQuickDualWield it calls (jnz after IsMultiplayer at 100DCB40); both open with the command's, or neither
+        story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
+        gates = {}
+        for name in ('COF_QUICK_DUAL_GATE', 'COF_QUICK_DUAL_CHECK'):
+            gates[name] = int(re.search(r'#define %s (0x[0-9A-Fa-f]+)' % name, story).group(1), 16)
+        stock = {name: bytes(int(b, 16) for b in re.search(
+            r'%s\[6\] = \{ ([^}]*) \}' % array, story).group(1).split(','))
+            for name, array in (('COF_QUICK_DUAL_GATE', 'cof_quick_dual_gate_original'),
+                                ('COF_QUICK_DUAL_CHECK', 'cof_quick_dual_check_original'))}
+        self.assertEqual(gates, {'COF_QUICK_DUAL_GATE': 0xF0884, 'COF_QUICK_DUAL_CHECK': 0xDCB45})
+        self.assertEqual(stock, {'COF_QUICK_DUAL_GATE': bytes.fromhex('0f855c010000'),
+                                 'COF_QUICK_DUAL_CHECK': bytes.fromhex('0f850b030000')})
+        enable = story[story.index('qboolean SV_CoF_StoryCoopEnabled( void )'):]
+        enable = enable[:enable.index('\n}\n')]
+        opened = enable.index('cof_dual_gate = CoF_StoryWriteGate( base + COF_DUAL_GATE')
+        self.assertIn('if( cof_dual_gate && CoF_StoryWriteGate( base + COF_QUICK_DUAL_CHECK,', enable[opened:])
+        self.assertIn('else CoF_StoryWriteGate( base + COF_QUICK_DUAL_CHECK, cof_gate_open, cof_quick_dual_check_original );', enable)
+        close = story[story.index('static void CoF_StoryCloseGate( void )'):]
+        close = close[:close.index('\n}\n')]
+        self.assertIn('CoF_StoryWriteGate( cof_quick_dual_gate, cof_gate_open, cof_quick_dual_gate_original );', close)
+        self.assertIn('CoF_StoryWriteGate( cof_quick_dual_check, cof_gate_open, cof_quick_dual_check_original );', close)
+        if not HL_DLL.is_file() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
+            self.skipTest('the retail Cry of Fear 1.6 hl.dll is not installed locally')
+        for name, rva in gates.items():
+            self.assertEqual(file_bytes(HL_DLL, rva, 6), stock[name], name)
+        # each right after a call to the rules' IsMultiplayer (vtable +0x20) and its test
+        for name, rva in gates.items():
+            self.assertEqual(file_bytes(HL_DLL, rva - 5, 5).hex(), 'ff502085c0', name)
 
     def test_continue_is_registered(self):
         session = (ENGINE_SERVER / 'sv_cof_session.inc').read_text()

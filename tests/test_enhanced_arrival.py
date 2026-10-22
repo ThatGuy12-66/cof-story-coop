@@ -27,7 +27,36 @@ class ArrivalTests(unittest.TestCase):
             'stood in another exit since arriving: refused',
             'door long ago: refused',
             'no story arrival: counts',
+            'quick: glock 3 1, slot 12 1, slot 0 0, slot 13 0, cleared 0, key 0, none 0',
         ])
+
+    def test_every_story_sign_on_gets_its_quick_slot_pictures_back(self):
+        # client.dll's VidInit empties the QUICK SELECT boxes; the game sends them again only from the first PostThink
+        # after a restore, on one global flag the first player's PostThink clears (100EB4CA..100EB4FF): guests' boxes
+        # stayed empty after every level change or load
+        begin = body_of(SERVER / 'sv_client.c', 'static qboolean SV_Begin_f( sv_client_t *cl )')
+        self.assertLess(begin.index('cl->state = cs_spawned;'), begin.index('SV_CoF_ArrivalBegin( cl );'))
+        arrival = (SERVER / 'sv_cof_arrival.c').read_text(encoding='latin-1')
+        assert_has(self, '#define COF_ARRIVAL_QUICK_SLOT  0x03D8', arrival)
+        assert_has(self, '#define COF_ARRIVAL_QUICK_NAME  0x204C', arrival)
+        quick = body_of(SERVER / 'sv_cof_arrival.c', 'static void CoF_ArrivalQuickSlots( sv_client_t *cl )')
+        assert_has(self, 'pv + COF_ARRIVAL_QUICK_SLOT + k * (int)sizeof( int )', quick)
+        assert_has(self, 'SV_CoF_SendUserMessage( cl->edict, "QSlotUpdate", payload, sizeof( payload ), true )', quick)
+        frame = body_of(SERVER / 'sv_cof_arrival.c', 'void SV_CoF_ArrivalFrame( void )')
+        assert_has(self, 'CoF_ArrivalQuickSlots( cl );', frame)
+        story = body_of(SERVER / 'sv_cof_arrival.c', 'void SV_CoF_ArrivalBegin( sv_client_t *cl )')
+        assert_has(self, 'p->quick = true;', story)
+
+    def test_the_quick_slot_fields_are_where_the_retail_code_reads_them(self):
+        import hashlib
+        from tests.test_coop_engine import HL_DLL, HL_SHA, file_bytes
+        if not HL_DLL.is_file() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
+            self.skipTest('the retail hl.dll is not in runtimes/enhanced')
+        # the restore's resend (PostThink): cmp [m_bRestored], 0, then cmp [edi+0x3DC], 0 for quick slot 1
+        self.assertEqual(file_bytes(HL_DLL, 0xEB4CA, 7).hex(), '803d7664221000')
+        self.assertEqual(file_bytes(HL_DLL, 0xEB5B6, 7).hex(), '83bfdc03000000')
+        # QuickSelectItem: lea eax, [esi+0x204C] (m_sQuickSel1), the names 0x80 apart
+        self.assertEqual(file_bytes(HL_DLL, 0xF0A11, 6).hex(), '8dbe4c200000')
 
     def test_a_refusal_is_logged_once_per_player_exit_and_map(self):
         # 1.1.9 (X4, E1 F10): an arrival idling in the exit back logged exit-arrival-refused every 10 s

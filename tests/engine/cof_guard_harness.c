@@ -40,6 +40,9 @@ int main( void )
 	refusal( "pause", 1, 0 );       // a guest's Backspace froze the host's game
 	refusal( "pause", 1, 1 );       // the host pauses the party
 	refusal( "pause", 0, 0 );
+	refusal( "aitest", 1, 0 );     // a guest stopping every monster in the host's game
+	refusal( "simonmode", 1, 0 );  // a guest killing c_ending4b's book Simon
+	refusal( "aitest", 1, 1 );     // the host keeps the console's developer commands
 	scene( "unfreeze", "1024", 1 );  // a viewport reset's unfreeze while a camera holds the player
 	scene( "unfreeze", "1024", 0 );  // a panel closing (telephone, yes/no, save)
 	scene( "unfreeze", "512", 1 );   // the computer's own

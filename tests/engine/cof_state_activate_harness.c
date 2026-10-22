@@ -64,6 +64,8 @@ static qboolean SV_CoF_RetailSetHealthCap( sv_client_t *cl, int cap ) { (void)cl
 static int SV_CoF_RetailPhoneBroken( sv_client_t *cl, int *body ) { (void)cl; (void)body; return -1; }
 static qboolean SV_CoF_RetailBreakPhone( sv_client_t *cl, int body ) { (void)cl; (void)body; return false; }
 static qboolean SV_CoF_RetailPuzzleRelease( sv_client_t *cl ) { (void)cl; return false; }
+#define Q_strlen strlen
+static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable ) { (void)to; (void)name; (void)payload; (void)size; (void)reliable; return false; }
 
 #include "state_under_test.c"
 

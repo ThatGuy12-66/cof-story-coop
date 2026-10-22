@@ -27,5 +27,9 @@ int main( void )
 	touch( "stood in another exit since arriving", -1.0, 1, 40.0, 0 );
 	touch( "door long ago", 10.0, 0, 5.0, 1 );
 	touch( "no story arrival", -1.0, 0, -1.0, 1 );
+	/* quick slots: a weapon in an inventory slot 1..12; empty, cleared (cof_clearitems empties the names) or not a weapon: none */
+	printf( "quick: glock 3 %d, slot 12 %d, slot 0 %d, slot 13 %d, cleared %d, key %d, none %d\n",
+		CoF_QuickSlotShown( 3, "weapon_glock" ), CoF_QuickSlotShown( 12, "weapon_flashlight" ), CoF_QuickSlotShown( 0, "weapon_glock" ),
+		CoF_QuickSlotShown( 13, "weapon_glock" ), CoF_QuickSlotShown( 3, "" ), CoF_QuickSlotShown( 3, "item_key" ), CoF_QuickSlotShown( 3, 0 ));
 	return 0;
 }

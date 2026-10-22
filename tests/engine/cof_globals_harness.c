@@ -29,7 +29,7 @@ static void command( int player, void ( *game )( void ))
 }
 
 static void host_trips( void ) { image[0x226489] = 1; image[0x226477] = 1; }
-static void guest_moves( void ) { image[0x231F0A] = 1; image[0x231F5C] = 3; image[DUAL_THINK_STATE] = 8; /* phone light on */ }
+static void guest_moves( void ) { image[0x231F0A] = 1; image[0x231F5C] = 3; image[DUAL_THINK_STATE] = 8; /* phone light on */ image[0x226718] = 2; /* quick slot 2 pressed */ }
 static void guest_reads( void ) { show( "the guest's own command" ); }
 
 int main( void )

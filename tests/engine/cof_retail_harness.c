@@ -16,6 +16,7 @@ typedef long long fs_offset_t;
 #define FL_KILLME ( 1 << 30 )
 #define FL_ONGROUND ( 1 << 9 )
 #define FL_FROZEN ( 1 << 12 )
+#define FCL_FAKECLIENT 128
 #define DEAD_NO 0
 #define DEAD_DEAD 2
 #define ARRAYSIZE( x ) ( sizeof( x ) / sizeof(( x )[0] ))
@@ -54,7 +55,7 @@ static struct { double time; } sv;
 static struct { struct { void ( *pfnClientCommand )( edict_t *ent ); int ( *pfnSpawn )( edict_t *ent ); void ( *pfnUse )( edict_t *ent, edict_t *player ); } dllFuncs; int numEntities; edict_t *edicts; } svgame;
 static edict_t edicts[12];
 static sv_client_t clients[2];
-static byte private_data[2][0x2820], doc_private[0x210], weapon_private[4][0x210], monster_private[3][0x360], phone_private[0xE4];
+static byte private_data[2][0x2820], doc_private[0x210], weapon_private[6][0x210], monster_private[3][0x360], phone_private[0xE4];
 static const char *strings[] = { "", "inventoryitems/hallkey.txt", "inventoryitems/weapons/weapon_mobile.txt", "inventoryitems/fuse.txt", "cof_document",
 	"weapon_glock", "weapon_switchblade", "weapon_syringe", "weapon_shotgun", "monster_slower", "monster_generic", "monster_sawrunner", "monster_nerd",
 	"weapon_dualweapon", "findthekey", "txtfiles/custom_objectives.txt", "txtfiles/hints.txt", "cof_yesno", "ryesno", "trigger_multiple", "boat",
@@ -82,7 +83,7 @@ static size_t private_size( const void *pv )
 	int i;
 	if( pv == doc_private ) return sizeof( doc_private );
 	if( pv == phone_private ) return sizeof( phone_private );
-	for( i = 0; i < 4; i++ ) if( pv == weapon_private[i] ) return sizeof( weapon_private[0] );
+	for( i = 0; i < 6; i++ ) if( pv == weapon_private[i] ) return sizeof( weapon_private[0] );
 	for( i = 0; i < 3; i++ ) if( pv == monster_private[i] ) return sizeof( monster_private[0] );
 	return sizeof( private_data[0] );
 }
@@ -103,13 +104,16 @@ static string_t SV_AllocString( const char *text )
 static edict_t *SV_CreateNamedEntity( edict_t *entity, string_t classname ) { return NULL; }
 static void SV_FreeEdict( edict_t *entity ) { entity->free = 1; }
 static edict_t *SV_EdictNum( int i ) { return &edicts[i]; }
+static int switch_refused; /* SwitchWeapon's CanDeploy says no (on a ladder) */
 static qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg )
 {
 	calls++; call_rva = rva; call_self = self; call_arg = arg;
+	if( rva == 0xF5E50 && !switch_refused ) memcpy( (byte *)self + 0x2538, &arg, sizeof( arg )); /* SwitchWeapon: m_pNextItem */
 	return true;
 }
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
-static int Cvar_VariableInteger( const char *name ) { return !strcmp( name, "sv_cheats" ) ? cheats : 0; }
+static int difficulty = 2;
+static int Cvar_VariableInteger( const char *name ) { return !strcmp( name, "sv_cheats" ) ? cheats : !strcmp( name, "difficulty" ) ? difficulty : 0; }
 static byte *FS_LoadFile( const char *path, fs_offset_t *size, qboolean gamedironly )
 {
 	static const char hallkey[] = "\"map_name\"\r\n{\r\n\tdata\t\"hallkey\"\r\n}\r\n\"nice_name\"\r\n{\r\n\tdata\t\"Hall key\"\r\n}\r\n\"classname\"\r\n{\r\n\tdata\t\"item_key\"\r\n}\r\n";
@@ -423,23 +427,89 @@ int main( void )
 		assert( SV_CoF_RetailEquip( &clients[0], "weapon_shotgun" ) && calls == 1 && call_rva == 0xF1A50 && call_self == private_data[0] && !strcmp( call_arg, "weapon_shotgun" ));
 		assert( !SV_CoF_RetailEquip( &clients[0], "item_key" ) && !SV_CoF_RetailEquip( &clients[0], NULL ) && calls == 1 );
 		/* Dual wield (live 2026-10-15: nothing happened in co-op): the game builds weapon_dualweapon
-		 * but its multiplayer rules never switch to it (weight 1); the engine switches, like single player */
-		weapon( 8, 3, 13, private_data[0], 15, -1, 0 );
-		put_int( weapon_private[3] + 0x204, 3 ); put_int( weapon_private[3] + 0x200, 1 ); /* glock left, flashlight right */
-		put_int( private_data[0] + 0x1E70, 3 ); put_int( private_data[0] + 0x1E74, 1 );
-		calls = 0;
-		assert( SV_CoF_RetailDualDeploy( &clients[0] ) && calls == 1 && call_rva == 0xF5E50 && call_self == private_data[0] && call_arg == weapon_private[3] );
-		/* already in hand, or already on its way: nothing */
-		put_pointer( private_data[0] + 0x252C, weapon_private[3] ); calls = 0;
-		assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
-		put_pointer( private_data[0] + 0x252C, weapon_private[0] ); put_pointer( private_data[0] + 0x2538, weapon_private[3] );
-		assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
-		put_pointer( private_data[0] + 0x2538, NULL );
-		/* a dual weapon of another pair (the command failed), or of the other player: not ours to deploy */
-		put_int( private_data[0] + 0x1E70, 6 ); assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
-		put_int( private_data[0] + 0x1E70, 3 ); put_pointer( weapon_private[3] + 0x160, private_data[1] );
-		assert( !SV_CoF_RetailDualDeploy( &clients[0] ) && !calls );
+		 * but its multiplayer rules never switch to it (weight 1); the engine switches, like single player.
+		 * The commands: the inventory's and the quick-slot double tap's (one quicksel per key) */
+		assert( SV_CoF_RetailDualCommand( "inventorydualwield" ) && SV_CoF_RetailDualCommand( "quicksel" ));
+		assert( !SV_CoF_RetailDualCommand( "quickselset1" ) && !SV_CoF_RetailDualCommand( "inventoryequip" ) && !SV_CoF_RetailDualCommand( NULL ));
+		{
+			cof_retail_dual_seen_t seen, none;
+			memset( &none, 0, sizeof( none )); none.valid = 1;
+			SV_CoF_RetailDualSeen( &clients[0], &seen ); assert( seen.valid && !seen.head ); /* before the command: none */
+			weapon( 8, 3, 13, private_data[0], 15, -1, 0 ); /* the command builds it, first in its bucket */
+			put_pointer( private_data[0] + 0x2518, weapon_private[3] );
+			put_int( weapon_private[3] + 0x204, 3 ); put_int( weapon_private[3] + 0x200, 1 ); /* glock left, flashlight right */
+			put_int( private_data[0] + 0x1E70, 3 ); put_int( private_data[0] + 0x1E74, 1 );
+			calls = 0;
+			assert( SV_CoF_RetailDualDeploy( &clients[0], &seen ) && calls == 1 && call_rva == 0xF5E50 && call_self == private_data[0] && call_arg == weapon_private[3] );
+			put_pointer( private_data[0] + 0x2538, NULL ); calls = 0;
+			/* already in hand, or already on its way: nothing */
+			put_pointer( private_data[0] + 0x252C, weapon_private[3] );
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], &none ) && !calls );
+			put_pointer( private_data[0] + 0x252C, weapon_private[0] ); put_pointer( private_data[0] + 0x2538, weapon_private[3] );
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], &none ) && !calls );
+			put_pointer( private_data[0] + 0x2538, NULL );
+			/* a dual weapon of another pair (the command failed), or of the other player: not ours to deploy */
+			put_int( private_data[0] + 0x1E70, 6 ); assert( !SV_CoF_RetailDualDeploy( &clients[0], &none ) && !calls );
+			put_int( private_data[0] + 0x1E70, 3 ); put_pointer( weapon_private[3] + 0x160, private_data[1] );
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], &none ) && !calls );
+			put_pointer( weapon_private[3] + 0x160, private_data[0] );
+			/* no command noted before: nothing */
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], NULL ) && !calls );
+			memset( &seen, 0, sizeof( seen )); assert( !SV_CoF_RetailDualDeploy( &clients[0], &seen ) && !calls );
+			/* switched out of dual wield (a quick-slot key alone, to reload): the dual weapon is still carried, and
+			 * the press builds none, so the engine leaves the switch to the single weapon alone */
+			put_pointer( private_data[0] + 0x2538, weapon_private[0] );
+			SV_CoF_RetailDualSeen( &clients[0], &seen ); assert( seen.head == weapon_private[3] );
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], &seen ) && !calls );
+			/* the same two again: the game kills the old one, which stays the player's with the same pair until its
+			 * removal 0.1 s later, and builds another (first in the bucket): the new one is deployed, not the first
+			 * found by edict number */
+			weapon( 9, 4, 13, private_data[0], 15, -1, 0 );
+			put_int( weapon_private[4] + 0x204, 3 ); put_int( weapon_private[4] + 0x200, 1 );
+			put_pointer( private_data[0] + 0x2518, weapon_private[4] );
+			assert( SV_CoF_RetailDualDeploy( &clients[0], &seen ) && calls == 1 && call_arg == weapon_private[4] );
+			/* any number of killed ones still the player's (a burst of commands): only the bucket's first counts.
+			 * And a switch the game refuses (on a ladder) while the replaced dual weapon is on its way would deploy
+			 * freed memory: the new one takes its place */
+			put_pointer( private_data[0] + 0x2538, weapon_private[3] ); /* the old one, killed, on its way */
+			SV_CoF_RetailDualSeen( &clients[0], &seen ); /* head: weapon_private[4], about to be replaced too */
+			weapon( 10, 5, 13, private_data[0], 15, -1, 0 );
+			put_int( weapon_private[5] + 0x204, 3 ); put_int( weapon_private[5] + 0x200, 1 );
+			put_pointer( private_data[0] + 0x2518, weapon_private[5] );
+			switch_refused = 1; calls = 0;
+			assert( SV_CoF_RetailDualDeploy( &clients[0], &seen ) && calls == 1 && call_arg == weapon_private[5] );
+			{ byte *next; memcpy( &next, private_data[0] + 0x2538, sizeof( next )); assert( next == weapon_private[5] ); }
+			/* refused with a single weapon on its way: left as it is */
+			put_pointer( private_data[0] + 0x2538, weapon_private[0] ); seen.head = weapon_private[4]; calls = 0;
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], &seen ) && calls == 1 );
+			{ byte *next; memcpy( &next, private_data[0] + 0x2538, sizeof( next )); assert( next == weapon_private[0] ); }
+			switch_refused = 0;
+			/* a bucket head that is not a live dual weapon of the player's: nothing */
+			edicts[10].v.flags = FL_KILLME; calls = 0;
+			assert( !SV_CoF_RetailDualDeploy( &clients[0], &seen ) && !calls );
+			put_pointer( private_data[0] + 0x2518, NULL ); put_pointer( private_data[0] + 0x2538, NULL );
+			memset( &edicts[9], 0, sizeof( edicts[9] )); memset( &edicts[10], 0, sizeof( edicts[10] ));
+		}
 		edicts[8].free = 1;
+		/* The hardest difficulty's stamina: skillset sets m_bNightmare (P+0x1EE0) only in single player; every
+		 * player's follows the difficulty, both ways */
+		private_data[0][0x1EE0] = 1; difficulty = 2; SV_CoF_RetailPlayersFrame(); assert( private_data[0][0x1EE0] == 0 );
+		difficulty = 4; SV_CoF_RetailPlayersFrame(); assert( private_data[0][0x1EE0] == 1 );
+		gate = 0; difficulty = 2; SV_CoF_RetailPlayersFrame(); assert( private_data[0][0x1EE0] == 1 ); gate = 1; /* not in story co-op */
+		SV_CoF_RetailPlayersFrame(); assert( private_data[0][0x1EE0] == 0 );
+		/* an AI companion's morphine trip timer (P+0x2274) stays 0 (it heals itself every 15 s); a human's is the game's,
+		 * and a companion already tripping keeps its */
+		{
+			float t = 60.0f, read;
+			put_float( private_data[0] + 0x2274, t ); put_float( private_data[1] + 0x2274, t );
+			clients[1].flags |= FCL_FAKECLIENT; SV_CoF_RetailPlayersFrame();
+			memcpy( &read, private_data[0] + 0x2274, 4 ); assert( read == 60.0f );
+			memcpy( &read, private_data[1] + 0x2274, 4 ); assert( read == 0.0f );
+			put_float( private_data[1] + 0x2274, t ); private_data[1][0x2278] = 1; SV_CoF_RetailPlayersFrame();
+			memcpy( &read, private_data[1] + 0x2274, 4 ); assert( read == 60.0f );
+			private_data[1][0x2278] = 0; clients[1].flags &= ~FCL_FAKECLIENT;
+			put_float( private_data[0] + 0x2274, 0.0f ); put_float( private_data[1] + 0x2274, 0.0f );
+		}
 		/* the allocation check runs once per entity per map, not every frame */
 		private_lookups = 0; SV_CoF_RetailArms( &clients[0], &arms ); SV_CoF_RetailArms( &clients[0], &arms );
 		assert( private_lookups == 0 );

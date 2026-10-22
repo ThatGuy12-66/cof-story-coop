@@ -17,9 +17,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 to 1.2.4 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen) keep it: 1.1
-VERSION_LABEL = "1.2.4"
-BUILD = 19   # counts on (1.2.3 was 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
+VERSION = "1.1"   # who can join whom: 1.1.1 to 1.2.5 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield) keep it: 1.1
+VERSION_LABEL = "1.2.5"
+BUILD = 20   # counts on (1.2.4 was 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
@@ -37,7 +37,7 @@ REPORT_URL = "https://discord.gg/4uwV6jmmY7"   # "Report a bug": the public Disc
 # cl_updaterate 102, ex_interp 0.1); fps_max stays 60 and sv_fps 0 (cof_skip).
 STORY_SETTINGS = (
     "cof_story_coop 1", "cof_story_trace 1", "sv_connect_timeout_ban 0", "sv_cheats 0", "sv_enttools_enable 0", "developer 0",
-    "coop 0", "deathmatch 1", "mp_timelimit 0", "mp_fraglimit 0", "cof_test_gun 0", "fps_max 60",
+    "coop 0", "deathmatch 1", "mp_timelimit 0", "mp_fraglimit 0", "mp_weaponstay 0", "cof_test_gun 0", "fps_max 60",
     "rate 100000", "cl_cmdrate 100", "cl_updaterate 100", "sv_maxupdaterate 100", "ex_interp 0.1",
     "cl_forwardspeed 300", "cl_backspeed 200", "cl_sidespeed 200", "+mlook",
 )

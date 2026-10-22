@@ -1,6 +1,26 @@
-Cry of Fear Co-op 1.2.4
+Cry of Fear Co-op 1.2.5
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.5
+Co-op runs the game as a multiplayer game, and the original game switches a few single-player
+things off in multiplayer. These are back:
+- Quick dual wield. Press two quick-slot keys at the same time (1 and 2, say) with two items
+  that go together, like a pistol and the flashlight, and you hold both. Press one of them
+  alone to put the other away, to reload.
+- Monsters' attacks are stopped by walls and doors again. They could hit you through them,
+  and the taller's stomp could kill you on the other side of a wall.
+- You limp when your health is low.
+- The control hints show again (sprint, dodge, quick slots, saving, the phone and more).
+- Taking a second syringe too soon gives you the morphine trip again.
+- Your quick-slot pictures stay after going through a door (guests lost them before).
+- Everyone gets the "new objective" popup, not just one player.
+- Nightmare difficulty uses its own stamina rules.
+- Your first-person arms are Simon's (or your costume's), not the police officer's.
+- Smaller things: pings in the player list, the Glock's brass, the intro card's language, no
+  stray health bar in the last ending, and a respawn no longer clears everyone's messages.
+- 1.1 to 1.2.5 can play together. Most of this is in the host's game and the arms are in each
+  player's, so everyone should update.
 
 WHAT'S NEW IN 1.2.4
 - No more error messages flashing in the top-left corner while you play. Every co-op game

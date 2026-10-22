@@ -24,6 +24,11 @@ int main( void )
 	printf( "wanted on=1 maxclients=4: %d\n", CoF_CoopHudWanted( 1, 4 ));
 	printf( "wanted on=1 maxclients=1: %d\n", CoF_CoopHudWanted( 1, 1 )); /* single player keeps client.dll's own HUD */
 	printf( "wanted on=0 maxclients=4: %d\n", CoF_CoopHudWanted( 0, 4 ));
+	/* the arms: Simon's on the story's maps, the police officer's on CoF's own co-op maps */
+	printf( "arms c_start: %d, cm_park2: %d, c_cof_hospital: %d, single player: %d, off: %d, hud on cof_: %d\n",
+		CoF_ClientGateWanted( COF_CLIENT_GATE_SIMON_ARMS, 1, 4, "c_start" ), CoF_ClientGateWanted( COF_CLIENT_GATE_SIMON_ARMS, 1, 2, "cm_park2" ),
+		CoF_ClientGateWanted( COF_CLIENT_GATE_SIMON_ARMS, 1, 4, "c_cof_hospital" ), CoF_ClientGateWanted( COF_CLIENT_GATE_SIMON_ARMS, 1, 1, "c_start" ),
+		CoF_ClientGateWanted( COF_CLIENT_GATE_SIMON_ARMS, 0, 4, "c_start" ), CoF_ClientGateWanted( 0, 1, 4, "c_cof_hospital" ));
 	memcpy( p, g->original, g->size );
 	i = CoF_GateSet( image, g, 1, write_bytes ); printf( "on: %d first %02x writes %d\n", i, p[0], writes );
 	i = CoF_GateSet( image, g, 0, write_bytes ); printf( "off: %d first %02x writes %d\n", i, p[0], writes );

@@ -23,11 +23,12 @@ class GlobalsRuleTests(unittest.TestCase):
             'global spread-sprinting 231F0F 1',
             'global spread-minimum 231F5C 4',
             'global dual-weapon 21199C 88',
-            'bytes 98',
-            'after the host\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0 dual-weapon=0',
-            # the guest's movement and left hand stay theirs; outside a command the host's state is back
-            'after the guest\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0 dual-weapon=0',
-            'the guest\'s own command: morphine-muffle=0 cutscene=0 spread-moving=1 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=3 dual-weapon=8',
+            'global quick-slot 226718 4',
+            'bytes 102',
+            'after the host\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0 dual-weapon=0 quick-slot=0',
+            # the guest's movement, left hand and last quick slot stay theirs; outside a command the host's state is back
+            'after the guest\'s command: morphine-muffle=1 cutscene=1 spread-moving=0 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=0 dual-weapon=0 quick-slot=0',
+            'the guest\'s own command: morphine-muffle=0 cutscene=0 spread-moving=1 spread-jumping=0 spread-ducking=0 spread-sprinting=0 spread-minimum=3 dual-weapon=8 quick-slot=2',
             'room_type owner: none -1, guest 1, host -1, host without the cvar 0, other cvar -1',
         ])
 
@@ -43,6 +44,8 @@ class GlobalsRuleTests(unittest.TestCase):
         self.assertEqual(file_bytes(HL_DLL, 0x11BBE7, 7).hex(), '803d0a1f231000')
         # PostThink 100EED5E: mov ecx, offset gDualWeapon before HasDualWeapon
         self.assertEqual(file_bytes(HL_DLL, 0xEED5E, 5).hex(), 'b9c0182110')
+        # QuickSelectItem 100F0863: cmp [lastquickslotpressed], edi (the key pressed against the last one)
+        self.assertEqual(file_bytes(HL_DLL, 0xF0863, 6).hex(), '393d18672210')
 
 
 class GlobalsWiringTests(unittest.TestCase):
