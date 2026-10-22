@@ -27,6 +27,7 @@ class PadBuiltinTests(unittest.TestCase):
                                                 'cof_pad_layout_gen2', 'cof_pad_layout_gen3', 'cof_pad_layout_gen4')]
         for signature in ('static qboolean CL_CoF_PadAnyBound( void )', 'static int CL_CoF_PadApplyLayout( qboolean force )',
                           'static const char *CL_CoF_PadLayoutBind(', 'static void CL_CoF_PadMigrate(',
+                          'static qboolean CL_CoF_PadHalfLifeLeft( void )',
                           'static void CL_CoF_PadDefaultsCheck( void )'):
             code.append(body_of(PAD, signature) + '\n}\n')
         keydefs = (ENGINE / 'keydefs.h').read_text(encoding='latin-1')

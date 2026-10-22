@@ -94,6 +94,13 @@ int main( void )
 	profile( 4, cof_pad_layout_gen4, ARRAYSIZE( cof_pad_layout_gen4 ));
 	CL_CoF_PadDefaultsCheck();
 	assert( the_layout() && strstr( printed, "generation 4 layout migrated to generation 6" ) && strstr( printed, "0 Half-Life pad binds moved" ));
+	/* a generation-5 profile on the Cry of Fear layout whose player set keys to binds Half-Life also has: kept */
+	profile( 5, cof_pad_layout, ARRAYSIZE( cof_pad_layout ));
+	bindings[K_B_BUTTON] = "+use";
+	bindings[K_R1_BUTTON] = "+attack";
+	bindings[K_RSTICK] = "+duck";
+	CL_CoF_PadDefaultsCheck();
+	assert( is( K_B_BUTTON, "+use" ) && is( K_R1_BUTTON, "+attack" ) && is( K_RSTICK, "+duck" ) && strstr( printed, "generation 5 layout kept" ));
 	/* a profile bound some other way: left as it is */
 	profile( 0, NULL, 0 );
 	bindings[K_A_BUTTON] = "+use";

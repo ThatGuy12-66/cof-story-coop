@@ -1420,8 +1420,25 @@ int main(void) {
         SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(0,4000);
         assert(strstr(status_log,"arrival-placed userid=101 beside=100") && logged("arrival-walk-in")==2);
         assert(entities[1].v.origin[0]==-40 && entities[1].v.origin[1]==0 && entities[2].v.origin[0]==-40 && entities[2].v.origin[1]==0);
-        assert(strstr(status_log,"arrival-walk-in userid=100 trigger=7 origin=-40.000,0.000,0.000"));
+        assert(strstr(status_log,"arrival-walk-in userid=100 trigger=7 origin=-40.000,0.000,36.000")); /* standing on the floor under it */
+        /* the partner, whom the placement could only set beside the leader, is not regrouped beside him again at
+         * sign-on (it would set them down outside the walk-in) */
+        clients[0].state=clients[1].state=cs_spawned; SV_CoF_PartyPlayerReady(&clients[0],false); SV_CoF_PartyPlayerReady(&clients[1],false);
+        tick(0.1); tick(0.1); assert(entities[2].v.origin[0]==-40 && !strstr(status_log,"spawn-placed"));
         assert(!spawn_blocks); /* nothing was missing */
+        /* ...one the placement kept for a regroup (no room beside the leader) is walked in too, and the regroup is
+         * dropped: placed beside the leader at sign-on, they would stand beside the exit back again */
+        exit_setup(3000); world_model.entities=script_walkin;
+        entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+        entities[11].v.classname=18; entities[11].v.targetname=31; entities[11].v.target=19;
+        entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],-40,25);
+        snprintf(sv.startspot,sizeof(sv.startspot),"landbc"); has_landmark=1; VectorClear(landmark_at);
+        SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0);
+        narrow_direction=1; arrive(0,100); narrow_direction=0;
+        assert(strstr(status_log,"arrival-kept userid=101") && strstr(status_log,"arrival-walk-in userid=101"));
+        clients[0].state=clients[1].state=cs_spawned; SV_CoF_PartyPlayerReady(&clients[0],false); SV_CoF_PartyPlayerReady(&clients[1],false);
+        tick(0.1); tick(0.1); tick(1);
+        assert(entities[2].v.origin[0]==-40 && !strstr(status_log,"spawn-placed"));
         /* ...one already well inside it stays where they are; one elsewhere in the map is not in that room */
         exit_setup(64); world_model.entities=script_walkin;
         entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
