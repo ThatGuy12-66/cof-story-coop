@@ -1,6 +1,13 @@
-Cry of Fear Co-op 1.2.3
+Cry of Fear Co-op 1.2.4
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.4
+- No more error messages flashing in the top-left corner while you play. Every co-op game
+  showed the engine's own messages over the game (sounds the original game never had,
+  graphics warnings, loading notes). They still go to the log files.
+- 1.1 to 1.2.4 can play together. The fix is in each player's game, so everyone should
+  update.
 
 WHAT'S NEW IN 1.2.3
 - No more getting stuck in a door's black room. Going back through some doors (c_city to
