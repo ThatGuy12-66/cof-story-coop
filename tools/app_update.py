@@ -165,10 +165,20 @@ def extract_app(zip_path: Path, folder: Path) -> Path:
     return exe
 
 
+def one_file() -> bool:
+    """A one-file build (up to 1.2.0) unpacks itself to a temporary folder; a one-folder build (1.2.1) runs from
+    its own folder of files next to the exe."""
+    if not getattr(sys, "frozen", False):
+        return False
+    return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)).resolve().parent != \
+        Path(sys.executable).resolve().parent
+
+
 def pids_to_wait() -> list[int]:
-    """This app's processes. A one-file exe runs as two: the unpacking parent and Python."""
+    """This app's processes. A one-file exe runs as two: the unpacking parent and Python; a one-folder exe is one
+    (its parent is whatever started it, often Explorer, which the new app must never wait for)."""
     pids = [os.getpid()]
-    if getattr(sys, "frozen", False):
+    if one_file():
         pids.append(os.getppid())
     return pids
 

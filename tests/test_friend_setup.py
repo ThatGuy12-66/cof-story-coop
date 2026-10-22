@@ -844,6 +844,33 @@ KB_DEF = b'"w"\t\t"+forward"\r\n"h"\t\t"+hint"\r\n// a comment\r\n\r\nSPACE +jum
 KB_ACT = b'"blank"\t\t"Movement"\r\n"+forward"\t\t"Move forward"\r\n"cof_skip"\t\t"Skip"'
 
 
+class InstallAppTests(unittest.TestCase):
+    def test_the_app_and_its_folder_of_files_go_into_the_copy(self):
+        # 1.2.1: the one-folder app needs its coop-app folder next to the exe; an older copy's is replaced whole
+        with tempfile.TemporaryDirectory() as temp:
+            download, root = Path(temp) / "download", Path(temp) / "copy"
+            (download / friend.APP_FILES / "payload").mkdir(parents=True)
+            (download / friend.APP_EXE).write_bytes(b"new app")
+            (download / friend.APP_FILES / "payload" / "engine.zip").write_bytes(b"new payload")
+            (root / friend.APP_FILES).mkdir(parents=True)
+            (root / friend.APP_FILES / "stale.dll").write_bytes(b"old")
+            (root / friend.APP_EXE).write_bytes(b"old app")
+            friend.install_app(download / friend.APP_EXE, root)
+            self.assertEqual((root / friend.APP_EXE).read_bytes(), b"new app")
+            self.assertEqual((root / friend.APP_FILES / "payload" / "engine.zip").read_bytes(), b"new payload")
+            self.assertFalse((root / friend.APP_FILES / "stale.dll").exists())
+            self.assertEqual(sorted(p.name for p in root.iterdir()), sorted([friend.APP_EXE, friend.APP_FILES]))
+            # the copy's own app (Repair from inside the copy) is left alone
+            friend.install_app(root / friend.APP_EXE, root)
+            self.assertEqual((root / friend.APP_EXE).read_bytes(), b"new app")
+            # a one-file app from an older zip has no folder: only the exe is copied
+            old = Path(temp) / "old"
+            old.mkdir()
+            (old / friend.APP_EXE).write_bytes(b"one-file app")
+            friend.install_app(old / friend.APP_EXE, root)
+            self.assertEqual((root / friend.APP_EXE).read_bytes(), b"one-file app")
+
+
 class MissingCoopBindTests(unittest.TestCase):
     def test_only_unbound_coop_keys_are_bound_for_the_session(self):
         # 1.2.0: a copy set up before O existed keeps its config.cfg; a key bound to anything else stays the player's

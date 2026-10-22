@@ -32,6 +32,9 @@ ANYWHERE_DIRS = {".git", "__pycache__"}   # the others only at the game root or 
 EXCLUDED_FILES = {"config.cfg", "userconfig.cfg", "autoexec.cfg", "server.cfg", "listenserver.cfg", "gameinfo.txt", "mapcycle.txt", "motd.txt", "console.log", "qconsole.log", "steam_appid.txt"}
 EXCLUDED_SUFFIXES = {".sav", ".hl1", ".hl2", ".hl3", ".log", ".dem", ".ent", ".orig", ".bak", ".tmp", ".dmp", ".pdb"}
 APP_EXE = "CoF Story Co-op.exe"
+# 1.2.1: the app is a one-folder build: its Python, Tk and engine payload sit in this folder next to the exe instead
+# of being unpacked to a temporary folder at every start (antivirus programs flagged the self-unpacking exe)
+APP_FILES = "coop-app"
 PAYLOAD_ZIP = "engine-payload.zip"
 PAYLOAD_JSON = "payload.json"
 INSTALLED = "cof-story-installed.json"
@@ -593,9 +596,7 @@ def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path
            merged: dict | None = None) -> None:
     """The parts setup and update share: the story cfg, the app in the copy, the installed record, shortcuts."""
     (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
-    target = root / APP_EXE
-    if Path(exe).resolve() != target.resolve():
-        shutil.copyfile(exe, target)
+    install_app(Path(exe), root)
     add_coop_keys(root, steps)
     state = {"schema": 2, "version": manifest["version"], "build": manifest["build"],
              "xash_sha256": manifest["xash_sha256"], "models": models, "merged_maps": merged or {},
@@ -607,6 +608,29 @@ def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path
         steps.done(f"Done, but the desktop shortcut could not be made: start {APP_EXE} in {root}.")
         return
     steps.done("Done. Use the Cry of Fear Co-op shortcut on your desktop or in the Start menu.")
+
+
+def install_app(exe: Path, root: Path) -> None:
+    """The app into the copy: its folder of files (a one-folder build, 1.2.1) first, then the exe, last (1.1.8 L14.12:
+    while the copy's own app runs, Windows refuses to replace it). Nothing to do when it is the copy's own app."""
+    target = root / APP_EXE
+    if exe.resolve() == target.resolve():
+        return
+    files = exe.parent / APP_FILES
+    if files.is_dir():
+        reject_links(files)
+        new, old, current = root / f"{APP_FILES}.new", root / f"{APP_FILES}.old", root / APP_FILES
+        for leftover in (new, old):
+            reject_links(leftover)
+            if leftover.exists():
+                shutil.rmtree(leftover)
+        shutil.copytree(files, new)
+        if current.exists():
+            reject_links(current)
+            current.rename(old)
+        new.rename(current)
+        shutil.rmtree(old, ignore_errors=True)
+    shutil.copyfile(exe, target)
 
 
 def model_sources() -> dict[str, str]:

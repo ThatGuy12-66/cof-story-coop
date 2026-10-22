@@ -1,6 +1,13 @@
-Cry of Fear Co-op 1.2.0
+Cry of Fear Co-op 1.2.1
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.1
+- Some antivirus programs flagged the app as a trojan. It wasn't one: the app was a single
+  file that unpacked itself every time it started, which looks suspicious to them. The app
+  is now a normal program with its own folder of files (coop-app, keep it next to the
+  exe), its own icon and version details.
+- 1.1 to 1.2.1 can play together. Nothing changed in the game.
 
 WHAT'S NEW IN 1.2.0
 - The bonus room's items at every chapter start: with "Bonus room unlocked" ticked, a
@@ -148,6 +155,7 @@ YOU NEED
 
 INSTALL
 1. Extract this zip to a normal folder, such as Downloads (not into the game folder).
+   Keep the coop-app folder next to "CoF Story Co-op.exe": it holds the app's own files.
 2. Double-click "CoF Story Co-op.exe". Windows may warn you because the app isn't signed:
    click "More info", then "Run anyway".
 3. Click "Set up". The app finds your game through Steam (or use Browse to pick the

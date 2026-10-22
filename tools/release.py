@@ -186,6 +186,7 @@ def moddb_text(readme: str, zip_sha: str) -> str:
               "You need Windows 10 or 11, Cry of Fear installed from Steam (it's free) with Steam running, and about "
               "6 GB of free space.", "", "In the zip", "",
               "- CoF Story Co-op.exe: the app (setup, update, Play solo, Host, Join)",
+              "- coop-app: the app's own files (keep it next to the exe)",
               "- READ ME FIRST.txt: install, hosting and co-op keys",
               "- source-and-licences: the engine source (GPL) and licences"]
     if known:
@@ -260,6 +261,9 @@ def check_copy(log: Log, copy: Path, report: dict, what: str) -> str:
     log.check(all(line in cfg for line in ("sv_cheats 0", "cof_test_gun 0", "developer 0")),
               f"{what}: the story cfg turns the test tools off")
     log.check(sha(copy / setup.APP_EXE) == report["exe_sha256"], f"{what}: this version's app is in the copy")
+    log.check((copy / setup.APP_FILES / "payload" / setup.PAYLOAD_ZIP).is_file() and
+              not (copy / f"{setup.APP_FILES}.new").exists() and not (copy / f"{setup.APP_FILES}.old").exists(),
+              f"{what}: the app's files are in the copy ({setup.APP_FILES})")
     merged = (copy / setup.MERGE_LOG).read_text(encoding="utf-8").splitlines()
     log.check(merged and not any("not merged" in line for line in merged), f"{what}: {len(merged)} merged groups")
     return (copy / setup.SETUP_LOG).read_text(encoding="utf-8")
@@ -272,7 +276,11 @@ def check_package(log: Log, out: Path, report: dict, latest: app_update.Release,
         names = sorted(archive.namelist())
         log.check(zip_path.name == f"CoF-Story-Coop-{label()}.zip", f"zip name {zip_path.name}")
         log.check(archive.testzip() is None, "zip CRC")
-        log.check(names == ZIP_FILES, f"zip files: {names}")
+        # 1.2.1: the one-folder app's own files are in coop-app, next to the exe
+        app_files = f"{setup.APP_FILES}/"
+        log.check([n for n in names if not n.startswith(app_files)] == ZIP_FILES, f"zip files: {names[:12]}")
+        log.check(f"{app_files}payload/{setup.PAYLOAD_ZIP}" in names and f"{app_files}tools/map_groups.json" in names
+                  and f"{app_files}tools/app.ico" in names, f"the app's files are in {app_files}")
         readme = archive.read("READ ME FIRST.txt").decode("utf-8")
         log.check(archive.read("READ ME FIRST.txt") == README.read_bytes(), "the zip's readme is tools/player_readme.txt")
         log.check(not any(w in readme.lower() for w in DEV_WORDS), "readme has no test or dev wording")

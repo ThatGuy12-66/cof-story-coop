@@ -72,12 +72,37 @@ def notices(target: Path) -> None:
         shutil.copyfile(path, target / name)
 
 
+ICON = ROOT / "tools/app.ico"   # 1.2.1: the app's own icon (tools/make_app_icon.py), not PyInstaller's stock one
+
+
+def version_info() -> str:
+    """The exe's Windows version details (Properties > Details), for PyInstaller's --version-file (1.2.1: an exe
+    with none, PyInstaller's stock icon and a self-unpacking body was flagged as a trojan by antivirus programs)."""
+    parts = [int(p) for p in play.VERSION_LABEL.split(".")][:3]
+    numbers = tuple(parts + [0] * (3 - len(parts)) + [play.BUILD])
+    strings = {"CompanyName": "Cry of Fear Story Co-op", "FileDescription": "Cry of Fear Story Co-op",
+               "FileVersion": f"{play.VERSION_LABEL} (build {play.BUILD})", "InternalName": "CoF Story Co-op",
+               "LegalCopyright": "GPL-3.0-or-later",
+               "OriginalFilename": setup_lib.APP_EXE, "ProductName": "Cry of Fear Story Co-op",
+               "ProductVersion": play.VERSION_LABEL}
+    rows = ",\n".join(f"          StringStruct({k!r}, {v!r})" for k, v in strings.items())
+    return (f"VSVersionInfo(\n  ffi=FixedFileInfo(filevers={numbers}, prodvers={numbers}, mask=0x3f, flags=0x0, "
+            f"OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),\n  kids=[\n    StringFileInfo([\n"
+            f"      StringTable('040904B0', [\n{rows}])]),\n"
+            f"    VarFileInfo([VarStruct('Translation', [1033, 1200])])\n  ]\n)\n")
+
+
 def pyinstaller_command(out: Path, payload: Path) -> list:
-    """The one-file app: the window, the payload, and the merged-map group list (tools.map_merge.groups_path)."""
-    return [sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed",
+    """The one-folder app (1.2.1; it was one file, unpacked to a temporary folder at every start): the window, the
+    payload, and the merged-map group list (tools.map_merge.groups_path), in setup_lib.APP_FILES next to the exe;
+    its own icon and version details; no UPX."""
+    return [sys.executable, "-m", "PyInstaller", "--noconfirm", "--onedir", "--windowed", "--noupx",
+            "--contents-directory", setup_lib.APP_FILES, "--icon", str(ICON),
+            "--version-file", str(out / "version-info.txt"),
             "--name", Path(setup_lib.APP_EXE).stem, "--paths", str(ROOT),
             "--add-data", f"{payload}{os.pathsep}payload",
             "--add-data", f"{ROOT / 'tools/map_groups.json'}{os.pathsep}tools",
+            "--add-data", f"{ICON}{os.pathsep}tools",
             "--distpath", str(out / "dist"), "--workpath", str(out / "work"), "--specpath", str(out),
             str(ROOT / "tools/coop_app.py")]
 
@@ -96,14 +121,16 @@ def build(out: Path) -> dict:
                 "xash_sha256": stage["binaries"]["xash.dll"]["sha256"]}
     (payload / setup_lib.PAYLOAD_JSON).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     setup_lib.inspect_payload(payload)
+    (out / "version-info.txt").write_text(version_info(), encoding="utf-8")
     command = pyinstaller_command(out, payload)
     with (out / "pyinstaller.log").open("wb") as log:
         subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
-    exe = out / "dist" / setup_lib.APP_EXE
+    exe = out / "dist" / Path(setup_lib.APP_EXE).stem / setup_lib.APP_EXE
     subprocess.run([str(exe), "--self-test"], check=True, timeout=120)
     bundle = out / "bundle"
     (bundle / "source-and-licences").mkdir(parents=True)
     shutil.copyfile(exe, bundle / setup_lib.APP_EXE)
+    shutil.copytree(exe.parent / setup_lib.APP_FILES, bundle / setup_lib.APP_FILES)
     shutil.copyfile(README, bundle / "READ ME FIRST.txt")
     shutil.copyfile(stage["source_zip"], bundle / "source-and-licences/corresponding-source.zip")
     notices(bundle / "source-and-licences/notices")

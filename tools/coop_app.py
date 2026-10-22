@@ -815,6 +815,7 @@ def open_window(payload, exe, copy=None, update_from=None, wait=()):
     window = tk.Tk()
     app = App(window, payload, exe)
     theme.dark_title_bar(window)
+    window_icon(window)
     state = setup_lib.installed_state(update_from) if update_from else None
     if state and state["build"] < play.BUILD:
         app.show_update(update_from, auto=True, wait=wait)
@@ -831,6 +832,17 @@ def open_window(payload, exe, copy=None, update_from=None, wait=()):
         else:
             app.show_main(found)
     window.mainloop()
+
+
+def window_icon(window) -> None:
+    """The app's own icon (1.2.1) on the window and taskbar; packed in the app's files (build_tester_package)."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    icon = base / "tools/app.ico"
+    try:
+        if os.name == "nt" and icon.is_file():
+            window.iconbitmap(default=str(icon))
+    except Exception:   # a missing or unreadable icon is only cosmetic
+        pass
 
 
 def self_test(payload) -> int:

@@ -164,6 +164,18 @@ class HandOverTests(unittest.TestCase):
         self.assertEqual(up.parse_pids(None), [])
         self.assertEqual(up.pids_to_wait()[0], os.getpid())
 
+    def test_only_a_one_file_app_waits_for_its_parent(self):
+        # 1.2.1: a one-folder app's parent is whatever started it (Explorer): the new app would wait for ever
+        exe = Path(tempfile.mkdtemp()) / "CoF Story Co-op.exe"
+        with mock.patch.object(up.sys, "frozen", True, create=True), mock.patch.object(up.sys, "executable", str(exe)):
+            with mock.patch.object(up.sys, "_MEIPASS", str(exe.parent / "coop-app"), create=True):
+                self.assertFalse(up.one_file())
+                self.assertEqual(up.pids_to_wait(), [os.getpid()])
+            with mock.patch.object(up.sys, "_MEIPASS", str(Path(tempfile.gettempdir()) / "_MEI12345"), create=True):
+                self.assertTrue(up.one_file())
+                self.assertEqual(up.pids_to_wait(), [os.getpid(), os.getppid()])
+        self.assertFalse(up.one_file())   # run from source
+
     def test_waiting_for_the_old_app(self):
         import threading
         sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(0.6)"])

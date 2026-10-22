@@ -25,14 +25,14 @@ class BuilderTests(unittest.TestCase):
                         "source-and-licences/notices/PYTHON-LICENSE.txt"):
                 (folder / rel).parent.mkdir(parents=True, exist_ok=True)
                 (folder / rel).write_bytes(b"x")
-            path = Path(temp) / "CoF-Story-Coop-1.2.0.zip"
+            path = Path(temp) / "CoF-Story-Coop-1.2.1.zip"
             builder.write_zip(folder, path)
             with zipfile.ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 self.assertEqual(sorted(archive.namelist()), [
                     "CoF Story Co-op.exe", "READ ME FIRST.txt", "source-and-licences/corresponding-source.zip",
                     "source-and-licences/notices/PYTHON-LICENSE.txt"])
-        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.2.0.zip")
+        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.2.1.zip")
 
     def test_the_app_carries_the_merged_map_groups(self):
         out, payload = Path("C:/out"), Path("C:/out/payload")
@@ -41,11 +41,31 @@ class BuilderTests(unittest.TestCase):
         self.assertIn(f"{groups}{builder.os.pathsep}tools", command)
         self.assertIn(f"{payload}{builder.os.pathsep}payload", command)
 
+    def test_the_app_is_one_folder_with_its_own_icon_and_version_details(self):
+        # 1.2.1: players' antivirus flagged the one-file exe (self-unpacking, PyInstaller's stock icon, no details)
+        out, payload = Path("C:/out"), Path("C:/out/payload")
+        command = builder.pyinstaller_command(out, payload)
+        self.assertNotIn("--onefile", command)
+        self.assertIn("--onedir", command)
+        self.assertIn("--noupx", command)
+        self.assertEqual(command[command.index("--contents-directory") + 1], builder.setup_lib.APP_FILES)
+        self.assertEqual(command[command.index("--icon") + 1], str(builder.ICON))
+        self.assertTrue(builder.ICON.is_file())
+        self.assertIn(f"{builder.ICON}{builder.os.pathsep}tools", command)
+        self.assertEqual(command[command.index("--version-file") + 1], str(out / "version-info.txt"))
+        import ast
+        info = builder.version_info()
+        ast.parse(info)   # PyInstaller evaluates it as Python
+        numbers = tuple(int(p) for p in builder.play.VERSION_LABEL.split(".")) + (builder.play.BUILD,)
+        self.assertIn(f"filevers={numbers}", info)
+        self.assertIn("StringStruct('ProductName', 'Cry of Fear Story Co-op')", info)
+        self.assertIn(f"StringStruct('OriginalFilename', {builder.setup_lib.APP_EXE!r})", info)
+
     def test_readme_names_the_release_and_no_test_or_dev_tools(self):
         text = builder.README.read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("Cry of Fear Co-op 1.2.0\n"))
-        self.assertIn("WHAT'S NEW IN 1.2.0", text)
-        self.assertIn("1.1 to 1.2.0 can play together", text)
+        self.assertTrue(text.startswith("Cry of Fear Co-op 1.2.1\n"))
+        self.assertIn("WHAT'S NEW IN 1.2.1", text)
+        self.assertIn("1.1 to 1.2.1 can play together", text)
         self.assertIn("https://discord.gg/4uwV6jmmY7", text)
         for word in ("protocol", "sha256", "rcon", "console", "test build", "test package", "tester", "cheat"):
             self.assertNotIn(word, text.lower())
