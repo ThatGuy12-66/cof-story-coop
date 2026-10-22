@@ -2353,12 +2353,14 @@ static qboolean CoF_PartyDoorRoomLanding( sv_client_t *cl, const vec3_t mark, ed
 		!CoF_DoorRoomSpot( mark, walkin->v.absmin, walkin->v.absmax, ent->v.mins, ent->v.maxs, which, point )) return false;
 	tr = SV_Move( mark, zero, zero, point, MOVE_NOMONSTERS, ent, false );
 	if( tr.startsolid || tr.allsolid || tr.fraction < 1.0f ) return false;
+	// the floor under it by a point, then the hull standing on it: a landmark nearer the floor or the ceiling than
+	// half a hull leaves no room for a hull at its own height
 	VectorCopy( point, down );
-	down[2] -= 256.0f;
-	tr = SV_Move( point, ent->v.mins, ent->v.maxs, down, MOVE_NOMONSTERS, ent, false );
+	down[2] -= 512.0f;
+	tr = SV_Move( point, zero, zero, down, MOVE_NOMONSTERS, ent, false );
 	if( tr.startsolid || tr.allsolid || tr.fraction == 1.0f || tr.plane.normal[2] < 0.7f ) return false;
 	VectorCopy( tr.endpos, point );
-	point[2] += 1.0f;
+	point[2] += 1.0f - ent->v.mins[2];
 	tr = SV_Move( point, ent->v.mins, ent->v.maxs, point, MOVE_NOMONSTERS, ent, false );
 	if( tr.startsolid || tr.allsolid || !CoF_DoorRoomInside( point, ent->v.mins, ent->v.maxs, walkin->v.absmin, walkin->v.absmax )) return false;
 	VectorCopy( point, result );
@@ -2390,9 +2392,13 @@ static void CoF_PartyDoorRoomArrive( const cof_party_arrival_t *arrival )
 		for( which = 0; which < 2; which++ )
 		{
 			if( !CoF_PartyDoorRoomLanding( cl, mark, walkin, which, landing ) || !CoF_PartyMoveEdict( ent, pv, landing, NULL )) continue;
+			// the walk-in places them now: a regroup beside a partner at sign-on would set them down outside it
+			// again, beside the exit back, while the partner it was for is already through
+			cof_party_regroup[i] = 0;
 			Con_Printf( "cofstory phase=arrival-walk-in userid=%d trigger=%d origin=%.3f,%.3f,%.3f\n", cl->userid, NUM_FOR_EDICT( walkin ), landing[0], landing[1], landing[2] );
 			break;
 		}
+		if( which == 2 ) Con_Printf( "cofstory phase=arrival-walk-in-none userid=%d trigger=%d\n", cl->userid, NUM_FOR_EDICT( walkin ));
 	}
 }
 

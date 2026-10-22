@@ -1513,6 +1513,30 @@ static void CL_CoF_PadMigrate( const cof_pad_bind_t *old, int count, int *moved,
 	}
 }
 
+// 1.2.3: a pad key still on a bind of the engine's that only Half-Life has (Cry of Fear has no +speed, lastinv or
+// spray): the profile kept the engine's own pad binds (cof_pad_layout_builtin).
+static qboolean CL_CoF_PadHalfLifeLeft( void )
+{
+	static const cof_pad_bind_t marks[] =
+	{
+		{ K_LSTICK,      "+speed" },
+		{ K_JOY1,        "+speed" },
+		{ K_L2_BUTTON,   "+speed" },
+		{ K_DPAD_DOWN,   "lastinv" },
+		{ K_DPAD_UP,     "impulse 201" },
+	};
+
+	for( int i = 0; i < ARRAYSIZE( marks ); i++ )
+	{
+		const char *b = Key_GetBinding( marks[i].key );
+
+		if( b && !Q_stricmp( b, marks[i].binding ))
+			return true;
+	}
+
+	return false;
+}
+
 static void CL_CoF_PadDefaultsCheck( void )
 {
 	int      gen = (int)cof_pad_defaults_gen.value;
@@ -1540,8 +1564,10 @@ static void CL_CoF_PadDefaultsCheck( void )
 		else if( gen == 4 )
 			CL_CoF_PadMigrate( cof_pad_layout_gen4, ARRAYSIZE( cof_pad_layout_gen4 ), &moved, &kept );
 
-		// 1.2.3: the engine's Half-Life pad binds the profile kept (cof_pad_layout_builtin)
-		CL_CoF_PadMigrate( cof_pad_layout_builtin, ARRAYSIZE( cof_pad_layout_builtin ), &builtin, &unchanged );
+		// 1.2.3: the engine's Half-Life pad binds the profile kept (cof_pad_layout_builtin), when it still has one of
+		// those only Half-Life has: a profile on the Cry of Fear layout whose player set B to +use keeps it
+		if( CL_CoF_PadHalfLifeLeft( ))
+			CL_CoF_PadMigrate( cof_pad_layout_builtin, ARRAYSIZE( cof_pad_layout_builtin ), &builtin, &unchanged );
 
 		if( gen >= 1 && gen <= 4 )
 			Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "generation %d layout migrated to generation %d (%d binds changed, %d customised keys kept, %d Half-Life pad binds moved)", gen, COF_PAD_DEFAULTS_GENERATION, moved, kept, builtin );
