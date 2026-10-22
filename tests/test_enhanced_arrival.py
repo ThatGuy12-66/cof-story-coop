@@ -47,6 +47,20 @@ class ArrivalTests(unittest.TestCase):
         assert_has(self, 'SV_CoF_SendUserMessage( cl->edict, "HideWeapon", &hide, 1, true );', arrival)
         assert_has(self, 'SV_CoF_SendUserMessage( cl->edict, "ScoreInfo", payload, sizeof( payload ), true )', arrival)
 
+    def test_an_arrival_in_the_exit_back_does_not_count_from_its_own_sign_on(self):
+        # 1.2.2 (host log 2026-10-21): the host signs on first, set down at the landmark inside the exit back; while the
+        # guest still loaded that touch held the exit, and the guest's arrival took the party straight back, eight
+        # times in two minutes (c_city <-> c_buscity). The stayed rule began only once everyone had signed on.
+        signon = body_of(SERVER / 'sv_cof_arrival.c', 'void SV_CoF_ArrivalSignon( sv_client_t *cl )')
+        assert_has(self, 'p->stayed = SV_CoF_PartyInExit( cl->edict, NULL, 0 );', signon)
+        assert_has(self, 'p->stay_generation = svs.spawncount;', signon)
+        self.assertLess(signon.index('p->signon = true;'), signon.index('p->stayed ='))
+        # the refusal reads it before the exit can be held, and SV_Begin_f sets cs_spawned before the sign-on call
+        refuses = body_of(SERVER / 'sv_cof_arrival.c', 'qboolean SV_CoF_ArrivalRefuses(')
+        assert_has(self, 'p->stayed && p->stay_generation == svs.spawncount', refuses)
+        begin = body_of(SERVER / 'sv_client.c', 'static qboolean SV_Begin_f( sv_client_t *cl )')
+        self.assertLess(begin.index('cl->state = cs_spawned;'), begin.index('if( cof_carried ) SV_CoF_ArrivalSignon( cl );'))
+
     def test_f_switches_the_torch_the_player_has(self):
         source = (SERVER / 'sv_client.c').read_text(encoding='latin-1')
         call = source.index('svgame.dllFuncs.pfnClientCommand( cl->edict );')

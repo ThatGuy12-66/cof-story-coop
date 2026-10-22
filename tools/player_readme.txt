@@ -1,6 +1,12 @@
-Cry of Fear Co-op 1.2.1
+Cry of Fear Co-op 1.2.2
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.2
+- Level changes no longer bounce the party back and forth. When the host arrived inside the
+  exit back while a partner was still loading, the partner's arrival took everyone straight
+  back, again and again (the black room over and over, until someone quit).
+- 1.1 to 1.2.2 can play together. The fix is in the host's game, so the host should update.
 
 WHAT'S NEW IN 1.2.1
 - Some antivirus programs flagged the app as a trojan. It wasn't one: the app was a single
