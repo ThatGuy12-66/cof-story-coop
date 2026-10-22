@@ -206,6 +206,22 @@ static trace_t SV_Move(const vec3_t start,vec3_t mins,vec3_t maxs,
     return t;
 }
 
+/* 1.2.3: the engine's vector parser, edict numbers and the map-block spawn (a black room's teleport put back): the
+ * spawn fills spawn_into as the game would spawn the script's cof_teleport tp-src, when a test sets it. */
+static void Q_atov(float *vec,const char *str,size_t siz) {
+    size_t i; char *end;
+    for(i=0;i<siz;i++) { vec[i]=(float)strtod(str,&end); if(end==str) { for(;i<siz;i++) vec[i]=0; return; } str=end; }
+}
+#define NUM_FOR_EDICT(e) ((int)((e)-entities))
+static int spawn_blocks; static edict_t *spawn_into;
+static edict_t *SV_CoF_SpawnMapBlock(char *block) {
+    spawn_blocks++;
+    assert(block && strstr(block,"cof_teleport"));
+    if(!spawn_into) return NULL;
+    memset(spawn_into,0,sizeof(*spawn_into)); spawn_into->v.classname=18; spawn_into->v.targetname=31; spawn_into->v.target=19;
+    return spawn_into;
+}
+#include "sv_cof_doorroom.h"
 #include "party_under_test.c"
 #include "status_under_test.c"
 
@@ -215,7 +231,7 @@ static void setup(void) {
     memset(private_data,0,sizeof(private_data)); memset(prompts,0,sizeof(prompts));
     exit_key=exit_waiter=fades=scene_watching=companion_moved=0; memset(in_wheelchair,0,sizeof(in_wheelchair)); ending_fades_out=ending_fades_in=0; gift_log[0]=0;
     gate=true; give_ok=give_actual=true; give_calls=links=blocked=narrow_direction=solid_probe=no_floor=crowded=solid_zone=0; front_only_x=0;
-    status_log[0]=0; status_length=0; sv.name="c_start";
+    status_log[0]=0; status_length=0; sv.name="c_start"; spawn_blocks=0; spawn_into=NULL;
     sv.worldmodel=&world_model; world_model.entities=NULL; sv.startspot[0]=0; has_landmark=0; section_height=0;
     sv.state=ss_active; sv.time=10; svs.clients=clients; svs.maxclients=2;
     svs.spawncount++; svgame.edicts=entities; svgame.numEntities=12; svgame.dllFuncs.pfnUse=game_use; clear_uses=0;
@@ -1390,5 +1406,68 @@ int main(void) {
     }
     setup(); inventory(0,0,11); SV_CoF_PartyPlayerReady(&clients[0],true); tick(0.1); tick(1.2);
     assert(!strstr(status_log,"gift-restored"));
+    /* 1.2.3: an arrival through a door's black room goes on through it. The room's walk-in (entity 7: a trigger_multiple
+     * firing the walk-in cof_teleport tp-src, entity 11, to tp-dest) lies 15 units from the landmark the map was entered
+     * by; the placement put the leader on the landmark and the partner beside him, in the dark between it and the exit
+     * back (host log 2026-10-21, c_buscity's landbc). Both are set down in the walk-in, which sends them on. */
+    {
+        vec3_t landmark={3000,0,0};
+        exit_setup(3000); world_model.entities=script_walkin;
+        entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+        entities[11].v.classname=18; entities[11].v.targetname=31; entities[11].v.target=19;
+        entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],-40,25);
+        snprintf(sv.startspot,sizeof(sv.startspot),"landbc"); has_landmark=1; VectorClear(landmark_at);
+        SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(0,4000);
+        assert(strstr(status_log,"arrival-placed userid=101 beside=100") && logged("arrival-walk-in")==2);
+        assert(entities[1].v.origin[0]==-40 && entities[1].v.origin[1]==0 && entities[2].v.origin[0]==-40 && entities[2].v.origin[1]==0);
+        assert(strstr(status_log,"arrival-walk-in userid=100 trigger=7 origin=-40.000,0.000,0.000"));
+        assert(!spawn_blocks); /* nothing was missing */
+        /* ...one already well inside it stays where they are; one elsewhere in the map is not in that room */
+        exit_setup(64); world_model.entities=script_walkin;
+        entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+        entities[11].v.classname=18; entities[11].v.targetname=31; entities[11].v.target=19;
+        entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],-40,25);
+        snprintf(sv.startspot,sizeof(sv.startspot),"landbc"); has_landmark=1; VectorClear(landmark_at);
+        SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(-30,400);
+        assert(!logged("arrival-walk-in") && entities[1].v.origin[0]==-30 && entities[2].v.origin[0]==400);
+        /* ...a trigger 75 units off is another door's, a scripted chain's teleport is no walk-in, a teleport gone with
+         * nothing to put it back is no way out, and a map entered without a landmark has no black room */
+        {
+            int k;
+            for(k=0;k<4;k++) {
+                exit_setup(3000); world_model.entities=k==1 ? script_managed : script_walkin;
+                entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+                entities[11].v.classname=k==2 ? 0 : 18; entities[11].v.targetname=31; entities[11].v.target=19;
+                entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],k==0 ? -100.0f : -40.0f,25);
+                if(k!=3) { snprintf(sv.startspot,sizeof(sv.startspot),"landbc"); has_landmark=1; VectorClear(landmark_at); }
+                SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(0,4000);
+                assert(!logged("arrival-walk-in") && entities[1].v.origin[0]==0);
+                assert(k!=2 || spawn_blocks==1); /* the script's tp-src was tried, and the game made nothing */
+            }
+        }
+        /* ...the teleport a level change took away is put back from the map's script first (once a map) */
+        exit_setup(3000); world_model.entities=script_walkin; spawn_into=&entities[11];
+        entities[10].v.classname=17; entities[10].v.targetname=19; entities[10].v.origin[0]=2000;
+        entities[7].v.classname=22; entities[7].v.target=31; entities[7].v.solid=SOLID_TRIGGER; absbox(&entities[7],-40,25);
+        snprintf(sv.startspot,sizeof(sv.startspot),"landbc"); has_landmark=1; VectorClear(landmark_at);
+        SV_CoF_PartyTransitionCapture((unsigned int)svs.spawncount+1,landmark,NULL,0); arrive(0,4000);
+        assert(spawn_blocks==1 && strstr(status_log,"cofstory phase=teleport-restored name=tp-src target=tp-dest origin=0,0,0"));
+        assert(logged("arrival-walk-in")==2 && entities[1].v.origin[0]==-40);
+        clients[0].state=clients[1].state=cs_spawned; tick(0.1); tick(0.1); assert(spawn_blocks==1);
+        /* ...and in a checkpoint's map the frame puts it back too; not when its destination is not in this map */
+        setup(); world_model.entities=script_walkin; spawn_into=&entities[11]; entities[10].v.classname=17; entities[10].v.targetname=19;
+        tick(0.1); assert(spawn_blocks==1 && entities[11].v.classname==18 && logged("teleport-restored")==1);
+        setup(); world_model.entities=script_walkin; spawn_into=&entities[11]; tick(0.1); assert(!spawn_blocks);
+        setup(); world_model.entities=script_walkin; entities[10].v.classname=17; entities[10].v.targetname=19;
+        entities[11].v.classname=18; entities[11].v.targetname=31; entities[11].v.target=19; tick(0.1); assert(!spawn_blocks);
+    }
+    /* 1.2.3: a cof_teleport with its destination in this map stays here across a story level change */
+    setup(); entities[10].v.classname=17; entities[10].v.targetname=19; entities[11].v.classname=18; entities[11].v.target=19;
+    assert(SV_CoF_TeleportStaysHome(&entities[11]));
+    entities[10].v.flags=FL_KILLME; assert(!SV_CoF_TeleportStaysHome(&entities[11])); entities[10].v.flags=0;
+    entities[11].v.target=0; assert(!SV_CoF_TeleportStaysHome(&entities[11])); entities[11].v.target=19;
+    entities[11].v.targetname=19; entities[10].free=1; assert(!SV_CoF_TeleportStaysHome(&entities[11])); /* itself is no destination */
+    entities[10].free=0; entities[11].v.classname=22; assert(!SV_CoF_TeleportStaysHome(&entities[11]));
+    entities[11].v.classname=18; gate=false; assert(!SV_CoF_TeleportStaysHome(&entities[11])); gate=true;
     puts("party scenarios passed"); return 0;
 }

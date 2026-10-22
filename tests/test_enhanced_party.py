@@ -33,6 +33,7 @@ class EnhancedPartyTests(unittest.TestCase):
             end = story.index('\nvoid SV_CoF_StoryInit(', start)
             (work / 'status_under_test.c').write_text(story[start:end])
             shutil.copyfile(ROOT / 'tests/engine/cof_party_harness.c', work / 'harness.c')
+            shutil.copyfile(ENGINE / 'engine/server/sv_cof_doorroom.h', work / 'sv_cof_doorroom.h')
             if os.name == 'nt':
                 (work / 'build.cmd').write_text(
                     f'@call "{VCVARS}" amd64_x86 >nul\n'

@@ -1,6 +1,18 @@
-Cry of Fear Co-op 1.2.2
+Cry of Fear Co-op 1.2.3
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.3
+- No more getting stuck in a door's black room. Going back through some doors (c_city to
+  the bus station, for one) left the party in the dark room with no way out, and the
+  only way on was the level change back. The room's way out now stays in its own map,
+  rooms that lost it get it back, and arriving in one walks you straight through it.
+- Controllers: copies set up by the app had Half-Life's controller layout instead of
+  Cry of Fear's, so sprint (left trigger and stick click) did nothing and Back paused the
+  game. Keys still on those binds move to the Cry of Fear layout the first time you
+  start 1.2.3; any key you set yourself stays as it is.
+- 1.1 to 1.2.3 can play together. The black room fix is in the host's game and the
+  controller fix in each player's, so everyone should update.
 
 WHAT'S NEW IN 1.2.2
 - Level changes no longer bounce the party back and forth. When the host arrived inside the
