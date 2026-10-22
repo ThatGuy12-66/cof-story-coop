@@ -13,6 +13,9 @@ docs/research/2026-10-18-cof-decompilation-survey.md sections 4 and 7 (the launc
   let a player walk out of a scene a trigger_camera holds them in. While a camera holds the view it is not needed:
   the camera's end gives every living player control back (CTriggerCamera, triggers.cpp:5565-5583, 5890-5905).
 - 1.1.9: c_asylumb's puzzle bars once the puzzle is solved, and a telephone dial that would answer another player.
+- 1.2.5: `aitest` (client.cpp:1065: every monster stops) and `simonmode` (client.cpp:1629: spawns a book Simon, or
+  kills the first monster_booksimon, c_ending4b's fight) are developer commands with no developer check: a guest's
+  would change the host's game. The host keeps them, as the single-player console does.
 Chat and names need nothing here: the network layer turns every '%' a client sends into '.' (net_buffer.c).
 
 Plain C (standard library only): the offline tests share it.
@@ -36,6 +39,7 @@ COF_GUARD_FN const char *CoF_GuardRefusal( const char *cmd, int story, int host 
 	if( !strcmp( cmd, "vote" ) || !strcmp( cmd, "votekick" )) return "vote";
 	if( !host && ( !strcmp( cmd, "subtitleset" ) || !strcmp( cmd, "hinttoggle" ))) return "host-setting";
 	if( !host && !strcmp( cmd, "pause" )) return "host-pause";
+	if( !host && ( !strcmp( cmd, "aitest" ) || !strcmp( cmd, "simonmode" ))) return "host-developer";
 	return NULL;
 }
 

@@ -17,6 +17,12 @@ static CVAR_DEFINE_AUTO( cof_coop_friendly_fire, "0", 0, "Cry of Fear story co-o
 
 static CVAR_DEFINE_AUTO( cof_sp_carry, "1", 0, "Cry of Fear story co-op: the single-player carry limits (10 syringes, flares, full ammo); 0: the game's multiplayer limits (one syringe, a third of the ammo, no flares)" );
 
+static CVAR_DEFINE_AUTO( cof_sp_melee, "1", 0, "Cry of Fear story co-op: monsters' blows, the taller's stamp and a partner's syringe are stopped by walls, as in single player; 0: the game's multiplayer test reaches any player on the line through walls" );
+static CVAR_DEFINE_AUTO( cof_sp_limp, "1", 0, "Cry of Fear story co-op: below 25 health a player limps (slower, uneven steps), as in single player; 0: no limp (the game's multiplayer)" );
+static CVAR_DEFINE_AUTO( cof_sp_hints, "1", 0, "Cry of Fear story co-op: the control hints (sprint, quick slots, saving, dodge, a struggle's prompt...), once per player, as in single player; 0: none (the game's multiplayer)" );
+static CVAR_DEFINE_AUTO( cof_sp_morphine_trip, "1", 0, "Cry of Fear story co-op: a second syringe too soon after the last starts the morphine trip, as in single player; 0: never (the game's multiplayer)" );
+static CVAR_DEFINE_AUTO( cof_sp_details, "1", 0, "Cry of Fear story co-op: single-player details (monsters hear a hard landing, the Glock's brass, the intro card's language, a respawn clears only its own message strip, no stray Simon health bar in the last ending); 0: the game's multiplayer" );
+
 static byte *cof_gates_base; // where the gates were written, and for which DLL instance
 static void *cof_gates_instance;
 static signed char cof_gates_state[COF_GATES]; // -1 unknown, 0 retail, 1 ours
@@ -54,8 +60,30 @@ static qboolean CoF_GateWanted( int gate )
 	case COF_GATE_CARRY_AMMO_VP70: return cof_sp_carry.value != 0.0f;
 	case COF_GATE_RAIN_MODIFY: return SV_CoF_WeatherOn();
 	case COF_GATE_DEATH_NOTICE: return true;
+	case COF_GATE_LIMP_ON:
+	case COF_GATE_LIMP_OFF:
+	case COF_GATE_LIMP_RESTORE: return cof_sp_limp.value != 0.0f;
+	case COF_GATE_HINTS: return cof_sp_hints.value != 0.0f;
+	case COF_GATE_MORPHINE_TRIP: return cof_sp_morphine_trip.value != 0.0f;
+	case COF_GATE_LANDING_SOUND:
+	case COF_GATE_SPAWN_STRIP:
+	case COF_GATE_GLOCK_BRASS:
+	case COF_GATE_INTRO_LANGUAGE:
+	case COF_GATE_BOOKSIMON_BOSS: return cof_sp_details.value != 0.0f;
 	}
 	return false;
+}
+
+// Monster melee (cof_sp_melee). CBaseMonster::CheckTraceHullAttack (the shared claw/bite/swing helper, combat.cpp:1556
+// in the decompilation), the taller's stamp and the partner heal trace a hull, which walls stop, and then in
+// multiplayer also trace every living player's model alone with pfnTraceModel, which no wall stops: blows landed
+// through walls and doors, and a stamp killed a player behind one. That loop is how a monster reaches a player who
+// touches another (the game's multiplayer PreThink makes them SOLID_NOT, player.cpp:4072-4089, which the hull trace
+// skips), so it stays; pfnTraceModel on a player (sv_game.c) misses when a MOVE_NOMONSTERS trace with the same hull
+// meets the world or a brush entity first.
+qboolean SV_CoF_MeleeWalls( void )
+{
+	return cof_sp_melee.value != 0.0f && SV_CoF_StoryCoopEnabled();
 }
 
 qboolean SV_CoF_FriendlyFire( void )
@@ -67,6 +95,11 @@ void SV_CoF_GatesInit( void )
 {
 	Cvar_RegisterVariable( &cof_coop_friendly_fire );
 	Cvar_RegisterVariable( &cof_sp_carry );
+	Cvar_RegisterVariable( &cof_sp_melee );
+	Cvar_RegisterVariable( &cof_sp_limp );
+	Cvar_RegisterVariable( &cof_sp_hints );
+	Cvar_RegisterVariable( &cof_sp_morphine_trip );
+	Cvar_RegisterVariable( &cof_sp_details );
 	memset( cof_gates_state, -1, sizeof( cof_gates_state ));
 }
 

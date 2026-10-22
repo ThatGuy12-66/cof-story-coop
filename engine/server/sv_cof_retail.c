@@ -54,6 +54,8 @@
 #define COF_RETAIL_FALL_FREEZE    0x1ED0 // bool m_bShouldFallFreeze: held down after a hard landing
 #define COF_RETAIL_FALL_TIME      0x1ECC // float m_fFallingTime: the get-up comes after it
 #define COF_RETAIL_WAITING_FALL   0x050C // bool m_bWaitingToFall: a taller's knock-down until its get-up (RevivePlayer clears +0x50C)
+#define COF_RETAIL_TRIP_TIME      0x2274 // float m_fMorphineTripTime: another syringe before it starts the trip (CSyringe::Inject 1007AADC)
+#define COF_RETAIL_NIGHTMARE      0x1EE0 // bool m_bNightmare: the hardest difficulty's stamina (skillset 4 sets it, 10019E02)
 #define COF_RETAIL_IN_CALL        0x1EE8 // bool m_bInPhoneCall: equip and quick-select refused
 #define COF_RETAIL_DEFER_DEPLOY   0x1EF9 // bool m_bWeaponWaitingToDeploy: a switch under way
 #define COF_RETAIL_INFINITE_AMMO  0x21EA // bool m_bInfiniteAmmo: every firing path skips the clip and syringe count
@@ -72,6 +74,7 @@
 #define COF_RETAIL_DUAL_ITEM_LEFT  0x204 // weapon_dualweapon: m_iLeftWeaponID
 #define COF_RETAIL_DUAL_ITEM_RIGHT 0x200 // m_iRightWeaponID
 #define COF_RETAIL_DUAL_ITEM_NEED  0x208
+#define COF_RETAIL_DUAL_BUCKET    0x2518 // m_rgpPlayerItems[1] (+0x2514 + 4): weapon_dualweapon's iItemSlot is 1 (10037D10); AddPlayerItem puts the newest first (100DAFD3)
 #define COF_RETAIL_CARRIED        24
 #define COF_RETAIL_WEAPON_SCOPE   0x106 // rifle: bool m_bRaised
 #define COF_RETAIL_WEAPON_SUICIDE 0x140 // int m_iSuicideState: 2 = the struggle
@@ -591,39 +594,99 @@ qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname )
 	return done;
 }
 
-// Dual wield in co-op (sv_cof_story.c opens the command's multiplayer refusal):
-// the game builds weapon_dualweapon, but its multiplayer rules switch only to a
-// heavier weapon (dual 1, a pistol 5), so it is never deployed. Switch to it here,
-// as single player's AddPlayerItem does. Only the pair this player just asked for.
-qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl )
+qboolean SV_CoF_RetailDualCommand( const char *cmd )
 {
-	byte *player = CoF_RetailStoryPlayer( cl ), *active, *next;
-	int i, left, right;
-	if( !player ) return false;
+	return cmd && ( !Q_strcmp( cmd, "inventorydualwield" ) || !Q_strcmp( cmd, "quicksel" ));
+}
+
+// The player's own dual weapons that are not on their way out (FL_KILLME): the game's m_pPlayer.
+static qboolean CoF_RetailOwnDual( edict_t *e, byte *player, byte **pv )
+{
+	byte *owner;
+	if( !SV_IsValidEdict( e ) || FBitSet( e->v.flags, FL_KILLME ) || Q_strcmp( SV_GetString( e->v.classname ), "weapon_dualweapon" )) return false;
+	if( !( *pv = CoF_RetailPrivate( e, COF_RETAIL_DUAL_ITEM_NEED ))) return false;
+	memcpy( &owner, *pv + COF_RETAIL_WEAPON_PLAYER, sizeof( owner ));
+	return owner == player;
+}
+
+// The player's own live dual weapon whose object is pv, or NULL (pv is only compared, never followed).
+static byte *CoF_RetailOwnDualAt( byte *player, const byte *pv )
+{
+	int i;
+	byte *own;
+	if( !pv ) return NULL;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+		if( SV_EdictNum( i )->pvPrivateData == pv && CoF_RetailOwnDual( SV_EdictNum( i ), player, &own )) return own;
+	return NULL;
+}
+
+void SV_CoF_RetailDualSeen( sv_client_t *cl, cof_retail_dual_seen_t *seen )
+{
+	byte *player = CoF_RetailStoryPlayer( cl );
+	memset( seen, 0, sizeof( *seen ));
+	if( !player ) return;
+	memcpy( &seen->head, player + COF_RETAIL_DUAL_BUCKET, sizeof( seen->head ));
+	seen->valid = true;
+}
+
+// Dual wield in co-op (sv_cof_story.c opens the multiplayer refusals of the command
+// and of the quick-slot double tap): the game builds weapon_dualweapon, but its
+// multiplayer rules switch only to a heavier weapon (dual 1, a pistol 5), so it is
+// never deployed. Switch to it here, as single player's AddPlayerItem does. Only
+// one this command built: AddPlayerItem puts it first in its bucket, and the one it
+// replaced (killed, still the player's and with the same pair for 0.1 s) is unlinked.
+qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl, const cof_retail_dual_seen_t *seen )
+{
+	byte *player = CoF_RetailStoryPlayer( cl ), *active, *next, *head, *pv;
+	int left, right, l, r;
+	if( !player || !seen || !seen->valid ) return false;
+	memcpy( &head, player + COF_RETAIL_DUAL_BUCKET, sizeof( head ));
+	if( !head || head == seen->head || !( pv = CoF_RetailOwnDualAt( player, head ))) return false; // none built
 	memcpy( &left, player + COF_RETAIL_DUAL_LEFT, sizeof( left ));
 	memcpy( &right, player + COF_RETAIL_DUAL_RIGHT, sizeof( right ));
+	memcpy( &l, pv + COF_RETAIL_DUAL_ITEM_LEFT, sizeof( l ));
+	memcpy( &r, pv + COF_RETAIL_DUAL_ITEM_RIGHT, sizeof( r ));
+	if( l != left || r != right ) return false;
 	memcpy( &active, player + COF_RETAIL_ACTIVE_ITEM, sizeof( active ));
 	memcpy( &next, player + COF_RETAIL_NEXT_ITEM, sizeof( next ));
-	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	if( pv == active || pv == next ) return false;
+	SV_CoF_GlobalsEnter( cl ); // the dual weapon's Deploy runs on the game's one dual-weapon object
+	SV_CoF_StoryCallMember( COF_RETAIL_SWITCH_WEAPON, player, pv );
+	SV_CoF_GlobalsLeave( cl );
+	// SwitchWeapon refuses a weapon that cannot deploy (on a ladder) and keeps the switch under way. When that was to
+	// the dual weapon this command replaced, freed 0.1 s later, the new one takes its place (single player has the
+	// same hole; here a repeated command could reach it).
+	memcpy( &next, player + COF_RETAIL_NEXT_ITEM, sizeof( next ));
+	if( next != pv && CoF_RetailOwnDualAt( player, next ))
 	{
-		edict_t *e = SV_EdictNum( i );
-		byte *pv, *owner;
-		int l, r;
-		if( !SV_IsValidEdict( e ) || FBitSet( e->v.flags, FL_KILLME ) || Q_strcmp( SV_GetString( e->v.classname ), "weapon_dualweapon" )) continue;
-		if( !( pv = CoF_RetailPrivate( e, COF_RETAIL_DUAL_ITEM_NEED ))) continue;
-		memcpy( &owner, pv + COF_RETAIL_WEAPON_PLAYER, sizeof( owner ));
-		memcpy( &l, pv + COF_RETAIL_DUAL_ITEM_LEFT, sizeof( l ));
-		memcpy( &r, pv + COF_RETAIL_DUAL_ITEM_RIGHT, sizeof( r ));
-		if( owner != player || l != left || r != right ) continue;
-		if( pv == active || pv == next ) return false;
-		SV_CoF_GlobalsEnter( cl ); // the dual weapon's Deploy runs on the game's one dual-weapon object
-		i = SV_CoF_StoryCallMember( COF_RETAIL_SWITCH_WEAPON, player, pv );
-		SV_CoF_GlobalsLeave( cl );
-		if( !i ) return false;
-		Con_Printf( "cofstory phase=dualwield-switch userid=%d left=%d right=%d\n", cl->userid, left, right );
-		return true;
+		memcpy( player + COF_RETAIL_NEXT_ITEM, &pv, sizeof( pv ));
+		next = pv;
 	}
-	return false;
+	if( next != pv ) return false;
+	Con_Printf( "cofstory phase=dualwield-switch userid=%d left=%d right=%d\n", cl->userid, left, right );
+	return true;
+}
+
+// Every frame, for each player:
+// - The hardest difficulty's stamina (it drains twice as fast, comes back a third as fast, and running out of breath
+//   lasts 10 s, 100F5411..100F55AA): skillset sets m_bNightmare only in single player (client.cpp:1346 in the
+//   decompilation), so a co-op game on difficulty 4 ran the easier stamina. Every player's follows the difficulty.
+// - An AI companion never takes the morphine trip (the cof_sp_morphine_trip gate gives it back to players): it heals
+//   itself every 15 s while hurt, with syringes that never run out. Its trip timer stays 0.
+void SV_CoF_RetailPlayersFrame( void )
+{
+	byte want = (byte)( Cvar_VariableInteger( "difficulty" ) == 4 );
+	float none = 0.0f;
+	int i;
+	if( !SV_CoF_StoryCoopEnabled()) return;
+	for( i = 0; i < svs.maxclients; i++ )
+	{
+		byte *player = CoF_RetailStoryPlayer( &svs.clients[i] );
+		if( !player ) continue;
+		if( player[COF_RETAIL_NIGHTMARE] != want ) player[COF_RETAIL_NIGHTMARE] = want;
+		if( FBitSet( svs.clients[i].flags, FCL_FAKECLIENT ) && !player[COF_RETAIL_TRIPPING] )
+			memcpy( player + COF_RETAIL_TRIP_TIME, &none, sizeof( none ));
+	}
 }
 
 qboolean SV_CoF_RetailHeld( sv_client_t *cl, int *id, int *right_hand, int *left_hand )

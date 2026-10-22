@@ -1349,7 +1349,24 @@ qboolean SV_ShouldUpdatePing( sv_client_t *cl )
 	}
 
 	// they are viewing the scoreboard.  Send them pings.
-	return FBitSet( cl->lastcmd.buttons, IN_SCORE ) ? true : false;
+	if( FBitSet( cl->lastcmd.buttons, IN_SCORE ))
+		return true;
+
+	// Cry of Fear story co-op: the co-op player list (name, health, ping) is always on screen, but client.dll holds
+	// the score button only on maps named cof_ (CL_ButtonBits), so on the story's maps the pings were never sent: once
+	// a second (not next_checkpingtime, which SV_GetPlayerStats keeps)
+	if( SV_CoF_StoryCoopEnabled() && !FBitSet( cl->flags, FCL_FAKECLIENT ))
+	{
+		static double cof_ping_next[MAX_CLIENTS];
+		int slot = (int)( cl - svs.clients );
+
+		if( slot < 0 || slot >= MAX_CLIENTS || ( host.realtime < cof_ping_next[slot] && cof_ping_next[slot] - host.realtime <= 1.0 ))
+			return false;
+
+		cof_ping_next[slot] = host.realtime + 1.0;
+		return true;
+	}
+	return false;
 }
 
 /*
@@ -2291,6 +2308,7 @@ static qboolean SV_Begin_f( sv_client_t *cl )
 	SV_CoF_TransitionClientReady( cl );
 	// Cry of Fear story co-op: the HUD state a level change left behind on this client (sv_cof_arrival.c)
 	if( cof_carried ) SV_CoF_ArrivalSignon( cl );
+	SV_CoF_ArrivalBegin( cl ); // and the quick-slot pictures client.dll's VidInit emptied
 
 	return true;
 }
@@ -3274,7 +3292,8 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 
 	if( sv.state == ss_active )
 	{
-		qboolean fullupdate;
+		qboolean fullupdate, dual;
+		cof_retail_dual_seen_t dual_seen = { 0 };
 
 		if( cl->state == cs_spawned && sv_enttools_enable.value > 0.0f && !sv.background )
 		{
@@ -3299,6 +3318,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 				return;
 		}
 
+		// Cry of Fear story co-op: the dual weapons the player has before a dual-wield command
+		dual = SV_CoF_StoryCoopEnabled() && SV_CoF_RetailDualCommand( Cmd_Argv( 0 ));
+		if( dual ) SV_CoF_RetailDualSeen( cl, &dual_seen );
+
 		// custom client commands; story co-op attributes their inventory changes
 		// and makes the sender "the first player" for the game's lookups
 		SV_CoF_TraceCommand( cl );
@@ -3310,9 +3333,8 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 		svgame.dllFuncs.pfnClientCommand( cl->edict );
 		SV_CoF_ArrivalCommandEnd( cl );
 		SV_CoF_CommandSender( NULL );
-		// Cry of Fear story co-op: deploy the dual weapon the game just built
-		if( SV_CoF_StoryCoopEnabled() && !Q_strcmp( Cmd_Argv( 0 ), "inventorydualwield" ))
-			SV_CoF_RetailDualDeploy( cl );
+		// Cry of Fear story co-op: deploy the dual weapon the command just built (inventory or quick slots)
+		if( dual ) SV_CoF_RetailDualDeploy( cl, &dual_seen );
 		SV_CoF_GlobalsLeave( cl );
 		SV_CoF_ShareCommandEnd( cl );
 		SV_CoF_StateCommandEnd( cl );

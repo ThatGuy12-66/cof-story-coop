@@ -44,6 +44,7 @@ void SV_CoF_ArrivalReset( void );
 void SV_CoF_ArrivalLanded( const sv_client_t *cl );
 qboolean SV_CoF_ArrivalTouchCounts( const sv_client_t *cl );
 void SV_CoF_ArrivalSignon( sv_client_t *cl );
+void SV_CoF_ArrivalBegin( sv_client_t *cl );
 void SV_CoF_ArrivalReady( const vec3_t landmark );
 void SV_CoF_ArrivalFrame( void );
 void SV_CoF_ArrivalMessage( const char *name, const byte *payload, int size );
@@ -94,6 +95,7 @@ void SV_CoF_VoicePrecache( const char *name );
 void SV_CoF_GatesFrame( void );
 void SV_CoF_GatesClose( void );
 qboolean SV_CoF_FriendlyFire( void );
+qboolean SV_CoF_MeleeWalls( void ); // cof_sp_melee in story co-op
 // Fog for every player, and per section in merged maps (sv_cof_fog.c): the game's message checked before it goes
 // (true: held back), the replays after a reset or a section move.
 qboolean SV_CoF_FogMessage( edict_t *to, int dest, const char *name, const byte *payload, int size );

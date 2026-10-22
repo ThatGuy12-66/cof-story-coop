@@ -26,6 +26,11 @@ gInitHUD is only set by a new game or a loaded save, world.cpp:455). Three thing
    back 8 s after arriving). A touch of an exit does not count for a player who has stood in an exit ever since
    arriving, nor, in the first COF_ARRIVAL_GRACE seconds, at the exit back by the landmark the party came in by;
    coming through a door just now always counts (the doors are how the story takes those exits).
+4. Empty quick-slot pictures. client.dll's VidInit empties the three QUICK SELECT boxes (CRECBInventory::Initialize)
+   and the game sends them again (QSlotUpdate) from the first PostThink after a restore, on one global flag
+   (m_bRestored, 0x10226476) that the first player's PostThink clears: after every level change or load the
+   others' boxes stayed empty, their keys still working. At every story sign-on the engine sends the player's set
+   quick slots (a weapon's name in m_sQuickSelK and its inventory slot in m_iQuickSlotSlot[K]).
 
 Plain C: the offline tests share it.
 */
@@ -91,6 +96,17 @@ COF_ARRIVAL_FN int CoF_ArrivalTouchCounts( double door_age, int stayed, double a
 	if( door_age >= 0.0 && door_age <= COF_ARRIVAL_DOOR_WINDOW ) return 1;
 	if( stayed ) return 0;
 	if( back && arrived_age >= 0.0 && arrived_age < COF_ARRIVAL_GRACE ) return 0;
+	return 1;
+}
+
+// A quick slot whose picture goes out again: an inventory slot (1..12) holding the weapon the slot selects.
+COF_ARRIVAL_FN int CoF_QuickSlotShown( int slot, const char *weapon )
+{
+	static const char prefix[] = "weapon_";
+	int i;
+	if( slot < 1 || slot > 12 || !weapon ) return 0;
+	for( i = 0; prefix[i]; i++ )
+		if( weapon[i] != prefix[i] ) return 0;
 	return 1;
 }
 

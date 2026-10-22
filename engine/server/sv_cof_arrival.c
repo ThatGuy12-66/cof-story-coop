@@ -21,6 +21,9 @@ phase=torch-switched userid on, phase=exit-arrival-refused destination landmark 
 #define COF_ARRIVAL_HIDEHUD     0x2500 // int m_iHideHUD
 #define COF_ARRIVAL_DOOR_HIDES  ( 1 | 8 ) // HIDEHUD_WEAPONS | HIDEHUD_HEALTH: what a door hides (CoF_InterDoor.cpp:347-348)
 #define COF_ARRIVAL_EXIT_MODELS 16
+#define COF_ARRIVAL_QUICK_SLOT  0x03D8 // int m_iQuickSlotSlot[4]: the inventory slot quick slot K shows (PostThink 100EB5B6)
+#define COF_ARRIVAL_QUICK_NAME  0x204C // char m_sQuickSel1..3[128]: the weapon quick slot K selects (QuickSelectItem)
+#define COF_ARRIVAL_QUICK_SIZE  0x80
 
 typedef struct
 {
@@ -33,6 +36,7 @@ typedef struct
 	qboolean stayed;          // in an exit ever since the party arrived
 	int stay_generation;
 	qboolean signon;          // a story sign-on: the HUD state goes out at the next frame
+	qboolean quick;           // any story sign-on: the quick-slot pictures go out at the next frame
 	int refused_generation;   // the exit this player's touch was last refused at (logged), and in which map
 	char refused_level[MAX_QPATH], refused_landmark[MAX_QPATH];
 } cof_arrival_player_t;
@@ -164,6 +168,14 @@ void SV_CoF_ArrivalSignon( sv_client_t *cl )
 	}
 }
 
+// Called by SV_Begin_f for every player in story co-op: a level change, a load or a join.
+void SV_CoF_ArrivalBegin( sv_client_t *cl )
+{
+	cof_arrival_player_t *p;
+	if( !SV_CoF_StoryCoopEnabled() || FBitSet( cl->flags, FCL_FAKECLIENT ) || !( p = CoF_ArrivalPlayer( cl ))) return;
+	p->quick = true;
+}
+
 // Called when every carried player has signed on: who stands in an exit now, and the landmark they came in by.
 void SV_CoF_ArrivalReady( const vec3_t landmark )
 {
@@ -236,6 +248,25 @@ static void CoF_ArrivalHud( sv_client_t *cl )
 	Con_Printf( "cofstory phase=arrival-hud userid=%d hidehud=%d scores=%d\n", cl->userid, pv ? hide : -1, scores );
 }
 
+// QSlotUpdate( byte K, byte slot ) for each set quick slot, as the game's restore sends it (sv_cof_arrival.h 4).
+static void CoF_ArrivalQuickSlots( sv_client_t *cl )
+{
+	byte *pv = SV_CoF_StoryEntityPrivate( cl->edict, COF_ARRIVAL_PLAYER_SIZE );
+	int k, slot, sent = 0;
+	if( !pv ) return;
+	for( k = 1; k <= 3; k++ )
+	{
+		const char *weapon = (const char *)pv + COF_ARRIVAL_QUICK_NAME + ( k - 1 ) * COF_ARRIVAL_QUICK_SIZE;
+		byte payload[2];
+		memcpy( &slot, pv + COF_ARRIVAL_QUICK_SLOT + k * (int)sizeof( int ), sizeof( slot ));
+		if( !memchr( weapon, 0, COF_ARRIVAL_QUICK_SIZE ) || !CoF_QuickSlotShown( slot, weapon )) continue;
+		payload[0] = (byte)k;
+		payload[1] = (byte)slot;
+		if( SV_CoF_SendUserMessage( cl->edict, "QSlotUpdate", payload, sizeof( payload ), true )) sent++;
+	}
+	if( sent ) Con_Printf( "cofstory phase=arrival-quick userid=%d slots=%d\n", cl->userid, sent );
+}
+
 void SV_CoF_ArrivalFrame( void )
 {
 	qboolean allowed = SV_CoF_CoopFlashlightAllowed();
@@ -250,6 +281,11 @@ void SV_CoF_ArrivalFrame( void )
 		{
 			p->signon = false;
 			CoF_ArrivalHud( cl );
+		}
+		if( p->quick )
+		{
+			p->quick = false;
+			CoF_ArrivalQuickSlots( cl );
 		}
 		if( SV_CoF_PartyInDoor( cl ))
 		{

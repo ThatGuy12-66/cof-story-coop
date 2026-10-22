@@ -11,6 +11,10 @@
 #define COF_GLOBAL_MODE 0xE0
 #define COF_GLOBAL_INITIAL 0xE4
 
+// 1.2.5: the story's control hints a player was sent (CoF_StateHintSent)
+#define COF_STATE_HINTS 16
+#define COF_STATE_HINT 64
+
 static cof_state_data_t cof_state;
 static struct
 {
@@ -18,10 +22,22 @@ static struct
 	cof_story_values_t previous;
 	int notes[COF_STATE_NOTES];
 	char delivered[COF_STATE_TEXT]; // the objective the game last sent this player (Objectives)
+	char shown[COF_STATE_TEXT]; // the objective this player last got with its popup
+	char hints[COF_STATE_HINTS][COF_STATE_HINT]; // the story's control hints this player was sent
+	int hint_count;
 	int cap_known, health_cap, phone_known, phone; // 1.1.9: what the last look saw (the party values below)
 	double phone_tried;
 } cof_state_players[MAX_CLIENTS];
 static qboolean cof_state_sending;
+// 1.2.5: the story's control hints (cof_hint, c_start's tutorial and three more) go to their trigger's activator only:
+// the first player through. Each is the party's: queued for the others at the next frame, once per player.
+static const char *const cof_state_story_hints[] = { "inventory", "sprint", "quickslots", "save", "melee", "ladders", "dodge",
+	"objectives", "mobilelight", "useitems", "usemobilephone", "survive the acid trip" };
+static struct { char name[COF_STATE_HINT], file[COF_STATE_TEXT]; } cof_state_hint_queue[4];
+static int cof_state_hint_queued;
+// The objective the game last sent with its popup (cof_objective's showobjective: one global, cleared by the first
+// PostThink that sends it, so the partners it is mirrored to got it without one).
+static char cof_state_shown[COF_STATE_TEXT];
 static edict_t *cof_state_document;
 static int cof_state_document_serial, cof_state_reader;
 // 1.1.9: party values the checkpoint does not hold (its layout stays as it is); a session starts them over.
@@ -38,6 +54,8 @@ void SV_CoF_StateReset( void )
 {
 	memset( &cof_state, 0, sizeof( cof_state ));
 	memset( cof_state_players, 0, sizeof( cof_state_players ));
+	cof_state_shown[0] = 0;
+	cof_state_hint_queued = 0;
 	cof_state_document = NULL;
 	cof_state_sending = false;
 	CoF_StatePartyReset();
@@ -92,12 +110,14 @@ static int CoF_StatePlayer( sv_client_t *cl )
 }
 
 // Objectives( string key, string file, byte isNew ): what the game sent this player. A file other than a language's
-// hints.txt is the custom one cof_objective set (the game zeroes it right after sending).
-static void CoF_StateObjectiveSent( edict_t *entity, const byte *payload, int size )
+// hints.txt is the custom one cof_objective set (the game zeroes it right after sending). isNew pops the objective up
+// on screen: the game sets it for the first player sent the new objective only, so a partner sent the same objective
+// without it gets it set, once.
+static void CoF_StateObjectiveSent( edict_t *entity, byte *payload, int size )
 {
 	const char *key = (const char *)payload, *file;
 	sv_client_t *client;
-	int slot, key_length, file_length;
+	int slot = -1, key_length, file_length, popup;
 	for( key_length = 0; key_length < size && payload[key_length]; key_length++ );
 	if( key_length >= size || key_length >= COF_STATE_TEXT ) return;
 	file = key + key_length + 1;
@@ -105,9 +125,77 @@ static void CoF_StateObjectiveSent( edict_t *entity, const byte *payload, int si
 	if( key_length + 1 + file_length >= size || file_length >= COF_STATE_TEXT ) return;
 	if(( client = SV_ClientFromEdict( entity, true )) != NULL && ( slot = CoF_StatePlayer( client )) >= 0 )
 		Q_strncpy( cof_state_players[slot].delivered, key, sizeof( cof_state_players[slot].delivered ));
+	popup = key_length + 1 + file_length + 1;
+	if( slot >= 0 && key_length && popup < size )
+	{
+		if( payload[popup] == 1 ) Q_strncpy( cof_state_shown, key, sizeof( cof_state_shown ));
+		else if( !Q_strcmp( key, cof_state_shown ) && Q_strcmp( key, cof_state_players[slot].shown ))
+		{
+			payload[popup] = 1;
+			Con_Printf( "cofstory phase=objective-popup userid=%d\n", client->userid );
+		}
+		if( payload[popup] == 1 ) Q_strncpy( cof_state_players[slot].shown, key, sizeof( cof_state_players[slot].shown ));
+	}
 	if( !file_length || ( !Q_strncmp( file, "txtfiles/", 9 ) && file_length >= 9 && !Q_strcmp( file + file_length - 9, "hints.txt" ))) return;
 	Q_strncpy( cof_state.sent_key, key, sizeof( cof_state.sent_key ));
 	Q_strncpy( cof_state.sent_file, file, sizeof( cof_state.sent_file ));
+}
+
+static qboolean CoF_StateHintHad( int slot, const char *hint )
+{
+	int i;
+	for( i = 0; i < cof_state_players[slot].hint_count; i++ )
+		if( !Q_strcmp( cof_state_players[slot].hints[i], hint )) return true;
+	return false;
+}
+
+static void CoF_StateHintHas( int slot, const char *hint )
+{
+	if( CoF_StateHintHad( slot, hint ) || cof_state_players[slot].hint_count >= COF_STATE_HINTS ) return;
+	Q_strncpy( cof_state_players[slot].hints[cof_state_players[slot].hint_count++], hint, COF_STATE_HINT );
+}
+
+// ControlHint( string hint, string file ): a story hint sent to one player is queued for the party. A weapon's own hints
+// (iron sights, a struggle, night vision) stay the player's.
+static void CoF_StateHintSent( edict_t *entity, const byte *payload, int size )
+{
+	const char *hint = (const char *)payload, *file;
+	sv_client_t *client;
+	int slot, hint_length, file_length, i;
+	for( hint_length = 0; hint_length < size && payload[hint_length]; hint_length++ );
+	if( !hint_length || hint_length >= size || hint_length >= COF_STATE_HINT ) return;
+	file = hint + hint_length + 1;
+	for( file_length = 0; hint_length + 1 + file_length < size && file[file_length]; file_length++ );
+	if( hint_length + 1 + file_length >= size || file_length >= COF_STATE_TEXT ) return;
+	if( !( client = SV_ClientFromEdict( entity, true )) || ( slot = CoF_StatePlayer( client )) < 0 ) return;
+	for( i = 0; i < (int)( sizeof( cof_state_story_hints ) / sizeof( cof_state_story_hints[0] )) && Q_strcmp( hint, cof_state_story_hints[i] ); i++ );
+	if( i == (int)( sizeof( cof_state_story_hints ) / sizeof( cof_state_story_hints[0] ))) return;
+	CoF_StateHintHas( slot, hint );
+	for( i = 0; i < cof_state_hint_queued && Q_strcmp( cof_state_hint_queue[i].name, hint ); i++ );
+	if( i < cof_state_hint_queued || cof_state_hint_queued >= (int)( sizeof( cof_state_hint_queue ) / sizeof( cof_state_hint_queue[0] ))) return;
+	Q_strncpy( cof_state_hint_queue[i].name, hint, sizeof( cof_state_hint_queue[i].name ));
+	Q_strncpy( cof_state_hint_queue[i].file, file, sizeof( cof_state_hint_queue[i].file ));
+	cof_state_hint_queued++;
+}
+
+static void CoF_StateDeliverHints( sv_client_t *client, int slot )
+{
+	int i;
+	for( i = 0; i < cof_state_hint_queued; i++ )
+	{
+		byte payload[COF_STATE_HINT + COF_STATE_TEXT];
+		int a = (int)Q_strlen( cof_state_hint_queue[i].name ) + 1, b = (int)Q_strlen( cof_state_hint_queue[i].file ) + 1;
+		if( CoF_StateHintHad( slot, cof_state_hint_queue[i].name )) continue;
+		memcpy( payload, cof_state_hint_queue[i].name, a );
+		memcpy( payload + a, cof_state_hint_queue[i].file, b );
+		cof_state_sending = true;
+		if( SV_CoF_SendUserMessage( client->edict, "ControlHint", payload, a + b, true ))
+		{
+			CoF_StateHintHas( slot, cof_state_hint_queue[i].name );
+			Con_Printf( "cofstory phase=hint-shared userid=%d hint=%s\n", client->userid, cof_state_hint_queue[i].name );
+		}
+		cof_state_sending = false;
+	}
 }
 
 void SV_CoF_StateMessage( edict_t *entity, const char *name, byte *payload, int size )
@@ -115,6 +203,7 @@ void SV_CoF_StateMessage( edict_t *entity, const char *name, byte *payload, int 
 	sv_client_t *client;
 	int slot, entry, note;
 	if( name && payload && !Q_strcmp( name, "Objectives" ) && SV_CoF_StoryCoopEnabled()) { CoF_StateObjectiveSent( entity, payload, size ); return; }
+	if( name && payload && !cof_state_sending && !Q_strcmp( name, "ControlHint" ) && SV_CoF_StoryCoopEnabled()) { CoF_StateHintSent( entity, payload, size ); return; }
 	if( cof_state_sending || !name || Q_strcmp( name, "AddNote" ) || !CoF_StateNoteValid( payload, size ) || !SV_CoF_StoryCoopEnabled()) return;
 	client = SV_ClientFromEdict( entity, true );
 	if( !client || ( slot = CoF_StatePlayer( client )) < 0 ) return;
@@ -252,8 +341,10 @@ void SV_CoF_StateFrame( void )
 		if( cof_state.values.three_slots && !observed[slot].three_slots && cof_state_players[slot].alive ) SV_CoF_RetailThreeSlots( client );
 		if( SV_CoF_RetailStoryRead( client, &cof_state_players[slot].previous )) cof_state_players[slot].known = 1;
 		CoF_StateDeliverNotes( client, slot );
+		CoF_StateDeliverHints( client, slot );
 		CoF_StatePartyWrite( client, slot );
 	}
+	cof_state_hint_queued = 0; // the players present had it; one still loading misses it, as one who came later would
 }
 
 void SV_CoF_StateCommandBegin( sv_client_t *cl )

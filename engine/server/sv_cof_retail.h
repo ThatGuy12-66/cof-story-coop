@@ -53,9 +53,25 @@ typedef struct
 qboolean SV_CoF_RetailArms( sv_client_t *cl, cof_retail_arms_t *arms );
 // Take a carried weapon in hand through the game's own SelectItem (refused mid-shot, on a ladder...).
 qboolean SV_CoF_RetailEquip( sv_client_t *cl, const char *classname );
-// After `inventorydualwield`: switch to the weapon_dualweapon the game just built
-// for this player (multiplayer rules never do). True when a switch was started.
-qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl );
+// Before a dual-wield command (`inventorydualwield`, or `quicksel`'s double tap): the newest item in the player's
+// dual-weapon bucket. When the game builds another dual weapon it kills the old one, which stays the player's, with
+// the same pair when the same two are put together again, until its removal a tenth of a second later; the new one
+// is the bucket's first.
+typedef struct
+{
+	const void *head; // compared, never followed
+	int valid;
+} cof_retail_dual_seen_t;
+// A command that may build a dual weapon for its sender.
+qboolean SV_CoF_RetailDualCommand( const char *cmd );
+void SV_CoF_RetailDualSeen( sv_client_t *cl, cof_retail_dual_seen_t *seen );
+// After the command: switch to the weapon_dualweapon it built for this player (multiplayer rules never do). True when
+// that is now the weapon about to be deployed. A quick-slot press that only selects one weapon (out of dual wield, to
+// reload) builds none, so it stays as the game left it.
+qboolean SV_CoF_RetailDualDeploy( sv_client_t *cl, const cof_retail_dual_seen_t *seen );
+// Every player's m_bNightmare follows the difficulty cvar (4: the hardest's stamina), as skillset sets it in single
+// player; an AI companion's morphine trip timer stays 0.
+void SV_CoF_RetailPlayersFrame( void );
 // The item in hand (its m_iId) and, for weapon_dualweapon, the weapon id in each hand.
 qboolean SV_CoF_RetailHeld( sv_client_t *cl, int *id, int *right_hand, int *left_hand );
 // A companion bot never runs dry: the game's own infinite-ammo switch, and a

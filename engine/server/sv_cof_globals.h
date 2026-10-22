@@ -11,7 +11,9 @@ Written for one player, these are file globals in the retail hl.dll, so in co-op
   one got the one-time kick every frame, up to the 10 degree cap;
 - gDualWeapon (0x102118C0, CDualWeaponRight): one object ran every player's left hand, so with two players dual
   wielding the wrong one swung, fired or toggled the phone light (CoF_Dual_Weapon.cpp:162-241); its own fields
-  (+0xDC..+0x134) are swapped, not its vtable or pev.
+  (+0xDC..+0x134) are swapped, not its vtable or pev;
+- lastquickslotpressed (QuickSelectItem 100F07F0): two quick-slot keys within a quarter second dual-wield their
+  items, and one player's key paired up with another's (the time it counts from is the player's own, +0x5D8).
 Each player keeps a copy; while a player's command runs the DLL holds theirs, otherwise the host's.
 
 Plain C (standard library only): the offline tests share it.
@@ -32,8 +34,8 @@ typedef struct
 	int size;
 } cof_global_t;
 
-#define COF_GLOBALS 8
-#define COF_GLOBALS_BYTES 98 // the sizes added up
+#define COF_GLOBALS 9
+#define COF_GLOBALS_BYTES 102 // the sizes added up
 
 static const cof_global_t cof_player_globals[COF_GLOBALS] =
 {
@@ -45,6 +47,7 @@ static const cof_global_t cof_player_globals[COF_GLOBALS] =
 	{ "spread-sprinting", 0x231F0F, 1 },// bool wassprinting
 	{ "spread-minimum", 0x231F5C, 4 },  // int minimum
 	{ "dual-weapon", 0x21199C, 0x58 },  // gDualWeapon.m_iCurrentShot .. m_iIdleAnimation2
+	{ "quick-slot", 0x226718, 4 },      // int lastquickslotpressed
 };
 
 // A player's copy into the DLL's globals.

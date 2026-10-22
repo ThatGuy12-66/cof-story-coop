@@ -2511,6 +2511,20 @@ static void GAME_EXPORT pfnTraceModel( const float *v1, const float *v2, int hul
 		SV_ClipMoveToEntity( pent, v1, mins, maxs, v2, &trace );
 	}
 
+	// Cry of Fear story co-op: the game's multiplayer melee, the taller's stamp and the partner heal trace each living
+	// player alone, through walls; a wall or brush entity first on the line is a miss (cof_sp_melee, sv_cof_gates.c)
+	if( trace.fraction < 1.0f && FBitSet( pent->v.flags, FL_CLIENT|FL_FAKECLIENT ) && SV_CoF_MeleeWalls( ))
+	{
+		trace_t world = SV_Move( v1, mins, maxs, v2, MOVE_NOMONSTERS, pent, false );
+
+		if( world.fraction < trace.fraction )
+		{
+			memset( &trace, 0, sizeof( trace ));
+			VectorCopy( v2, trace.endpos );
+			trace.fraction = 1.0f;
+		}
+	}
+
 	SV_ConvertTrace( ptr, &trace );
 }
 

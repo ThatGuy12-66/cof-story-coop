@@ -62,6 +62,17 @@ static void *cof_gate_instance;
 #define COF_DUAL_GATE 0x1B6E0
 static const byte cof_dual_gate_original[6] = { 0x0f, 0x85, 0x5a, 0x15, 0x00, 0x00 };
 static byte *cof_dual_gate;
+// The quick-slot double tap (two quick-slot keys within a quarter second dual-wield
+// their items) is refused in multiplayer twice: QuickSelectItem (100F07F0, the jnz
+// after IsMultiplayer at 100F087F) and the CheckQuickDualWield it calls (100DCB10,
+// the jnz after IsMultiplayer at 100DCB40). Both open with the command's gate, or
+// neither; the last slot pressed, one global of the game's, is kept per player
+// (sv_cof_globals.h), and the dual weapon is deployed like the command's.
+#define COF_QUICK_DUAL_GATE 0xF0884
+static const byte cof_quick_dual_gate_original[6] = { 0x0f, 0x85, 0x5c, 0x01, 0x00, 0x00 };
+#define COF_QUICK_DUAL_CHECK 0xDCB45
+static const byte cof_quick_dual_check_original[6] = { 0x0f, 0x85, 0x0b, 0x03, 0x00, 0x00 };
+static byte *cof_quick_dual_gate, *cof_quick_dual_check;
 
 static qboolean CoF_StoryWriteGate( byte *p, const byte *expect, const byte *value )
 {
@@ -126,10 +137,14 @@ static void CoF_StoryCloseGate( void )
 	{
 		CoF_StoryWriteGate( cof_gate, cof_gate_open, cof_gate_original );
 		if( cof_dual_gate ) CoF_StoryWriteGate( cof_dual_gate, cof_gate_open, cof_dual_gate_original );
+		if( cof_quick_dual_gate ) CoF_StoryWriteGate( cof_quick_dual_gate, cof_gate_open, cof_quick_dual_gate_original );
+		if( cof_quick_dual_check ) CoF_StoryWriteGate( cof_quick_dual_check, cof_gate_open, cof_quick_dual_check_original );
 		CoF_StoryRestoreRules();
 	}
 	cof_rules_new = NULL;
 	cof_dual_gate = NULL;
+	cof_quick_dual_gate = NULL;
+	cof_quick_dual_check = NULL;
 	cof_gate = NULL;
 	cof_gate_instance = NULL;
 }
@@ -166,7 +181,17 @@ qboolean SV_CoF_StoryCoopEnabled( void )
 		cof_gate_instance = svgame.hInstance;
 		// dual wield is a nicety: story co-op runs without it if the bytes differ
 		cof_dual_gate = CoF_StoryWriteGate( base + COF_DUAL_GATE, cof_dual_gate_original, cof_gate_open ) ? base + COF_DUAL_GATE : NULL;
-		Con_Printf( "cofstory phase=gate-enabled landmark=preserved rules=zeroed dualwield=%s\n", cof_dual_gate ? "open" : "closed" );
+		if( cof_dual_gate && CoF_StoryWriteGate( base + COF_QUICK_DUAL_CHECK, cof_quick_dual_check_original, cof_gate_open ))
+		{
+			if( CoF_StoryWriteGate( base + COF_QUICK_DUAL_GATE, cof_quick_dual_gate_original, cof_gate_open ))
+			{
+				cof_quick_dual_check = base + COF_QUICK_DUAL_CHECK;
+				cof_quick_dual_gate = base + COF_QUICK_DUAL_GATE;
+			}
+			else CoF_StoryWriteGate( base + COF_QUICK_DUAL_CHECK, cof_gate_open, cof_quick_dual_check_original );
+		}
+		Con_Printf( "cofstory phase=gate-enabled landmark=preserved rules=zeroed dualwield=%s quickdual=%s\n",
+			cof_dual_gate ? "open" : "closed", cof_quick_dual_gate ? "open" : "closed" );
 		return true;
 	}
 #else
@@ -522,6 +547,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_ExitFrame();
 	SV_CoF_ShareFrame();
 	SV_CoF_StateFrame();
+	SV_CoF_RetailPlayersFrame();
 	SV_CoF_SessionFrame();
 	SV_CoF_TraceFrame();
 	SV_CoF_Inventory12Frame();
