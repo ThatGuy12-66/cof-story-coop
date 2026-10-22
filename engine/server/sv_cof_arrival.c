@@ -153,6 +153,15 @@ void SV_CoF_ArrivalSignon( sv_client_t *cl )
 	cof_arrival_player_t *p;
 	if( !SV_CoF_StoryCoopEnabled() || !( p = CoF_ArrivalPlayer( cl ))) return;
 	p->signon = true;
+	// 1.2.2: standing in an exit counts as arriving in it from the player's own sign-on, not only once the whole party
+	// has signed on (SV_CoF_ArrivalReady). The host signs on first; set down in the exit back at the landmark while a
+	// guest still loaded, the host's touch held that exit and the guest's arrival took the party straight back, over
+	// and over (host log 2026-10-21: c_city <-> c_buscity eight times in two minutes, and c_city <-> c_city2)
+	if( CoF_ArrivalHuman( cl ))
+	{
+		p->stayed = SV_CoF_PartyInExit( cl->edict, NULL, 0 );
+		p->stay_generation = svs.spawncount;
+	}
 }
 
 // Called when every carried player has signed on: who stands in an exit now, and the landmark they came in by.
