@@ -3,8 +3,7 @@ Cry of Fear Co-op 1.2.5
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 
 WHAT'S NEW IN 1.2.5
-Co-op runs the game as a multiplayer game, and the original game switches a few single-player
-things off in multiplayer. These are back:
+- Single-player things the original game switches off in a multiplayer game are back in co-op.
 - Quick dual wield. Press two quick-slot keys at the same time (1 and 2, say) with two items
   that go together, like a pistol and the flashlight, and you hold both. Press one of them
   alone to put the other away, to reload.
