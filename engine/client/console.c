@@ -2206,8 +2206,13 @@ static void Con_DrawNotify( void )
 
 	int x = con.curFont->charWidths[' ']; // offset one space at left screen side
 
-	// cof_notify 0: no notify lines (the chat input below still draws)
-	if( host.allow_console && !Con_BackgroundMapActive( ) && cof_notify.value != 0.0f )
+	// cof_notify 0: no notify lines (the chat input below still draws). 1.2.3: and only for a player who has the
+	// console themselves (con_enable, -console or -dev: host.allow_console_init) or developer mode. A game with
+	// more than one slot unlocks the console on its own (cl_parse.c, "allow console in multiplayer games"), so in
+	// every co-op game each engine message ("Error: Could not load sound ...", "Setting up renderer...") flashed
+	// in the top-left corner over the game, which GoldSrc never shows outside developer mode. The console and the
+	// log still have every line.
+	if( host.allow_console && ( host.allow_console_init || host_developer.value > 0.0f ) && !Con_BackgroundMapActive( ) && cof_notify.value != 0.0f )
 	{
 		for( int i = Q_max( 0, CON_LINES_COUNT - con.num_times ); i < CON_LINES_COUNT; i++ )
 		{
