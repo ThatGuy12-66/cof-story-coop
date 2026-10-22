@@ -19,6 +19,7 @@
 #include "sv_cof_scene.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_sections.h"
+#include "sv_cof_doorroom.h"
 
 #define COF_PARTY_DOOR_FLAG 0x1EA4
 #define COF_PARTY_PREVIOUS_ORIGIN 0x618
@@ -213,6 +214,8 @@ static struct
 	int generation, count;
 	int entity[COF_PARTY_BOUNCES], serial[COF_PARTY_BOUNCES];
 } cof_party_bounces = { -1, 0, { 0 }, { 0 } };
+// 1.2.3: svs.spawncount the map's own cof_teleports were last checked in (CoF_PartyRepairTeleports)
+static int cof_party_repaired_generation = -1;
 static int cof_party_generation = -1;
 static double cof_party_inventory_time;
 static convar_t *cof_party_respawn_delay;
@@ -345,6 +348,7 @@ void SV_CoF_PartyShutdown( void )
 	cof_party_generation = -1;
 	cof_party_teleports.generation = -1;
 	cof_party_bounces.generation = -1;
+	cof_party_repaired_generation = -1;
 	cof_party_inventory_time = 0;
 }
 
@@ -2218,6 +2222,180 @@ static byte *CoF_PartyArrived( sv_client_t *cl, int userid )
 	return pv;
 }
 
+// 1.2.3: the black rooms of the doors between maps (sv_cof_doorroom.h).
+
+// A live cof_teleport named name stands at origin (within two units: a merged map's sections move by whole units).
+static qboolean CoF_PartyTeleportAt( const char *name, const vec3_t origin )
+{
+	int i;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *tele = SV_EdictNum( i );
+		if( !SV_IsValidEdict( tele ) || ( tele->v.flags & FL_KILLME ) || Q_strcmp( SV_GetString( tele->v.classname ), "cof_teleport" ) ||
+			Q_strcmp( SV_GetString( tele->v.targetname ), name )) continue;
+		if( CoF_PartyDistanceSquared( tele->v.origin, origin ) <= 4.0f ) return true;
+	}
+	return false;
+}
+
+// Something live in the loaded map is named name (skip aside).
+static qboolean CoF_PartyNamed( const char *name, const edict_t *skip )
+{
+	int i;
+	if( !name[0] ) return false;
+	for( i = 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *ent = SV_EdictNum( i );
+		if( ent != skip && SV_IsValidEdict( ent ) && !( ent->v.flags & FL_KILLME ) && !Q_strcmp( SV_GetString( ent->v.targetname ), name )) return true;
+	}
+	return false;
+}
+
+// A live cof_teleport named name with somewhere to send its activator in this map.
+static qboolean CoF_PartyLiveTeleport( const char *name )
+{
+	int i;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *tele = SV_EdictNum( i );
+		if( SV_IsValidEdict( tele ) && !( tele->v.flags & FL_KILLME ) && !Q_strcmp( SV_GetString( tele->v.classname ), "cof_teleport" ) &&
+			!Q_strcmp( SV_GetString( tele->v.targetname ), name ) && CoF_PartyNamed( SV_GetString( tele->v.target ), tele )) return true;
+	}
+	return false;
+}
+
+// 1.2.3: the map's own cof_teleports put back where a level change took them away. A black room's teleport lies in its
+// landmark's view, and the game lets it cross a level change with the party (CBaseEntity's FCAP_ACROSS_TRANSITION); a
+// change into a merged map matched none of the connections the game had marked (the exit names the original map, the
+// story transition the merged file), so it never came back: c_buscity's teleportbc2 stayed in c_city and the black
+// room at c_buscity's landbc had no way out (host log 2026-10-21 22:13-22:16). SV_CoF_TeleportStaysHome keeps them
+// from leaving now; this mends saves made before. No story map removes a cof_teleport (nothing names one in a
+// killtarget), so one missing from the map's entity script went with a level change. Once a map.
+static void CoF_PartyRepairTeleports( void )
+{
+	char *cursor, *block, key[256], value[1024], name[64], target[64];
+	qboolean teleport;
+	vec3_t origin;
+	int repaired = 0;
+	if( cof_party_repaired_generation == svs.spawncount ) return;
+	cof_party_repaired_generation = svs.spawncount;
+	if( !sv.worldmodel || !sv.worldmodel->entities ) return;
+	cursor = sv.worldmodel->entities;
+	while( cursor )
+	{
+		block = cursor;
+		if(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) == NULL || key[0] != '{' ) break;
+		teleport = false;
+		name[0] = target[0] = 0;
+		VectorClear( origin );
+		while(( cursor = COM_ParseFile( cursor, key, sizeof( key ))) != NULL && key[0] != '}' )
+		{
+			if(( cursor = COM_ParseFile( cursor, value, sizeof( value ))) == NULL ) break;
+			if( !Q_strcmp( key, "classname" )) teleport = !Q_strcmp( value, "cof_teleport" );
+			else if( !Q_strcmp( key, "targetname" )) Q_strncpy( name, value, sizeof( name ));
+			else if( !Q_strcmp( key, "target" )) Q_strncpy( target, value, sizeof( target ));
+			else if( !Q_strcmp( key, "origin" )) Q_atov( origin, value, 3 );
+		}
+		if( !cursor ) break;
+		// one with nowhere to go in this map is one that crosses, as in single player (CoF_DoorRoomTeleportStays)
+		if( !teleport || !name[0] || CoF_PartyTeleportAt( name, origin ) || !CoF_PartyNamed( target, NULL )) continue;
+		if( SV_CoF_SpawnMapBlock( block ) == NULL ) continue;
+		repaired++;
+		Con_Printf( "cofstory phase=teleport-restored name=%s target=%s origin=%.0f,%.0f,%.0f\n", name, target, origin[0], origin[1], origin[2] );
+	}
+	if( repaired ) cof_party_bounces.generation = -1; // read again with them in
+}
+
+// 1.2.3: whether this entity stays in its map across a story level change (sv_save.c clears the game's marks on it).
+qboolean SV_CoF_TeleportStaysHome( edict_t *ent )
+{
+	const char *target;
+	if( !SV_CoF_StoryCoopEnabled() || !SV_IsValidEdict( ent ) || Q_strcmp( SV_GetString( ent->v.classname ), "cof_teleport" )) return false;
+	target = SV_GetString( ent->v.target );
+	return CoF_DoorRoomTeleportStays( true, target[0] != 0, target[0] && CoF_PartyNamed( target, ent ));
+}
+
+// The live walk-in trigger of the black room whose landmark is at mark, or NULL: a trigger_multiple that fires a
+// walk-in cof_teleport present in the map, its box within COF_DOORROOM_WALKIN_NEAR of the landmark (the nearest).
+static edict_t *CoF_PartyDoorRoomWalkIn( const vec3_t mark )
+{
+	edict_t *best = NULL;
+	float best_d = 0.0f, d;
+	int i;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *trigger = SV_EdictNum( i );
+		const char *target;
+		if( !SV_IsValidEdict( trigger ) || ( trigger->v.flags & FL_KILLME ) || trigger->v.solid != SOLID_TRIGGER ||
+			Q_strcmp( SV_GetString( trigger->v.classname ), "trigger_multiple" ) ||
+			!CoF_DoorRoomWalkInNear( mark, trigger->v.absmin, trigger->v.absmax )) continue;
+		target = SV_GetString( trigger->v.target );
+		if( !target[0] || !CoF_PartyWalkInTeleport( target ) || !CoF_PartyLiveTeleport( target )) continue;
+		d = CoF_DoorRoomBoxDistance2( mark, trigger->v.absmin, trigger->v.absmax );
+		if( !best || d < best_d )
+		{
+			best = trigger;
+			best_d = d;
+		}
+	}
+	return best;
+}
+
+// A spot for cl well inside the walk-in, on its floor, in the landmark's room (no wall between). Players may share it,
+// as on a shared warp: retail PreThink lets overlapping players pass through each other, and the walk-in sends each
+// away at their first move.
+static qboolean CoF_PartyDoorRoomLanding( sv_client_t *cl, const vec3_t mark, edict_t *walkin, int which, vec3_t result )
+{
+	edict_t *ent = cl->edict;
+	vec3_t point, down, zero = { 0, 0, 0 };
+	trace_t tr;
+	if( !CoF_PartyVectorValid( mark ) || !CoF_PartyVectorValid( ent->v.mins ) || !CoF_PartyVectorValid( ent->v.maxs ) ||
+		!CoF_DoorRoomSpot( mark, walkin->v.absmin, walkin->v.absmax, ent->v.mins, ent->v.maxs, which, point )) return false;
+	tr = SV_Move( mark, zero, zero, point, MOVE_NOMONSTERS, ent, false );
+	if( tr.startsolid || tr.allsolid || tr.fraction < 1.0f ) return false;
+	VectorCopy( point, down );
+	down[2] -= 256.0f;
+	tr = SV_Move( point, ent->v.mins, ent->v.maxs, down, MOVE_NOMONSTERS, ent, false );
+	if( tr.startsolid || tr.allsolid || tr.fraction == 1.0f || tr.plane.normal[2] < 0.7f ) return false;
+	VectorCopy( tr.endpos, point );
+	point[2] += 1.0f;
+	tr = SV_Move( point, ent->v.mins, ent->v.maxs, point, MOVE_NOMONSTERS, ent, false );
+	if( tr.startsolid || tr.allsolid || !CoF_DoorRoomInside( point, ent->v.mins, ent->v.maxs, walkin->v.absmin, walkin->v.absmax )) return false;
+	VectorCopy( point, result );
+	return true;
+}
+
+// 1.2.3: an arrival by a door's black room goes on through it, as in single player. The retail arrival stands in the
+// room's walk-in at once; one set down elsewhere in the dark room (beside the leader, kept out of the bounce triggers
+// by the placement; on the landmark after everyone came in inside solid, as when c_city's taller room let a waiter
+// fall to its floor during the hold) stood between the walk-in and the level change back, and a step into that took
+// the party back to the map it had left (host log 2026-10-21 22:13-22:16, c_buscity's landbc). Everyone carried into
+// that room is set down in its walk-in, which sends each on at their first move.
+static void CoF_PartyDoorRoomArrive( const cof_party_arrival_t *arrival )
+{
+	edict_t *walkin;
+	vec3_t mark, landing, zero = { 0, 0, 0 };
+	int i, which;
+	if( !sv.startspot[0] || !SV_CoF_LiveLandmark( sv.startspot, mark ) || ( walkin = CoF_PartyDoorRoomWalkIn( mark )) == NULL ) return;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		edict_t *ent = cl->edict;
+		byte *pv = CoF_PartyArrived( cl, arrival->userid[i] );
+		trace_t tr;
+		if( !pv || CoF_DoorRoomInside( ent->v.origin, ent->v.mins, ent->v.maxs, walkin->v.absmin, walkin->v.absmax ) ||
+			CoF_PartyDistanceSquared( ent->v.origin, mark ) > COF_DOORROOM_ROOM * COF_DOORROOM_ROOM ) continue;
+		tr = SV_Move( mark, zero, zero, ent->v.origin, MOVE_NOMONSTERS, ent, false );
+		if( tr.startsolid || tr.allsolid || tr.fraction < 1.0f ) continue; // not in that room
+		for( which = 0; which < 2; which++ )
+		{
+			if( !CoF_PartyDoorRoomLanding( cl, mark, walkin, which, landing ) || !CoF_PartyMoveEdict( ent, pv, landing, NULL )) continue;
+			Con_Printf( "cofstory phase=arrival-walk-in userid=%d trigger=%d origin=%.3f,%.3f,%.3f\n", cl->userid, NUM_FOR_EDICT( walkin ), landing[0], landing[1], landing[2] );
+			break;
+		}
+	}
+}
+
 // Called by the restore, after every carried player exists in the new map and
 // before any client runs a command there, so nobody falls or sticks first.
 void SV_CoF_PartyTransitionArrive( unsigned int epoch )
@@ -2236,8 +2414,9 @@ void SV_CoF_PartyTransitionArrive( unsigned int epoch )
 		Con_Printf( "cofstory phase=music-cleared track=%s\n", music->string );
 		Cvar_DirectSet( music, "" );
 	}
-	if( !arrival.leader || arrival.epoch != epoch ) return;
 	CoF_PartyCheckGeneration();
+	CoF_PartyRepairTeleports(); // 1.2.3: before the placement reads the map's teleports and bounce triggers
+	if( !arrival.leader || arrival.epoch != epoch ) return;
 	// Everyone gathers at the leader, who arrives where the map expects. Only if
 	// the leader landed inside solid, gather at a player whose spot is fine. (No
 	// floor below is normal for an exit taken while falling down a shaft.)
@@ -2312,6 +2491,7 @@ void SV_CoF_PartyTransitionArrive( unsigned int epoch )
 			Con_Printf( "cofstory phase=arrival-overlapped userid=%d beside=%d\n", cl->userid, svs.clients[anchor].userid );
 		else Con_Printf( "cofstory phase=arrival-stranded userid=%d\n", cl->userid );
 	}
+	CoF_PartyDoorRoomArrive( &arrival );
 	// where each came in, for a respawn (through a door too, its flag still up)
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 		if( arrival.userid[i] && svs.clients[i].userid == arrival.userid[i] &&
@@ -2431,6 +2611,7 @@ void SV_CoF_PartyFrame( void )
 {
 	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
 	CoF_PartyCheckGeneration();
+	CoF_PartyRepairTeleports(); // 1.2.3: a checkpoint or a new game's map too, once
 	CoF_PartyTrackLife();
 	CoF_PartyWatchDoors();
 	CoF_PartyTeleports();

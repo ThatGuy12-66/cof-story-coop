@@ -28,6 +28,8 @@ qboolean SV_CoF_PartySectionMove( sv_client_t *cl, const vec3_t landing, sv_clie
 // player, before their move, back where they came into this map or section.
 qboolean SV_CoF_PartyDead( edict_t *ent );
 void SV_CoF_PartyRespawned( sv_client_t *cl );
+// 1.2.3: a cof_teleport with its destination in this map stays here across a story level change (sv_save.c).
+qboolean SV_CoF_TeleportStaysHome( edict_t *ent );
 // cof_warp and other commands the story layer handles itself; true when handled.
 qboolean SV_CoF_PartyClientCommand( sv_client_t *cl );
 #endif

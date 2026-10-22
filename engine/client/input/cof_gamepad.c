@@ -109,8 +109,10 @@ does for keys, without any OS input.
 #endif
 
 // bump when the default layout changes in a way existing profiles should get
-// (CL_CoF_PadDefaultsCheck migrates keys still holding the previous defaults)
-#define COF_PAD_DEFAULTS_GENERATION 5
+// (CL_CoF_PadDefaultsCheck migrates keys still holding the previous defaults).
+// 6 (1.2.3): the same layout as 5; the engine's own Half-Life pad binds a
+// profile kept are moved to it (cof_pad_layout_builtin)
+#define COF_PAD_DEFAULTS_GENERATION 6
 
 static CVAR_DEFINE_AUTO( cof_pad_panel_gate, "1", FCVAR_ARCHIVE, "Cry of Fear gamepad: while a clickable panel (inventory, note, keypad...) is open the sticks do not move the player, START opens the pause menu, the close key closes the inventory and A/X click" );
 static CVAR_DEFINE_AUTO( cof_pad_close_key, "B_BUTTON", FCVAR_ARCHIVE, "Cry of Fear gamepad: key that backs out of an open panel (its own Back/Close/Cancel/No button; the inventory closes through its +inventory binding); empty = off" );
@@ -157,7 +159,7 @@ typedef struct
 	const char *binding;
 } cof_pad_bind_t;
 
-// the Cry of Fear gamepad layout (generation 5); the same list is in
+// the Cry of Fear gamepad layout (generation 5, still in 6); the same list is in
 // gfx/shell/kb_def.lst (Options > Keybinds > Use defaults) and
 // docs/patches/cof-gamepad-input.md. The engine key names are POSITIONS
 // (A = the bottom face button, B = right, X = left, Y = top) on every pad,
@@ -246,6 +248,35 @@ static const cof_pad_bind_t cof_pad_layout_gen2[] =
 	{ K_DPAD_DOWN,     "flashlight" },
 	{ K_BACK_BUTTON,   "+objectives" },
 	{ K_START_BUTTON,  "cancelselect" },
+};
+
+// 1.2.3: the engine's own pad binds (in_keys.c keynames, Half-Life's: +speed and
+// lastinv do not exist in Cry of Fear). The game's config.cfg starts with
+// "unbindall", which wipes them; the config.cfg the co-op app writes for a new
+// copy (its keyboard list) does not, so every such profile kept them, and the
+// defaults check saw pad keys bound and left them: sprint on the left trigger
+// and stick did nothing ("Unknown command: +speed", a guest's log 2026-10-21).
+// A key that still holds one moves to the layout above.
+static const cof_pad_bind_t cof_pad_layout_builtin[] =
+{
+	{ K_A_BUTTON,      "+jump" },
+	{ K_B_BUTTON,      "+use" },
+	{ K_X_BUTTON,      "+reload" },
+	{ K_Y_BUTTON,      "impulse 100" },
+	{ K_BACK_BUTTON,   "pause" },
+	{ K_START_BUTTON,  "cancelselect" },
+	{ K_LSTICK,        "+speed" },
+	{ K_RSTICK,        "+duck" },
+	{ K_L1_BUTTON,     "+duck" },
+	{ K_R1_BUTTON,     "+attack" },
+	{ K_DPAD_UP,       "impulse 201" },
+	{ K_DPAD_DOWN,     "lastinv" },
+	{ K_DPAD_LEFT,     "invprev" },
+	{ K_DPAD_RIGHT,    "invnext" },
+	{ K_L2_BUTTON,     "+speed" },
+	{ K_R2_BUTTON,     "+attack2" },
+	{ K_JOY1,          "+speed" },
+	{ K_JOY2,          "+attack2" },
 };
 
 // generation 1 (the first staging of this round): a key that still holds its
@@ -1496,9 +1527,9 @@ static void CL_CoF_PadDefaultsCheck( void )
 		int n = CL_CoF_PadApplyLayout( false );
 		Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "default layout applied (%d binds, generation %d)", n, COF_PAD_DEFAULTS_GENERATION );
 	}
-	else if( gen >= 1 && gen <= 4 )
+	else
 	{
-		int moved, kept;
+		int moved = 0, kept = 0, builtin = 0, unchanged = 0;
 
 		if( gen == 1 )
 			CL_CoF_PadMigrate( cof_pad_layout_gen1, ARRAYSIZE( cof_pad_layout_gen1 ), &moved, &kept );
@@ -1506,11 +1537,20 @@ static void CL_CoF_PadDefaultsCheck( void )
 			CL_CoF_PadMigrate( cof_pad_layout_gen2, ARRAYSIZE( cof_pad_layout_gen2 ), &moved, &kept );
 		else if( gen == 3 )
 			CL_CoF_PadMigrate( cof_pad_layout_gen3, ARRAYSIZE( cof_pad_layout_gen3 ), &moved, &kept );
-		else CL_CoF_PadMigrate( cof_pad_layout_gen4, ARRAYSIZE( cof_pad_layout_gen4 ), &moved, &kept );
+		else if( gen == 4 )
+			CL_CoF_PadMigrate( cof_pad_layout_gen4, ARRAYSIZE( cof_pad_layout_gen4 ), &moved, &kept );
 
-		Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "generation %d layout migrated to generation %d (%d binds changed, %d customised keys kept)", gen, COF_PAD_DEFAULTS_GENERATION, moved, kept );
+		// 1.2.3: the engine's Half-Life pad binds the profile kept (cof_pad_layout_builtin)
+		CL_CoF_PadMigrate( cof_pad_layout_builtin, ARRAYSIZE( cof_pad_layout_builtin ), &builtin, &unchanged );
+
+		if( gen >= 1 && gen <= 4 )
+			Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "generation %d layout migrated to generation %d (%d binds changed, %d customised keys kept, %d Half-Life pad binds moved)", gen, COF_PAD_DEFAULTS_GENERATION, moved, kept, builtin );
+		else if( builtin )
+			Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "%d of the engine's Half-Life pad binds moved to the Cry of Fear layout (generation %d)", builtin, COF_PAD_DEFAULTS_GENERATION );
+		else if( gen == 5 )
+			Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "generation 5 layout kept as generation %d", COF_PAD_DEFAULTS_GENERATION );
+		else Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "gamepad keys already bound, default layout not applied (generation %d)", COF_PAD_DEFAULTS_GENERATION );
 	}
-	else Q_snprintf( cof_pad.defaults_note, sizeof( cof_pad.defaults_note ), "gamepad keys already bound, default layout not applied (generation %d)", COF_PAD_DEFAULTS_GENERATION );
 
 	Con_Printf( "Cry of Fear gamepad: %s\n", cof_pad.defaults_note );
 

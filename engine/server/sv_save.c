@@ -1987,6 +1987,11 @@ static SAVERESTOREDATA *SaveGameState( int changelevel )
 		if( FBitSet( pTable->pent->v.flags, FL_CLIENT ))
 			SetBits( pTable->flags, FENTTABLE_PLAYER );
 
+		// 1.2.3: a door's black-room teleport stays in its own map; the game marked it to cross with the party, and a
+		// change into a merged map never brought it back (SV_CoF_TeleportStaysHome)
+		if( SV_CoF_TransitionActive() && SV_CoF_TeleportStaysHome( pTable->pent ))
+			ClearBits( pTable->flags, FENTTABLE_MOVEABLE | (( 1 << MAX_LEVEL_CONNECTIONS ) - 1 ));
+
 		if( SV_CoF_TransitionActive() && i < cof_transition.entity_count )
 		{
 			qboolean player = i > 0 && i <= svs.maxclients && CoF_TransitionMatches( &cof_transition.tickets, cof_transition.tickets.epoch, i - 1, svs.clients[i - 1].userid );

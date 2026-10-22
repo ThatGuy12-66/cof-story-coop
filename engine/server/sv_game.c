@@ -5543,6 +5543,29 @@ edict_t *SV_CoF_SpawnMapEntity( const char *classname, const char *targetname, c
 	return NULL;
 }
 
+// 1.2.3: one block of the loaded map's entity script (block: its '{'), spawned as the map spawns it, where the block
+// says. NULL when the game did not make it.
+edict_t *SV_CoF_SpawnMapBlock( char *block )
+{
+	char key[256], *cursor;
+	edict_t *ent;
+	if( !block || ( cursor = COM_ParseFile( block, key, sizeof( key ))) == NULL || key[0] != '{' )
+		return NULL;
+	ent = SV_AllocEdict();
+	if( !SV_ParseEdict( &cursor, ent ))
+	{
+		if( !ent->free ) SV_FreeEdict( ent );
+		return NULL;
+	}
+	if( svgame.dllFuncs.pfnSpawn( ent ) == -1 || ent->free || FBitSet( ent->v.flags, FL_KILLME ))
+	{
+		if( !ent->free ) SV_FreeEdict( ent );
+		return NULL;
+	}
+	SV_LinkEdict( ent, false );
+	return ent;
+}
+
 /*
 ================
 SV_LoadFromFile

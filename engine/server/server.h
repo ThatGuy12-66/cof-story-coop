@@ -717,6 +717,7 @@ void SV_CoF_RescueThinkEnd( void );
 // Spawn again the map's own entity of this class (and targetname, when given) at origin and angles; NULL when the map
 // has none or the game refused it (sv_cof_rescue.c: a way back from a retail co-op soft-lock).
 edict_t *SV_CoF_SpawnMapEntity( const char *classname, const char *targetname, const vec3_t origin, const vec3_t angles );
+edict_t *SV_CoF_SpawnMapBlock( char *block );
 
 //
 // sv_pmove.c
