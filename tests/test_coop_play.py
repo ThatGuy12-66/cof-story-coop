@@ -186,9 +186,9 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen) and 1.2.5 (quick dual wield) keep 1.1's version, so 1.1 to 1.2.5 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.2.5'))
-        self.assertGreater(play.BUILD, 19)   # 1.2.4 was build 19: its copies must be offered the update
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield) and 1.2.6 (the code review) keep 1.1's version, so 1.1 to 1.2.6 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.2.6'))
+        self.assertGreater(play.BUILD, 20)   # 1.2.5 was build 20: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
         self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')
@@ -206,6 +206,25 @@ class HostCheckTests(unittest.TestCase):
             play.check_host({'cofbuild': '1.1', 'numcl': '2', 'maxcl': '2'}, password='')
         with self.assertRaisesRegex(ValueError, 'password'):
             play.check_host({'cofbuild': '1.1', 'numcl': '1', 'maxcl': '2', 'password': '1'}, password='')
+
+
+class HostReleaseTests(unittest.TestCase):
+    """1.2.6: 1.1.1 to the newest all join each other (cofbuild 1.1), but most fixes run in the host's game: a guest
+    whose app is newer is told before joining. The host sends its release as cofver (cof_label in the session cfg)."""
+
+    def test_the_host_sends_its_release(self):
+        config = play.host_launch(Path('copy'), solo=False, name='Ann', map_name='c_intro', players=2, password='',
+                                  companions=0, port=27015, cont=False, video=[])[1]
+        self.assertIn(f'cof_label {play.VERSION_LABEL}\n', config)
+
+    def test_an_older_or_unnamed_release_is_said_and_the_same_or_newer_is_not(self):
+        self.assertIn(f'older than {play.VERSION_LABEL}', play.host_version_note({'cofbuild': '1.1'}))
+        self.assertIn('is 1.2.5 (yours', play.host_version_note({'cofver': '1.2.5'}))
+        self.assertIn('Join anyway?', play.host_version_note({'cofver': '1.2.5'}))
+        for same_or_newer in (play.VERSION_LABEL, '1.3', '9.9.9'):
+            self.assertIsNone(play.host_version_note({'cofver': same_or_newer}))
+        for unreadable in ('dev', '1.2.6-test', '1..2'):
+            self.assertIsNone(play.host_version_note({'cofver': unreadable}))
 
 
 class MergedMapsCheckTests(unittest.TestCase):

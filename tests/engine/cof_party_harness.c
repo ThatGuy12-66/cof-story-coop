@@ -462,8 +462,9 @@ int main(void) {
     assert(!(entities[1].v.effects&EF_NODRAW));
     /* A fresh join spawned far away is placed beside the available partner. */
     setup(); tick(0.1); entities[2].v.origin[0]=3000; SV_CoF_PartyPlayerReady(&clients[1],true);
-    tick(0.1); assert(links==1 && entities[2].v.origin[0]==35);
+    arrival_landed=0; tick(0.1); assert(links==1 && entities[2].v.origin[0]==35);
     assert(strstr(status_log,"spawn-placed userid=101 partner=100"));
+    assert(arrival_landed==1); /* 1.2.6: beside a partner who may stand in an exit: not taken before stepping out */
     /* Spawned inside the partner (the live c_start2 case): also placed. */
     setup(); tick(0.1); entities[2].v.origin[0]=5; SV_CoF_PartyPlayerReady(&clients[1],true);
     tick(0.1); assert(links==1 && !CoF_PartyBoxesTouch(&entities[1],&entities[2]));
@@ -807,9 +808,10 @@ int main(void) {
     SV_CoF_PartyNoteOrigin(&entities[1],before); tick(0.1);
     assert(links==0 && !prompts[1][0]);
     /* Warp: J puts the caller beside the partner, facing the same way, with a blink. */
-    setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.angles[1]=90; warp(1);
+    setup(); tick(0.1); entities[2].v.origin[0]=3000; entities[1].v.angles[1]=90; arrival_landed=0; warp(1);
     assert(links==1 && entities[2].v.origin[0]==35 && entities[2].v.angles[1]==90 && fades==1);
     assert(strstr(status_log,"cofstory phase=warp userid=101 partner=100"));
+    assert(arrival_landed==1); /* 1.2.6: the same for J */
     /* ...not again inside the 2 s cooldown, and silently */
     entities[2].v.origin[0]=3000; warp(1);
     assert(links==1 && entities[2].v.origin[0]==3000 && !strstr(status_log,"warp-refused"));
@@ -1120,6 +1122,11 @@ int main(void) {
     assert(strstr(status_log,"cut-off userid=101 owner=100 kind=door"));
     setup(); start_door(); finish_door(); blocked=1; tick(0.1); tick(6); blocked=0;
     assert(links==0 && !prompts[1][0] && strstr(status_log,"door-expired userid=100"));
+    /* 1.2.6: ...and told too when the opener takes another door before that wait is over (their event is reused) */
+    setup(); start_door(); entities[5].free=1; finish_door(); blocked=1; tick(0.1); assert(!prompts[1][0]);
+    entities[5].free=0; entities[5].serialnumber=16; private_data[0][0x1EA4]=1; entities[1].v.flags|=FL_FROZEN; tick(0.1);
+    assert(!strcmp(prompts[1],cut_off_line) && strstr(status_log,"cut-off userid=101 owner=100 kind=door"));
+    blocked=0; finish_door(); tick(0.1);
     /* ...and a teleport companion held in a scene past the wait is told too (the repeats reach them once free) */
     teleport_setup(64); entities[2].v.flags|=FL_FROZEN; teleport_to(2000); tick(0.1); assert(!prompts[1][0]);
     tick(10.1); assert(!strcmp(prompts[1],cut_off_line) && strstr(status_log,"teleport-expired userid=100"));

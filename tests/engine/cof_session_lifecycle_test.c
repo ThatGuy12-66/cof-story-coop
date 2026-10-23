@@ -42,6 +42,7 @@ static double cof_session_save_after, cof_session_wipe_after;
 static void *cof_session_pending;
 static char last_slot[25];
 static char cof_session_latest[25];
+static int cof_session_owned; /* 1.2.6: set by this session's own successful save (or checkpoint load) */
 static void CoF_SessionLatest( void ) {}
 static int CoF_SessionUsable( const char *slot ) { return slot && slot[0] && usable; }
 static int SV_CoF_SceneActive( void ) { return 0; }
@@ -51,7 +52,7 @@ static int CoF_SessionWait( void ) { return wait_reason; }
 static int SV_CoF_StoryCoopEnabled( void ) { return gate; }
 static int SV_CoF_TransitionActive( void ) { return transition; }
 static int SV_IsValidEdict( edict_t *entity ) { return entity != NULL; }
-static int SV_CoF_SessionSave( const char *slot ) { saves++; Q_strncpy( last_slot, slot, sizeof( last_slot )); return result; }
+static int SV_CoF_SessionSave( const char *slot ) { saves++; Q_strncpy( last_slot, slot, sizeof( last_slot )); if( result ) cof_session_owned = 1; return result; }
 static int SV_CoF_SessionLoad( const char *slot ) { loads++; Q_strncpy( last_slot, slot ? slot : "latest", sizeof( last_slot )); return result; }
 static int Cmd_Argc( void ) { return argc; }
 static const char *Cmd_Argv( int index ) { return index < argc ? argv[index] : ""; }
@@ -69,6 +70,7 @@ static int SV_CoF_RetailProFont( sv_client_t *client, int colour, const char *te
 static int revived[2];
 static qboolean SV_CoF_RetailRevived( sv_client_t *client ) { return revived[client - clients]; }
 qboolean SV_CoF_SessionWipe( const char *map, const char *landmark );
+void SV_CoF_SessionAutosaveSoon( void );
 #include "session_lifecycle_under_test.c"
 
 int main( void )
@@ -141,8 +143,9 @@ int main( void )
 	assert( saves == 5 ); /* Continue keeps the checkpoint it loads: no autosave over it first */
 	sv.time = 110; SV_CoF_SessionFrame(); assert( loads == 1 );   /* once */
 	/* refused: the host is told, and it is not retried */
-	continue_var.value = 1; result = 0; sv.time = 120; SV_CoF_SessionFrame();
+	continue_var.value = 1; result = 0; cof_session_auto_needed = 0; sv.time = 120; SV_CoF_SessionFrame();
 	assert( loads == 2 && profont == 1 && continue_var.value == 0 );
+	assert( cof_session_auto_needed ); /* 1.2.6: the map starts over as this session's own and saves its own checkpoint */
 	sv.time = 130; SV_CoF_SessionFrame(); assert( loads == 2 ); result = 1;
 	/* a living AI companion can still revive the person (or they respawn beside it):
 	 * no checkpoint load under its CPR; a downed companion does not count */
@@ -166,5 +169,20 @@ int main( void )
 	wait_reason = 2; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "a cutscene is running" ));
 	wait_reason = 0; assert( SV_CoF_SessionClientCommand( &clients[0] ) && strstr( console_line, "Co-op save refused" ));
 	result = 1;
+	/* 1.2.6: a new game or a chapter start before its own first checkpoint lands (a cutscene holds the autosave, a
+	 * chapter kit is on its way): a team wipe runs the game's own restart, never the previous session's checkpoint,
+	 * which latest.txt still names (another map or chapter, maybe another party) */
+	{
+		int saves_before;
+		cof_session_owned = 0; strcpy( cof_session_latest, "autosave" ); cof_session_generation = -1; continue_var.value = 0;
+		clients[0].flags = clients[1].flags = 0; clients[0].state = clients[1].state = cs_spawned; revived[1] = 0;
+		edicts[0].v.fuser3 = edicts[1].v.fuser3 = 0; edicts[0].v.health = edicts[1].v.health = 0;
+		loads = 0; cof_session_pending = NULL; saves_before = saves; result = 0; /* the autosave is held back */
+		sv.time = 300; SV_CoF_SessionFrame(); assert( strstr( console_line, "session-checkpoint-not-ours" ));
+		sv.time = 303; SV_CoF_SessionFrame(); assert( !loads && strstr( console_line, "session-wipe-no-checkpoint" ));
+		assert( !SV_CoF_SessionWipe( "c_start", NULL ) && !loads ); /* the game's own restart (pfnChangeLevel) goes on */
+		result = 1; sv.time = 310; SV_CoF_SessionFrame(); assert( !loads && saves > saves_before && cof_session_owned );
+		sv.time = 312; SV_CoF_SessionFrame(); assert( loads == 1 && !strcmp( last_slot, "latest" )); /* now its own */
+	}
 	puts( "session lifecycle scenarios passed" ); return 0;
 }

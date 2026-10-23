@@ -784,7 +784,14 @@ class App:
                 if button.winfo_exists():
                     button.configure(state="normal")
 
-            def ready(_):
+            def ready(note):
+                # 1.2.6: a host on an older release runs without the newest fixes: say so, the guest decides
+                if note:
+                    from tkinter import messagebox
+                    if not messagebox.askokcancel("Cry of Fear Co-op", note, parent=self.window):
+                        enable()
+                        status.set("")
+                        return
                 try:
                     args, config = play.join_launch(self.root, name=name, password=secret, endpoint=str(endpoint),
                                                     video=self.video())
@@ -799,8 +806,11 @@ class App:
                 enable()
                 status.set("")
                 self.error(error)
-            self.work(lambda: play.check_host(network.query_info(endpoint, timeout=3), password=secret,
-                                              maps=self.maps_tag()), ready, refused)
+            def check():
+                info = network.query_info(endpoint, timeout=3)
+                play.check_host(info, password=secret, maps=self.maps_tag())
+                return play.host_version_note(info)
+            self.work(check, ready, refused)
         buttons = ttk.Frame(body)
         buttons.pack(anchor="w", pady=18)
         button = ttk.Button(buttons, text="Join", command=self.guard(join), style="Accent.TButton")

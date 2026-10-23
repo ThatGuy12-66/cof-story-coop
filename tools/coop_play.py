@@ -17,9 +17,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 to 1.2.5 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield) keep it: 1.1
-VERSION_LABEL = "1.2.5"
-BUILD = 20   # counts on (1.2.4 was 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
+VERSION = "1.1"   # who can join whom: 1.1.1 to 1.2.6 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review) keep it: 1.1
+VERSION_LABEL = "1.2.6"
+BUILD = 21   # counts on (1.2.5 was 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
@@ -145,7 +145,7 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {companions}", "cof_companion_drive 0",
-             f"cof_build {VERSION}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
+             f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
              f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}"]
     if merged and _TAG.match(maps):
         lines.append(f"cof_maps {maps}")
@@ -185,6 +185,28 @@ def check_host(info: dict, *, password: str, maps: str = "") -> None:
         raise ValueError("The host's game is full.")
     if info.get("password") == "1" and not password:
         raise ValueError("The host's game has a password. Enter it and join again.")
+
+
+def _release(label: str) -> tuple[int, ...] | None:
+    """"1.2.6" -> (1, 2, 6); None for anything else."""
+    return tuple(int(part) for part in label.split(".")) if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){1,3}", label) else None
+
+
+def host_version_note(info: dict) -> str | None:
+    """1.2.6: most fixes run in the host's game, and 1.1.1 to the newest all join each other, so a guest whose app is
+    newer than the host's is told before joining (the host's release is cofver in its info reply, sent from 1.2.6 on).
+    None when the host's release is the same or newer, or cannot be read."""
+    ours = _release(VERSION_LABEL)
+    theirs = info.get("cofver", "")
+    if not theirs:
+        older = f"older than {VERSION_LABEL}" if ours and ours > (1, 2, 5) else ""
+    else:
+        found = _release(theirs)
+        older = theirs if found and ours and found < ours else ""
+    if not older:
+        return None
+    return (f"The host's Cry of Fear Co-op is {older} (yours is {VERSION_LABEL}). Most fixes only work when the host "
+            "has the newest version, so ask them to open the app and click Update now.\n\nJoin anyway?")
 
 
 @dataclass(frozen=True)

@@ -27,6 +27,9 @@ class ArrivalTests(unittest.TestCase):
             'stood in another exit since arriving: refused',
             'door long ago: refused',
             'no story arrival: counts',
+            'opened the door back inside the exit: refused',
+            'mid-door anywhere: refused',
+            'set down by the door: counts',
             'quick: glock 3 1, slot 12 1, slot 0 0, slot 13 0, cleared 0, key 0, none 0',
         ])
 

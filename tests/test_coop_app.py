@@ -79,7 +79,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.2.5")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.2.6")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:
@@ -434,6 +434,38 @@ class WindowTests(unittest.TestCase):
                 job()   # L8: this copy has no merged maps, the host has others
         refused(ValueError("The host's merged maps differ from yours."))
         self.assertEqual(str(join.cget("state")), "normal")
+
+    def test_a_host_on_an_older_release_is_named_before_the_join(self):
+        # 1.2.6: 1.1.1 to the newest join each other, but most fixes run in the host's game
+        self.copy()
+        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
+            self.app.show_main(self.app.root)
+        self.app.show_join()
+        entry = next(w for w in widgets(self.app.body) if w.winfo_class() == "TEntry")
+        entry.insert(0, "203.0.113.7:27015")
+        join = button(self.app.body, "Join")
+        join.invoke()
+        job, ready, refused = self.jobs[-1]
+        with mock.patch.object(app.network, "query_info", return_value={"cofbuild": app.play.VERSION}):
+            note = job()   # a 1.2.5 host sends no cofver
+        self.assertIn("older than " + app.play.VERSION_LABEL, note)
+        with mock.patch.object(app.network, "query_info",
+                               return_value={"cofbuild": app.play.VERSION, "cofver": app.play.VERSION_LABEL}):
+            self.assertIsNone(job())
+        with mock.patch("tkinter.messagebox.askokcancel", return_value=False) as asked, \
+                mock.patch.object(app.play, "join_launch") as launch:
+            ready(note)   # the guest says no: nothing starts, Join is back
+        asked.assert_called_once()
+        launch.assert_not_called()
+        self.assertEqual(str(join.cget("state")), "normal")
+        join.invoke()
+        job, ready, refused = self.jobs[-1]
+        with mock.patch("tkinter.messagebox.askokcancel", return_value=True), \
+                mock.patch.object(app.play, "join_launch", return_value=(["game"], "cfg\n")) as launch, \
+                mock.patch.object(self.app, "launch") as started:
+            ready(note)   # yes: the join goes on
+        launch.assert_called_once()
+        started.assert_called_once()
 
 
 if __name__ == "__main__":

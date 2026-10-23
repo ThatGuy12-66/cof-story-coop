@@ -1040,3 +1040,38 @@ The user: "I need you to fix the dual wield thing in the base game. You can pres
   - Tests: `test_enhanced_gates` (10 gates against the retail hl.dll, each after the IsMultiplayer test; the pfnTraceModel wall check), `test_enhanced_arrival` (quick-slot rule and the retail offsets), `cof_state_harness` (popup), `cof_retail_harness` (nightmare, the companions' trip timer), `cof_state_harness` (hints shared), `test_enhanced_guard`, `test_enhanced_coop_hud` (simon-arms against the retail client.dll, pings), `test_coop_play`. Cloud run: no new failures against HEAD. Readme and `docs/releases/1.2.5.md` (written directly, no Idiolect) list it all. **Not played.**
   - **Independent review** of the sweep fixes: HIGH, the first melee gates left stacked (SOLID_NOT) players immune: replaced by the pfnTraceModel wall check; MEDIUM, the trip would come from a partner's or a companion's heal and companions would trip themselves: self-injection only, companions' timer kept 0. Left (LOW): a trip started from the syringe's think (outside any player's command) reads and sets the host's `room_type` for a frame and leaves the tripper the host's old room type until the next env_sound; hints are in the host's language and a guest can't switch them off; flipping `cof_sp_limp` while under 25 health keeps the old key until health crosses 25; in single-player sleeve mode a costume's sleeves also show on partners' models (as jeans and face already did).
 - **Published 1.2.5 2026-10-22 ~06:49 PT** (`release.py build` then `publish`, standing approval): full suite 724 OK (3 skipped), fresh install and the 1.2.4 -> 1.2.5 update passed; GitHub `v1.2.5` latest, build 20. publish's own last check (the latest/download link serving 1.2.5 within 60 s) timed out on GitHub's redirect lag; the release, its two assets and `releases/latest` were already right, and the link served 1.2.5 two minutes later. Zip `878BCC01…`, 111,589,583 bytes, MD5 `09971FB4…`. Engine `720abef4`, launcher `71485ec` + `c9fa7de` (readme: the WHAT'S NEW section must be bullets only, `readme_section`). Not on ModDB (account banned). **Not played.**
+
+## 1.2.6: the whole-system code review (2026-10-22 evening)
+
+The user, after a playtest as the guest (`evidence/playtest-20261022-gor3/`: his 12:07-12:56 guest log on 1.2.5 holds
+no server detail, only known noise; the morning host logs on 1.2.4 show one fault, the 05:09:32 re-dual-wield freed
+entity 1.2.5 fixed): "look at latest logs and debug. We still had some issues", then "Just debug the entire system
+then", "have a sub agent using Fable 5.1 to review the code". Two read-only Fable 5.1 passes covered the engine and the
+launcher; every finding was checked against the code and the decompilation (`/home/claude/dbg/decomp`). Results, fixes
+and what was false or left: `docs/research/2026-10-22-code-review.md`. In short (engine unless said):
+- `sv_pmove.c`: a SOLID_NOT player's relink touches triggers (`!sv.playersonly`), so the 1.0 stacked-touch rule runs at
+  last: two players on one spot (door-room walk-in, J, kunitei) take the way out.
+- `sv_cof_session.inc`: a team wipe loads only this session's own checkpoint (`cof_session_owned`); before the first
+  autosave lands the game's own restart runs (`session-wipe-no-checkpoint`).
+- `sv_client.c` `SV_UserinfoChanged`: a joining/level-changing client counts for the duplicate-name check in story
+  co-op; `session-save-refused reason=same-names` logged once a map.
+- `sv_cof_globals.c`: `SV_CoF_GlobalsReset` at story shutdown (a Host_Error inside a command left the swap open).
+- `sv_cof_arrival.h/.c`: a touch of an exit never counts mid-door (`CoF_ArrivalTouchCounts( in_door, ... )`; live
+  cm_apartment3 05:07:39-42, two section moves for one door); `reason=mid-door`.
+- `sv_cof_party.c`: `SV_CoF_ArrivalLanded` after a spawn placement beside a partner and after J; a reused door event
+  tells its pending companions (`CoF_PartyLeftBehind`) first.
+- `sv_cof_moments.c`: a ladder is busy only while its climber holds that ladder's camera model (`CoF_MomentClimbsThis`).
+- `sv_game.c`: `phase=setmodel-invalid` names the hl.dll caller RVA of a SET_MODEL on a freed edict.
+- Launcher/engine: the host sends its release (`cof_label` -> `cofver`); `play.host_version_note` and the join tell a
+  guest whose app is newer (1.1.1 to 1.2.5 join each other and almost every fix is the host's). `cofcoop/network.py`
+  `_http`: no socket opened past the deadline.
+- Independent review (a third Fable agent, of the diff): nothing wrong. Taken anyway:
+  - a joining slot from the same address is not counted in the name check;
+  - a refused Continue schedules an autosave;
+  - no cut-off line before the ending door.
+- Note for future version bumps: `cofver` comes from the launcher's cfg at run time, not from `cof_version.h`
+  (waf does not track `__has_include`, see `console.c.2.o`).
+- Tests: `test_coop_engine`, `test_enhanced_session` (+ `cof_session_lifecycle_test.c`), `test_enhanced_globals`,
+  `test_enhanced_arrival` (+ harness), `test_enhanced_party` (+ harness), `test_enhanced_moments` (+ harness),
+  `test_coop_play`, `test_coop_app`, `test_network`. Version 1.2.6, build 21 (`VERSION` stays 1.1). Release notes
+  `docs/releases/1.2.6.md` (written directly, no Idiolect). **Not played.**

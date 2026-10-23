@@ -400,6 +400,7 @@ def _http(request, deadline: float, limit: int = 131072) -> bytes:
         raise NetworkError('Invalid network service URL.')
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     address = _resolve(Endpoint(parsed.hostname, port), deadline)
+    delay = _remaining(deadline)   # 1.2.6: before the socket, which the try below always closes (a spent deadline left it open)
     raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     transport = [raw]
     connection = None
@@ -410,7 +411,7 @@ def _http(request, deadline: float, limit: int = 131072) -> bytes:
             transport[0].shutdown(socket.SHUT_RDWR)
         except OSError:
             pass
-    timer = threading.Timer(_remaining(deadline), expire)
+    timer = threading.Timer(delay, expire)
     timer.daemon = True
     timer.start()
     try:

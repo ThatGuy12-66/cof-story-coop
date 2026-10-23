@@ -44,6 +44,30 @@ class SessionTests(unittest.TestCase):
 
 
 class SessionWiringTests(unittest.TestCase):
+    def test_a_name_taken_while_its_player_loads_is_taken(self):
+        # 1.2.6: checkpoints know players by name; Xash's duplicate check saw only spawned clients, so someone who
+        # joined while the host was loading a level kept the host's name, and every checkpoint was refused silently
+        from tests.native import assert_has
+        from tests.test_enhanced_sections import body_of
+        body = body_of(ENGINE_SERVER / 'sv_client.c', 'static void SV_UserinfoChanged( sv_client_t *cl )\n{')
+        assert_has(self, 'if( current == cl || ( current->state != cs_spawned && !( current->state >= cs_connected && '
+                         'SV_CoF_StoryCoopEnabled( ) &&', body)
+        # ...but not a slot still joining from the player's own address: their own earlier try, until it times out
+        assert_has(self, '!NET_CompareBaseAdr( current->netchan.remote_address, cl->netchan.remote_address ))))', body)
+        save = body_of(ENGINE_SERVER / 'sv_cof_session.inc', 'qboolean SV_CoF_SessionSave( const char *slot )\n{')
+        assert_has(self, 'reason=same-names', save)
+
+    def test_a_wipe_loads_only_this_sessions_own_checkpoint(self):
+        # 1.2.6: latest.txt names the previous session's checkpoint until a new game's first autosave lands
+        from tests.native import assert_has
+        from tests.test_enhanced_sections import body_of
+        source = ENGINE_SERVER / 'sv_cof_session.inc'
+        wipe = body_of(source, 'qboolean SV_CoF_SessionWipe( const char *map, const char *landmark )\n{')
+        self.assertLess(wipe.index('if( !cof_session_owned )'), wipe.index('SV_CoF_SessionLoad( NULL )'))
+        assert_has(self, 'cof_session_owned = true;', body_of(source, 'qboolean SV_CoF_SessionSave( const char *slot )\n{'))
+        assert_has(self, 'cof_session_owned = true;', body_of(source, 'static qboolean CoF_SessionRunLoad( void )\n{'))
+        assert_has(self, 'cof_session_owned = false;', body_of(source, 'void SV_CoF_SessionReset( void )\n{'))
+
     def test_the_save_screen_is_seen(self):
         from tests.native import assert_has
         from tests.test_enhanced_sections import body_of

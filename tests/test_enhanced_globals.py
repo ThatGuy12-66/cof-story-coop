@@ -77,6 +77,16 @@ class GlobalsWiringTests(unittest.TestCase):
             assert_has(self, 'SV_CoF_GlobalsEnter( cl );', body)
             assert_has(self, 'SV_CoF_GlobalsLeave( cl );', body)
 
+    def test_a_shutdown_forgets_a_call_an_engine_error_left_open(self):
+        # 1.2.6: a Host_Error inside a player's command jumps past GlobalsLeave; without a reset every later Enter
+        # only counted a nested call and nobody's copy was swapped again in that process
+        module = (SERVER / 'sv_cof_globals.c').read_text(encoding='latin-1')
+        reset = body_of(SERVER / 'sv_cof_globals.c', 'void SV_CoF_GlobalsReset( void )\n{')
+        for line in ('cof_globals_client = NULL;', 'cof_globals_nested = 0;', 'cof_globals_base = NULL;'):
+            assert_has(self, line, reset)
+        assert_has(self, 'if( base != cof_globals_base )', module)  # a NULL base: the next Enter starts over
+        assert_has(self, 'SV_CoF_GlobalsReset();', body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryShutdown( void )\n{'))
+
     def test_the_games_room_type_goes_through_the_engine(self):
         source = (SERVER / 'sv_game.c').read_text(encoding='latin-1')
         table = source[source.index('static enginefuncs_t gEngfuncs ='):]

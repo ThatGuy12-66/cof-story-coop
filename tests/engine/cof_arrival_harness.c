@@ -2,9 +2,14 @@
 #include <stdio.h>
 #include "arrival_under_test.h"
 
+static void touch_in( const char *label, int in_door, double door_age, int stayed, double arrived_age, int back )
+{
+	printf( "%s: %s\n", label, CoF_ArrivalTouchCounts( in_door, door_age, stayed, arrived_age, back ) ? "counts" : "refused" );
+}
+
 static void touch( const char *label, double door_age, int stayed, double arrived_age, int back )
 {
-	printf( "%s: %s\n", label, CoF_ArrivalTouchCounts( door_age, stayed, arrived_age, back ) ? "counts" : "refused" );
+	touch_in( label, 0, door_age, stayed, arrived_age, back );
 }
 
 int main( void )
@@ -27,6 +32,11 @@ int main( void )
 	touch( "stood in another exit since arriving", -1.0, 1, 40.0, 0 );
 	touch( "door long ago", 10.0, 0, 5.0, 1 );
 	touch( "no story arrival", -1.0, 0, -1.0, 1 );
+	/* 1.2.6: a door still running (opened inside the exit just arrived in, cm_apartment3 05:07:39): not yet, and a
+	 * door still running anywhere else neither; once it has set them down, the window counts */
+	touch_in( "opened the door back inside the exit", 1, 0.0, 1, 2.0, 1 );
+	touch_in( "mid-door anywhere", 1, 0.0, 0, -1.0, 0 );
+	touch_in( "set down by the door", 0, 0.05, 1, 2.0, 1 );
 	/* quick slots: a weapon in an inventory slot 1..12; empty, cleared (cof_clearitems empties the names) or not a weapon: none */
 	printf( "quick: glock 3 %d, slot 12 %d, slot 0 %d, slot 13 %d, cleared %d, key %d, none %d\n",
 		CoF_QuickSlotShown( 3, "weapon_glock" ), CoF_QuickSlotShown( 12, "weapon_flashlight" ), CoF_QuickSlotShown( 0, "weapon_glock" ),

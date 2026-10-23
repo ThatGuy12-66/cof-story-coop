@@ -256,7 +256,7 @@ static void yesno_message( int slot, int index )
 
 int main( void )
 {
-	edict_t *host = &entities[1], *guest = &entities[2], *call, *chair, *manager, *use;
+	edict_t *host = &entities[1], *guest = &entities[2], *call, *chair, *manager, *use, *ladder_camera;
 	usercmd_t cmd;
 	int bits, value;
 	float suicide;
@@ -376,8 +376,9 @@ int main( void )
 	set_handle( 14, COF_CALL_USER, guest ); SV_CoF_MomentsFrame(); sv.time = 102.5; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] );
 	/* Ladders: while the host climbs, nobody near its use brushes can start it. The climb freezes the climber and
 	 * hands them the ladder's camera model (P+0x5AC); its FL_GODMODE lasts one frame (PostThink clears it). */
-	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN;
+	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; manager->v.model = 38; host->v.flags = FL_FROZEN;
 	value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );
+	ladder_camera = spawn( 18, 12, 0, 0 ); ladder_camera->v.owner = host; ladder_camera->v.model = 38;
 	use = spawn( 16, 9, 0, 10 ); use->v.absmin[0] = 480; use->v.absmax[0] = 520; use->v.absmax[1] = use->v.absmax[2] = 10;
 	SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE | 1; SV_CoF_MomentsCommand( &clients[1], &cmd );
@@ -391,6 +392,12 @@ int main( void )
 	/* frozen for something else (no ladder camera): not a climb */
 	host->v.flags = FL_FROZEN; value = 0; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 ); SV_CoF_MomentsFrame();
 	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
+	/* 1.2.6: held by a strangle or a model cutscene (another camera model; the manager still names its last climber):
+	 * the ladder is free */
+	value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 ); ladder_camera->v.model = 39; SV_CoF_MomentsFrame();
+	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == IN_USE );
+	ladder_camera->v.model = 38; SV_CoF_MomentsFrame();
+	cmd.buttons = IN_USE; SV_CoF_MomentsCommand( &clients[1], &cmd ); assert( cmd.buttons == 0 ); /* its own model: busy */
 	/* another ladder's brush is not this one's */
 	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; host->v.flags = FL_FROZEN;
 	value = 0x5678; memcpy( private_data[1] + COF_PL_CAMERA_MODEL, &value, 4 );

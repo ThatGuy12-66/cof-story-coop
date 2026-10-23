@@ -33,6 +33,21 @@ class CoopEngineTests(unittest.TestCase):
         self.assertLess(body.index('"bots"'), body.index('"host"'))       # the AI companions, for the host's status
         story = (ENGINE_SERVER / 'sv_cof_story.c').read_text()
         self.assertRegex(story, r'Cvar_Get\( "cof_build", "", 0,')
+        # 1.2.6: the app's release (cof_label in the session cfg) as cofver, for a guest's app to compare
+        self.assertIn('Cvar_VariableString( "cof_label" )', body)
+        self.assertIn('if( build[0] && label[0] ) Info_SetValueForKey( s, "cofver", label, sizeof( s ));', body)
+        self.assertLess(body.index('"cofver"'), body.index('"host"'))
+        self.assertRegex(story, r'Cvar_Get\( "cof_label", "", 0,')
+
+    def test_a_model_set_on_a_freed_entity_names_its_caller(self):
+        # 1.2.6: hl.dll's SET_MODEL on a freed edict is a Deploy run on a freed weapon (host log 2026-10-22 05:09:32);
+        # the log names the game's own caller as an RVA of hl.dll
+        source = (ENGINE_SERVER / 'sv_game.c').read_text()
+        body = source[source.index('void GAME_EXPORT SV_SetModel( edict_t *ent, const char *modelname )'):]
+        body = body[:body.index('if( !modelname ||')]
+        self.assertIn('cofstory phase=setmodel-invalid entity=%d serial=%d model=%s caller=%s%08x', body)
+        self.assertIn('SV_CoF_StoryBase()', body)
+        self.assertIn('#define COF_SETMODEL_CALLER() ((uintptr_t)_ReturnAddress( ))', source)
 
     def test_the_party_moves_before_the_companion_decides(self):
         # live 2026-10-15: 11 of 72 companion teleports were overridden in the same frame by the
@@ -50,6 +65,16 @@ class CoopEngineTests(unittest.TestCase):
         self.assertIn('SV_CoF_MomentsStackedTouch( ent )', branch)
         self.assertIn('SV_TouchLinks( ent, sv_areanodes )', branch)
         self.assertIn('iTouchLinkSemaphore', branch)
+        self.assertIn('touch_triggers &&', branch)
+        # 1.2.6: the only link of a SOLID_NOT player's own move (SV_RunCmd's story branch) must ask for touches,
+        # or the rule above never runs (players skip SV_Physics_Entity)
+        pmove = (ENGINE_SERVER / 'sv_pmove.c').read_text()
+        solid_not = pmove[pmove.index('else if( clent->v.solid == SOLID_NOT && SV_CoF_StoryCoopEnabled( ))'):]
+        solid_not = solid_not[:solid_not.index('}')]
+        self.assertIn('SV_LinkEdict( clent, !sv.playersonly );', solid_not)
+        self.assertNotIn('SV_LinkEdict( clent, false )', solid_not)
+        physics = (ENGINE_SERVER / 'sv_phys.c').read_text()
+        self.assertIn('if( i > 0 && i <= svs.maxclients )', physics)
 
     def test_dual_wield_gate_matches_the_retail_dll(self):
         # the multiplayer refusal of `inventorydualwield` (jnz after IsMultiplayer at 1001B6DB)

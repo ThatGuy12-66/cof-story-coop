@@ -1,6 +1,23 @@
-Cry of Fear Co-op 1.2.5
+Cry of Fear Co-op 1.2.6
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.6
+- Players standing on the same spot (the small dark room after a door, or after pressing J)
+  can take the way out again. The game ignored everyone on that spot until they moved apart.
+- Opening a door right where you arrived no longer takes you through the level exit twice.
+- Respawning or pressing J next to a partner who stands in a level exit no longer sends the
+  party back a level.
+- If everyone dies before a new game's or chapter's first checkpoint, the level starts over
+  instead of loading the checkpoint from your last session.
+- Two players with the same name no longer switch checkpoints off. Someone who joins while
+  the host loads a level gets a number after their name, as at any other time.
+- A ladder no longer shows as busy while the last person who climbed it is in a cutscene.
+- A partner who couldn't follow through a door is still told to press J when the opener
+  goes straight through another door.
+- Before you join, the app tells you if the host's game is an older version.
+- 1.1 to 1.2.6 can play together. Almost all of this is in the host's game, so the host
+  especially should update.
 
 WHAT'S NEW IN 1.2.5
 - Single-player things the original game switches off in a multiplayer game are back in co-op.
