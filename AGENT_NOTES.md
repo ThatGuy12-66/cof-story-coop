@@ -1095,3 +1095,30 @@ the Enhanced CoFLaunchApp.exe replaces the retail one, so it has no reputation).
   install and the 1.2.6 -> 1.2.7 update passed; GitHub `v1.2.7` latest, build 22; `releases/latest` serves its
   release.json. Zip `206F2B04…`, 111,597,089 bytes, MD5 `F1D9FC68…`. Engine `5f2e6a7c`, launcher `07156b4`. Not on
   ModDB (account banned).
+
+## 1.2.8: no child process for the player ID; who has the pointer (2026-10-23)
+
+The 1.2.7 player's details (the user, from Discord): the detections were on a friend's 1.2.5 install, Windows
+Defender `Behavior:Win32/SuspLummalnj.A`, three detections: `C:\Windows\SysWOW64\wbem\WMIC.exe` (two pids) and the
+file `%LOCALAPPDATA%\CoF-Story-Coop\CoFLaunchApp.exe` (the launching process). The player's own later 1.2.7 install
+got only SmartScreen. The cause is upstream Xash's `engine/client/identification.c`: every launch it ran
+`wmic path win32_physicalmedia get SerialNumber` and `wmic bios get serialnumber` as hidden child processes with piped
+output (`ID_RunWMIC`), the infostealer pattern Defender's rule looks for. Defender killed the game (the "game ended")
+and quarantined it (the WinError 2 1.2.7 explains). Every version had it; whether Defender acts depends on that PC.
+- Fix: `ID_WindowsSource` reads MachineGuid (`HKLM\SOFTWARE\Microsoft\Cryptography`, `KEY_WOW64_64KEY`) and the
+  Windows volume's serial (`GetVolumeInformationA`) in-process; `ID_ProcessWindows` / `ID_CheckWindows` replace the
+  WMIC calls in `ID_GenerateRawId` / `ID_CheckRawId`. No `CreateProcess` left in the engine's ID code. A stored ID
+  from the WMIC sources fails `ID_Check` once and is remade (nothing of ours uses the ID: checkpoints go by name).
+  Also gone: `ID_RunWMIC`'s `ReadFile` could wait forever when WMIC died without output (the parent held the pipe's
+  write end). Tests `tests/test_engine_identification.py` (+ `cof_id_windows_harness.c`, Windows only).
+- The same friend, after restoring and updating: the arrow was invisible in the menus and over the in-play panels,
+  mouse only (Steam open, no controller named), still clickable, moving the mouse did not help, a restart did. No log
+  of it. Not diagnosed. Hardening and diagnostics in `cof_gamepad.c`: `CL_CoF_AxisPushed`, so a stick or trigger counts
+  as gamepad input once per push from rest (a drifting or off-centre axis took the pointer back from the mouse on
+  every event, hiding the arrow); `CL_CoF_InputLog`, always-on `cofinput phase=last-input` lines for changes to or from
+  the pad (at most one per 2 s, the rest counted); `CL_CoF_ArrowWatch`, in a menu or clickable panel with the window
+  focused and the pad neither last input nor engaged, an arrow down for over a second logs `cofinput
+  phase=arrow-missing reason=cursor-type-none|relative-mouse|sdl-hidden` (20 a session) and SDL's is shown again.
+  If it recurs without that line, SDL had the arrow up: look outside the game. Tests `tests/test_cof_pad_pointer.py`
+  (+ `cof_axis_push_harness.c`).
+- Version 1.2.8, build 23 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.8.md`. Not played.

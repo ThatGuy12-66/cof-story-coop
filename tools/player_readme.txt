@@ -1,6 +1,15 @@
-Cry of Fear Co-op 1.2.7
+Cry of Fear Co-op 1.2.8
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.8
+- Windows Defender could stop the game ("game ended"), then quarantine CoFLaunchApp.exe. The
+  game engine started a Windows tool (WMIC) in the background to read hardware serial numbers
+  for its player ID, which Defender can take for malware. The game no longer starts any
+  other program; the ID is read directly.
+- A controller stick that drifts can no longer keep hiding the mouse arrow in the menus.
+- If the mouse arrow goes missing in the menus, your log now says why, so send it to us.
+- 1.1 to 1.2.8 can play together.
 
 WHAT'S NEW IN 1.2.7
 - If your antivirus removes CoFLaunchApp.exe (the program that starts the game), the app now
