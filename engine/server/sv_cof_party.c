@@ -863,6 +863,8 @@ qboolean SV_CoF_PartyHolding( void )
 	return false;
 }
 
+static void CoF_PartyLeftBehind( int slot, const cof_party_door_t *event, int i, const char *kind );
+
 static void CoF_PartyWatchDoors( void )
 {
 	int i, slot, j;
@@ -882,6 +884,11 @@ static void CoF_PartyWatchDoors( void )
 			if( !pv || !pv[COF_PARTY_DOOR_FLAG] ) continue;
 			exit = CoF_PartyDoorExit( door, &ending );
 			if( !exit ) continue; // Menu/camera targets are not party doors.
+			// 1.2.6: a companion of the opener's last door or teleport still waiting to be moved (no room beside its
+			// exit yet, or held in a scene) is told, as when that event runs out, not dropped without a word
+			if( event->active && !ending ) // the ending door takes everyone along anyway
+				for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
+					if( event->pending[j] ) CoF_PartyLeftBehind( slot, event, j, event->teleport ? "teleport" : "door" );
 			CoF_PartyEndingRelease( event ); // a finished event may still hold someone
 			memset( event, 0, sizeof( *event ));
 			event->active = true;
@@ -1930,6 +1937,9 @@ static void CoF_PartyPlace( void )
 		angles[1] = partner->edict->v.angles[1];
 		if( !CoF_PartyMove( cl, landing, angles )) continue;
 		p->place_pending = false;
+		// 1.2.6: set down beside a partner standing in an exit (the way back, waiting for them): not taken until they
+		// step out, as for a respawn or a section move (the 15 s grace after an arrival was all that held it)
+		SV_CoF_ArrivalLanded( cl );
 		Con_Printf( "cofstory phase=spawn-placed userid=%d partner=%d origin=%.3f,%.3f,%.3f\n", cl->userid, partner->userid, landing[0], landing[1], landing[2] );
 	}
 }
@@ -2598,6 +2608,9 @@ static void CoF_PartyWarp( sv_client_t *cl )
 	}
 	cof_party_players[i].warp_after = sv.time + COF_PARTY_WARP_COOLDOWN;
 	cof_party_players[i].cutoff_left = 0; // they joined: no more "Press J" lines (1.1.8)
+	// 1.2.6: J beside a partner standing in an exit takes no one through it before they step out (a held exit's
+	// waiter is not refused: its waiter already counted, SV_CoF_ArrivalRefuses)
+	SV_CoF_ArrivalLanded( cl );
 	// Black, fading in over half a second: the retail co-op door's blink. The
 	// warp does not depend on it being seen.
 	SV_CoF_RetailScreenFade( cl, 0.5f, 0.0f, 0, 0, 0, 0, 255 );

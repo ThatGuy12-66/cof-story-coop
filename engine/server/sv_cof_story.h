@@ -69,6 +69,8 @@ void SV_CoF_GlobalsInit( void );
 void SV_CoF_GlobalsEnter( sv_client_t *cl );
 void SV_CoF_GlobalsLeave( sv_client_t *cl );
 void SV_CoF_GlobalsFrame( void );
+// 1.2.6: an engine error inside a player's command (longjmp past GlobalsLeave) left the swap open for good: shut down.
+void SV_CoF_GlobalsReset( void );
 qboolean SV_CoF_RoomTypeGet( const char *name, float *value );
 qboolean SV_CoF_RoomTypeSet( const char *name, float value );
 // Scripted weather for every player (sv_cof_weather.c).

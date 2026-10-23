@@ -1202,8 +1202,12 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 		// Cry of Fear: retail PreThink keeps a player SOLID_NOT while its absbox
 		// touches another player's. Without a relink the box never follows the
 		// player, so both stay non-solid forever and stop touching triggers.
-		// A SOLID_NOT link only refreshes the box and PVS leafs; no touches.
-		SV_LinkEdict( clent, false );
+		// A SOLID_NOT link refreshes the box and PVS leafs, and touches triggers
+		// only for a living player stacked on a living partner
+		// (SV_CoF_MomentsStackedTouch in SV_LinkEdict's non-solid branch: a party
+		// sharing one spot, such as c_intro's kunitei room, still takes its exit).
+		// 1.2.6: this link passed false, so that rule never ran for a player's move.
+		SV_LinkEdict( clent, !sv.playersonly );
 	}
 
 	svgame.pmove->numtouch = 0;

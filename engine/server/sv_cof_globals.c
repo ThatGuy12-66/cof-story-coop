@@ -68,6 +68,16 @@ void SV_CoF_GlobalsLeave( sv_client_t *cl )
 	cof_globals_client = NULL;
 }
 
+// Server shutdown (SV_CoF_StoryShutdown). A Host_Error inside a command jumps past its Leave: every later Enter
+// would only count a nested call and nobody's copy would be swapped again in this process. Forget the open call and
+// the DLL base: the next Enter starts over from the DLL's globals as they are.
+void SV_CoF_GlobalsReset( void )
+{
+	cof_globals_client = NULL;
+	cof_globals_nested = 0;
+	cof_globals_base = NULL;
+}
+
 // A new player in a slot starts from nothing (story frame).
 void SV_CoF_GlobalsFrame( void )
 {

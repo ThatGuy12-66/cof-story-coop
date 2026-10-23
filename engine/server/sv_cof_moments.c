@@ -809,7 +809,24 @@ static qboolean CoF_MomentClimbing( edict_t *player )
 	return model != 0;
 }
 
-// Ladders being climbed: a manager whose owner is mid-climb, and the use brushes that start it.
+// 1.2.6: the player's camera model is this ladder's (Use: SET_MODEL( pDeathScene, the manager's model )). A manager
+// keeps its last climber as owner for good (CoF_Ladder.cpp:539), and a strangle or a model cutscene freezes them with
+// another camera model: every ladder they had climbed in the map read as busy for the rest of the party meanwhile.
+static qboolean CoF_MomentClimbsThis( edict_t *player, edict_t *manager )
+{
+	int i;
+	if( !manager->v.model ) return false;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *model = SV_EdictNum( i );
+		if( CoF_MomentClass( model, "camera_model" ) && model->v.owner == player && model->v.model &&
+			!Q_stricmp( SV_GetString( model->v.model ), SV_GetString( manager->v.model )))
+			return true;
+	}
+	return false;
+}
+
+// Ladders being climbed: a manager whose owner is mid-climb on it, and the use brushes that start it.
 static void CoF_MomentLadders( void )
 {
 	int i, j;
@@ -820,7 +837,7 @@ static void CoF_MomentLadders( void )
 		sv_client_t *climber;
 		const char *name;
 		if( !CoF_MomentClass( manager, "cof_ladder_manager" ) || !( climber = CoF_MomentClient( manager->v.owner ))) continue;
-		if( !CoF_MomentClimbing( climber->edict )) continue;
+		if( !CoF_MomentClimbing( climber->edict ) || !CoF_MomentClimbsThis( climber->edict, manager )) continue;
 		name = SV_GetString( manager->v.targetname );
 		if( !name[0] ) continue;
 		for( j = svs.maxclients + 1; j < svgame.numEntities && cof_moment_ladder_count < COF_MOMENT_LADDERS; j++ )

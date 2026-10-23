@@ -213,8 +213,7 @@ qboolean SV_CoF_ArrivalTouchCounts( const sv_client_t *cl )
 	double door_age;
 	if( !SV_CoF_StoryCoopEnabled() || !cl || !CoF_ArrivalHuman( cl ) || !( p = CoF_ArrivalPlayer( cl ))) return true;
 	door_age = p->door_generation == svs.spawncount ? sv.time - p->door_seen : -1.0;
-	if( SV_CoF_PartyInDoor( cl )) door_age = 0.0;
-	return CoF_ArrivalTouchCounts( door_age, p->stayed && p->stay_generation == svs.spawncount, -1.0, false );
+	return CoF_ArrivalTouchCounts( SV_CoF_PartyInDoor( cl ), door_age, p->stayed && p->stay_generation == svs.spawncount, -1.0, false );
 }
 
 // A door the player was in the middle of when the level changed: its EndSequence stays in the old map.
@@ -382,6 +381,7 @@ static qboolean CoF_ArrivalRefusalNew( cof_arrival_player_t *p, const char *leve
 qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark )
 {
 	cof_arrival_player_t *refused = NULL;
+	qboolean refused_in_door = false;
 	double arrived_age = cof_arrival.generation == svs.spawncount ? sv.time - cof_arrival.time : -1.0;
 	qboolean back = false;
 	const char *reason;
@@ -405,15 +405,18 @@ qboolean SV_CoF_ArrivalRefuses( const char *level, const char *landmark )
 		if( !CoF_ArrivalHuman( cl ) || !CoF_ArrivalAlive( cl->edict ) || !( p = CoF_ArrivalPlayer( cl )) ||
 			!SV_CoF_PartyInExit( cl->edict, cof_arrival_exit.models, cof_arrival_exit.count )) continue;
 		door_age = p->door_generation == svs.spawncount ? sv.time - p->door_seen : -1.0;
-		if( SV_CoF_PartyInDoor( cl )) door_age = 0.0;
-		if( CoF_ArrivalTouchCounts( door_age, p->stayed && p->stay_generation == svs.spawncount, arrived_age, back ))
+		if( CoF_ArrivalTouchCounts( SV_CoF_PartyInDoor( cl ), door_age, p->stayed && p->stay_generation == svs.spawncount, arrived_age, back ))
 			return false;
-		if( !refused ) refused = p;
+		if( !refused )
+		{
+			refused = p;
+			refused_in_door = SV_CoF_PartyInDoor( cl );
+		}
 	}
 	if( !refused ) return false; // nobody in it: a scripted change
 	if( CoF_ArrivalRefusalNew( refused, level, landmark )) // asked every frame
 	{
-		reason = refused->stayed ? "arrived-inside" : "just-arrived";
+		reason = refused_in_door ? "mid-door" : refused->stayed ? "arrived-inside" : "just-arrived";
 		Con_Printf( "cofstory phase=exit-arrival-refused destination=%s landmark=%s userid=%d reason=%s\n", level, landmark, refused->userid, reason );
 	}
 	return true;

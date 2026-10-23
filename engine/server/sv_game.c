@@ -225,6 +225,19 @@ void SV_CopyTraceToGlobal( trace_t *trace )
 SV_SetModel
 ==============
 */
+// 1.2.6: who asked to set a model on an entity already freed. In hl.dll that is a weapon's Deploy (DefaultDeploy's
+// SET_MODEL, weapons.cpp:1862) run on a weapon object freed under it: the host's heap is already damaged when this
+// shows (1.2.4's re-dual-wield of the same pair, host log 2026-10-22 05:09:32). The game's own return address names
+// the function (an RVA of hl.dll) if it ever shows again.
+#if defined( _MSC_VER )
+#include <intrin.h>
+#define COF_SETMODEL_CALLER() ((uintptr_t)_ReturnAddress( ))
+#elif defined( __GNUC__ )
+#define COF_SETMODEL_CALLER() ((uintptr_t)__builtin_return_address( 0 ))
+#else
+#define COF_SETMODEL_CALLER() ((uintptr_t)0)
+#endif
+
 void GAME_EXPORT SV_SetModel( edict_t *ent, const char *modelname )
 {
 	char	name[MAX_QPATH];
@@ -234,6 +247,14 @@ void GAME_EXPORT SV_SetModel( edict_t *ent, const char *modelname )
 	if( !SV_IsValidEdict( ent ))
 	{
 		Con_Printf( S_WARN "%s: invalid entity %s\n", __func__, SV_ClassName( ent ));
+		if( SV_CoF_StoryCoopEnabled( ))
+		{
+			uintptr_t caller = COF_SETMODEL_CALLER(), base = SV_CoF_StoryBase();
+			int number = ent && svgame.edicts && ent >= svgame.edicts && ent < svgame.edicts + GI->max_edicts ? (int)( ent - svgame.edicts ) : -1;
+			Con_Printf( "cofstory phase=setmodel-invalid entity=%d serial=%d model=%s caller=%s%08x\n", number,
+				number >= 0 ? ent->serialnumber : -1, modelname && ((byte)modelname[0] ) > ' ' ? modelname : "-",
+				base && caller > base && caller - base < 0x01000000 ? "hl+" : "", (unsigned int)( base && caller > base && caller - base < 0x01000000 ? caller - base : caller ));
+		}
 		return;
 	}
 

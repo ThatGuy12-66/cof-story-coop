@@ -25,7 +25,11 @@ gInitHUD is only set by a new game or a loaded save, world.cpp:455). Three thing
    new map's exit back (cm_park2 -> cm_park3 -> cm_park2 at sign-on), or a step from it (a dodge took a player
    back 8 s after arriving). A touch of an exit does not count for a player who has stood in an exit ever since
    arriving, nor, in the first COF_ARRIVAL_GRACE seconds, at the exit back by the landmark the party came in by;
-   coming through a door just now always counts (the doors are how the story takes those exits).
+   coming through a door just now always counts (the doors are how the story takes those exits). 1.2.6: not while
+   the door still runs: the game raises its flag when the door opens and moves the player two seconds later
+   (inter_door, CoF_InterDoor.cpp:336-387, 507-521), so a player who opened the door back from inside the exit they
+   had just arrived in was taken through that exit at once, then set down in it again by the door and taken twice
+   (cm_apartment3, host log 2026-10-22 05:07:39-42).
 4. Empty quick-slot pictures. client.dll's VidInit empties the three QUICK SELECT boxes (CRECBInventory::Initialize)
    and the game sends them again (QSlotUpdate) from the first PostThink after a restore, on one global flag
    (m_bRestored, 0x10226476) that the first player's PostThink clears: after every level change or load the
@@ -88,11 +92,13 @@ COF_ARRIVAL_FN int CoF_ScoreInfoField( const unsigned char *payload, int field )
 }
 
 // Whether a player's touch of an exit counts.
+// in_door: going through an inter_door right now (still where they opened it: never counts yet).
 // door_age: seconds since they were last seen going through an inter_door in this map, negative: never.
 // stayed: in an exit ever since arriving. arrived_age: seconds since the party arrived in this map by a story
 // level change, negative: it did not. back: the exit leads back by the landmark the party came in by.
-COF_ARRIVAL_FN int CoF_ArrivalTouchCounts( double door_age, int stayed, double arrived_age, int back )
+COF_ARRIVAL_FN int CoF_ArrivalTouchCounts( int in_door, double door_age, int stayed, double arrived_age, int back )
 {
+	if( in_door ) return 0;
 	if( door_age >= 0.0 && door_age <= COF_ARRIVAL_DOOR_WINDOW ) return 1;
 	if( stayed ) return 0;
 	if( back && arrived_age >= 0.0 && arrived_age < COF_ARRIVAL_GRACE ) return 0;

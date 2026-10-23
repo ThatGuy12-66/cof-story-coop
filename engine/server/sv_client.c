@@ -1031,6 +1031,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		char temp[sizeof( s )];
 		const char *build = Cvar_VariableString( "cof_build" );
 		const char *maps = Cvar_VariableString( "cof_maps" );
+		const char *label = Cvar_VariableString( "cof_label" ); // 1.2.6: the app's release (an older host's sends none)
 
 		SV_GetPlayerCount( &count, &bots );
 
@@ -1047,6 +1048,7 @@ static void SV_Info( netadr_t from, int protocolVersion )
 		if( build[0] ) Info_SetValueForKey( s, "cofbuild", build, sizeof( s )); // story co-op: the tester app checks it before a join
 		if( build[0] ) Info_SetValueForKeyf( s, "bots", sizeof( s ), "%i", bots ); // ...and shows the AI companions in its status
 		if( build[0] && maps[0] ) Info_SetValueForKey( s, "cofmaps", maps, sizeof( s )); // ...and the merged maps a guest needs too (1.1.8)
+		if( build[0] && label[0] ) Info_SetValueForKey( s, "cofver", label, sizeof( s )); // ...and its release, for a guest's app (1.2.6)
 
 		// write host last so we can try to cut off too long hostnames
 		// TODO: value size limit for infostrings
@@ -1955,7 +1957,12 @@ static void SV_UserinfoChanged( sv_client_t *cl )
 	{
 		for( i = 0, current = svs.clients; i < svs.maxclients; i++, current++ )
 		{
-			if( current == cl || current->state != cs_spawned )
+			// Cry of Fear story co-op (1.2.6): a player still joining or changing level counts too. Checkpoints know
+			// players by name (sv_cof_session.inc refuses a party with two of one name), and someone joining while
+			// the host loads a level met nobody spawned and kept a name already taken. Not a slot still joining from
+			// this player's own address: their own earlier try (left until it times out), not another player.
+			if( current == cl || ( current->state != cs_spawned && !( current->state >= cs_connected && SV_CoF_StoryCoopEnabled( ) &&
+				!NET_CompareBaseAdr( current->netchan.remote_address, cl->netchan.remote_address ))))
 				continue;
 
 			if( !Q_stricmp( current->name, val ))

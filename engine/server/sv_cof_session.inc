@@ -10,6 +10,9 @@ static int cof_session_generation = -1;
 static double cof_session_save_after;
 static qboolean cof_session_auto_needed;
 static char cof_session_latest[25];
+// 1.2.6: this session saved or loaded a checkpoint itself. Until then latest.txt names another session's (a new game
+// or a chapter start keeps the file until its first autosave lands), which a team wipe must never load.
+static qboolean cof_session_owned;
 static char cof_session_pending_slot[25];
 static double cof_session_wipe_after;
 static int cof_session_deferred; // the reason last logged (CoF_SessionWait): once per deferral
@@ -203,7 +206,15 @@ qboolean SV_CoF_SessionSave( const char *slot )
 		if( client->state != cs_spawned || !SV_IsValidEdict( client->edict ) || client->edict->v.health <= 0 || client->edict->v.deadflag != DEAD_NO ) return false;
 		spawned++;
 	}
-	if( !spawned || svgame.numEntities > COF_SNAPSHOT_ENTITIES || !CoF_SessionCurrentNames( names )) return false;
+	if( !spawned || svgame.numEntities > COF_SNAPSHOT_ENTITIES ) return false;
+	if( !CoF_SessionCurrentNames( names ))
+	{
+		// 1.2.6: said once a map (it was silent): two players share a name, so no checkpoint can know them apart
+		static int said = -1;
+		if( said != svs.spawncount ) Con_Printf( "cofstory phase=session-save-refused slot=%s reason=same-names\n", slot );
+		said = svs.spawncount;
+		return false;
+	}
 	SV_CoF_StateFrame(); SV_CoF_ShareFrame();
 	cof_session_data = Mem_Calloc( host.mempool, sizeof( *cof_session_data ));
 	cof_session_data->version = COF_SESSION_VERSION; cof_session_data->clients = svs.maxclients; cof_session_data->entities = svgame.numEntities;
@@ -265,6 +276,7 @@ qboolean SV_CoF_SessionSave( const char *slot )
 	Q_snprintf( path, sizeof( path ), "save/cofcoop/%s.cof", slot );
 	if( !CoF_SessionReplace( path, archive, size )) goto done;
 	Q_strncpy( cof_session_latest, slot, sizeof( cof_session_latest ));
+	cof_session_owned = true;
 	if( !CoF_SessionReplace( "save/cofcoop/latest.txt", (const byte *)slot, Q_strlen( slot )))
 		Con_Printf( "cofstory phase=session-index-failed slot=%s\n", slot );
 	Con_Printf( "cofstory phase=session-saved slot=%s map=%s bytes=%u\n", slot, sv.name, (unsigned int)size );
@@ -582,6 +594,7 @@ static qboolean CoF_SessionRunLoad( void )
 	SV_CoF_BlurCheckpointLoaded(); // the party's blur starts off (sv_cof_blur.c)
 	SV_CoF_PickupsCheckpointLoaded( cof_session_pending_slot ); // 1.1.9: the map pickups taken, as then
 	Q_strncpy( cof_session_latest, cof_session_pending_slot, sizeof( cof_session_latest ));
+	cof_session_owned = true;
 	Con_Printf( "cofstory phase=session-loaded slot=%s map=%s generation=%d\n", cof_session_pending_slot, sv.name, svs.spawncount );
 	Mem_Free( cof_session_data ); cof_session_data = NULL;
 	Mem_Free( cof_session_pending ); cof_session_pending = NULL; cof_session_pending_size = 0;
@@ -595,7 +608,7 @@ void SV_CoF_SessionReset( void )
 	if( cof_session_data ) Mem_Free( cof_session_data );
 	cof_session_pending = NULL; cof_session_data = NULL; cof_session_pending_size = 0;
 	cof_session_generation = -1; cof_session_auto_needed = false;
-	cof_session_saving = cof_session_loading = false;
+	cof_session_saving = cof_session_loading = cof_session_owned = false;
 	cof_session_latest[0] = cof_session_pending_slot[0] = 0;
 }
 
@@ -624,7 +637,8 @@ void SV_CoF_SessionFrame( void )
 				Con_Printf( "cofstory phase=session-checkpoint-preserved slot=%s\n", cof_session_latest );
 			}
 			else if( cof_session_latest[0] )
-				Con_Printf( "cofstory phase=session-checkpoint-unusable slot=%s\n", cof_session_latest );
+				Con_Printf( "cofstory phase=session-checkpoint-%s slot=%s\n",
+					cof_continue && cof_continue->value ? "unusable" : "not-ours", cof_session_latest );
 		}
 	}
 	// Continue (the tester app's start option): the latest checkpoint, once,
@@ -636,7 +650,13 @@ void SV_CoF_SessionFrame( void )
 		Cvar_DirectSet( cof_continue, "0" );
 		queued = SV_CoF_SessionLoad( NULL );
 		Con_Printf( "cofstory phase=session-continue result=%s\n", queued ? "queued" : "refused" );
-		if( !queued ) SV_CoF_RetailProFont( &svs.clients[0], 5, "The checkpoint could not be loaded: this map starts from its beginning.", true );
+		if( !queued )
+		{
+			SV_CoF_RetailProFont( &svs.clients[0], 5, "The checkpoint could not be loaded: this map starts from its beginning.", true );
+			// 1.2.6: the map starts over as this session's own, so it saves a checkpoint of its own for a team wipe
+			// (the first frame kept the old one for Continue and planned no autosave)
+			SV_CoF_SessionAutosaveSoon();
+		}
 		return;
 	}
 	if( sv.time >= cof_session_wipe_after && !SV_CoF_TransitionActive() && !cof_session_pending )
@@ -689,6 +709,15 @@ qboolean SV_CoF_SessionWipe( const char *map, const char *landmark )
 	waiting = false;
 	if( !players ) return false;
 	if( cof_session_pending ) return true;
+	// 1.2.6: before this session's own first checkpoint, the game's own restart of the map (no checkpoint) runs:
+	// latest.txt still names the previous session's, another map or chapter and maybe another party.
+	if( !cof_session_owned )
+	{
+		static int said = -1;
+		if( said != svs.spawncount ) Con_Printf( "cofstory phase=session-wipe-no-checkpoint map=%s\n", map );
+		said = svs.spawncount;
+		return false;
+	}
 	if( !SV_CoF_SessionLoad( NULL )) return false;
 	Con_Printf( "cofstory phase=session-wipe-recovery map=%s\n", map );
 	return true;

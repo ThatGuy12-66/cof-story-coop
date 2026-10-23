@@ -317,6 +317,8 @@ void SV_CoF_StoryInit( void )
 {
 	Cvar_Get( "cof_story_coop", "0", 0, "experimental Cry of Fear story co-op world and party persistence" );
 	Cvar_Get( "cof_build", "", 0, "story co-op: the tester build this server runs, sent as cofbuild in its info reply" );
+	// 1.2.6: most fixes run in the host's game, so a guest's app says when the host runs an older release (cofver)
+	Cvar_Get( "cof_label", "", 0, "story co-op: the app release this server runs (1.2.6 and later), sent as cofver in its info reply" );
 	Cvar_Get( "cof_chapter_start", "", 0, "story co-op: the chapter map the app started (not New game or Continue); its kit is handed out once" );
 	Cvar_Get( "cof_maps", "", 0, "story co-op: a hash of the host's merged maps, sent as cofmaps in its info reply (the app compares it before a join)" );
 	Cmd_AddCommand( "cof_story_status", CoF_StoryStatus_f, "report story co-op player and world state" );
@@ -558,6 +560,7 @@ void SV_CoF_StoryShutdown( void )
 {
 	SV_CoF_CommandSender( NULL ); // an engine error inside a command leaves it set
 	SV_CoF_UsercmdSender( NULL );
+	SV_CoF_GlobalsReset(); // 1.2.6: the same for the per-player globals swap
 	SV_CoF_PartyShutdown();
 	SV_CoF_SceneReset();
 	SV_CoF_MomentsReset();
