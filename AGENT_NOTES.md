@@ -1091,3 +1091,7 @@ the Enhanced CoFLaunchApp.exe replaces the retail one, so it has no reputation).
   file now.
 - Version 1.2.7, build 22 (`VERSION` stays 1.1); engine changed only in its stamp. Release notes
   `docs/releases/1.2.7.md` (no Idiolect). Not played. The player's full log was not seen (it is on Discord).
+- **Published 1.2.7 2026-10-22 ~20:54 PT** (`release.py build` then `publish`, standing approval): full suite OK, fresh
+  install and the 1.2.6 -> 1.2.7 update passed; GitHub `v1.2.7` latest, build 22; `releases/latest` serves its
+  release.json. Zip `206F2B04…`, 111,597,089 bytes, MD5 `F1D9FC68…`. Engine `5f2e6a7c`, launcher `07156b4`. Not on
+  ModDB (account banned).
