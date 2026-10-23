@@ -1122,3 +1122,8 @@ and quarantined it (the WinError 2 1.2.7 explains). Every version had it; whethe
   If it recurs without that line, SDL had the arrow up: look outside the game. Tests `tests/test_cof_pad_pointer.py`
   (+ `cof_axis_push_harness.c`).
 - Version 1.2.8, build 23 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.8.md`. Not played.
+- **Published 1.2.8 2026-10-23 ~03:52 PT** (standing approval): full suite 740 OK, fresh install and the 1.2.7 -> 1.2.8
+  update passed; GitHub `v1.2.8` latest, `releases/latest` serves build 23 (publish's own page check failed on
+  GitHub lag, as before). Zip `05577E58…`, 111,600,438 bytes, MD5 `C0BEB153…`. Engine `7ccfb5c8`, launcher
+  `bfe898c`. The built xash.dll has no "wmic" string; it still imports CreateProcessW (the static CRT), unused by the
+  ID. The Windows harness read both sources on the dev PC. Not on ModDB yet (the new page is being made).
