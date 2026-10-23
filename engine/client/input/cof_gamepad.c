@@ -333,6 +333,12 @@ static struct
 	int      warp_next;
 	float    mouse_travel;     // real mouse motion since the last pad input
 	double   mouse_travel_time;
+	qboolean axis_held[2][8];  // CL_CoF_AxisPushed: [SDL controller axis, engine axis] counted, not back at rest yet
+	double   log_next;         // CL_CoF_InputLog's budget
+	int      log_skipped;
+	double   arrow_wrong_since; // CL_CoF_ArrowWatch: the arrow should be up and is not, since (0 = fine)
+	qboolean arrow_wrong_logged;
+	int      arrow_wrong_count;
 
 	// cursor art (gfx/shell/gamepad/cursor.png) and its shadow
 	int      art_tex, shadow_tex;
@@ -578,6 +584,75 @@ static void CL_CoF_ApplyOSCursor( void )
 
 /*
 ============
+CL_CoF_InputLog
+
+Always on (1.2.8), unlike cof_input_trace, so the log a player sends shows
+what took the pointer: one line per 2 seconds at most, the lines over that
+are counted and the count goes out with the next one.
+============
+*/
+static void CL_CoF_InputLog( const char *fmt, ... ) FORMAT_CHECK( 1 );
+static void CL_CoF_InputLog( const char *fmt, ... )
+{
+	va_list args;
+	char    text[512];
+
+	if( host.realtime < cof_pad.log_next )
+	{
+		cof_pad.log_skipped++;
+		return;
+	}
+
+	va_start( args, fmt );
+	Q_vsnprintf( text, sizeof( text ), fmt, args );
+	va_end( args );
+
+	cof_pad.log_next = host.realtime + 2.0;
+	if( cof_pad.log_skipped )
+		Con_Printf( "cofinput %s (%d more not logged)\n", text, cof_pad.log_skipped );
+	else Con_Printf( "cofinput %s\n", text );
+	cof_pad.log_skipped = 0;
+}
+
+/*
+============
+CL_CoF_AxisPushed
+
+A stick or trigger counts as the player picking up the gamepad when it is
+pushed well past rest (12000 of 32767), and again only after it came back
+under 8000. A stick that drifts, or an axis that rests off centre, sends
+motion events all the time: it took the pointer back from the mouse on every
+one of them, the arrow hidden while the mouse was in use (1.2.8). source 0 is
+the SDL controller axis, 1 the engine axis (in_joy.c).
+============
+*/
+#define COF_AXIS_PUSH 12000
+#define COF_AXIS_REST 8000
+
+static qboolean CL_CoF_AxisPushed( int source, int axis, int value )
+{
+	qboolean *held;
+
+	value = abs( value );
+	if( source < 0 || source >= (int)ARRAYSIZE( cof_pad.axis_held ) || axis < 0 || axis >= (int)ARRAYSIZE( cof_pad.axis_held[0] ))
+		return value > COF_AXIS_PUSH;
+
+	held = &cof_pad.axis_held[source][axis];
+	if( value < COF_AXIS_REST )
+	{
+		*held = false;
+		return false;
+	}
+
+	if( value <= COF_AXIS_PUSH || *held )
+		return false;
+
+	*held = true;
+	return true;
+}
+
+/*
+============
 CL_CoF_NoteInput
 
 The last input device changed (or was confirmed).
@@ -593,6 +668,12 @@ static void CL_CoF_NoteInput( int device, const char *why )
 
 	if( CL_CoF_DeviceFromCvar( ) == device )
 		return;
+
+	// the gamepad taking the pointer, or giving it back, is what hides and
+	// shows the arrow: always logged (mouse / keyboard changes are not)
+	if( device == COF_INPUT_PAD || CL_CoF_DeviceFromCvar( ) == COF_INPUT_PAD )
+		CL_CoF_InputLog( "phase=last-input from=%s to=%s why=%s key_dest=%d", cof_input_names[CL_CoF_DeviceFromCvar( )],
+			cof_input_names[device], why, (int)cls.key_dest );
 
 	Cvar_DirectSet( &cof_last_input, cof_input_names[device] );
 	cof_pad.device = device;
@@ -691,12 +772,15 @@ void CL_CoF_InputEvent( const void *sdlEvent )
 		break;
 	case SDL_CONTROLLERAXISMOTION:
 		cof_pad.stat_axis_events++;
-		if( abs( ev->caxis.value ) > 12000 )
-			CL_CoF_NoteInput( COF_INPUT_PAD, "gamepad stick" );
+		if( CL_CoF_AxisPushed( 0, ev->caxis.axis, ev->caxis.value ))
+			CL_CoF_NoteInput( COF_INPUT_PAD, va( "gamepad axis %d at %d", ev->caxis.axis, ev->caxis.value ));
 		break;
 	case SDL_JOYBUTTONDOWN:
+		CL_CoF_NoteInput( COF_INPUT_PAD, va( "joystick button %d", ev->jbutton.button ));
+		break;
 	case SDL_JOYHATMOTION:
-		CL_CoF_NoteInput( COF_INPUT_PAD, "joystick" );
+		if( ev->jhat.value != SDL_HAT_CENTERED )
+			CL_CoF_NoteInput( COF_INPUT_PAD, "joystick hat" );
 		break;
 	}
 #else
@@ -714,10 +798,8 @@ come through there): a stick or trigger pushed well past its deadzone.
 */
 void CL_CoF_NotePadAxis( int axis, short value )
 {
-	(void)axis;
-
-	if( abs( value ) > 12000 )
-		CL_CoF_NoteInput( COF_INPUT_PAD, "gamepad axis" );
+	if( CL_CoF_AxisPushed( 1, axis, value ))
+		CL_CoF_NoteInput( COF_INPUT_PAD, va( "engine axis %d at %d", axis, value ));
 }
 
 /*
@@ -1835,6 +1917,68 @@ static void CL_CoF_PadLegacyJoystick( void )
 
 /*
 ============
+CL_CoF_ArrowWatch
+
+1.2.8, for a report of an arrow that stayed invisible in the menus and over the
+in-play panels (mouse only, still clickable, moving the mouse did not bring it
+back, restarting the game did). While this file's own rules want the arrow up
+(a menu or a clickable panel, the window focused, the gamepad neither the last
+input nor holding the pointer) and the engine's or SDL's state has it down for
+over a second, the player's log gets one line with that state, and an arrow SDL
+hid is shown again. A log without that line means SDL had the arrow up and
+something outside the game hid it.
+============
+*/
+static void CL_CoF_ArrowWatch( void )
+{
+#if XASH_SDL == 2
+	const char *why = NULL;
+	qboolean    shown, relative;
+
+	if(( cls.key_dest != key_menu && !cof_pad.panel_open ) || CL_CoF_PadHidesOSCursor( ) || cof_pad.engaged
+		|| !host.hWnd || !( SDL_GetWindowFlags( host.hWnd ) & SDL_WINDOW_INPUT_FOCUS ))
+	{
+		cof_pad.arrow_wrong_since = 0.0;
+		cof_pad.arrow_wrong_logged = false;
+		return;
+	}
+
+	shown = SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE;
+	relative = SDL_GetRelativeMouseMode( ) ? true : false;
+
+	if( !host.mouse_visible )
+		why = "cursor-type-none";
+	else if( relative )
+		why = "relative-mouse";
+	else if( !shown )
+		why = "sdl-hidden";
+
+	if( !why )
+	{
+		cof_pad.arrow_wrong_since = 0.0;
+		cof_pad.arrow_wrong_logged = false;
+		return;
+	}
+
+	if( !cof_pad.arrow_wrong_since )
+		cof_pad.arrow_wrong_since = host.realtime;
+
+	if( host.realtime - cof_pad.arrow_wrong_since < 1.0 || cof_pad.arrow_wrong_logged )
+		return;
+
+	cof_pad.arrow_wrong_logged = true;
+	if( cof_pad.arrow_wrong_count++ < 20 )
+		Con_Printf( "cofinput phase=arrow-missing reason=%s key_dest=%d panel=%d classes=%x mouse_visible=%d sdl_shown=%d relative=%d last_input=%s os_hidden=%d frame=%d\n",
+			why, (int)cls.key_dest, (int)cof_pad.panel_open, cof_pad.panel_classes, (int)host.mouse_visible, (int)shown, (int)relative,
+			cof_input_names[CL_CoF_DeviceFromCvar( )], (int)cof_pad.os_hidden, (int)host.framecount );
+
+	if( host.mouse_visible && !relative && !shown )
+		SDL_ShowCursor( SDL_ENABLE );
+#endif
+}
+
+/*
+============
 CL_CoF_PadFrame
 
 Host_InputFrame, before IN_MouseMove. Returns true while the virtual cursor
@@ -1863,6 +2007,8 @@ qboolean CL_CoF_PadFrame( void )
 		CL_CoF_DuckRelease( cls.state != ca_active ? "left the game / loading" : "level change" );
 
 	CL_CoF_SprintFrame( );
+
+	CL_CoF_ArrowWatch( );
 
 	// the last input device may also have been set from outside (the menu
 	// marks its gamepad keys, a test cfg sets the cvar)

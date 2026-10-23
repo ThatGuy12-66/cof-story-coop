@@ -402,108 +402,94 @@ static int ID_SetKeyData( HKEY hRootKey, char *subKey, DWORD dwType, char *value
 	return 1;
 }
 
-#define BUFSIZE 4096
+/*
+Cry of Fear Story Co-op 1.2.8: the two Windows sources are read in this process.
+Upstream ran `wmic path win32_physicalmedia get SerialNumber` and `wmic bios get
+serialnumber` as hidden child processes with their output piped back, on every
+launch. Windows Defender's behaviour monitoring took that for an infostealer
+(Behavior:Win32/SuspLummalnj.A on WMIC.exe, launched by CoFLaunchApp.exe): it
+killed the game and quarantined it. A WMIC child that died without output also
+left ID_RunWMIC's ReadFile waiting for good, the parent held the pipe's write
+end, and current Windows 11 ships without WMIC. No child process now: the
+Windows install's own ID (MachineGuid, 64-bit view: a 32-bit process is
+redirected to WOW6432Node, which has none) and the serial number of the volume
+Windows is on. An ID made from the WMIC sources fails ID_Check once and is made
+again from these.
+*/
+#define ID_WINDOWS_SOURCES 2
 
-static int ID_RunWMIC( char *buffer, const wchar_t *cmdline )
+static qboolean ID_WindowsSource( int index, char *buf, DWORD size )
 {
-	HANDLE g_IN_Rd = NULL;
-	HANDLE g_IN_Wr = NULL;
-	HANDLE g_OUT_Rd = NULL;
-	HANDLE g_OUT_Wr = NULL;
-	DWORD dwRead;
-	BOOL bSuccess = FALSE;
-	wchar_t *cmdline_copy;
-	
-	const int cmdline_size = wcslen( cmdline ) * sizeof( *cmdline );
-	PROCESS_INFORMATION pi = { 0 };
-	SECURITY_ATTRIBUTES saAttr =
+	buf[0] = 0;
+
+	if( index == 0 )
 	{
-		.nLength = sizeof( SECURITY_ATTRIBUTES ),
-		.bInheritHandle = TRUE,
-		.lpSecurityDescriptor = NULL,
-	};
+		HKEY  hKey;
+		DWORD type = 0, len = size - 1;
+		LONG  result;
 
-	CreatePipe( &g_IN_Rd, &g_IN_Wr, &saAttr, 0 );
-	CreatePipe( &g_OUT_Rd, &g_OUT_Wr, &saAttr, 0 );
-	SetHandleInformation( g_IN_Wr, HANDLE_FLAG_INHERIT, 0 );
+		if( RegOpenKeyExA( HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &hKey ) != ERROR_SUCCESS )
+			return false;
 
-	STARTUPINFOW si =
+		result = RegQueryValueExA( hKey, "MachineGuid", NULL, &type, (LPBYTE)buf, &len );
+		RegCloseKey( hKey );
+
+		if( result != ERROR_SUCCESS || type != REG_SZ || len >= size )
+		{
+			buf[0] = 0;
+			return false;
+		}
+
+		buf[len] = 0;
+	}
+	else if( index == 1 )
 	{
-		.cb = sizeof( STARTUPINFOW ),
-		.dwFlags = STARTF_USESTDHANDLES,
-		.hStdInput = g_IN_Rd,
-		.hStdOutput = g_OUT_Wr,
-		.hStdError = g_OUT_Wr,
-		.wShowWindow = SW_HIDE,
-		.dwFlags = STARTF_USESTDHANDLES,
-	};
+		char  root[MAX_PATH];
+		DWORD serial = 0;
+		UINT  len = GetWindowsDirectoryA( root, sizeof( root ));
 
-	cmdline_copy = malloc( cmdline_size );
-	if( !cmdline_copy )
-		goto err;
+		if( len < 3 || len >= sizeof( root ) || root[1] != ':' )
+			return false;
 
-	memcpy( cmdline_copy, cmdline, cmdline_size );
+		root[3] = 0; // "C:\"
+		if( !GetVolumeInformationA( root, NULL, 0, &serial, NULL, NULL, NULL, 0 ) || !serial )
+			return false;
 
-	if( !CreateProcessW( NULL, cmdline_copy, NULL, NULL, true, CREATE_NO_WINDOW, NULL, NULL, &si, &pi ))
-		goto err;
+		Q_snprintf( buf, size, "%08lX", (unsigned long)serial );
+	}
+	else return false;
 
-	WaitForSingleObject( pi.hProcess, 500 );
-
-	bSuccess = ReadFile( g_OUT_Rd, buffer, BUFSIZE, &dwRead, NULL );
-	buffer[BUFSIZE-1] = 0;
-
-	TerminateProcess( pi.hProcess, 0 );
-
-	CloseHandle( pi.hProcess );
-	CloseHandle( pi.hThread );
-
-err:
-	CloseHandle( g_IN_Wr );
-	CloseHandle( g_OUT_Wr );
-	CloseHandle( g_IN_Rd );
-	CloseHandle( g_OUT_Rd );
-
-	free( cmdline_copy );
-
-	return bSuccess;
+	return ID_VerifyHEX( buf );
 }
 
-static int ID_ProcessWMIC( bloomfilter_t *value, const wchar_t *cmdline )
+static int ID_ProcessWindows( bloomfilter_t *value )
 {
-	char buffer[BUFSIZE], token[BUFSIZE], *pbuf;
+	char buf[256];
 	int count = 0;
 
-	if( !ID_RunWMIC( buffer, cmdline ))
-		return 0;
-
-	pbuf = COM_ParseFile( buffer, token, sizeof( token )); // Header
-	while(( pbuf = COM_ParseFile( pbuf, token, sizeof( token ))))
+	for( int i = 0; i < ID_WINDOWS_SOURCES; i++ )
 	{
-		if( !ID_VerifyHEX( token ))
+		if( !ID_WindowsSource( i, buf, sizeof( buf )))
 			continue;
 
-		*value |= BloomFilter_ProcessStr( token );
+		*value |= BloomFilter_ProcessStr( buf );
 		count++;
 	}
 
 	return count;
 }
 
-static int ID_CheckWMIC( bloomfilter_t value, const wchar_t *cmdline )
+static int ID_CheckWindows( bloomfilter_t value )
 {
-	char buffer[BUFSIZE], token[BUFSIZE], *pbuf;
+	char buf[256];
 	int count = 0;
 
-	if( !ID_RunWMIC( buffer, cmdline ))
-		return 0;
-
-	pbuf = COM_ParseFile( buffer, token, sizeof( token )); // Header
-	while(( pbuf = COM_ParseFile( pbuf, token, sizeof( token ))))
+	for( int i = 0; i < ID_WINDOWS_SOURCES; i++ )
 	{
-		if( !ID_VerifyHEX( token ))
+		if( !ID_WindowsSource( i, buf, sizeof( buf )))
 			continue;
 
-		bloomfilter_t filter = BloomFilter_ProcessStr( token );
+		bloomfilter_t filter = BloomFilter_ProcessStr( buf );
 		count += ( filter & value ) == filter;
 	}
 
@@ -556,8 +542,7 @@ static bloomfilter_t ID_GenerateRawId( void )
 	count += ID_ProcessNetDevices( &value );
 #endif
 #if XASH_WIN32
-	count += ID_ProcessWMIC( &value, L"wmic path win32_physicalmedia get SerialNumber " );
-	count += ID_ProcessWMIC( &value, L"wmic bios get serialnumber " );
+	count += ID_ProcessWindows( &value );
 #endif
 #if XASH_IOS
 	{
@@ -622,8 +607,7 @@ static uint ID_CheckRawId( bloomfilter_t filter )
 #endif
 
 #if XASH_WIN32
-	count += ID_CheckWMIC( filter, L"wmic path win32_physicalmedia get SerialNumber" );
-	count += ID_CheckWMIC( filter, L"wmic bios get serialnumber" );
+	count += ID_CheckWindows( filter );
 #endif
 
 #if XASH_IOS
