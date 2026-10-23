@@ -1,6 +1,13 @@
-Cry of Fear Co-op 1.2.6
+Cry of Fear Co-op 1.2.7
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.7
+- If your antivirus removes CoFLaunchApp.exe (the program that starts the game), the app now
+  says so and offers Repair, instead of Windows' "cannot find the file specified". Restore
+  it from the antivirus's quarantine or repair the copy, and add the copy's folder as an
+  exception so it stays.
+- 1.1 to 1.2.7 can play together.
 
 WHAT'S NEW IN 1.2.6
 - Players standing on the same spot (the small dark room after a door, or after pressing J)

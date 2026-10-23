@@ -434,6 +434,7 @@ class FriendSetupTests(unittest.TestCase):
             root = Path(temp) / "copy"
             (root / "cryoffear/maps").mkdir(parents=True)
             (root / "xash.dll").write_bytes(b"engine")
+            (root / "CoFLaunchApp.exe").write_bytes(b"starter")
             (root / "cryoffear/gameinfo.txt").write_text("max_edicts 4096\n")   # 1.1.8: checked too (L1)
             (root / "cryoffear/maps/cm_apartment1.bsp").write_bytes(b"merged")
             (root / friend.INSTALLED).write_text(json.dumps({"schema": 2, "version": "test1", "build": 1,
@@ -637,7 +638,8 @@ class SetupProgressTests(unittest.TestCase):
 
 def a_copy(root: Path, **record) -> Path:
     """A copy that passes validate_runtime: engine, vgui.dll, the entity limit, one model and its record."""
-    for rel, data in {"xash.dll": b"engine", "vgui.dll": b"vgui", "cryoffear/gameinfo.txt": b'gamedir "cryoffear"\r\n'
+    for rel, data in {"CoFLaunchApp.exe": b"starter", "xash.dll": b"engine", "vgui.dll": b"vgui",
+                      "cryoffear/gameinfo.txt": b'gamedir "cryoffear"\r\n'
                       b"max_edicts 4096\r\n", "cryoffear/models/player/cof_s1/cof_s1.mdl": b"model"}.items():
         path = root / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
     state = {"schema": 2, "version": "1.1", "build": 12, "xash_sha256": hashlib.sha256(b"engine").hexdigest(),
@@ -695,6 +697,19 @@ class RepairCheckTests(unittest.TestCase):
             (root / "cryoffear/gameinfo.txt").unlink()
             with self.assertRaises(friend.CopyMismatch):
                 friend.validate_runtime(root)
+
+    def test_a_starter_an_antivirus_took_away_is_a_mismatch_that_names_it(self):
+        # 1.2.7: a player's antivirus removed CoFLaunchApp.exe after the first game; Start then failed with Windows'
+        # "[WinError 2] The system cannot find the file specified". Now the app names it and offers Repair, which
+        # lays the engine package (CoFLaunchApp.exe included) over the copy again.
+        with tempfile.TemporaryDirectory() as temp:
+            root = a_copy(Path(temp) / "copy")
+            (root / "CoFLaunchApp.exe").unlink()
+            with self.assertRaises(friend.CopyMismatch) as caught:
+                friend.validate_runtime(root)
+            self.assertIn("CoFLaunchApp.exe", caught.exception.problem)
+            self.assertIn("antivirus", caught.exception.problem)
+            self.assertIn(str(root.resolve()), caught.exception.problem)
 
     def test_a_record_from_before_1_1_8_has_no_vgui_hash(self):
         with tempfile.TemporaryDirectory() as temp:

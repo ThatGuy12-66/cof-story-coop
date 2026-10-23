@@ -1075,3 +1075,19 @@ and what was false or left: `docs/research/2026-10-22-code-review.md`. In short 
   `test_enhanced_arrival` (+ harness), `test_enhanced_party` (+ harness), `test_enhanced_moments` (+ harness),
   `test_coop_play`, `test_coop_app`, `test_network`. Version 1.2.6, build 21 (`VERSION` stays 1.1). Release notes
   `docs/releases/1.2.6.md` (written directly, no Idiolect). **Not played.**
+- **Published 1.2.6 2026-10-22 ~20:35 PT** (`release.py build` then `publish`, standing approval): full suite 731 OK (3 skipped), fresh install and the 1.2.5 -> 1.2.6 update passed; GitHub `v1.2.6` latest, build 21. publish's own last check (the releases page showing the new version) failed on GitHub's lag again; `releases/latest` and its release.json already served 1.2.6. Zip `F56BE14B…`, 111,595,696 bytes, MD5 `7D9AC771…`. Engine `7623e569`, launcher `3d3982a`. Not on ModDB (account banned).
+
+## 1.2.7: the antivirus notice (2026-10-22 night)
+
+A player's report (forwarded by the user, from Discord; Russian Windows, 1.2.5, Play solo): the game started once,
+"game ended" right after the intro camera, and then Start only said "[WinError 2] The system cannot find the file
+specified". `validate_runtime` passed (xash.dll there, right hash), so `subprocess.Popen` could not find the copy's
+`CoFLaunchApp.exe`: an antivirus killed the game and removed its program after the first run (behaviour detection;
+the Enhanced CoFLaunchApp.exe replaces the retail one, so it has no reputation). An update or Repair puts it back
+(the Enhanced installer verifies and re-copies all 667 files).
+- Fix (`tools/friend_setup.py`): `validate_runtime` raises `CopyMismatch` when the copy's `CoFLaunchApp.exe` is
+  missing, naming the antivirus and the folder to except; the app offers Repair. Test
+  `test_a_starter_an_antivirus_took_away_is_a_mismatch_that_names_it`; `a_copy` and the merged-maps fixture have the
+  file now.
+- Version 1.2.7, build 22 (`VERSION` stays 1.1); engine changed only in its stamp. Release notes
+  `docs/releases/1.2.7.md` (no Idiolect). Not played. The player's full log was not seen (it is on Discord).

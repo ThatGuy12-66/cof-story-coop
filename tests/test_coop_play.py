@@ -186,9 +186,9 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield) and 1.2.6 (the code review) keep 1.1's version, so 1.1 to 1.2.6 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.2.6'))
-        self.assertGreater(play.BUILD, 20)   # 1.2.5 was build 20: its copies must be offered the update
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review) and 1.2.7 (the antivirus notice) keep 1.1's version, so 1.1 to 1.2.7 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.2.7'))
+        self.assertGreater(play.BUILD, 21)   # 1.2.6 was build 21: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
         self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')

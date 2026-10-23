@@ -858,6 +858,12 @@ def validate_runtime(runtime: Path) -> Path:
         raise ValueError("Use the separate game copy created by setup.")
     state = installed_state(root)
     message = "This game copy does not match its install."
+    # 1.2.7: an antivirus that took the game's own program away after a first run left Start failing with Windows'
+    # bare "The system cannot find the file specified" (a player's report, 2026-10-22)
+    if state and not (root / "CoFLaunchApp.exe").is_file():
+        raise CopyMismatch(f"CoFLaunchApp.exe, the program that starts the game, is missing from {root}. Antivirus "
+                           "programs sometimes remove it: look for it in your antivirus's quarantine or protection "
+                           "history, and add that folder as an exception so it is not removed again.")
     if not state or not (root / "xash.dll").is_file() or digest_file(root / "xash.dll") != state.get("xash_sha256"):
         raise CopyMismatch(message)
     # 1.1.8 (L1): vgui.dll is always installed with xash.dll (they share an interface every build changes); records
