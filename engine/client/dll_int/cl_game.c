@@ -42,6 +42,7 @@ GNU General Public License for more details.
 #include "cof_strip.h"
 #include "cof_merged.h"
 #include "cof_levelname.h"
+#include "cof_hud_sprites.h"
 
 #define MAX_LINELENGTH	80
 #define TEXT_MSGNAME	"TextMessage"
@@ -1636,6 +1637,7 @@ static client_sprite_t *SPR_GetList( char *psz, int *piCount )
 {
 	cached_spritelist_t	*pEntry = &clgame.sprlist[0];
 	int		slot, index, numSprites = 0;
+	qboolean	cof_hud = !Q_stricmp( psz, "sprites/hud.txt" );   // cof_hud_sprites.h
 	byte *afile;
 	char *pfile;
 	string		token;
@@ -1674,8 +1676,8 @@ static client_sprite_t *SPR_GetList( char *psz, int *piCount )
 
 	Q_strncpy( pEntry->szListName, psz, sizeof( pEntry->szListName ));
 
-	// name, res, pic, x, y, w, h
-	pEntry->pList = Mem_Calloc( cls.mempool, sizeof( client_sprite_t ) * numSprites );
+	// name, res, pic, x, y, w, h (and room for the names Cry of Fear's client asks hud.txt for that it lacks)
+	pEntry->pList = Mem_Calloc( cls.mempool, sizeof( client_sprite_t ) * ( numSprites + ( cof_hud ? COF_HUD_EXTRA : 0 )));
 
 	for( index = 0; index < numSprites; index++ )
 	{
@@ -1710,6 +1712,15 @@ static client_sprite_t *SPR_GetList( char *psz, int *piCount )
 
 	if( index < numSprites )
 		Con_DPrintf( S_WARN "unexpected end of %s (%i should be %i)\n", psz, numSprites, index );
+	if( cof_hud && pEntry->count > 0 )
+	{
+		int parsed = pEntry->count;
+
+		pEntry->count = CoF_HudSpriteDefaults( pEntry->pList, parsed, Q_max( numSprites, parsed ) + COF_HUD_EXTRA );
+		if( pEntry->count > parsed )
+			Con_Printf( "[cof-hud] %s: %d sprites, %d names client.dll asks for added as empty entries\n", psz, parsed,
+				pEntry->count - parsed );
+	}
 	if( piCount ) *piCount = pEntry->count;
 	Mem_Free( afile );
 
