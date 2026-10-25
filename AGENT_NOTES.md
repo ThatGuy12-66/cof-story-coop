@@ -1179,3 +1179,7 @@ I go into the notes"; then "only one person can grab the gas mask in the bonus r
   `phase=pickups-room-nightvision entity=N`. Tests: `cof_pickups_harness.c` `the_rooms_own_night_vision`,
   `cof_bonus_module_harness.c` `item_unlock_lines`, `test_enhanced_pickups` wiring; 5 mutants all caught. Not played.
 - Version 1.2.10, build 25 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.10.md`.
+- **Published 1.2.10 2026-10-25 ~01:46 PT** (standing approval): full suite 745 OK (3 skipped), fresh install and the 1.2.9 ->
+  1.2.10 update passed; GitHub `v1.2.10` latest, `releases/latest` serves build 24 -> 25 (publish's own page check failed on
+  GitHub lag, as before). Zip `F5EF38C9…`, 111,604,339 bytes, MD5 `F10A9FFE…`. Engine `071c699f`, FreeVGUI `5a65421`,
+  launcher `fcfb091`. `console.c.2.o` moved aside as `console.c.2.o.1.2.9.bak` for the stamp.
