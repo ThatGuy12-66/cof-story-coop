@@ -85,6 +85,19 @@ class GridLogicTests(unittest.TestCase):
                              {'logic_under_test.h': (FREEVGUI / 'cofinventory_logic.h').read_text()})
         self.assertIn('inventory grid logic passed', out)
 
+    def test_menu_acts_on_release(self):
+        """The item menu lies over the client's NOTES / QUICK SELECT buttons, which act on
+        release: acting on the press hid the menu and the release opened NOTES (2026-10-25)."""
+        text = (FREEVGUI / 'cofinventory.cpp').read_text()
+        start = text.index('class MenuInput')
+        menu = text[start:text.index('};', start)]
+        pressed = menu[menu.index('void mousePressed'):menu.index('void mouseReleased')]
+        released = menu[menu.index('void mouseReleased'):menu.index('void mouseDoublePressed')]
+        self.assertIn('cofinv::PressMenu(', pressed)
+        self.assertNotIn('Apply(', pressed)
+        self.assertNotIn('ClickMenu(', menu)
+        self.assertIn('Apply( cofinv::ReleaseMenu(', released)
+
 
 if __name__ == '__main__':
     unittest.main()

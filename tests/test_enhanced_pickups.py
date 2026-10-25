@@ -74,6 +74,17 @@ class PickupModuleWiringTests(unittest.TestCase):
         body = body_of(SERVER / 'sv_cof_pickups.c', 'void SV_CoF_PickupsFrame(')
         assert_has(self, 'if( cof_pickups.generation != svs.spawncount ) CoF_PickupsFind();', body)
 
+    def test_the_rooms_own_night_vision_is_marked_before_the_kits_are_found(self):
+        # 1.2.10 (user report 2026-10-25: only one player could take the bonus room's night vision)
+        find = body_of(SERVER / 'sv_cof_pickups.c', 'static void CoF_PickupsFind( void )')
+        self.assertLess(find.index('CoF_PickupsRoomNightVision( );'), find.index('bonus = CoF_PickupsFindBonus('))
+        mark = body_of(SERVER / 'sv_cof_pickups.c', 'static void CoF_PickupsRoomNightVision( void )')
+        self.assertLess(mark.index('SV_CoF_BonusItemUnlocked( item )'), mark.index('SetBits( room->v.spawnflags, COF_PICKUP_BONUS_FLAG );'))
+        assert_has(self, 'qboolean SV_CoF_BonusItemUnlocked( int item );', (SERVER / 'sv_cof_story.h').read_text(encoding='latin-1'))
+        unlocked = body_of(SERVER / 'sv_cof_bonus.c', 'qboolean SV_CoF_BonusItemUnlocked( int item )')
+        assert_has(self, 'settings = SV_CoF_BonusLoadFile( "scriptsettings.dat", &length );', unlocked)
+        assert_has(self, 'if( settings ) COM_FreeFile( settings );', unlocked)
+
     def test_the_hooks_called_for_every_entity_are_cheap(self):
         # sent entities and sphere searches only look the edict up in the index: no scan, no cvar lookup
         for signature in ('qboolean SV_CoF_PickupsVisible(', 'qboolean SV_CoF_PickupsBlocked(', 'static cof_pickups_slot_t *CoF_PickupsAt('):

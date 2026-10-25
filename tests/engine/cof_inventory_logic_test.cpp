@@ -94,6 +94,44 @@ int main()
 	r = ClickSlot( s, 6, items );
 	assert( r.sound == kSoundNo && !r.command[0] );
 
+	// the menu acts on the release over the button it was pressed on, as the client's buttons
+	// do (2026-10-25: acting on the press hid the menu, and the release opened NOTES under it)
+	ClickSlot( s, 6, items );
+	PressMenu( s, kDualWield );
+	assert( s.menu == 6 && !s.dualFrom && s.pressed == kDualWield ); // still open while held
+	r = ReleaseMenu( s, kDualWield );
+	assert( s.menu == 0 && s.dualFrom == 6 && s.pressed == kNone && !r.command[0] );
+	r = ClickSlot( s, 9, items );
+	assert( !strcmp( r.command, "inventorydualwield 6 9" ));
+	ClickSlot( s, 9, items );
+	PressMenu( s, kEquip );
+	r = ReleaseMenu( s, kEquip );
+	assert( !strcmp( r.command, "inventoryequip 9" ) && s.menu == 0 );
+	ClickSlot( s, 9, items );
+	PressMenu( s, kEquip );
+	r = ReleaseMenu( s, kDrop ); // slid to another button: nothing, the menu stays
+	assert( !r.command[0] && s.menu == 9 && s.pressed == kNone );
+	PressMenu( s, kDrop );
+	r = ReleaseMenu( s, kNone ); // slid off the menu
+	assert( !r.command[0] && s.menu == 9 );
+	r = ReleaseMenu( s, kDrop ); // a release with no press on the menu
+	assert( !r.command[0] && s.menu == 9 );
+	PressMenu( s, kQuick2 );
+	ClickSlot( s, 6, items ); // a press on the grid lets go of the held button
+	r = ReleaseMenu( s, kQuick2 );
+	assert( !r.command[0] && s.menu == 6 );
+	PressMenu( s, kDrop );
+	ClickOutside( s );
+	assert( s.menu == 0 && s.pressed == kNone );
+	PressMenu( s, kEquip ); // no menu open: nothing held
+	assert( s.pressed == kNone );
+	ClickSlot( s, 6, items );
+	PressMenu( s, kDrop );
+	items[6].present = false; // the item went away while held
+	Sync( s, items, kSlots );
+	assert( s.menu == 0 && s.pressed == kNone && !ReleaseMenu( s, kDrop ).command[0] );
+	items[6].present = true;
+
 	// an empty box closes the menu without a sound
 	ClickSlot( s, 6, items );
 	r = ClickSlot( s, 10, items );

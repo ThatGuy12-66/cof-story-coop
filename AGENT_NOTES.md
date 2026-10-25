@@ -1155,3 +1155,27 @@ after it was fine. Reproduced twice in the smoke copy (updated to 1.2.8 first: `
   1.2.9 update passed (a save kept); GitHub `v1.2.9` latest, `releases/latest` serves build 24 (publish's own page
   check failed on GitHub lag, as before). Zip `12BF6D7F…`, 111,601,285 bytes, MD5 `BA411765…`. Engine `62b954fe`,
   launcher `0ba570a`.
+
+## 1.2.10: the item menu's click-through to NOTES, and the bonus room's night vision (2026-10-25 night)
+
+The user: "when I click an item and then I want to dual wield it or something, the notes thing underneath clips and then
+I go into the notes"; then "only one person can grab the gas mask in the bonus room".
+- **Item menu → NOTES** (FreeVGUI `platform/xash3d-fwgs/cofinventory*.{cpp,h}`): our item menu (right of the 12-slot grid,
+  over QUICK SELECT 1 and most of the NOTES heading, see the 2026-10-15 notes) acted on the *press* (`MenuInput::mousePressed`
+  -> `ClickMenu`), which closed it; `CofInventory_Frame` hid the panel that frame, the next `App::internalTick` gave mouse
+  focus to the client's button under the cursor, and the *release* went to it. VGUI1 buttons fire on release
+  (`MomentaryButtonController::mouseReleased` -> `fireActionSignal`, no press needed), so NOTES opened. Fix: the menu acts on
+  the release over the button it went down on (`cofinv::PressMenu` / `ReleaseMenu`, `State::pressed`; a grid press,
+  an outside press or the menu closing lets go), as the client's own buttons. Tests: `cof_inventory_logic_test.cpp`
+  (press keeps the menu open, release acts, slid/off/no-press releases do nothing; a press-acting mutant fails),
+  `test_enhanced_inventory12.test_menu_acts_on_release` (source check). Not played.
+- **Bonus room night vision** (engine): the room's guns are blocks of the map text and per-player since 1.1.9 (the
+  user's log, c_start 01:20: FAMAS/axe/camera copies for userid 2); `item_nightvision` is no class of the pickup table,
+  so only the first player got it ("You got the Nightvision" to userid 1, no pickup lines). Now `CoF_PickupsRoomNightVision`
+  (sv_cof_pickups.c, in `CoF_PickupsFind` before `CoF_PickupsFindBonus`) gives the first unmarked one lying the bonus mark
+  while its line (75) reads unlocked (`SV_CoF_BonusItemUnlocked`, sv_cof_bonus.c, the kit's own rule; locked, the game
+  removes it inside a player's first-update command, which would read as a take), and not when a marked one lies; from then
+  on it is the kit's night vision (block 0x10000+4, copies with the kit's keys = the room's, touch/+use filters). Logs
+  `phase=pickups-room-nightvision entity=N`. Tests: `cof_pickups_harness.c` `the_rooms_own_night_vision`,
+  `cof_bonus_module_harness.c` `item_unlock_lines`, `test_enhanced_pickups` wiring; 5 mutants all caught. Not played.
+- Version 1.2.10, build 25 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.10.md`.

@@ -485,12 +485,38 @@ static void the_wardrobe_key( void )
 	sv.state = 1; wardrobe( host, "cof_wardrobe", false ); sv.state = ss_active;
 }
 
+/* 1.2.10: an item's own unlock line, as the kit reads it (the room's own night vision is per-player only then) */
+static void item_unlock_lines( void )
+{
+	setup(); bonus_cvar->value = -1.0f; settings( 1, 1, 1 );
+	assert( SV_CoF_BonusItemUnlocked( 0 ) && !SV_CoF_BonusItemUnlocked( 4 ) && SV_CoF_BonusItemUnlocked( 5 ) && files_open == 0 );
+	CoF_BonusRewriteTable( file_text, (size_t)file_length, CoF_BonusLine( 75 ), 1, 1 );
+	assert( SV_CoF_BonusItemUnlocked( 4 ) && files_open == 0 );
+	/* cof_bonus_room 1 opens every line; 0 shuts them; the MP5 has no line (the game's other rule) */
+	setup(); settings( 0, 0, 0 );
+	assert( SV_CoF_BonusItemUnlocked( 4 ));
+	bonus_cvar->value = 0.0f; settings( 1, 1, 1 );
+	CoF_BonusRewriteTable( file_text, (size_t)file_length, CoF_BonusLine( 75 ), 1, 1 );
+	assert( !SV_CoF_BonusItemUnlocked( 4 ) && SV_CoF_BonusItemUnlocked( 5 ));
+	/* no file: as the switch makes it (1: open; -1: none, locked) */
+	setup(); file_length = -1;
+	assert( SV_CoF_BonusItemUnlocked( 4 ) && files_open == -1 ); /* the file the switch made, freed */
+	bonus_cvar->value = -1.0f;
+	assert( !SV_CoF_BonusItemUnlocked( 4 ));
+	/* no such item, or not story co-op */
+	setup();
+	assert( !SV_CoF_BonusItemUnlocked( -1 ) && !SV_CoF_BonusItemUnlocked( COF_BONUS_KIT_ITEMS ));
+	h_gate = 0;
+	assert( !SV_CoF_BonusItemUnlocked( 4 ));
+}
+
 int main( void )
 {
 	kit_laid_out_once_and_safely();
 	kit_decided_by_the_room();
 	kit_in_a_merged_maps_section();
 	the_wardrobe_key();
+	item_unlock_lines();
 	assert( traces > 0 && point_contents > 0 );
 	puts( "bonus module scenarios passed" );
 	return 0;

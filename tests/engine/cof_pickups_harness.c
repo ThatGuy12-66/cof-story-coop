@@ -58,6 +58,9 @@ static model_t world;
 static char lump[2048];
 
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
+/* 1.2.10: the night vision's unlock line (sv_cof_bonus.c), asked for the room's own */
+static int nv_unlocked = 1, nv_asked;
+static qboolean SV_CoF_BonusItemUnlocked( int item ) { nv_asked++; assert( item == 4 ); return nv_unlocked; }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= entities && e < entities + ENTITIES && !e->free; }
 static edict_t *SV_EdictNum( int i ) { return i >= 0 && i < ENTITIES ? &entities[i] : NULL; }
 static int NUM_FOR_EDICT( const edict_t *e ) { return (int)( e - entities ); }
@@ -204,7 +207,7 @@ static void setup( void )
 	strcpy( sv.name, "c_test" ); sv.worldmodel = &world; sv.state = ss_active; sv.time = 100.0;
 	svs.maxclients = 4; svs.clients = clients; svs.spawncount = 1;
 	svgame.edicts = entities; svgame.dllFuncs.pfnKeyValue = game_keyvalue; svgame.dllFuncs.pfnSpawn = game_spawn;
-	gate = 1; spawn_fails = 0;
+	gate = 1; spawn_fails = 0; nv_unlocked = 1; nv_asked = 0;
 	player( 0, "Host", 11, 0 ); player( 1, "Guest", 12, 0 ); player( 2, "Companion", 13, 1 );
 	SV_CoF_PickupsInit();
 	load_map();
@@ -613,12 +616,79 @@ static void the_bonus_kit( void )
 	assert( logged( "bonus=1\n" ) == 1 );
 }
 
+/* 1.2.10: the bonus room's own night vision (c_start, c_bridge; user report 2026-10-25: only one player could take
+ * it). It lies unmarked, a CItem of no class of the table: with its line unlocked it gets the bonus mark at the map's
+ * first story frame and is the kit's from then on. */
+static void the_rooms_own_night_vision( void )
+{
+	static const float room_at[3] = { 500, 0, 0 };
+	int n, e;
+	setup();
+	n = NUM_FOR_EDICT( place( 30, "item_nightvision", room_at ));
+	frame();
+	assert( logged( "phase=pickups-room-nightvision entity=30\n" ) == 1 && entities[n].v.spawnflags == COF_PICKUP_BONUS_FLAG );
+	assert( logged( "found=6 lying=6 copies=0 waiting=0 none=0 skipped=0 ledger=0 bonus=1\n" ) == 1 && nv_asked == 1 );
+	assert( sees( host(), n ) && sees( guest(), n ) && !refused( host(), n ) && !refused( guest(), n ) && refused( bot(), n ));
+	frame();
+	assert( logged( "pickups-room-nightvision" ) == 1 && nv_asked == 1 ); /* once a map */
+	/* the host takes it (by touch with +use pressed: removed at once, in their command): the guest's copy where it
+	 * lay, with the room's keys; the host neither sees it nor finds it by touch or +use */
+	removed( n );
+	command( 0 );
+	frame();
+	assert( logged( "phase=pickup-taken userid=11 class=item_nightvision block=65540 companion=0 takers=1" ) == 1 );
+	e = bonus_copy_of( "item_nightvision" );
+	assert( e && e != n && entities[e].v.origin[0] == 500.0f && !strcmp( keys_seen[e], "frags=-1;" ));
+	assert( !sees( host(), e ) && sees( guest(), e ) && refused( host(), e ) && !refused( guest(), e ) && refused( bot(), e ));
+	/* the guest takes theirs: everyone here has one, no more copies */
+	SV_FreeEdict( &entities[n] );
+	removed( e );
+	command( 1 );
+	frame();
+	SV_FreeEdict( &entities[e] );
+	frame();
+	assert( logged( "class=item_nightvision block=65540 companion=0 takers=2" ) == 1 && !bonus_copy_of( "item_nightvision" ));
+
+	/* its line locked: left as the game has it (it removes itself at a first update, in a command: no take read) */
+	setup(); nv_unlocked = 0;
+	n = NUM_FOR_EDICT( place( 30, "item_nightvision", room_at ));
+	frame();
+	assert( !logged( "pickups-room-nightvision" ) && entities[n].v.spawnflags == 0 && logged( "bonus=0\n" ) == 1 && nv_asked == 1 );
+	removed( n );
+	command( 0 );
+	frame();
+	assert( !logged( "class=item_nightvision" ) && !bonus_copy_of( "item_nightvision" ));
+
+	/* a marked one lies too (the kit's, a revisit's copy): the unmarked one is not made a second slot */
+	setup();
+	n = NUM_FOR_EDICT( place( 31, "item_nightvision", room_at ));
+	place( 32, "item_nightvision", room_at )->v.spawnflags = COF_PICKUP_BONUS_FLAG;
+	frame();
+	assert( !logged( "pickups-room-nightvision" ) && entities[n].v.spawnflags == 0 && logged( "bonus=1\n" ) == 1 && !nv_asked );
+	/* none lying: nothing asked; carried (a held one is no pickup): not marked */
+	setup();
+	frame();
+	assert( !nv_asked && logged( "bonus=0\n" ) == 1 );
+	setup();
+	n = NUM_FOR_EDICT( place( 30, "item_nightvision", room_at ));
+	entities[n].v.owner = host();
+	frame();
+	assert( entities[n].v.spawnflags == 0 && !nv_asked );
+	/* the pickups off: the retail rules, nothing marked */
+	setup(); cof_coop_pickups.value = 0.0f;
+	n = NUM_FOR_EDICT( place( 30, "item_nightvision", room_at ));
+	frame();
+	assert( entities[n].v.spawnflags == 0 && !nv_asked );
+	cof_coop_pickups.value = 1.0f;
+}
+
 int main( void )
 {
 	a_fresh_map();
 	a_revisit_and_checkpoints();
 	switched_off_and_failures();
 	the_bonus_kit();
+	the_rooms_own_night_vision();
 	printf( "pickups scenarios passed\n" );
 	return 0;
 }
