@@ -15,6 +15,8 @@ GPL-3.0-or-later.
 - The bonus room's items a chapter start lays out (sv_cof_bonus.c, sv_cof_bonus_kit.h) are per-player too: found by
   their bonus mark (or, all taken, by the ledger), each with a slot of its own after the map's; a copy gets the kit's
   keys (SV_CoF_PickupsSpawnBonus, which also lays the kit out).
+- 1.2.10: the room's own night vision (c_start, c_bridge) gets the bonus mark at the map's first story frame, its line
+  unlocked, and is then the kit's (CoF_PickupsRoomNightVision); the room's guns were per-player already.
 cof_coop_pickups 0: the retail multiplayer rules, the first player takes the only one.
 Logs: phase=pickups (once a map), phase=pickup-taken, phase=pickup-copy, phase=pickup-gone, phase=pickups-checkpoint.
 */
@@ -400,6 +402,30 @@ static int CoF_PickupsFindBonus( int *states, int *copies, int *skipped )
 	return found;
 }
 
+// 1.2.10: the bonus room's own night vision (c_start, c_bridge: their item_nightvision; user report 2026-10-25: only
+// one player could take it). The room's guns are blocks of the map's text, per-player as any; the night vision is no
+// class of the table (sv_cof_pickups_state.h), so the one lying unmarked gets the bonus mark here and is from then on
+// the kit's night vision: one for every player (CoF_PickupsFindBonus, a copy with the kit's keys, which are the room's),
+// and a taker's touch and +use do not find the next (SV_TouchLinks, pfnFindEntityInSphere). Only while its line reads
+// unlocked: locked, the game removes it at a player's first update, inside their command, which would read as a take
+// (CoF_PickupAfterCommand). Not when a marked one lies (a revisit, a checkpoint, the kit's): the kit has one slot each.
+static void CoF_PickupsRoomNightVision( void )
+{
+	edict_t *room = NULL;
+	int item = CoF_BonusKitItem( "item_nightvision" ), e;
+	for( e = svs.maxclients + 1; e < svgame.numEntities; e++ )
+	{
+		edict_t *ent = SV_EdictNum( e );
+		if( !SV_IsValidEdict( ent ) || FBitSet( ent->v.flags, FL_KILLME ) || CoF_PickupsHeld( ent ) ||
+			Q_strcmp( SV_GetString( ent->v.classname ), "item_nightvision" )) continue;
+		if( FBitSet( ent->v.spawnflags, COF_PICKUP_BONUS_FLAG )) return;
+		if( !room ) room = ent;
+	}
+	if( !room || !SV_CoF_BonusItemUnlocked( item )) return;
+	SetBits( room->v.spawnflags, COF_PICKUP_BONUS_FLAG );
+	Con_Printf( "cofstory phase=pickups-room-nightvision entity=%d\n", NUM_FOR_EDICT( room ));
+}
+
 // A map's pickups: its entity text's per-player blocks, the pickups lying in the world, paired, and the ledger.
 static void CoF_PickupsFind( void )
 {
@@ -499,6 +525,7 @@ static void CoF_PickupsFind( void )
 		}
 		states[slot->state]++;
 	}
+	CoF_PickupsRoomNightVision( );
 	bonus = CoF_PickupsFindBonus( states, &copies, &skipped );
 	Con_Printf( "cofstory phase=pickups map=%s found=%d lying=%d copies=%d waiting=%d none=%d skipped=%d ledger=%d bonus=%d\n", sv.name,
 		cof_pickups.count, states[COF_PICKUP_LIVE], copies, states[COF_PICKUP_WAITING], states[COF_PICKUP_OFF], skipped, cof_pickups_ledger.count, bonus );

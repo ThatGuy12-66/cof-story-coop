@@ -60,8 +60,8 @@ enum { COF_PICKUP_LYING, COF_PICKUP_TAKEN, COF_PICKUP_GONE };
 // are taken with +use only (weapons.cpp FallInit, CBasePlayerAmmo::Spawn: their touch is set only for iuser4 1, the
 // items GiveNamedItem hands out); AoM pills too (effects.cpp CAoMPills). Every class the 81 story maps place is
 // here except the story items (item_key, item_phonebattery: the share ledger), item_padlock (a puzzle) and
-// item_nightvision (the bonus room's: an item, not a weapon, ammo or medicine, and a CItem is also taken by touch,
-// which no filter holds). Not placed by the story maps and left out on purpose: weapon_mobile and weapon_flashlight
+// item_nightvision (the bonus room's: an item, not a weapon, ammo or medicine, and a CItem is also taken by touch; since
+// 1.2.10 the room's gets the bonus mark and is per-player as the kit's, sv_cof_pickups.c). Not placed by the story maps and left out on purpose: weapon_mobile and weapon_flashlight
 // (the story's own lights: the starter kit and a gift, sv_cof_party.c), weapon_browning_wheelchair (c_ending4b's
 // chair), weapon_radio, weapon_dualweapon and weapon_action (the game builds them).
 typedef struct { const char *classname, *spawns; int kind; } cof_pickup_class_t;
