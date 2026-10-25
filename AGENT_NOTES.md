@@ -1151,3 +1151,7 @@ after it was fine. Reproduced twice in the smoke copy (updated to 1.2.8 first: `
   off, ~1 min each; `evidence/chapter-crash-20261024/sweep/`): all 17 `CHAPTERS` maps came up and ran without a crash;
   the intro reached c_nightmare. Every "ERRORS" verdict is only the voice capture's `Calibration failed` line.
 - Version 1.2.9, build 24 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.9.md`.
+- **Published 1.2.9 2026-10-24 ~23:37 PT** (standing approval): full suite 743 OK (3 skipped), fresh install and the 1.2.8 ->
+  1.2.9 update passed (a save kept); GitHub `v1.2.9` latest, `releases/latest` serves build 24 (publish's own page
+  check failed on GitHub lag, as before). Zip `12BF6D7F…`, 111,601,285 bytes, MD5 `BA411765…`. Engine `62b954fe`,
+  launcher `0ba570a`.
