@@ -1183,3 +1183,10 @@ I go into the notes"; then "only one person can grab the gas mask in the bonus r
   1.2.10 update passed; GitHub `v1.2.10` latest, `releases/latest` serves build 24 -> 25 (publish's own page check failed on
   GitHub lag, as before). Zip `F5EF38C9…`, 111,604,339 bytes, MD5 `F10A9FFE…`. Engine `071c699f`, FreeVGUI `5a65421`,
   launcher `fcfb091`. `console.c.2.o` moved aside as `console.c.2.o.1.2.9.bak` for the stamp.
+
+## 1.3: 1.2.10 relabelled (2026-10-25 ~01:53)
+
+The user, after 1.2.10 went up: "Make it 1.3". The same two fixes (item menu acts on release; the bonus room's own night
+vision per player) released again as label 1.3, build 26 (1.2.10's copies, build 25, are offered it). Version stamp
+(`engine/cof_version.h`), app label/build, readme section "WHAT'S NEW IN 1.3", `docs/releases/1.3.md` (1.2.10.md kept:
+it was published), code comments "1.2.10" -> "1.3". GitHub `v1.2.10` left in place (not deleted without the user's say).

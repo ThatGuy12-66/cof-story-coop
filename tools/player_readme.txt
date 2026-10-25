@@ -1,15 +1,15 @@
-Cry of Fear Co-op 1.2.10
+Cry of Fear Co-op 1.3
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
 
-WHAT'S NEW IN 1.2.10
+WHAT'S NEW IN 1.3
 - Picking Dual wield (or another option) in an item's menu in the inventory could open the
   notes too: the menu closed as soon as you pressed, and letting go of the mouse button then
   clicked the NOTES button under it. The menu now acts when you let go, like the game's own
   buttons.
 - Everyone can take the gas mask (night vision) in the bonus room now. Only the first player
   could before; the bonus room's guns were already one for each player.
-- 1.1 to 1.2.10 can play together.
+- 1.1 to 1.3 can play together.
 
 WHAT'S NEW IN 1.2.9
 - Starting a new game from Chapter 4 crashed while the level loaded. The game's HUD looks up

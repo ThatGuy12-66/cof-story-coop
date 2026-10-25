@@ -485,7 +485,7 @@ static void the_wardrobe_key( void )
 	sv.state = 1; wardrobe( host, "cof_wardrobe", false ); sv.state = ss_active;
 }
 
-/* 1.2.10: an item's own unlock line, as the kit reads it (the room's own night vision is per-player only then) */
+/* 1.3: an item's own unlock line, as the kit reads it (the room's own night vision is per-player only then) */
 static void item_unlock_lines( void )
 {
 	setup(); bonus_cvar->value = -1.0f; settings( 1, 1, 1 );

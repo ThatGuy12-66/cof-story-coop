@@ -75,7 +75,7 @@ class PickupModuleWiringTests(unittest.TestCase):
         assert_has(self, 'if( cof_pickups.generation != svs.spawncount ) CoF_PickupsFind();', body)
 
     def test_the_rooms_own_night_vision_is_marked_before_the_kits_are_found(self):
-        # 1.2.10 (user report 2026-10-25: only one player could take the bonus room's night vision)
+        # 1.3 (user report 2026-10-25: only one player could take the bonus room's night vision)
         find = body_of(SERVER / 'sv_cof_pickups.c', 'static void CoF_PickupsFind( void )')
         self.assertLess(find.index('CoF_PickupsRoomNightVision( );'), find.index('bonus = CoF_PickupsFindBonus('))
         mark = body_of(SERVER / 'sv_cof_pickups.c', 'static void CoF_PickupsRoomNightVision( void )')

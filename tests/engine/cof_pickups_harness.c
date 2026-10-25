@@ -58,7 +58,7 @@ static model_t world;
 static char lump[2048];
 
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
-/* 1.2.10: the night vision's unlock line (sv_cof_bonus.c), asked for the room's own */
+/* 1.3: the night vision's unlock line (sv_cof_bonus.c), asked for the room's own */
 static int nv_unlocked = 1, nv_asked;
 static qboolean SV_CoF_BonusItemUnlocked( int item ) { nv_asked++; assert( item == 4 ); return nv_unlocked; }
 static qboolean SV_IsValidEdict( const edict_t *e ) { return e && e >= entities && e < entities + ENTITIES && !e->free; }
@@ -616,7 +616,7 @@ static void the_bonus_kit( void )
 	assert( logged( "bonus=1\n" ) == 1 );
 }
 
-/* 1.2.10: the bonus room's own night vision (c_start, c_bridge; user report 2026-10-25: only one player could take
+/* 1.3: the bonus room's own night vision (c_start, c_bridge; user report 2026-10-25: only one player could take
  * it). It lies unmarked, a CItem of no class of the table: with its line unlocked it gets the bonus mark at the map's
  * first story frame and is the kit's from then on. */
 static void the_rooms_own_night_vision( void )
