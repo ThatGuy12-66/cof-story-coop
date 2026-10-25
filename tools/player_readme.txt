@@ -1,6 +1,13 @@
-Cry of Fear Co-op 1.2.8
+Cry of Fear Co-op 1.2.9
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.2.9
+- Starting a new game from Chapter 4 crashed while the level loaded. The game's HUD looks up
+  a few pictures its own list doesn't have and then reads just outside that list, which
+  crashes or not depending on how memory happens to be laid out; a Chapter 4 start crashed
+  every time. The missing pictures are now filled in, so the HUD never reads outside it.
+- 1.1 to 1.2.9 can play together.
 
 WHAT'S NEW IN 1.2.8
 - Windows Defender could stop the game ("game ended"), then quarantine CoFLaunchApp.exe. The

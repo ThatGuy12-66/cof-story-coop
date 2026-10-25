@@ -1127,3 +1127,27 @@ and quarantined it (the WinError 2 1.2.7 explains). Every version had it; whethe
   GitHub lag, as before). Zip `05577E58…`, 111,600,438 bytes, MD5 `C0BEB153…`. Engine `7ccfb5c8`, launcher
   `bfe898c`. The built xash.dll has no "wmic" string; it still imports CreateProcessW (the static CRT), unused by the
   ID. The Windows harness read both sources on the dev PC. Not on ModDB yet (the new page is being made).
+
+## 1.2.9: the Chapter 4 start crash (2026-10-24 night)
+
+The user: "I tried making a new game from chapter 4, I think, and it crashed. Check each chapter start and make sure
+they don't break." His log (05:56:39): a fresh game on c_park3 (Chapter 4 start) closed with C0000005 in client.dll
+1001BF0E (named `vgui::TextPanel::operator=`, the nearest export), called from HUD_VidInit; his Chapter 3 start right
+after it was fine. Reproduced twice in the smoke copy (updated to 1.2.8 first: `--update --no-shortcuts`) with
+`tools.live_loop run ... start --map c_park3`; a full dump (`-minidumps`, read with
+`evidence/chapter-crash-20261024/mdmp_read.py`, stdlib only) showed the cause:
+- 1001BF0E is CHudAmmo::VidInit reading `m_rgrcRects[m_HUD_bucket0]`: `GetSpriteIndex("bucket1")` is -1 because
+  Cry of Fear's hud.txt (57 entries, all 640) has no bucket1, and the rect array sat 8 bytes into a page after an
+  unmapped one, so the read 12 bytes before it faulted. A latent retail bug: client.dll asks for 15 names hud.txt lacks
+  (bucket1, selection, machinegun, cof_m76_mag(_icon), cross, dmg_bio, d_skull, flash_beam/empty/full, suit_empty/
+  full, title_half/life) and reads rects/handles at [-1] for each; harmless unless the heap layout puts the array at
+  a page start, which a Chapter 4 start did every time.
+- Fix (engine): `client/cof_hud_sprites.h` + `SPR_GetList` (cl_game.c): for "sprites/hud.txt" only, room for the extra
+  entries and an empty entry (the resolution's first sprite, rect 0x0) for each missing name at every resolution the
+  list has. Checked live in memory (dev engine `B00A2B07` in the smoke copy, ReadProcessMemory): m_iSpriteCount 72,
+  bucket1 at 57. The `[cof-hud] sprites/hud.txt: ...` line it prints did not show in the session log (not understood;
+  the entries are there). Tests `tests/test_cof_hud_sprites.py` (+ `cof_hud_sprites_harness.c`).
+- Every chapter start checked with the fix (`tools.live_loop sweep`, smoke copy, dev engine, 2 AI companions, bonus room
+  off, ~1 min each; `evidence/chapter-crash-20261024/sweep/`): all 17 `CHAPTERS` maps came up and ran without a crash;
+  the intro reached c_nightmare. Every "ERRORS" verdict is only the voice capture's `Calibration failed` line.
+- Version 1.2.9, build 24 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.9.md`.
