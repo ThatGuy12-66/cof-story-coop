@@ -15,7 +15,7 @@ GPL-3.0-or-later.
 - The bonus room's items a chapter start lays out (sv_cof_bonus.c, sv_cof_bonus_kit.h) are per-player too: found by
   their bonus mark (or, all taken, by the ledger), each with a slot of its own after the map's; a copy gets the kit's
   keys (SV_CoF_PickupsSpawnBonus, which also lays the kit out).
-- 1.2.10: the room's own night vision (c_start, c_bridge) gets the bonus mark at the map's first story frame, its line
+- 1.3: the room's own night vision (c_start, c_bridge) gets the bonus mark at the map's first story frame, its line
   unlocked, and is then the kit's (CoF_PickupsRoomNightVision); the room's guns were per-player already.
 cof_coop_pickups 0: the retail multiplayer rules, the first player takes the only one.
 Logs: phase=pickups (once a map), phase=pickup-taken, phase=pickup-copy, phase=pickup-gone, phase=pickups-checkpoint.
@@ -402,7 +402,7 @@ static int CoF_PickupsFindBonus( int *states, int *copies, int *skipped )
 	return found;
 }
 
-// 1.2.10: the bonus room's own night vision (c_start, c_bridge: their item_nightvision; user report 2026-10-25: only
+// 1.3: the bonus room's own night vision (c_start, c_bridge: their item_nightvision; user report 2026-10-25: only
 // one player could take it). The room's guns are blocks of the map's text, per-player as any; the night vision is no
 // class of the table (sv_cof_pickups_state.h), so the one lying unmarked gets the bonus mark here and is from then on
 // the kit's night vision: one for every player (CoF_PickupsFindBonus, a copy with the kit's keys, which are the room's),

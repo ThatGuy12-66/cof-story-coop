@@ -84,7 +84,7 @@ qboolean SV_CoF_BonusRoomOpen( void )
 	return open;
 }
 
-// 1.2.10: the bonus kit item's own line reads unlocked in scriptsettings.dat as the server hands it the game (with
+// 1.3: the bonus kit item's own line reads unlocked in scriptsettings.dat as the server hands it the game (with
 // cof_bonus_room's rewrite), as the kit decides at a chapter start (SV_CoF_BonusKitChapterStart); an item with no line
 // of its own (the MP5: the game's other rule) is. The room's own night vision is per-player only then (sv_cof_pickups.c
 // CoF_PickupsRoomNightVision): locked, the game removes it at a player's first update, inside their command.

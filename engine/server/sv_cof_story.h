@@ -26,7 +26,7 @@ byte *SV_CoF_BonusLoadFile( const char *filename, int *pLength );
 // start lays its items out beside the party's start (once, its first story frame); cof_wardrobe opens the wardrobe's
 // menu for whoever presses it, and the Close of that menu goes no further (client commands: true when handled).
 qboolean SV_CoF_BonusRoomOpen( void );
-// 1.2.10: the bonus kit item's (sv_cof_bonus_kit.h) own unlock line reads unlocked for this game
+// 1.3: the bonus kit item's (sv_cof_bonus_kit.h) own unlock line reads unlocked for this game
 qboolean SV_CoF_BonusItemUnlocked( int item );
 void SV_CoF_BonusKitChapterStart( const char *chapter );
 qboolean SV_CoF_BonusClientCommand( sv_client_t *cl );
