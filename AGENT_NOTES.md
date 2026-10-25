@@ -1190,3 +1190,7 @@ The user, after 1.2.10 went up: "Make it 1.3". The same two fixes (item menu act
 vision per player) released again as label 1.3, build 26 (1.2.10's copies, build 25, are offered it). Version stamp
 (`engine/cof_version.h`), app label/build, readme section "WHAT'S NEW IN 1.3", `docs/releases/1.3.md` (1.2.10.md kept:
 it was published), code comments "1.2.10" -> "1.3". GitHub `v1.2.10` left in place (not deleted without the user's say).
+- **Published 1.3 2026-10-25 ~02:10 PT** (standing approval): full suite 745 OK (3 skipped), fresh install and the 1.2.10 -> 1.3
+  update passed (a save kept); GitHub `v1.3` latest, `releases/latest` serves build 26 (publish's own page check passed this
+  time). Zip `8EBDA3D5…`, 111,603,250 bytes, MD5 `FF3E11E4…`. Engine `f3d9f875`, FreeVGUI `5a65421`, launcher `31a8ea9`.
+  `v1.2.10` still on GitHub (not deleted).
