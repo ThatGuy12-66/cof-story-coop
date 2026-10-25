@@ -36,6 +36,8 @@ make HTTPS requests (seen 2026-10-20 in `evidence/app-update-20261020/frozen/`).
 In one commit ("Release X: …"), with everything for the version already committed in all three
 repositories (launcher, engine, FreeVGUI) and the engine built (`tools\build_enhanced.cmd`):
 
+- Labels have no part past 9: after x.y.9 comes x.(y+1), never x.y.10 (the owner's rule, 2026-10-25;
+  `release.py` refuses one).
 - `tools/coop_play.py`: `VERSION_LABEL` = X; `BUILD` + 1 (a higher build is what makes older
   copies offer the update); `VERSION` changes only when old and new can't play together (it is
   the join check: 1.1.1 kept "1.1").

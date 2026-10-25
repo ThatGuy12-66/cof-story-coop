@@ -213,6 +213,9 @@ def preflight(log: Log):
     log.check(notes.is_file() and notes.read_text(encoding="utf-8").strip() != "" and tracked(notes),
               f"release notes for Discord and GitHub, committed: {notes.relative_to(ROOT)}")
     log.check(app_update.LABEL_PATTERN.fullmatch(label()) is not None, f"version label {label()} is plain numbers")
+    # the owner's rule (2026-10-25): no part past 9, ever. After 1.2.9 comes 1.3, never 1.2.10
+    log.check(all(len(part) == 1 for part in label().split(".")[1:]),
+              f"version label {label()} has no part past 9 (after x.y.9 comes x.(y+1))")
     # 1.1.9 (R4): the engine is built with it, so a stamp left behind shows the last version in every game
     log.check(engine_stamp() == label(), f"the engine's stamp (engine/cof_version.h) says {label()}: "
                                          f"{engine_stamp() or 'nothing'}")

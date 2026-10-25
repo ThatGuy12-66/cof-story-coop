@@ -1156,7 +1156,7 @@ after it was fine. Reproduced twice in the smoke copy (updated to 1.2.8 first: `
   check failed on GitHub lag, as before). Zip `12BF6D7F…`, 111,601,285 bytes, MD5 `BA411765…`. Engine `62b954fe`,
   launcher `0ba570a`.
 
-## 1.2.10: the item menu's click-through to NOTES, and the bonus room's night vision (2026-10-25 night)
+## 1.3: the item menu's click-through to NOTES, and the bonus room's night vision (2026-10-25 night)
 
 The user: "when I click an item and then I want to dual wield it or something, the notes thing underneath clips and then
 I go into the notes"; then "only one person can grab the gas mask in the bonus room".
@@ -1178,19 +1178,13 @@ I go into the notes"; then "only one person can grab the gas mask in the bonus r
   on it is the kit's night vision (block 0x10000+4, copies with the kit's keys = the room's, touch/+use filters). Logs
   `phase=pickups-room-nightvision entity=N`. Tests: `cof_pickups_harness.c` `the_rooms_own_night_vision`,
   `cof_bonus_module_harness.c` `item_unlock_lines`, `test_enhanced_pickups` wiring; 5 mutants all caught. Not played.
-- Version 1.2.10, build 25 (`VERSION` stays 1.1). Release notes `docs/releases/1.2.10.md`.
-- **Published 1.2.10 2026-10-25 ~01:46 PT** (standing approval): full suite 745 OK (3 skipped), fresh install and the 1.2.9 ->
-  1.2.10 update passed; GitHub `v1.2.10` latest, `releases/latest` serves build 24 -> 25 (publish's own page check failed on
-  GitHub lag, as before). Zip `F5EF38C9…`, 111,604,339 bytes, MD5 `F10A9FFE…`. Engine `071c699f`, FreeVGUI `5a65421`,
-  launcher `fcfb091`. `console.c.2.o` moved aside as `console.c.2.o.1.2.9.bak` for the stamp.
-
-## 1.3: 1.2.10 relabelled (2026-10-25 ~01:53)
-
-The user, after 1.2.10 went up: "Make it 1.3". The same two fixes (item menu acts on release; the bonus room's own night
-vision per player) released again as label 1.3, build 26 (1.2.10's copies, build 25, are offered it). Version stamp
-(`engine/cof_version.h`), app label/build, readme section "WHAT'S NEW IN 1.3", `docs/releases/1.3.md` (1.2.10.md kept:
-it was published), code comments "1.2.10" -> "1.3". GitHub `v1.2.10` left in place (not deleted without the user's say).
-- **Published 1.3 2026-10-25 ~02:10 PT** (standing approval): full suite 745 OK (3 skipped), fresh install and the 1.2.10 -> 1.3
+- **Versioning rule (the owner, 2026-10-25): no part past 9, ever: after x.y.9 comes x.(y+1).** These fixes first went out
+  01:46 as build 25 under the label 1.2.10; the owner: "Make it 1.3", then "Get rid of all of 1.2.10 and never do that
+  again". Released again as 1.3, build 26 (build-25 copies are offered it); `docs/releasing.md` has the rule and
+  `release.py` preflight refuses a part past 9. The GitHub release `v1.2.10` was made a draft (hidden, 04:5x; deleting it
+  and the bot's #downloads/#announcements posts of it are the owner's); its notes file removed from `docs/releases`.
+- Version 1.3, build 26 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.md`.
+- **Published 1.3 2026-10-25 ~02:10 PT** (standing approval): full suite 745 OK (3 skipped), fresh install and the build-25 -> 1.3
   update passed (a save kept); GitHub `v1.3` latest, `releases/latest` serves build 26 (publish's own page check passed this
   time). Zip `8EBDA3D5…`, 111,603,250 bytes, MD5 `FF3E11E4…`. Engine `f3d9f875`, FreeVGUI `5a65421`, launcher `31a8ea9`.
-  `v1.2.10` still on GitHub (not deleted).
+  The withdrawn label's GitHub release: a draft since 04:5x (see the rule above).

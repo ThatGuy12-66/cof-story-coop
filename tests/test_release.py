@@ -90,6 +90,13 @@ class PreflightTests(unittest.TestCase):
         self.assertTrue(self.run_preflight(readme=README.replace("WHAT'S NEW IN 9.9", "WHATS NEW"))[1])
         self.assertTrue(self.run_preflight(readme="Cry of Fear Co-op 9.8\n" + README)[1])
 
+    def test_it_refuses_a_part_past_9(self):
+        # the owner's rule (2026-10-25): after x.y.9 comes x.(y+1), never x.y.10
+        problems = self.run_preflight(label="9.9.10", readme=README.replace("9.9", "9.9.10"))[1]
+        self.assertEqual(len(problems), 1)
+        self.assertIn("no part past 9", problems[0])
+        self.assertEqual(self.run_preflight(label="10.0", readme=README.replace("9.9", "10.0"))[1], [])
+
     def test_it_refuses_an_engine_stamp_of_another_version(self):
         # 1.1.9 (R4): the engine's on-screen stamp said cofenhanced 0.4.0-test3 up to 1.1.7
         found, problems = self.run_preflight(stamp="9.8")
