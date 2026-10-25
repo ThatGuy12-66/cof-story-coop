@@ -8,7 +8,8 @@
 // added last to its 748x480 background, so they are painted and hit-tested above
 // every client child: the grid (the generated inventory12_left art, 12 boxes, the
 // examine picture) and the item menu beside it. The right half (QUICK SELECT,
-// NOTES, CURRENT OBJECTIVE) stays the client's. The client's children are found at
+// NOTES, CURRENT OBJECTIVE) stays the client's; the menu lies over part of it, so its
+// buttons act on release, as the client's do. The client's children are found at
 // their offsets in the 1.6 client.dll's CRECBInventory and checked by class (RTTI)
 // first; anything unexpected leaves the retail screen alone. Commands, sounds and
 // images go through the engine. Layout and click rules: cofinventory_logic.h.
@@ -207,15 +208,26 @@ class MenuInput : public InputSignalAdapter
 {
 public:
 	explicit MenuInput( ItemMenu *menu ) : m_menu( menu ) {}
+	// a button acts on the release over it, as the client's do (cofinv::PressMenu): acting
+	// on the press hid the menu, and the release set off the NOTES button under it
 	void mousePressed( MouseCode code, Panel * ) override
 	{
-		int x, y;
-		if( code != vgui::MOUSE_LEFT || !m_menu->cursor( x, y )) return;
-		cofinv::Rect art = cofinv::MenuArt( m_menu->menu );
-		Apply( cofinv::ClickMenu( g_model.state, cofinv::MenuHit( m_menu->menu, x + art.x, y + art.y )));
+		if( code == vgui::MOUSE_LEFT ) cofinv::PressMenu( g_model.state, hit());
+	}
+	void mouseReleased( MouseCode code, Panel * ) override
+	{
+		if( code == vgui::MOUSE_LEFT ) Apply( cofinv::ReleaseMenu( g_model.state, hit()));
 	}
 	void mouseDoublePressed( MouseCode code, Panel *panel ) override { mousePressed( code, panel ); }
 private:
+	// the button under the cursor, or kNone
+	cofinv::Action hit()
+	{
+		int x, y;
+		if( !m_menu->cursor( x, y )) return cofinv::kNone;
+		cofinv::Rect art = cofinv::MenuArt( m_menu->menu );
+		return cofinv::MenuHit( m_menu->menu, x + art.x, y + art.y );
+	}
 	ItemMenu *m_menu;
 };
 

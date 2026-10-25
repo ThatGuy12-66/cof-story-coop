@@ -86,6 +86,7 @@ struct State
 	bool weapon = false;	// that box holds a weapon
 	int combineFrom = 0;	// COMBINE was chosen here; the next box completes it
 	int dualFrom = 0;	// DUAL WIELD was chosen here
+	Action pressed = kNone;	// the menu button the left button went down on (PressMenu)
 };
 
 enum { kSoundNone = 0, kSoundToggle, kSoundNo };
@@ -107,6 +108,7 @@ inline Result Nothing()
 inline Result ClickSlot( State &s, int slot, const Item items[kSlots + 1] )
 {
 	Result r = Nothing();
+	s.pressed = kNone; // a press on the grid: no menu button is held
 	if( s.dualFrom )
 	{
 		int from = s.dualFrom;
@@ -156,13 +158,29 @@ inline Result ClickMenu( State &s, Action a )
 	return r;
 }
 
-inline void ClickOutside( State &s ) { s.menu = 0; }
+// The menu's buttons act when the left button comes up on the one it went down on,
+// as the client's own buttons do. Acting on the press hid the menu at once, and the
+// release then fell on the client's button under it (NOTES, the first QUICK SELECT
+// box), which acts on release and opened too (user report 2026-10-25: dual wield
+// opened the notes). PressMenu on the press, ReleaseMenu on the release.
+inline void PressMenu( State &s, Action a ) { s.pressed = s.menu ? a : kNone; }
+
+inline Result ReleaseMenu( State &s, Action a )
+{
+	Action held = s.pressed;
+	s.pressed = kNone;
+	if( held == kNone || a != held ) return Nothing(); // slid to another button or off the menu
+	return ClickMenu( s, a );
+}
+
+inline void ClickOutside( State &s ) { s.menu = 0; s.pressed = kNone; }
 
 // every frame: a menu or a pending combine / dual wield whose item went away (used,
 // shared, dropped by the server) or that a three-slot section hides is cancelled
 inline void Sync( State &s, const Item items[kSlots + 1], int visible )
 {
 	if( s.menu && ( s.menu > visible || !items[s.menu].present )) s.menu = 0;
+	if( !s.menu ) s.pressed = kNone;
 	if( s.combineFrom && ( s.combineFrom > visible || !items[s.combineFrom].present )) s.combineFrom = 0;
 	if( s.dualFrom && ( s.dualFrom > visible || !items[s.dualFrom].present )) s.dualFrom = 0;
 }
