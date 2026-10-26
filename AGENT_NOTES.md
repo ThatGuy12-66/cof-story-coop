@@ -1188,3 +1188,44 @@ I go into the notes"; then "only one person can grab the gas mask in the bonus r
   update passed (a save kept); GitHub `v1.3` latest, `releases/latest` serves build 26 (publish's own page check passed this
   time). Zip `8EBDA3D5…`, 111,603,250 bytes, MD5 `FF3E11E4…`. Engine `f3d9f875`, FreeVGUI `5a65421`, launcher `31a8ea9`.
   The withdrawn label's GitHub release: a draft since 04:5x (see the rule above).
+
+## 1.3.1: the chainsaw boss's grab, handed over (2026-10-26)
+
+The user (a guest; the host on 1.3): "when I die to the chainsaw boss, I can't use weapons after"; asked, "Weapons there,
+won't equip"; then "DO full debug w AFTER finding bleeding edge claude code best practices" and "dont launch". Nothing was
+launched. Evidence: only the guest's client log (17:28:31 "GOR3 died" in c_apartmentsick, respawn 17:28:42, level change
+17:29:29); no host log, so the `phase=` lines are not known. Two read-only subagents (retail equip gates; the engine's grab,
+respawn and restore path), then a fresh-context review of the change.
+- **Retail side, settled:** nothing the grab sets on the player (`m_bGibbed`, `m_iDeathBits`, FL_FROZEN/NOTARGET, EF_NODRAW,
+  view, vuser2) survives the respawn into an equip gate (`InventoryEquip` 100E40E0, `SelectItem` 100F1A50, PostThink's
+  deploy 100EDFB4); the interaction entity is removed 1 s after the death (sv_cof_rescue.c). `RemoveAllItems( FALSE )`
+  (player.cpp:2074) drops every weapon (SUB_Remove 0.1 s later), clears buckets, active item and ammo, and leaves the
+  slots' descriptors. `SelectItem` returns silently when no bucket item has the descriptor's classname, while
+  `InventoryEquip` still clicks and closes the menu: "weapons there, won't equip" is a restore of descriptors without
+  weapons, i.e. the death capture of the stripped body. (A failed restore cannot give it: the respawn's
+  `ClearOutSlot( 1, 1 )` empties the slots.)
+- **Cause (engine):** the 1.1.8 (E2-4) grab capture missed the victim, so the death took the stripped body. Two ways: the
+  reach was a ball of 128 around the boss's feet, but `CheckTraceHullAttack( 70 )` (combat.cpp:1541) traces the head hull
+  (+-16/16/18) from half the boss's 100 u height against each player's box (pfnTraceModel; `models/player.mdl` has flags 0,
+  no hitbox tracing), so it takes a player up two steps on a diagonal or mid-jump at its edge (about 130 u); and a player
+  FL_FROZEN when the think began was skipped. Which one the guest hit is not known (no host log).
+- **Fix (sv_cof_recovery.c):** `CoF_RecoveryInSwing`, the swing's own reach (the box widened by the hull within 70 + 16 u
+  of the swing's start, any facing); frozen players are captured too (ThinkEnd still hands over only frozen and
+  stripped); a death capture of a body with no weapon logs `phase=inventory-unarmed`. Also `SV_CoF_RetailInventoryReady`
+  deploys the restored weapon inside the player's globals (`SV_CoF_GlobalsEnter`): a guest's dual weapon's Deploy wrote
+  the host's copy of the game's one dual-weapon object (not shown to block equips; the checkpoint caller never reaches
+  the deploy, its clients are not spawned yet).
+- **Review (fresh context):** the bound is sound; the first version also let the strip's capture replace a waiting
+  restore, which loses it in a real window: a respawn runs in the player's command and is restored only in the story
+  frame after the physics, so one grabbed in between held the respawn's kit (and a waiting rejoin's `left[]` copies would
+  have been taken back without the P345 in the snapshot). Reverted: a waiting restore is given back on the held body and
+  the kill takes it (now tested). Left: a capture that fails (`SV_CoF_CaptureInventory` false) still leaves the death to
+  the stripped body, seen only as `inventory-unarmed`; the record table is never pruned before a reset.
+- Tests: `cof_recovery_harness.c` `swung_at` (same floor, diagonal two steps up, mid-jump, frozen, the respawn window,
+  out of the swing + the unarmed line) and `in_swing` (level, above, diagonal, each side of the bound);
+  `test_enhanced_recovery` wiring for the globals. Mutants: the 128 ball, no hull, no margin, margin 20, the start at the
+  feet or the top, the frozen skip, the strip replacing a waiting restore, no unarmed line, no globals wrap: all caught.
+  Not played. The host must run 1.3.1 for it.
+- `test_inventory_snapshot_io` fails on the cloud's Linux gcc only (-Werror=sign-compare in sv_cof_snapshot_io.inc:11,
+  before this change); on Windows it passes.
+- Version 1.3.1, build 27 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.1.md`.

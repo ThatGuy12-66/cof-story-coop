@@ -42,6 +42,13 @@ class RecoveryWiringTests(unittest.TestCase):
         self.assertLess(think.index('svgame.dllFuncs.pfnThink( ent );'), think.index('SV_CoF_RecoveryThinkEnd();'))
         assert_has(self, '"monster_bosschainsaw"', body_of(ENGINE_SERVER / 'sv_cof_recovery.c', 'void SV_CoF_RecoveryThinkBegin('))
 
+    def test_the_restored_weapon_is_deployed_with_its_players_globals(self):
+        """1.3.1: a dual weapon's Deploy runs on the game's one dual-weapon object; the restore runs outside any command,
+        where the DLL holds the host's copy, so a guest's deploy wrote the host's."""
+        ready = body_of(ENGINE_SERVER / 'sv_cof_retail_inventory.c', 'void SV_CoF_RetailInventoryReady(')
+        self.assertLess(ready.index('SV_CoF_GlobalsEnter( cl );'), ready.index('SV_CoF_StoryDeployWeapon( active );'))
+        self.assertLess(ready.index('SV_CoF_StoryDeployWeapon( active );'), ready.index('SV_CoF_GlobalsLeave( cl );'))
+
     def test_the_leavers_weapons_are_let_go_before_they_are_freed(self):
         """1.1.8 (E2-3): the player object's pointers are cleared before the frees, whatever the drop path."""
         done = body_of(ENGINE_SERVER / 'sv_cof_recovery.c', 'void SV_CoF_RecoveryDropDone(')

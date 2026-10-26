@@ -42,7 +42,7 @@ static void Q_strncpy( char *target, const char *source, size_t size ) { snprint
 typedef float vec3_t[3];
 typedef int string_t;
 /* owner: a weapon's m_pPlayer (the player object it belongs to) */
-typedef struct { int free, serialnumber; void *pvPrivateData, *owner; struct { float health, takedamage; int deadflag, flags, spawnflags, solid; string_t classname; vec3_t origin; } v; int inventory; } edict_t;
+typedef struct { int free, serialnumber; void *pvPrivateData, *owner; struct { float health, takedamage; int deadflag, flags, spawnflags, solid; string_t classname; vec3_t origin, mins, maxs, size; } v; int inventory; } edict_t;
 typedef struct { int state, flags, userid; char name[32]; edict_t *edict; } sv_client_t;
 static struct { int maxclients, spawncount; sv_client_t *clients; } svs;
 static struct { int state, loadgame; double time; } sv;
@@ -134,6 +134,36 @@ static void weapon( int i, string_t classname, int player, int bucket )
 	if( i >= svgame.numEntities ) svgame.numEntities = i + 1;
 }
 
+/* 1.3.1: the chainsaw boss (edict 3, 32x32x100, its origin at its feet on the floor, z 0) swings at the guest (edict 2,
+ * client 1, a standing hull) at x y z: the think strips them (frozen, buckets empty) and the kill follows; then the
+ * respawn's frame. True when the respawn gave back what they held before the swing (inventory 55), not the stripped
+ * body (the slots' descriptors and no weapon: everything in the inventory, nothing that would equip). */
+static int swung_at( float x, float y, float z, int frozen )
+{
+	sv.time += 5; /* never a capture of a think before */
+	memset( player_private[1] + 0x2514, 0, 0x2C ); weapon( 4, 1, 1, 0 );
+	edicts[2].v.origin[0] = x; edicts[2].v.origin[1] = y; edicts[2].v.origin[2] = z;
+	edicts[2].v.mins[0] = edicts[2].v.mins[1] = -16; edicts[2].v.mins[2] = -36;
+	edicts[2].v.maxs[0] = edicts[2].v.maxs[1] = 16; edicts[2].v.maxs[2] = 36;
+	edicts[2].v.flags = frozen ? FL_FROZEN : 0; edicts[2].v.health = 100; edicts[2].inventory = 55;
+	SV_CoF_RecoveryThinkBegin( &edicts[3] );
+	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); edicts[2].inventory = 0;
+	edicts[4].free = 1; /* dropped: removed a tenth of a second later, long before the kill */
+	SV_CoF_RecoveryThinkEnd(); SV_CoF_RecoveryFrame();
+	edicts[2].v.health = 0; edicts[2].v.flags = 0; SV_CoF_RecoveryFrame();
+	edicts[2].v.health = 100; edicts[2].inventory = 0; SV_CoF_RecoveryFrame();
+	return edicts[2].inventory == 55;
+}
+
+/* edict 2 standing at x y z: within the swing of the boss, edict 3 */
+static int in_swing( float x, float y, float z )
+{
+	edicts[2].v.origin[0] = x; edicts[2].v.origin[1] = y; edicts[2].v.origin[2] = z;
+	edicts[2].v.mins[0] = edicts[2].v.mins[1] = -16; edicts[2].v.mins[2] = -36;
+	edicts[2].v.maxs[0] = edicts[2].v.maxs[1] = 16; edicts[2].v.maxs[2] = 36;
+	return CoF_RecoveryInSwing( &edicts[3], &edicts[2] );
+}
+
 int main( void )
 {
 	int i;
@@ -217,12 +247,14 @@ int main( void )
 	edicts[2].v.health = 0; SV_CoF_RecoveryFrame(); assert( captures == 2 ); /* the kill: no capture of the empty hands */
 	edicts[2].v.flags = 0; edicts[2].v.health = 100; SV_CoF_RecoveryFrame();
 	assert( restores == 1 && edicts[2].inventory == 55 );                    /* the respawn: what they had before */
-	/* other things never capture: another monster, a human out of reach, a frozen one */
+	/* other things never capture: another monster, a human out of reach */
 	SV_CoF_RecoveryThinkBegin( &edicts[4] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 2 );
 	memcpy( player_private[1] + 0x2514, &edicts[4].pvPrivateData, 4 );
 	edicts[2].v.origin[0] = 300; SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 2 );
-	edicts[2].v.origin[0] = 10; SetBits( edicts[2].v.flags, FL_FROZEN );
-	SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 2 );
+	/* 1.3.1: a frozen one is captured too (a fall or a camera can hold them when the swing lands); still armed after the
+	 * think, nothing is handed over */
+	edicts[2].v.origin[0] = 10; SetBits( edicts[2].v.flags, FL_FROZEN ); console[0] = 0;
+	SV_CoF_RecoveryThinkBegin( &edicts[3] ); SV_CoF_RecoveryThinkEnd(); assert( captures == 3 && !strstr( console, "reason=grab" ));
 	/* let go alive by a grab that never killed: given back once free */
 	edicts[2].v.flags = 0; SV_CoF_RecoveryThinkBegin( &edicts[3] ); assert( captures == 3 );
 	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); edicts[2].inventory = 0;
@@ -260,6 +292,45 @@ int main( void )
 	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); console[0] = 0;
 	SV_CoF_RecoveryThinkEnd(); assert( !strstr( console, "reason=grab" ));
 	edicts[2].v.flags = 0; edicts[2].v.origin[0] = 10;
+	SV_CoF_RecoveryReset();
+
+	/* 1.3.1 (user report 2026-10-25, a guest in c_apartmentsick: "when I die to the chainsaw boss, I can't use weapons
+	 * after"; they were in the inventory and would not equip): when the strip is not handed over, the death takes the
+	 * stripped body. Whoever the swing can reach is captured before the boss's think: its head hull traced 70 units
+	 * from half the boss's height against the player's box (CheckTraceHullAttack, combat.cpp:1541), frozen or not, and
+	 * the strip's capture takes the place of a restore still waiting. */
+	for( i = 3; i < 12; i++ ) edicts[i].free = 1;
+	memset( &edicts[3], 0, sizeof( edicts[3] )); edicts[3].v.classname = 4; svgame.numEntities = 4;
+	edicts[3].v.mins[0] = edicts[3].v.mins[1] = -16; edicts[3].v.maxs[0] = edicts[3].v.maxs[1] = 16;
+	edicts[3].v.maxs[2] = edicts[3].v.size[2] = 100; edicts[3].v.size[0] = edicts[3].v.size[1] = 32;
+	SV_CoF_RecoveryInit(); SV_CoF_RecoveryFrame(); captures = restores = 0; fail_restore = 0;
+	clients[1].state = cs_spawned; clients[1].flags = 0; clients[1].userid = 30; strcpy( clients[1].name, "Guest" );
+	edicts[2].v.deadflag = DEAD_NO; edicts[2].v.flags = 0; edicts[2].v.health = 100;
+	assert( swung_at( 40, 0, 36, 0 ));    /* close, on the same floor */
+	assert( swung_at( 75, 75, 76, 0 ));   /* diagonal and two steps up: 130 units from the boss's origin */
+	assert( swung_at( 100, 0, 81, 0 ));   /* straight ahead, mid-jump: 130 units */
+	assert( swung_at( 40, 0, 36, 1 ));    /* held by something else when the swing lands */
+	/* ...a restore still waiting is theirs: a respawn runs in their command and is restored in the story frame after the
+	 * physics, so one grabbed in between, holding what the respawn gave, gets it back on the frozen body and the kill
+	 * takes that (the review, 2026-10-26: the strip handed over in its place lost it) */
+	sv.time += 5; weapon( 4, 1, 1, 0 ); edicts[2].v.flags = 0; edicts[2].v.health = 100; edicts[2].inventory = 73;
+	SV_CoF_RecoveryFrame(); edicts[2].v.health = 0; SV_CoF_RecoveryFrame(); /* a death: 73 kept */
+	edicts[2].v.health = 100; edicts[2].inventory = 55; /* the respawn, in their command: what it gives, armed */
+	sv.time += 5; edicts[2].v.origin[0] = 40; edicts[2].v.origin[1] = 0; edicts[2].v.origin[2] = 36;
+	SV_CoF_RecoveryThinkBegin( &edicts[3] );
+	memset( player_private[1] + 0x2514, 0, 0x2C ); SetBits( edicts[2].v.flags, FL_FROZEN ); edicts[2].inventory = 0; edicts[4].free = 1;
+	console[0] = 0; SV_CoF_RecoveryThinkEnd(); assert( !strstr( console, "reason=grab" ));
+	SV_CoF_RecoveryFrame(); assert( edicts[2].inventory == 73 ); /* the story frame: given back while held */
+	edicts[2].v.health = 0; edicts[2].v.flags = 0; SV_CoF_RecoveryFrame();
+	edicts[2].v.health = 100; edicts[2].inventory = 0; SV_CoF_RecoveryFrame(); assert( edicts[2].inventory == 73 );
+	/* ...the swing's reach itself: the box widened by the head hull, within 70 + 16 of half the boss's height */
+	assert( in_swing( 116, 0, 36 ) && !in_swing( 120, 0, 36 )); /* level: 84 and 88 from the widened box */
+	assert( in_swing( 0, 0, 170 ) && !in_swing( 0, 0, 200 ));   /* above: 66 and 96 */
+	assert( in_swing( 92, 92, 36 ) && !in_swing( 94, 94, 36 )); /* diagonal: 84.9 and 87.7 */
+	/* ...out of the swing's reach nobody is captured; a death of a body that holds no weapon says so */
+	captures = 0; sv.time += 5; console[0] = 0;
+	assert( !swung_at( 140, 0, 36, 0 ) && captures == 1 );
+	assert( strstr( console, "cofstory phase=inventory-unarmed userid=30" ) && !strstr( console, "reason=grab" ));
 	SV_CoF_RecoveryReset();
 
 	/* 1.1.9 (I5): a leaver's P345. (2) A player object the game never disconnected is made what ClientDisconnect makes

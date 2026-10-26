@@ -1,6 +1,15 @@
-Cry of Fear Co-op 1.3
+Cry of Fear Co-op 1.3.1
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.1
+- After the chainsaw boss killed you, you could respawn with your weapons in the inventory
+  and none of them would equip. His grab takes your weapons a few seconds before the kill,
+  and what you held just before it was kept only when you stood close to him at about his
+  height. Caught higher up (on stairs, mid-jump) or while something held you still, you got
+  back the list without the weapons. Now everyone his swing can reach is covered. The host
+  needs 1.3.1 for this.
+- 1.1 to 1.3.1 can play together.
 
 WHAT'S NEW IN 1.3
 - Picking Dual wield (or another option) in an item's menu in the inventory could open the

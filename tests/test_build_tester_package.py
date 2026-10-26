@@ -25,14 +25,14 @@ class BuilderTests(unittest.TestCase):
                         "source-and-licences/notices/PYTHON-LICENSE.txt"):
                 (folder / rel).parent.mkdir(parents=True, exist_ok=True)
                 (folder / rel).write_bytes(b"x")
-            path = Path(temp) / "CoF-Story-Coop-1.3.zip"
+            path = Path(temp) / "CoF-Story-Coop-1.3.1.zip"
             builder.write_zip(folder, path)
             with zipfile.ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 self.assertEqual(sorted(archive.namelist()), [
                     "CoF Story Co-op.exe", "READ ME FIRST.txt", "source-and-licences/corresponding-source.zip",
                     "source-and-licences/notices/PYTHON-LICENSE.txt"])
-        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.3.zip")
+        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.3.1.zip")
 
     def test_the_app_carries_the_merged_map_groups(self):
         out, payload = Path("C:/out"), Path("C:/out/payload")
@@ -57,16 +57,16 @@ class BuilderTests(unittest.TestCase):
         info = builder.version_info()
         ast.parse(info)   # PyInstaller evaluates it as Python
         parts = [int(p) for p in builder.play.VERSION_LABEL.split(".")]
-        numbers = tuple((parts + [0, 0, 0])[:3]) + (builder.play.BUILD,)   # 1.3: a two-part label is padded (1, 3, 0, build)
+        numbers = tuple((parts + [0, 0, 0])[:3]) + (builder.play.BUILD,)   # a two-part label (1.3) is padded (1, 3, 0, build)
         self.assertIn(f"filevers={numbers}", info)
         self.assertIn("StringStruct('ProductName', 'Cry of Fear Story Co-op')", info)
         self.assertIn(f"StringStruct('OriginalFilename', {builder.setup_lib.APP_EXE!r})", info)
 
     def test_readme_names_the_release_and_no_test_or_dev_tools(self):
         text = builder.README.read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("Cry of Fear Co-op 1.3\n"))
-        self.assertIn("WHAT'S NEW IN 1.3", text)
-        self.assertIn("1.1 to 1.3 can play together", text)
+        self.assertTrue(text.startswith("Cry of Fear Co-op 1.3.1\n"))
+        self.assertIn("WHAT'S NEW IN 1.3.1", text)
+        self.assertIn("1.1 to 1.3.1 can play together", text)
         self.assertIn("https://discord.gg/4uwV6jmmY7", text)
         for word in ("protocol", "sha256", "rcon", "console", "test build", "test package", "tester", "cheat"):
             self.assertNotIn(word, text.lower())
