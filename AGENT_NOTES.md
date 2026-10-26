@@ -1229,3 +1229,7 @@ respawn and restore path), then a fresh-context review of the change.
 - `test_inventory_snapshot_io` fails on the cloud's Linux gcc only (-Werror=sign-compare in sv_cof_snapshot_io.inc:11,
   before this change); on Windows it passes.
 - Version 1.3.1, build 27 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.1.md`.
+- **Published 1.3.1 2026-10-26 ~04:08 PT** (standing approval): full suite 747 OK (3 skipped), fresh install and the
+  1.3 -> 1.3.1 update passed (a save kept); GitHub `v1.3.1` latest, `releases/latest` serves build 27. Zip `F6524832…`,
+  111,602,342 bytes. Engine `dbf14ccc`, FreeVGUI `5a65421`, launcher `d72bae7`. The ModDB upload is the owner's
+  (`evidence/release-1.3.1/moddb-text.txt`).
