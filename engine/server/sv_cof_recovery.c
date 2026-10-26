@@ -15,7 +15,10 @@
 #define COF_RECOVERY_NV_WEAPON 0x03F0
 #define COF_RECOVERY_CARRIED   0x2530 // the buckets and m_pActiveItem: what RemoveAllItems always empties
 #define COF_RECOVERY_LEFT      4
-#define COF_RECOVERY_GRAB_REACH 128.0f
+// 1.3.1: the chainsaw boss's swing, CheckTraceHullAttack( 70 ) (combat.cpp:1541): the head hull traced 70 units from half
+// the boss's height, the way it faces, against each living player's box (pfnTraceModel: the box, not hitboxes)
+#define COF_RECOVERY_SWING        70.0f
+#define COF_RECOVERY_SWING_MARGIN 16.0f
 // 1.1.9 (I4): a grab capture is used again while this young and of the same inventory: the descriptors in the slots
 // (inventorySlot[13] +0x21FC..+0x2230) and the weapon buckets (m_rgpPlayerItems[6] +0x2514..+0x252C) unchanged.
 #define COF_RECOVERY_GRAB_KEEP 1.0
@@ -266,6 +269,30 @@ void SV_CoF_RecoveryDropDone( sv_client_t *cl )
 // (RemoveAllItems( FALSE ), CoF_ThirdPersonInteraction.cpp:76-84) seconds before its kill, so the inventory taken
 // at the death was empty. Around each boss think (sv_phys.c): the humans in its reach are captured before; the one
 // the think strips (frozen, its weapons gone) keeps that capture (pending 3) for the respawn after the kill.
+// 1.3.1 (user report 2026-10-25, a guest: "when I die to the chainsaw boss, I can't use weapons after"; his weapons were
+// in the inventory and would not equip): a strip not handed over left the death to take the stripped body, the slots'
+// descriptors and no weapon, and the respawn gave back just that. It was missed for a player outside a ball of 128
+// around the boss's feet whom the swing still reached (up two steps on a diagonal, mid-jump at its edge: 130), and for
+// one frozen when the think began. Now the reach is the swing's own (models/player.mdl has no hitbox-trace flag: its
+// box is what is hit), and a frozen player is captured too.
+static qboolean CoF_RecoveryInSwing( const edict_t *boss, const edict_t *body )
+{
+	static const float hull[3] = { 16.0f, 16.0f, 18.0f }; // the head hull, each way
+	const float reach = COF_RECOVERY_SWING + COF_RECOVERY_SWING_MARGIN;
+	float start[3], sum = 0.0f;
+	int i;
+	// any way it faces: the box widened by the hull within the swing's length of where it starts
+	VectorCopy( boss->v.origin, start );
+	start[2] += boss->v.size[2] * 0.5f;
+	for( i = 0; i < 3; i++ )
+	{
+		float low = body->v.origin[i] + body->v.mins[i] - hull[i], high = body->v.origin[i] + body->v.maxs[i] + hull[i];
+		float d = start[i] < low ? low - start[i] : start[i] > high ? start[i] - high : 0.0f;
+		sum += d * d;
+	}
+	return sum <= reach * reach;
+}
+
 static qboolean CoF_RecoveryArmed( sv_client_t *cl )
 {
 	byte *player = SV_CoF_StoryEntityPrivate( cl->edict, COF_RECOVERY_PLAYER_SIZE );
@@ -295,12 +322,10 @@ void SV_CoF_RecoveryThinkBegin( edict_t *thinker )
 	{
 		sv_client_t *cl = &svs.clients[slot];
 		byte look[COF_RECOVERY_LOOK];
-		vec3_t delta;
 		cof_recovery_grab[slot].live = false;
 		if( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) || !SV_IsValidEdict( cl->edict ) ||
-			cl->edict->v.health <= 0 || cl->edict->v.deadflag != DEAD_NO || FBitSet( cl->edict->v.flags, FL_FROZEN )) continue;
-		VectorSubtract( cl->edict->v.origin, thinker->v.origin, delta );
-		if( DotProduct( delta, delta ) > COF_RECOVERY_GRAB_REACH * COF_RECOVERY_GRAB_REACH || !CoF_RecoveryArmed( cl ) || !CoF_RecoveryLook( cl, look )) continue;
+			cl->edict->v.health <= 0 || cl->edict->v.deadflag != DEAD_NO ) continue;
+		if( !CoF_RecoveryInSwing( thinker, cl->edict ) || !CoF_RecoveryArmed( cl ) || !CoF_RecoveryLook( cl, look )) continue;
 		// 1.1.9 (I4): each capture is a 4 MB save heap and a save of every weapon, and the boss thinks about ten times a
 		// second: one of this person's same inventory taken less than a second ago is still what the grab would strip.
 		if( cof_recovery_grab[slot].snapshot && cof_recovery_grab[slot].userid == cl->userid && cof_recovery_grab[slot].generation == svs.spawncount &&
@@ -329,6 +354,8 @@ void SV_CoF_RecoveryThinkEnd( void )
 		cof_recovery_record_t *record;
 		if( !cof_recovery_grab[slot].live || !cof_recovery_grab[slot].snapshot || cl->state != cs_spawned || cl->userid != cof_recovery_grab[slot].userid ||
 			!SV_IsValidEdict( cl->edict ) || !FBitSet( cl->edict->v.flags, FL_FROZEN ) || CoF_RecoveryArmed( cl )) continue;
+		// a restore of theirs still waiting is what they own: a respawn (in their command) is restored only in the story
+		// frame after this physics pass, so one grabbed in between gets it now (the frozen body) and the kill takes it
 		if( !( record = CoF_RecoveryRecord( cl, true )) || record->pending ) continue;
 		if( record->snapshot ) Mem_Free( record->snapshot );
 		record->snapshot = cof_recovery_grab[slot].snapshot; record->size = cof_recovery_grab[slot].size;
@@ -382,7 +409,13 @@ void SV_CoF_RecoveryFrame( void )
 		if( !alive && record->pending != 1 && ( cof_recovery_life[slot].alive || cof_recovery_life[slot].userid != client->userid ))
 		{
 			SV_CoF_ShareRemember();
-			if( CoF_RecoveryCapture( client, record )) record->pending = 1;
+			if( CoF_RecoveryCapture( client, record ))
+			{
+				record->pending = 1;
+				// 1.3.1: a body that holds no weapon (none carried, or stripped and not handed over): the respawn gets
+				// the slots as they are, so a weapon listed there has nothing behind it
+				if( !CoF_RecoveryArmed( client )) Con_Printf( "cofstory phase=inventory-unarmed userid=%d\n", client->userid );
+			}
 		}
 		if( alive && record->pending && record->pending != 3 && record->snapshot )
 		{

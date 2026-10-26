@@ -89,7 +89,11 @@ void SV_CoF_RetailInventoryReady( sv_client_t *cl )
 		edict_t *weapon = SV_EdictNum( index );
 		if( SV_IsValidEdict( weapon ) && weapon->pvPrivateData == active && SV_CoF_RetailOwnsWeapon( cl->edict, weapon ))
 		{
+			// 1.3.1: a dual weapon's Deploy runs on the game's one dual-weapon object (sv_cof_globals.h): this player's
+			// copy, as at an equip (SV_CoF_RetailEquip). The restore runs outside any command, where it is the host's.
+			SV_CoF_GlobalsEnter( cl );
 			SV_CoF_StoryDeployWeapon( active );
+			SV_CoF_GlobalsLeave( cl );
 			break;
 		}
 	}
