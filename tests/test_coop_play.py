@@ -186,9 +186,9 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) and 1.3.1 (the chainsaw boss's grab) keep 1.1's version, so 1.1 to 1.3.1 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.1'))
-        self.assertGreater(play.BUILD, 26)   # 1.3 was build 26: its copies must be offered the update
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab) and 1.3.2 (the starter antivirus took for a trojan) keep 1.1's version, so 1.1 to 1.3.2 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.2'))
+        self.assertGreater(play.BUILD, 27)   # 1.3.1 was build 27: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
         self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')
@@ -221,7 +221,7 @@ class HostReleaseTests(unittest.TestCase):
         self.assertIn(f'older than {play.VERSION_LABEL}', play.host_version_note({'cofbuild': '1.1'}))
         self.assertIn('is 1.2.5 (yours', play.host_version_note({'cofver': '1.2.5'}))
         self.assertIn('Join anyway?', play.host_version_note({'cofver': '1.2.5'}))
-        for same_or_newer in (play.VERSION_LABEL, '1.3.1', '9.9.9'):
+        for same_or_newer in (play.VERSION_LABEL, '1.3.2', '9.9.9'):
             self.assertIsNone(play.host_version_note({'cofver': same_or_newer}))
         for unreadable in ('dev', '1.2.6-test', '1..2'):
             self.assertIsNone(play.host_version_note({'cofver': unreadable}))

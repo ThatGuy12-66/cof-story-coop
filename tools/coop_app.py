@@ -55,8 +55,8 @@ def desktop_size():
 
 
 def start_game(root: Path, args: list[str]) -> subprocess.Popen:
-    """CoFLaunchApp.exe is a console program: without CREATE_NO_WINDOW, Windows opens a
-    console window beside the game (and closing that window would close the game)."""
+    """CoFLaunchApp.exe was a console program until 1.3.2 (a windowed one since): without CREATE_NO_WINDOW, Windows
+    opened a console window beside the game (and closing that window would close the game)."""
     return subprocess.Popen(args, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, creationflags=0x08000000)   # CREATE_NO_WINDOW
 

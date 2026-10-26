@@ -27,8 +27,11 @@ FROZEN = core.PROJECT_ROOT / "runtimes/enhanced/experiment-evidence/staged-binar
 # "0.4.0-test3" from the first test package to 1.1.8
 VERSION = play.VERSION_LABEL.replace(" ", "")
 REVISION = 5  # playtester bundle revision; v3 has the join overflow, v4 lacks the transition fixes
+# 1.3.2: the starter rebuilt as an ordinary windowed program (upstream/cof-enhanced launcher/, scripts/build-cof-launcher.ps1,
+# commit 1f36372): the 2026-09-27 console build, a PNG icon half its size, was taken for a trojan by 16 of 71 scanners
+LAUNCHER = REPO / "build-launcher-1.3.2"
 BINARY_INPUTS = {
-    "CoFLaunchApp.exe": FROZEN / "CoFLaunchApp.exe",
+    "CoFLaunchApp.exe": LAUNCHER / "CoFLaunchApp.exe",
     "xash.dll": BUILD / "engine/xash.dll",
     "ref_gl.dll": BUILD / "ref/gl/ref_gl.dll",
     "vgui.dll": BUILD / "3rdparty/freevgui/vgui.dll",

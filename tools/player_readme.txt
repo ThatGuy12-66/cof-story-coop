@@ -1,6 +1,16 @@
-Cry of Fear Co-op 1.3.1
+Cry of Fear Co-op 1.3.2
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.2
+- Antivirus programs took the small program that starts the game (CoFLaunchApp.exe) for a
+  trojan: 16 of 71 scanners on VirusTotal flagged it, Microsoft Defender among them, and
+  some removed it. It was never malware: its icon was stored compressed, which made half
+  the file look like a hidden packed payload to their guessing, and it ran with its
+  window hidden. It is now built as an ordinary Windows program with a plain icon:
+  Microsoft Defender, Bitdefender (and the scanners built on it) and Trend Micro no longer
+  flag it, 2 small scanners of 68 still do. Nothing else changed.
+- 1.1 to 1.3.2 can play together.
 
 WHAT'S NEW IN 1.3.1
 - After the chainsaw boss killed you, you could respawn with your weapons in the inventory

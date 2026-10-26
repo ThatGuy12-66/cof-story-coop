@@ -1233,3 +1233,33 @@ respawn and restore path), then a fresh-context review of the change.
   1.3 -> 1.3.1 update passed (a save kept); GitHub `v1.3.1` latest, `releases/latest` serves build 27. Zip `F6524832…`,
   111,602,342 bytes. Engine `dbf14ccc`, FreeVGUI `5a65421`, launcher `d72bae7`. The ModDB upload is the owner's
   (`evidence/release-1.3.1/moddb-text.txt`).
+
+## 1.3.2: the starter antivirus took for a trojan (2026-10-26)
+
+A player sent the owner a sandbox report (WerFault reading memory, "reads its own binary image") and VirusTotal: 7/56 on
+the 1.3 zip (`8EBDA3D5…`, the published one): Bitdefender's `Gen:Trojan.Heur3.LPT` via ALYac, Arcabit, Emsisoft, GData,
+plus Google, Ikarus, WithSecure. The owner: "How do we make this stop happening? Everyone thinks it's fucking malware."
+- **Which file:** VirusTotal by hash (lookups only): the app exe `70B8AABC…` 1/65 (SecureAge); xash.dll, ref_gl, vgui,
+  menu, FileSystem_Stdio, SDL2 all 0; **`CoFLaunchApp.exe` `1A7F290E…` 16/71** (Microsoft `Trojan:Win32/Wacatac.B!ml`,
+  Bitdefender + ALYac/Arcabit/Emsisoft/GData/eScan/VIPRE, TrendMicro, Palo Alto `Generic.ml`, AliCloud, MaxSecure, CTX,
+  Arctic Wolf, SecureAge, Trapmine). It was the frozen 2026-09-27 build (`runtimes/enhanced/experiment-evidence/
+  staged-binaries`, CoF Enhanced's `launcher/cof_launch.cpp`): a console program (`/SUBSYSTEM:CONSOLE`, run hidden with
+  CREATE_NO_WINDOW), LoadLibrary/GetProcAddress/SetDllDirectory for xash.dll, no manifest, and a 7-image all-PNG icon
+  (95 KB of 204, `.rsrc` entropy 7.95: what a packed payload looks like). The 1.2.7 report (an antivirus removing it) and
+  Defender's ML verdict are this file.
+- **Fix (upstream/cof-enhanced `1f36372`, its own repo):** `wWinMain` + `CommandLineToArgvW`, `/SUBSYSTEM:WINDOWS`,
+  `Host_Main`/`Host_Shutdown` linked from `xash.lib` (`-EngineLibrary`, default the build-local one), `/MANIFEST:EMBED`,
+  `assets/branding/coffix-bitmaps.ico` (the same images up to 128 px as uncompressed bitmaps, pixel-identical; `.rsrc`
+  entropy 3.24). Arguments, XASH3D_BASEDIR and the working directory as before; SetDllDirectory dropped (it named the
+  program's own directory, searched first anyway). Built to `upstream/cof-enhanced/build-launcher-1.3.2/` (`B3B7A44E…`);
+  `package_enhanced_story.BINARY_INPUTS` takes it from there (`LAUNCHER`).
+- **Checked:** VirusTotal (the owner uploaded the file: the page's file input is not reachable from the extension):
+  **2/68** (SecureAge "Malicious", Trapmine "Suspicious.low.ml.score"; Microsoft, Bitdefender and its family, TrendMicro,
+  Palo Alto all clean). One launch at the owner's OK: a copy of the new exe beside the installed 1.3 copy
+  (`CoFLaunchApp-132test.exe`, then moved to `evidence/release-1.3.2/`) reached the main menu (`launcher-132test.log`),
+  quit cleanly.
+- Tests: `tests/test_launcher_starter.py` (the source is windowed and imports its engine, the build script's flags, the icon
+  has no PNG entry and low entropy, the packaged exe is GUI with `.rsrc` entropy < 6).
+- Left: signing (Azure Artifact Signing, ~$10/month, the owner: "Not now"); false-positive reports to Microsoft and
+  Bitdefender for the old starter still on 1.3.1-and-older copies (the owner: "I fill, you hit submit").
+- Version 1.3.2, build 28 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.2.md`.
