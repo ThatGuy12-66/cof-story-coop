@@ -1263,3 +1263,7 @@ plus Google, Ikarus, WithSecure. The owner: "How do we make this stop happening?
 - Left: signing (Azure Artifact Signing, ~$10/month, the owner: "Not now"); false-positive reports to Microsoft and
   Bitdefender for the old starter still on 1.3.1-and-older copies (the owner: "I fill, you hit submit").
 - Version 1.3.2, build 28 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.2.md`.
+- **Published 1.3.2 2026-10-26 ~12:15 PT** (standing approval): full suite 750 OK (3 skipped), fresh install and the
+  1.3.1 -> 1.3.2 update passed (a save kept); GitHub `v1.3.2`; publish's own "releases page shows the new version"
+  check failed on GitHub's cache (exit 1), `releases/latest` served build 28 a minute later. Zip `3459111C…`,
+  111,565,622 bytes, its starter `B3B7A44E…`. Engine `110d89b0`, CoF Enhanced `1f36372`, launcher `38841e0`.
