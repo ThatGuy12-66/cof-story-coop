@@ -5,7 +5,7 @@ a host before joining and watches a hosted game. Starts no process itself.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import os
@@ -17,9 +17,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 to 1.3.2 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review, the antivirus notice, the Defender fix, the Chapter 4 crash, the inventory menu, the bonus night vision, the chainsaw boss's grab and the starter antivirus took for a trojan) keep it: 1.1
-VERSION_LABEL = "1.3.2"
-BUILD = 28   # counts on (1.3.1 was 27, 1.3 26; 25 was 1.3 under a withdrawn label; 1.2.9 24, 1.2.8 23, 1.2.7 22, 1.2.6 21, 1.2.5 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
+VERSION = "1.1"   # who can join whom: 1.1.1 to 1.3.3 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review, the antivirus notice, the Defender fix, the Chapter 4 crash, the inventory menu, the bonus night vision, the chainsaw boss's grab, the starter antivirus took for a trojan, and the save picker with the game's own co-op mode) keep it: 1.1
+VERSION_LABEL = "1.3.3"
+BUILD = 29   # counts on (1.3.2 was 28, 1.3.1 27, 1.3 26; 25 was 1.3 under a withdrawn label; 1.2.9 24, 1.2.8 23, 1.2.7 22, 1.2.6 21, 1.2.5 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
@@ -27,6 +27,19 @@ SETTINGS = "cof-story-coop-settings.json"
 DEFAULT_PORT = 27015
 NEW_GAME_MAP = "c_intro"
 CHAPTER_CHOICES = [(label, name) for label, name in CHAPTERS if name != NEW_GAME_MAP]
+# 1.3.3 (a player: "it would be a dream if the actual co-op version were playable too, since the standard Cry of Fear
+# no longer runs properly"): Cry of Fear's own co-op mode, its maps as the game made them. The campaign and manhunt
+# start in a lobby (everyone presses the attack button when ready); the campaign's parts 2 to 4 start without one; the
+# survival maps stand alone. The game's multiplayer rules run them, never the story layer (the engine keeps it off on
+# cof_ and c_cof_ maps too: SV_CoF_StoryOfficialMap).
+OFFICIAL_CHOICES = [
+    ("Co-op campaign (from the lobby)", "cof_campaign_01"),
+    ("Co-op campaign, part 2", "cof_campaign_01_p2"),
+    ("Co-op campaign, part 3", "cof_campaign_01_p3"),
+    ("Co-op campaign, part 4", "cof_campaign_01_p4"),
+    ("Manhunt campaign (from the lobby)", "cof_manhunt_campaign"),
+    *((f"Survival {n}", f"cof_suicide{n}") for n in range(1, 5)),
+]
 REPORT_URL = "https://discord.gg/4uwV6jmmY7"   # "Report a bug": the public Discord
 # Every game the app starts: story co-op on, the test tools off. The story trace
 # goes to the log for bug reports; the engine never draws it on screen.
@@ -122,7 +135,7 @@ def merged_maps_tag(merged_maps: dict) -> str:
 def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
                 companions: int, port: int, cont: bool, video: list[str],
                 bonus_room: bool = False, merged: bool = True, coop_flashlight: bool = False,
-                maps: str = "") -> tuple[list[str], str]:
+                maps: str = "", slot: str = "") -> tuple[list[str], str]:
     """Play solo (LAN only, with AI companions) or host: the command line and the session cfg.
 
     companions: how many AI companion bots to keep (each gives its place to a friend who joins).
@@ -132,7 +145,8 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     session keeps the mode it was saved with (Checkpoint.merged).
     coop_flashlight: F gives everyone a free torch (Cry of Fear's co-op mode); off, the light is Simon's phone and
     the story's own lights, as in the single-player game.
-    maps: merged_maps_tag of the host's copy, sent (cof_maps) only with merged maps on, for check_host."""
+    maps: merged_maps_tag of the host's copy, sent (cof_maps) only with merged maps on, for check_host.
+    slot: 1.3.3, the checkpoint Continue loads (Checkpoint.slot, list_checkpoints); empty, the latest."""
     name = clean_name(name)
     password = "" if solo else clean_password(password)
     map_name = map_name.lower()
@@ -142,16 +156,40 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
         raise ValueError("Players: 2 to 4.")
     if not (1 if solo else 0) <= companions <= players - 1:
         raise ValueError("AI companions: one for each free place at most.")
+    if slot and (not cont or not _SLOT.match(slot)):
+        raise ValueError("Unknown checkpoint.")
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {companions}", "cof_companion_drive 0",
              f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
-             f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}"]
+             f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}",
+             f'cof_continue_slot "{slot}"']
     if merged and _TAG.match(maps):
         lines.append(f"cof_maps {maps}")
     if not cont and map_name != NEW_GAME_MAP:
         # a chapter start: the engine hands out what the story would have given by then (1.1.8)
         lines.append(f"cof_chapter_start {map_name}")
+    args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
+            "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
+    return args, "\n".join(lines) + "\n"
+
+
+def official_launch(runtime: Path, *, name: str, map_name: str, players: int, password: str, port: int,
+                    video: list[str]) -> tuple[list[str], str]:
+    """1.3.3: host Cry of Fear's own co-op mode (OFFICIAL_CHOICES): the command line and the session cfg. The session cfg
+    runs after the story cfg and turns the story layer, the AI companions, merged maps and Continue off; the game's
+    multiplayer rules (deathmatch 1, coop 0) and up to four players, one for each of its co-op spawns."""
+    name = clean_name(name)
+    password = clean_password(password)
+    map_name = map_name.lower()
+    if map_name not in {official for _, official in OFFICIAL_CHOICES}:
+        raise ValueError("Unknown co-op map.")
+    if not 2 <= players <= 4:
+        raise ValueError("Players: 2 to 4.")
+    lines = [f'name "{name}"', f"maxplayers {players}", "sv_lan 0", f'sv_password "{password}"', f'password "{password}"',
+             f'hostname "{name}\'s Cry of Fear co-op"', "cof_story_coop 0", "coop 0", "deathmatch 1",
+             "cof_companion 0", "cof_companion_drive 0", "cof_merged_maps 0", "cof_continue 0", 'cof_continue_slot ""',
+             "cof_bonus_room 0", f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}"]
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
     return args, "\n".join(lines) + "\n"
@@ -217,6 +255,7 @@ class Checkpoint:
     names: tuple[str, ...]
     merged: bool = False   # saved with merged story maps (merged.txt); saves from before them: False
     section: str = ""      # the original map the first player was in, in a merged map
+    saved: float = 0.0     # 1.3.3: when it was written (its file's time), for the Continue list
 
     @property
     def label(self) -> str:
@@ -278,13 +317,19 @@ def parse_checkpoint(slot: str, data: bytes) -> Checkpoint | None:
     return Checkpoint(slot, *found, merged=merged, section=section) if found else None
 
 
-def latest_checkpoint(runtime: Path) -> Checkpoint | None:
-    """The checkpoint the engine's cof_load would take: latest.txt's slot, in either save folder."""
+def checkpoint_folder(runtime: Path) -> Path | None:
+    """The copy's co-op save folder the engine writes: of the two (the root SAVE, or the game's own), the one whose
+    latest.txt was written last."""
     folders = [folder for folder in (Path(runtime) / "SAVE/cofcoop", Path(runtime) / "cryoffear/save/cofcoop")
                if (folder / "latest.txt").is_file()]
-    if not folders:
+    return max(folders, key=lambda f: (f / "latest.txt").stat().st_mtime) if folders else None
+
+
+def latest_checkpoint(runtime: Path) -> Checkpoint | None:
+    """The checkpoint the engine's cof_load would take: latest.txt's slot, in either save folder."""
+    folder = checkpoint_folder(runtime)
+    if folder is None:
         return None
-    folder = max(folders, key=lambda f: (f / "latest.txt").stat().st_mtime)
     try:
         slot = (folder / "latest.txt").read_text("latin-1").strip()
         if not _SLOT.match(slot):
@@ -292,6 +337,39 @@ def latest_checkpoint(runtime: Path) -> Checkpoint | None:
         return parse_checkpoint(slot, (folder / f"{slot}.cof").read_bytes())
     except OSError:
         return None
+
+
+def list_checkpoints(runtime: Path) -> list[Checkpoint]:
+    """1.3.3 (players asked for more than one save to go back to): every co-op checkpoint in the copy's save folder that
+    the engine can load, newest first: the automatic one after each level change ("autosave"), the five tape
+    recorder saves ("tape1" to "tape5") and any other slot cof_save wrote."""
+    folder = checkpoint_folder(runtime)
+    found = []
+    for path in sorted(folder.glob("*.cof")) if folder else ():
+        if not _SLOT.match(path.stem):
+            continue
+        try:
+            checkpoint = parse_checkpoint(path.stem, path.read_bytes())
+            saved = path.stat().st_mtime
+        except OSError:
+            continue
+        if checkpoint:
+            found.append(replace(checkpoint, saved=saved))
+    return sorted(found, key=lambda checkpoint: checkpoint.saved, reverse=True)
+
+
+def slot_title(slot: str) -> str:
+    """How the Continue list names a checkpoint's slot."""
+    if slot == "autosave":
+        return "Last level change"
+    tape = re.fullmatch(r"tape([1-5])", slot)
+    return f"Tape recorder save {tape.group(1)}" if tape else f"Saved as {slot}"
+
+
+def checkpoint_choice(checkpoint: Checkpoint, when=time.localtime) -> str:
+    """One line of the Continue list: the slot, the level and when it was saved."""
+    stamp = time.strftime("%b %d, %H:%M", when(checkpoint.saved)) if checkpoint.saved else "unknown time"
+    return f"{slot_title(checkpoint.slot)}: {checkpoint.label} ({stamp})"
 
 
 def continue_warning(checkpoint: Checkpoint, name: str) -> str | None:

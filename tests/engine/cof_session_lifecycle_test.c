@@ -33,10 +33,20 @@ static struct { int spawncount, maxclients; sv_client_t *clients; } svs;
 static struct { int state; double time; char name[64]; } sv;
 static int gate = 1, transition, saves, loads, result = 1, argc, usable = 1;
 static const char *argv[3];
-typedef struct { float value; } convar_t;
+typedef struct { float value; char string[32]; } convar_t;
 static convar_t continue_var, *cof_continue = &continue_var;
+static convar_t continue_slot_var, *cof_continue_slot = &continue_slot_var; /* 1.3.3: the app's pick */
 static int profont;
-static void Cvar_DirectSet( convar_t *var, const char *value ) { var->value = (float)atof( value ); }
+static void Cvar_DirectSet( convar_t *var, const char *value ) { var->value = (float)atof( value ); snprintf( var->string, sizeof( var->string ), "%s", value ); }
+/* sv_cof_session_data.h's rule: 1 to 24 of a-z 0-9 _ - */
+static int CoF_SessionSlotValid( const char *slot )
+{
+	size_t i, n = strlen( slot );
+	if( !n || n > 24 ) return 0;
+	for( i = 0; i < n; i++ ) if( !strchr( "abcdefghijklmnopqrstuvwxyz0123456789_-", slot[i] )) return 0;
+	return 1;
+}
+static const char *CoF_SessionContinueSlot( void );
 static int cof_session_generation = -1, cof_session_auto_needed;
 static double cof_session_save_after, cof_session_wipe_after;
 static void *cof_session_pending;
@@ -139,7 +149,7 @@ int main( void )
 	SV_CoF_SessionFrame(); assert( !loads );                 /* the first two seconds */
 	sv.time = 103; SV_CoF_SessionFrame(); assert( !loads );  /* the host is still joining (the wipe check moves the settle to 104) */
 	clients[0].state = cs_spawned; sv.time = 105; SV_CoF_SessionFrame();
-	assert( loads == 1 && !strcmp( last_slot, "latest" ) && continue_var.value == 0 && !profont );
+	assert( loads == 1 && !strcmp( last_slot, "autosave" ) && continue_var.value == 0 && !profont );
 	assert( saves == 5 ); /* Continue keeps the checkpoint it loads: no autosave over it first */
 	sv.time = 110; SV_CoF_SessionFrame(); assert( loads == 1 );   /* once */
 	/* refused: the host is told, and it is not retried */
@@ -147,6 +157,25 @@ int main( void )
 	assert( loads == 2 && profont == 1 && continue_var.value == 0 );
 	assert( cof_session_auto_needed ); /* 1.2.6: the map starts over as this session's own and saves its own checkpoint */
 	sv.time = 130; SV_CoF_SessionFrame(); assert( loads == 2 ); result = 1;
+	/* 1.3.3 (players asked for more than one save to go back to): Continue loads the checkpoint the app picked, a tape
+	 * recorder's or the automatic one, and keeps that one at the first frame; the pick is used once */
+	loads = 0; cof_session_pending = NULL; usable = 1; profont = 0; cof_session_auto_needed = 0;
+	strcpy( cof_session_latest, "autosave" ); cof_session_generation = -1; svs.spawncount++;
+	Cvar_DirectSet( cof_continue_slot, "tape3" ); continue_var.value = 1; sv.time = 400;
+	SV_CoF_SessionFrame(); assert( !loads && strstr( console_line, "session-checkpoint-preserved slot=tape3" ) && !cof_session_auto_needed );
+	sv.time = 405; SV_CoF_SessionFrame();
+	assert( loads == 1 && !strcmp( last_slot, "tape3" ) && continue_var.value == 0 && !continue_slot_var.string[0] );
+	assert( strstr( console_line, "session-continue slot=tape3 result=queued" ));
+	/* ...a pick that names no slot is the latest */
+	loads = 0; cof_session_generation = -1; svs.spawncount++;
+	Cvar_DirectSet( cof_continue_slot, "../tape1" ); continue_var.value = 1; sv.time = 500;
+	SV_CoF_SessionFrame(); sv.time = 505; SV_CoF_SessionFrame(); assert( loads == 1 && !strcmp( last_slot, "autosave" ));
+	/* ...and with no Continue, a stale pick changes nothing: a new game keeps saving its own */
+	loads = 0; cof_session_generation = -1; svs.spawncount++; cof_session_auto_needed = 0;
+	Cvar_DirectSet( cof_continue_slot, "tape2" ); continue_var.value = 0; sv.time = 600;
+	SV_CoF_SessionFrame(); assert( strstr( console_line, "session-checkpoint-not-ours slot=autosave" ) && cof_session_auto_needed );
+	sv.time = 605; SV_CoF_SessionFrame(); assert( !loads );
+	Cvar_DirectSet( cof_continue_slot, "" );
 	/* a living AI companion can still revive the person (or they respawn beside it):
 	 * no checkpoint load under its CPR; a downed companion does not count */
 	loads = 0; cof_session_pending = NULL; sv.time = 200; cof_session_wipe_after = 0;

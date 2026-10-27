@@ -186,9 +186,9 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab) and 1.3.2 (the starter antivirus took for a trojan) keep 1.1's version, so 1.1 to 1.3.2 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.2'))
-        self.assertGreater(play.BUILD, 27)   # 1.3.1 was build 27: its copies must be offered the update
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab), 1.3.2 (the starter antivirus took for a trojan) and 1.3.3 (the save picker, the game's own co-op mode) keep 1.1's version, so 1.1 to 1.3.3 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.3'))
+        self.assertGreater(play.BUILD, 28)   # 1.3.2 was build 28: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
         self.assertEqual(play.REPORT_URL, 'https://discord.gg/4uwV6jmmY7')
@@ -221,7 +221,7 @@ class HostReleaseTests(unittest.TestCase):
         self.assertIn(f'older than {play.VERSION_LABEL}', play.host_version_note({'cofbuild': '1.1'}))
         self.assertIn('is 1.2.5 (yours', play.host_version_note({'cofver': '1.2.5'}))
         self.assertIn('Join anyway?', play.host_version_note({'cofver': '1.2.5'}))
-        for same_or_newer in (play.VERSION_LABEL, '1.3.2', '9.9.9'):
+        for same_or_newer in (play.VERSION_LABEL, '1.3.3', '9.9.9'):
             self.assertIsNone(play.host_version_note({'cofver': same_or_newer}))
         for unreadable in ('dev', '1.2.6-test', '1..2'):
             self.assertIsNone(play.host_version_note({'cofver': unreadable}))
@@ -309,6 +309,54 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual((cp.map, cp.players), ('c_start2', 3))
             (folder / 'latest.txt').write_text('../evil')
             self.assertIsNone(play.latest_checkpoint(root))
+
+    def test_every_checkpoint_of_the_copy_is_listed_newest_first(self):
+        # 1.3.3 (players asked for more than one save to go back to): the automatic one, the tape recorder saves and any
+        # cof_save slot, from the folder the engine writes; damaged files and names that are no slot are left out
+        import os
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(play.list_checkpoints(root), [])
+            folder, other = root / 'SAVE/cofcoop', root / 'cryoffear/save/cofcoop'
+            for each in (folder, other):
+                each.mkdir(parents=True)
+                (each / 'latest.txt').write_text('autosave')
+            (other / 'tape1.cof').write_bytes(archive([('session.dat', session('c_sewer'))]))
+            os.utime(other / 'latest.txt', (1000, 1000))   # the other folder is an older layout's
+            for slot, map_name, when in (('autosave', 'c_park3', 3000), ('tape2', 'c_park2', 2000),
+                                         ('tape5', 'c_subway', 4000), ('mine', 'c_start', 1000)):
+                (folder / f'{slot}.cof').write_bytes(archive([('session.dat', session(map_name))]))
+                os.utime(folder / f'{slot}.cof', (when, when))
+            (folder / 'tape3.cof').write_bytes(b'damaged')
+            (folder / 'Bad Name.cof').write_bytes(archive([('session.dat', session('c_start'))]))
+            found = play.list_checkpoints(root)
+            self.assertEqual([(c.slot, c.map, c.saved) for c in found],
+                             [('tape5', 'c_subway', 4000), ('autosave', 'c_park3', 3000), ('tape2', 'c_park2', 2000),
+                              ('mine', 'c_start', 1000)])
+            self.assertEqual(play.latest_checkpoint(root).slot, 'autosave')   # unchanged: latest.txt's
+
+    def test_the_continue_list_names_each_checkpoint(self):
+        import time as clock
+        when = lambda seconds: clock.struct_time((2026, 10, 27, 15, 41, 0, 1, 300, 0))
+        merged = play.Checkpoint('autosave', 'cm_apartment3', 2, (), merged=True, section='c_apartment4', saved=1.0)
+        self.assertEqual(play.checkpoint_choice(merged, when), 'Last level change: c_apartment4 (Oct 27, 15:41)')
+        tape = play.Checkpoint('tape4', 'c_asylum1', 2, (), saved=1.0)
+        self.assertEqual(play.checkpoint_choice(tape, when), 'Tape recorder save 4: c_asylum1 (Oct 27, 15:41)')
+        self.assertEqual(play.slot_title('mine'), 'Saved as mine')
+
+    def test_continue_names_its_slot_for_the_engine(self):
+        runtime = Path('copy')
+        _, cfg = play.host_launch(runtime, solo=False, name='Bob', map_name='c_park2', players=2, password='',
+                                  companions=0, port=27015, cont=True, video=[], slot='tape2')
+        self.assertIn('cof_continue 1\n', cfg)
+        self.assertIn('cof_continue_slot "tape2"\n', cfg)
+        _, cfg = play.host_launch(runtime, solo=False, name='Bob', map_name='c_start', players=2, password='',
+                                  companions=0, port=27015, cont=False, video=[])
+        self.assertIn('cof_continue_slot ""\n', cfg)   # a stale pick from the last game never carries over
+        for bad, cont in (('../tape1', True), ('tape1"; quit', True), ('tape2', False)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                play.host_launch(runtime, solo=False, name='Bob', map_name='c_park2', players=2, password='',
+                                 companions=0, port=27015, cont=cont, video=[], slot=bad)
 
     def test_continue_warns_about_another_name(self):
         cp = play.Checkpoint('autosave', 'c_start', 2, ('Bob', 'Companion'))

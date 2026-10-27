@@ -1,6 +1,17 @@
-Cry of Fear Co-op 1.3.2
+Cry of Fear Co-op 1.3.3
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.3
+- Pick the save to continue from. Play solo and Host a game list every co-op checkpoint in
+  your copy under "Continue from", newest first: the last level change and each tape
+  recorder save, with the time it was saved. Continue used to load only the newest one.
+- Cry of Fear's own co-op mode is in the app: the co-op campaign (from its lobby, or
+  straight into part 2, 3 or 4), the manhunt campaign and Survival 1 to 4, as the game made
+  them, for 2 to 4 players. Choose "Cry of Fear's own co-op" on the main screen; friends
+  join with Join a game as usual. It runs on this app's engine, like the story, so the
+  original game's multiplayer doesn't have to work on your PC. The host needs 1.3.3 for it.
+- 1.1 to 1.3.3 can play together.
 
 WHAT'S NEW IN 1.3.2
 - Antivirus programs took the small program that starts the game (CoFLaunchApp.exe) for a
@@ -283,10 +294,15 @@ PLAY
   to your PC in the router, or all use a VPN such as Tailscale, ZeroTier or Radmin and
   share that address. If Windows Firewall asks about Cry of Fear, allow it.
 - Join a game: paste the host's join code (or address) and their password, if any.
+- Cry of Fear's own co-op: host the game's separate co-op campaign, manhunt or survival
+  maps (2 to 4 players). In a lobby, everyone presses the attack button when ready; the
+  game starts a few seconds after the last one. The story's extras (AI companions, merged
+  maps, checkpoints, J to join) are off in this mode.
 Everyone needs the same version of Cry of Fear Co-op.
 
-Start a new game (the intro), any chapter, or Continue from the last co-op checkpoint.
-The game makes a co-op checkpoint by itself after every level change.
+Start a new game (the intro), any chapter, or Continue from a co-op checkpoint.
+The game makes a co-op checkpoint by itself after every level change, and the host's tape
+recorder saves are checkpoints too: pick one in the list next to "Continue from".
 Tick "Bonus room unlocked" to open the bonus room (FAMAS, axe and more) for everyone.
 Starting a later chapter lays its weapons out next to you, and O opens the wardrobe.
 Dual wield (two pistols, or a pistol and a light) works from the inventory menu.

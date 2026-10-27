@@ -1267,3 +1267,36 @@ plus Google, Ikarus, WithSecure. The owner: "How do we make this stop happening?
   1.3.1 -> 1.3.2 update passed (a save kept); GitHub `v1.3.2`; publish's own "releases page shows the new version"
   check failed on GitHub's cache (exit 1), `releases/latest` served build 28 a minute later. Zip `3459111C…`,
   111,565,622 bytes, its starter `B3B7A44E…`. Engine `110d89b0`, CoF Enhanced `1f36372`, launcher `38841e0`.
+
+## 1.3.3: the save picker and Cry of Fear's own co-op mode (2026-10-27)
+
+Two requests from the Discord #feedback channel; the owner: "You both."
+- **Save slots** ("would be cool if there were multiple save slots"): co-op checkpoints were already kept per slot in
+  `save/cofcoop/<slot>.cof` (`autosave` after each level change, `tape1`-`tape5` from the tape recorder via
+  `savehack cofsaveN`, `cof_save` names), but Continue loaded only `latest.txt`'s. The engine's new `cof_continue_slot`
+  (sv_cof_session.inc, `CoF_SessionContinueSlot`: a valid slot, else the latest) is what Continue loads; the app's
+  `play.list_checkpoints` lists every valid `.cof` newest first, `checkpoint_choice` names it ("Last level change",
+  "Tape recorder save N", "Saved as X", with the date), and `start_choice` has a list beside "Continue from:".
+  `host_launch(slot=)` refuses a slot without Continue or with a bad name and always writes `cof_continue_slot`.
+- **Cry of Fear's own co-op** ("it would be a dream if the actual co-op version were playable too, since the standard Cry
+  of Fear no longer runs properly"): the game's mode is its multiplayer rules (deathmatch 1, coop 0, 2-4 players) on
+  `cof_campaign_01` (lobby: everyone presses attack, then a 3 s countdown), its parts `_p2`-`_p4`, `cof_manhunt_campaign`,
+  `cof_suicide1`-`4`, and the campaign's `c_cof_*` maps (all in the copy). Engine: `SV_CoF_StoryOfficialMap`
+  (`cof_*`, `c_cof_*`) keeps the story layer off on them whatever `cof_story_coop` says; the rules-allocation zeroing
+  (RVA `0xAF79E` -> `CoF_StoryNewRules`, vote-kick state) moved out of the story gate into `CoF_StoryRulesGuard`, run
+  from `SV_SpawnEntities` before the world's entities (InstallGameRules runs in the world's precache) in every multiplayer
+  game of the verified DLL, and from the story gate; closing the story gate no longer restores it; single player gets the
+  DLL as it is. Logs `cofstory phase=rules-zeroed map=...` once per DLL instance. App: a fourth main-screen card,
+  `show_official` (mode, players 2-4, password, port), `play.official_launch` (the story cfg then a session cfg with
+  `cof_story_coop 0`, `coop 0`, `deathmatch 1`, companions, merged maps and Continue off). Guests join with Join a game.
+- Main screen: four cards and an update offer overflowed the 760 px window (787); `app_theme.Card` padding 11 -> 7 and
+  gap 5 -> 4: 668 plain, 747 with the offer (`test_the_main_screen_fits_its_window_with_four_cards`).
+- Tests: `tests/test_enhanced_official_coop.py` (+ `tests/engine/cof_official_map_harness.c`), save-slot scenarios in
+  `cof_session_lifecycle_test.c`, `test_coop_play`, `test_coop_app`.
+- Review (a separate agent, the engine diff only): no bugs. Loaded saves and changelevel2 revisits (`LoadGameState`)
+  run the world's precache without the guard, but only after a guarded map in the same process (SV_LoadGame forces
+  single player; multiplayer without the story layer takes the classic changelevel); a single-player save loaded
+  after a multiplayer game keeps the patched call, harmless (its rules come from another allocation).
+- Not run in the game: asked for one test launch of the co-op campaign lobby, the owner answered "make it 1.3.3"
+  (built as 1.4 until then). The release notes ask players to report anything odd in the new mode.
+- Version 1.3.3, build 29 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.3.md`.

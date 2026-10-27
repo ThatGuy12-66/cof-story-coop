@@ -79,7 +79,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.2")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.3")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:
@@ -327,24 +327,34 @@ class WindowTests(unittest.TestCase):
         self.app.show_running(watch, solo=False)
         self.assertTrue(any("Windows Firewall" in text for text in texts(self.app.body)))
 
-    def host_continue(self, places, players):
-        """Host > Continue with a checkpoint saved with places, the Players box at players: what the window said."""
+    def host_continue(self, places, players, pick=0):
+        """Host > Continue with a checkpoint saved with places, the Players box at players: what the window said.
+        1.3.3: the Continue list holds the automatic checkpoint and a tape recorder save; pick chooses one."""
         from tkinter import messagebox
         self.copy()
-        checkpoint = app.play.Checkpoint("slot", "c_park3", places, ("Bob", "Ann", "Sam", "Kim")[:places])
+        names = ("Bob", "Ann", "Sam", "Kim")[:places]
+        checkpoints = [app.play.Checkpoint("autosave", "c_park3", places, names, saved=2000.0),
+                       app.play.Checkpoint("tape2", "c_park2", places, names, saved=1000.0)]
         settings = dict(app.play.DEFAULT_SETTINGS, name="Bob", players=players)
         with mock.patch.object(app.play, "load_settings", return_value=settings), \
-                mock.patch.object(app.play, "latest_checkpoint", return_value=checkpoint), \
+                mock.patch.object(app.play, "list_checkpoints", return_value=checkpoints), \
                 mock.patch.object(app.play, "continue_warning", return_value=None):
             self.app.show_main(self.app.root)
             self.app.show_start(solo=False)
+            listed = next(w for w in widgets(self.app.body) if w.winfo_class() == "TCombobox"
+                          and any("Tape recorder save 2" in str(v) for v in w.cget("values")))
+            self.assertEqual([str(v) for v in listed.cget("values")],
+                             [app.play.checkpoint_choice(c) for c in checkpoints])   # newest first, as listed
+            self.assertEqual(listed.current(), 0)
+            listed.current(pick)
             next(w for w in widgets(self.app.body) if w.winfo_class() == "TRadiobutton"
-                 and str(w.cget("text")).startswith("Continue:")).invoke()
+                 and str(w.cget("text")).startswith("Continue from:")).invoke()
             with mock.patch.object(messagebox, "showinfo") as info:
                 button(self.app.body, "Start").invoke()
-        with mock.patch.object(app, "start_game"), mock.patch.object(app.threading, "Thread"):
+        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
             self.jobs[-1][1](False)   # the copy's check passed: the game starts
         self.addCleanup(setattr, self.app.watch, "closed", True)
+        self.started_map = game.call_args.args[1][-1]
         return info, (self.app.root / "cryoffear" / app.play.SESSION_CFG).read_text().splitlines()
 
     def test_continue_as_host_says_the_players_box_is_not_used(self):
@@ -357,6 +367,65 @@ class WindowTests(unittest.TestCase):
         info, config = self.host_continue(places=2, players=2)
         info.assert_not_called()
         self.assertIn("maxplayers 2", config)
+
+    def test_continue_loads_the_checkpoint_picked_in_the_list(self):
+        # 1.3.3 (players asked for more than one save to go back to): the newest is picked unless another is chosen
+        _, config = self.host_continue(places=2, players=2)
+        self.assertIn('cof_continue_slot "autosave"', config)
+        self.assertEqual(self.started_map, "c_park3")
+        _, config = self.host_continue(places=2, players=2, pick=1)
+        self.assertIn('cof_continue_slot "tape2"', config)
+        self.assertIn("cof_continue 1", config)
+        self.assertEqual(self.started_map, "c_park2")
+
+    def test_the_games_own_co_op_is_hosted_from_the_main_screen(self):
+        # 1.3.3 (a player: "it would be a dream if the actual co-op version were playable too"): a fourth card
+        self.copy()
+        cards = {}
+        settings = dict(app.play.DEFAULT_SETTINGS, name="Bob", players=1, password="s3cret", port=27016)
+        with mock.patch.object(app.play, "load_settings", return_value=settings), \
+                mock.patch.object(app.theme, "Card", side_effect=lambda tk, parent, title, text, action:
+                                  cards.__setitem__(title, action)):
+            self.app.show_main(self.app.root)
+        self.assertEqual(list(cards)[:3], ["Play solo", "Host a game", "Join a game"])
+        cards["Cry of Fear's own co-op"]()
+        self.assertIn("Cry of Fear's own co-op", texts(self.app.body))
+        mode = next(w for w in widgets(self.app.body) if w.winfo_class() == "TCombobox")
+        self.assertEqual([str(v) for v in mode.cget("values")], [label for label, _ in app.play.OFFICIAL_CHOICES])
+        self.assertEqual(mode.current(), 0)
+        players = next(w for w in widgets(self.app.body) if w.winfo_class() == "TSpinbox")
+        self.assertEqual(players.get(), "2")   # a solo player's 1 is not a co-op count
+        mode.current(5)   # Survival 1
+        players.set("3")
+        button(self.app.body, "Start").invoke()
+        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"), \
+                mock.patch.object(app.play, "save_settings") as saved:
+            self.jobs[-1][1](False)   # the copy's check passed: the game starts
+        self.addCleanup(setattr, self.app.watch, "closed", True)
+        args = game.call_args.args[1]
+        self.assertEqual(args[-2:], ["+map", "cof_suicide1"])
+        self.assertIn("-port", args)
+        self.assertEqual(args[args.index("-port") + 1], "27016")
+        config = (self.app.root / "cryoffear" / app.play.SESSION_CFG).read_text().splitlines()
+        for line in ("cof_story_coop 0", "deathmatch 1", "coop 0", "maxplayers 3", 'sv_password "s3cret"'):
+            self.assertIn(line, config)
+        self.assertTrue(any(c.args[1].get("players") == 3 for c in saved.call_args_list))   # remembered for next time
+        self.assertIn("Hosting", texts(self.app.body))
+
+    def test_the_main_screen_fits_its_window_with_four_cards(self):
+        # 1.3.3: the fourth card; the window is 760 px tall (a 768 px screen leaves 688), and an update offer adds a box
+        import types
+        self.copy()
+        self.app.check_for_update = lambda: None
+        heights = []
+        for offer in (None, types.SimpleNamespace(label="9.9", page_url="https://example.invalid")):
+            self.app.offer = offer
+            with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
+                self.app.show_main(self.app.root)
+            self.window.update_idletasks()
+            heights.append(self.window.winfo_reqheight())
+        self.assertLessEqual(heights[0], 688)
+        self.assertLessEqual(heights[1], 760)
 
     def test_a_newer_copy_offers_only_its_own_shortcut(self):
         # L14.11: the older app opened the main screen and started the newer engine with its own settings

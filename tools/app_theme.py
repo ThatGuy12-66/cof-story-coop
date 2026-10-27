@@ -239,13 +239,13 @@ class Card:
         self.command = command
         self.frame = tk.Frame(parent, background=PANEL, highlightthickness=1, highlightbackground=LINE,
                               highlightcolor=ACCENT, takefocus=1, cursor="hand2")
-        self.frame.pack(fill="x", pady=5)
+        self.frame.pack(fill="x", pady=4)
         self.bar = tk.Frame(self.frame, background=PANEL, width=3)
         self.bar.pack(side="left", fill="y")
         self.arrow = tk.Label(self.frame, text="›", background=PANEL, foreground=FAINT, font=(FONTS["title"][0], 22))
         self.arrow.pack(side="right", padx=(0, 18))
         inner = tk.Frame(self.frame, background=PANEL)
-        inner.pack(side="left", fill="both", expand=True, padx=(14, 0), pady=11)
+        inner.pack(side="left", fill="both", expand=True, padx=(14, 0), pady=7)   # 1.3.3: a fourth card fits
         self.title = tk.Label(inner, text=title, background=PANEL, foreground=TEXT, font=FONTS["heading"], anchor="w")
         self.title.pack(fill="x")
         self.text = tk.Label(inner, text=text, background=PANEL, foreground=MUTED, font=FONTS["small"], anchor="w")
