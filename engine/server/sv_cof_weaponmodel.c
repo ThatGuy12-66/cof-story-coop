@@ -38,6 +38,7 @@ static struct
 	qboolean climb; // 1.1.9: on a ladder, drawn for the others at climb_origin, climb_angles
 	vec3_t climb_origin, climb_angles;
 	qboolean boat; // 1.1.9 (P5): rowing the boat, not sent to the others
+	qboolean chair; // 1.3.4: riding a wheelchair (c_ending4b): its model shows Simon in it, the parked body is not sent
 } cof_weaponmodel_players[MAX_CLIENTS];
 
 // 1.1.9 (P5): a rower's protection by slot (CoF_WeaponModelBoatLeft). It outlives a level change (the transition save
@@ -219,6 +220,7 @@ void SV_CoF_WeaponModelFrame( void )
 		CoF_WeaponModelBoat( cl, i ); // first: a rower who dropped is put back too
 		if( cl->state != cs_spawned || !SV_IsValidEdict( cl->edict )) continue;
 		ent = cl->edict;
+		cof_weaponmodel_players[i].chair = SV_CoF_RetailInWheelchair( cl );
 		cof_weaponmodel_players[i].camera = CoF_WeaponModelOnCamera( cl );
 		CoF_WeaponModelClimb( i, ent );
 		// read every frame (a save, a death, a late joiner, the wheelchair all end up in the flags)
@@ -284,12 +286,12 @@ int SV_CoF_WeaponModelMask( const sv_client_t *viewer, int e, entity_state_t *ou
 }
 
 // 1.1.9 (P5): player entity e is not sent to viewer: they row the boat (its model shows the rower). Their own client
-// still gets it, as before.
+// still gets it, as before. 1.3.4: the same for a wheelchair rider, whose body the game leaves where they sat down.
 qboolean SV_CoF_WeaponModelHidden( const edict_t *viewer, int e )
 {
 	int slot = e - 1;
 	if( slot < 0 || slot >= svs.maxclients || slot >= MAX_CLIENTS || !SV_CoF_StoryCoopEnabled( )) return false;
-	return cof_weaponmodel_players[slot].boat && viewer != svs.clients[slot].edict;
+	return ( cof_weaponmodel_players[slot].boat || cof_weaponmodel_players[slot].chair ) && viewer != svs.clients[slot].edict;
 }
 
 // 1.1.9 (ladders): player entity e climbs a ladder and viewer is someone else: the body is drawn on the ladder, away

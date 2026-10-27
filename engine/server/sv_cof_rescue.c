@@ -34,6 +34,7 @@
 #include "sv_cof_cheats.h"
 #include "sv_cof_story.h"
 #include "sv_cof_rescue.h"
+#include "sv_cof_chairs.h"
 
 #define COF_TPI_SIZE 0x37C
 #define COF_TPI_VICTIM 0x36C // EHANDLE m_pPlayer
@@ -329,6 +330,8 @@ edict_t *SV_CoF_RescueThinkFirst( edict_t *thinker )
 		return CoF_RescueStrangler( thinker );
 	if( CoF_RescueClass( thinker, "monster_roofboss" )) return CoF_RescueRoofBoss( thinker );
 	if( CoF_RescueClass( thinker, "monster_doctorboss" )) return CoF_RescueDoctor( thinker );
+	// 1.3.4: c_ending4b's book Simons with a gun fight the rider whose chair is nearest (sv_cof_chairs.c)
+	if( CoF_RescueClass( thinker, "monster_booksimon" )) return SV_CoF_ChairsSimonTarget( thinker );
 	if( !CoF_RescueClass( thinker, "item_padlock" ) || thinker->v.body != 1 ) return NULL;
 	for( i = 0; i < COF_RESCUE_PADLOCKS; i++ )
 	{
@@ -513,6 +516,7 @@ static void CoF_RescueWheelchair( void )
 		memset( rider_pv + COF_PL_WHEELCHAIR, 0, sizeof( cof_rescue_handle_t ));
 		SV_CoF_SetPhysicsKey( rider_ent, "chr", "1" );
 		Con_Printf( "cofstory phase=wheelchair-death-restart userid=%d\n", rider->userid );
+		SV_CoF_ChairsReleaseAll(); // 1.3.4: the partners' chairs are let go first, as the map's stop would
 		// everyone alive dies: the game's team wipe restarts the map
 		for( j = 0; j < svs.maxclients && j < MAX_CLIENTS; j++ )
 		{

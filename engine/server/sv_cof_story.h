@@ -17,6 +17,8 @@ void SV_CoF_StoryFrame( void );
 void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size );
 // Call a thiscall member of the verified retail DLL that takes one pointer.
 qboolean SV_CoF_StoryCallMember( unsigned int rva, void *self, void *arg );
+// 1.3.4: the same for a member that takes nothing (a plain ret: CBasePlayer::StartWheelchairMode, StopWheelchairMode).
+qboolean SV_CoF_StoryCallMember0( unsigned int rva, void *self );
 qboolean SV_CoF_StoryDeployWeapon( void *self );
 // The verified game DLL's load address, or 0.
 uintptr_t SV_CoF_StoryBase( void );

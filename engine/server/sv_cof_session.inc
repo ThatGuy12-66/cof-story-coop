@@ -27,7 +27,9 @@ qboolean SV_CoF_StoryKitDue( void ); // sv_cof_story.c: a chapter start's kit no
 // What keeps a checkpoint back right now, 0 for nothing. A running cutscene (1) or the ending door (2) freezes
 // players; a save must never hold that freeze. 1.1.9 (P6): a boat crossing (3, c_lake): the rider would be saved
 // aboard and the boat without its rider, which the boat does not save. 1.1.9 (I7): a chapter start's kit still
-// on its way (4): a team wipe would reload a party without it.
+// on its way (4): a team wipe would reload a party without it. 1.3.4: a wheelchair ride (5, c_ending4b): the chair
+// does not save its rider (CWheelchair's save fields end at m_bDead), so the riders came back frozen with no chair to
+// drive; a team wipe there loads the checkpoint from before the ride.
 static int CoF_SessionWait( void )
 {
 	int index;
@@ -36,6 +38,7 @@ static int CoF_SessionWait( void )
 	for( index = 0; index < svs.maxclients; index++ )
 		if( svs.clients[index].state == cs_spawned && SV_CoF_RetailInBoat( &svs.clients[index] )) return 3;
 	if( SV_CoF_StoryKitDue()) return 4;
+	if( SV_CoF_ChairsRiding()) return 5;
 	return 0;
 }
 
@@ -195,7 +198,7 @@ qboolean SV_CoF_SessionSave( const char *slot )
 		SV_CoF_TransitionActive() || cof_session_pending || cof_session_saving || svgame.globals->pSaveData ) return false;
 	if(( reason = CoF_SessionWait()) != 0 )
 	{
-		static const char *reasons[] = { "", "cutscene", "ending-door", "boat", "chapter-kit" };
+		static const char *reasons[] = { "", "cutscene", "ending-door", "boat", "chapter-kit", "wheelchair" };
 		if( cof_session_deferred != reason )
 			Con_Printf( "cofstory phase=session-save-deferred slot=%s reason=%s\n", slot, reasons[reason] );
 		cof_session_deferred = reason;
@@ -753,6 +756,7 @@ static void CoF_SessionSave_f( void )
 	wait = CoF_SessionWait();
 	if( wait == 3 ) Con_Printf( "Co-op save waits: a player is in the boat. Save again when everyone is ashore.\n" );
 	else if( wait == 4 ) Con_Printf( "Co-op save waits: the chapter's starting weapons are still being handed out. Save again in a moment.\n" );
+	else if( wait == 5 ) Con_Printf( "Co-op save waits: someone is riding a wheelchair. Save again when the ride is over.\n" );
 	else if( wait ) Con_Printf( "Co-op save waits: a cutscene is running. Save again when it ends.\n" );
 	else Con_Printf( "Co-op save refused: use a unique-name, living, fully joined story party and a slot of 1-24 lowercase letters, digits, _ or -.\n" );
 }

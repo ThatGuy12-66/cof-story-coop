@@ -2160,6 +2160,19 @@ static qboolean CoF_PartyMoveBeside( sv_client_t *cl, sv_client_t *partner )
 	return CoF_PartyLanding( cl, at, at->v.origin, spot ) && SV_CoF_PartySectionMove( cl, spot, NULL, NULL ); // a chair stands on the floor
 }
 
+// 1.3.4 (sv_cof_chairs.c): cl beside partner as a J does (beside the wheelchair partner rides), and cl's body set
+// down at a spot, its view kept (where the game leaves a rider's body).
+qboolean SV_CoF_PartyMoveBeside( sv_client_t *cl, sv_client_t *partner )
+{
+	if( !cl || !partner || !CoF_PartyPlayer( cl ) || !SV_IsValidEdict( partner->edict )) return false;
+	return CoF_PartyMoveBeside( cl, partner );
+}
+
+qboolean SV_CoF_PartyPlace( sv_client_t *cl, const vec3_t at )
+{
+	return cl && CoF_PartyMove( cl, at, NULL );
+}
+
 // The game respawns a player on the landmark the map was entered by (EntSelectSpawnPoint, gpGlobals->startspot),
 // and nearly every story landmark stands in the trigger of its exit back, which their first move fires (live
 // 2026-10-19, cm_sewer3: the level change back crashed the game). Called after the PreThink that respawned them,

@@ -30,6 +30,7 @@ GNU General Public License for more details.
 #include "sv_cof_sections.h"
 #include "sv_cof_scene.h"
 #include "sv_cof_moments.h"
+#include "sv_cof_chairs.h"
 #include "sv_cof_archive.h"
 #include "sv_story_transition_state.h"
 

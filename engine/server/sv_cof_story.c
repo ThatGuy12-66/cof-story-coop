@@ -20,6 +20,7 @@
 #include "sv_cof_scene.h"
 #include "sv_cof_moments.h"
 #include "sv_cof_rescue.h"
+#include "sv_cof_chairs.h"
 #include "sv_cof_companion.h"
 #include "sv_cof_sections.h"
 #include "sv_cof_testgun.h"
@@ -296,6 +297,23 @@ qboolean SV_CoF_StoryFireTargets( const char *name, void *activator, void *calle
 #endif
 }
 
+// 1.3.4: a retail thiscall member that takes nothing and returns with a plain ret (CBasePlayer::StartWheelchairMode
+// 100F5B30, StopWheelchairMode 100F5D50). __fastcall with no stack argument: self in ecx, a dummy in edx, nothing
+// for either side to pop.
+qboolean SV_CoF_StoryCallMember0( unsigned int rva, void *self )
+{
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	typedef void ( __fastcall *cof_member0_t )( void *self, void *edx );
+	dll_user_t *lib = (dll_user_t *)svgame.hInstance;
+	if( !self || !SV_CoF_StoryCoopEnabled() || !lib || !lib->hInstance || lib->custom_loader || lib->encrypted ) return false;
+	((cof_member0_t)((byte *)lib->hInstance + rva ))( self, NULL );
+	return true;
+#else
+	(void)rva; (void)self;
+	return false;
+#endif
+}
+
 qboolean SV_CoF_StoryDeployWeapon( void *self )
 {
 #if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
@@ -399,6 +417,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_ViewInit();
 	SV_CoF_CameraModelsInit();
 	SV_CoF_PickupsInit();
+	SV_CoF_ChairsInit();
 }
 
 // 1.1.9 (I7): the chapter start's kit until every person in the game carries it; sv_cof_session.inc keeps the
@@ -584,6 +603,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_SceneFrame();
 	SV_CoF_MomentsFrame();
 	SV_CoF_RescueFrame();
+	SV_CoF_ChairsFrame(); // 1.3.4: after the rescue (a team wipe lets riders out), before the party's moves
 	SV_CoF_PartyFrame(); // first: a door's party move lands before the AI decides it lost the leader
 	SV_CoF_SectionsFrame(); // merged maps: respawns, companions and gone exits, before the AI decides
 	SV_CoF_FogFrame(); // after the section moves
@@ -618,6 +638,7 @@ void SV_CoF_StoryShutdown( void )
 	SV_CoF_SceneReset();
 	SV_CoF_MomentsReset();
 	SV_CoF_RescueReset();
+	SV_CoF_ChairsReset();
 	SV_CoF_FogReset();
 	SV_CoF_WeatherReset();
 	SV_CoF_SkyReset();
