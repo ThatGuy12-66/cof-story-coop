@@ -1300,3 +1300,8 @@ Two requests from the Discord #feedback channel; the owner: "You both."
 - Not run in the game: asked for one test launch of the co-op campaign lobby, the owner answered "make it 1.3.3"
   (built as 1.4 until then). The release notes ask players to report anything odd in the new mode.
 - Version 1.3.3, build 29 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.3.md`.
+- **Published 1.3.3 2026-10-27 ~13:16 PT** (standing approval): full suite 761 OK (3 skipped), fresh install and the
+  1.3.2 -> 1.3.3 update passed (a save kept); GitHub `v1.3.3`; publish's "releases page shows the new version" check
+  failed on GitHub's cache again (exit 1), `latest/download/release.json` served build 29 two minutes later. Zip
+  `ACAB312E…`, 111,579,273 bytes. Engine `1dfd8f00`, launcher `d9231eb`. The ModDB upload is the owner's
+  (`evidence/release-1.3.3/moddb-text.txt`).
