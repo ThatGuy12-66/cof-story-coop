@@ -1,6 +1,15 @@
-Cry of Fear Co-op 1.3.4
+Cry of Fear Co-op 1.3.5
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.5
+- Cry of Fear's own co-op mode: the players who joined no longer drop out at every level
+  change or door and have to join again. The host's way of sending them to the next map
+  never reached their game, so they sat on the old map until the host timed them out. They
+  now go on to the next map with the host, the way the story does it.
+- In that mode every player now gets their own copy of each weapon, ammo box and medicine
+  a map puts down, as in the story. Before, whoever got there first took the only one.
+- The host needs 1.3.5 for both. 1.1 to 1.3.5 can play together.
 
 WHAT'S NEW IN 1.3.4
 - Everyone rides a wheelchair in the fight at the end of Ending 4. The game put only the

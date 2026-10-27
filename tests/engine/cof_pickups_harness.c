@@ -58,6 +58,9 @@ static model_t world;
 static char lump[2048];
 
 static qboolean SV_CoF_StoryCoopEnabled( void ) { return gate; }
+/* 1.3.5: a game of Cry of Fear's own co-op (the story off) */
+static int official;
+static qboolean SV_CoF_StoryOfficialCoop( void ) { return official; }
 /* 1.3: the night vision's unlock line (sv_cof_bonus.c), asked for the room's own */
 static int nv_unlocked = 1, nv_asked;
 static qboolean SV_CoF_BonusItemUnlocked( int item ) { nv_asked++; assert( item == 4 ); return nv_unlocked; }
@@ -207,7 +210,7 @@ static void setup( void )
 	strcpy( sv.name, "c_test" ); sv.worldmodel = &world; sv.state = ss_active; sv.time = 100.0;
 	svs.maxclients = 4; svs.clients = clients; svs.spawncount = 1;
 	svgame.edicts = entities; svgame.dllFuncs.pfnKeyValue = game_keyvalue; svgame.dllFuncs.pfnSpawn = game_spawn;
-	gate = 1; spawn_fails = 0; nv_unlocked = 1; nv_asked = 0;
+	gate = 1; official = 0; spawn_fails = 0; nv_unlocked = 1; nv_asked = 0;
 	player( 0, "Host", 11, 0 ); player( 1, "Guest", 12, 0 ); player( 2, "Companion", 13, 1 );
 	SV_CoF_PickupsInit();
 	load_map();
@@ -441,6 +444,15 @@ static void switched_off_and_failures( void )
 	gate = 0;
 	frame();
 	assert( sees( host(), copy ) && !refused( bot(), copy ));
+	/* 1.3.5: Cry of Fear's own co-op runs them as the story does; switched off and on again there, the copy the
+	   ledger knows stays hidden from the host (it is not cleared at the find: its level changes clear it) */
+	official = 1;
+	frame();
+	assert( !sees( host(), copy ) && refused( host(), copy ));
+	cof_coop_pickups.value = 0.0f; frame();
+	cof_coop_pickups.value = 1.0f; frame();
+	assert( !sees( host(), copy ) && refused( host(), copy ));
+	official = 0;
 	gate = 1;
 	frame();
 

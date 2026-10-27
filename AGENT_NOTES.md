@@ -1350,3 +1350,43 @@ The owner: "would be cool if in the good ending both players would be on wheelch
   1.3.3 -> 1.3.4 update passed (a save kept); GitHub `v1.3.4`, publish exit 0 (the releases page served it at once).
   Zip `1C974377…`, 111,587,627 bytes. Engine `e39aa26e`, launcher `d63b2ff`. The ModDB upload is the owner's
   (`evidence/release-1.3.4/moddb-text.txt`).
+
+## 1.3.5: the game's own co-op keeps its guests, and shares its pickups (2026-10-27)
+
+A player's report: "In the original co-op mode, the player who joins gets disconnected during level transitions or when
+passing through doors, requiring them to rejoin. Additionally, collectible items—such as syringes or ammunition—are not
+shared." The owner chose a live test and "Share them".
+- **Live repro** (`evidence/release-1.3.4/official_test2.py`): two copies on one PC. The host was `official_launch`
+  `cof_campaign_01_p2`, port 27055, with rcon (`rcon.ps1`); the guest was `join_launch`. Both windows were minimized,
+  never activated, `-noenginemouse` and `m_ignore 1`. The owner: "Don't let my mouse inputs be red", so nothing may
+  click into the games or steal focus. The level was changed over rcon.
+  - At developer 0 the guest timed out 3 times in 3. Its `cl_trace_stufftext 1` showed no "reconnect" ever parsed.
+  - At developer 2 it went on 2 times in 2. The root cause of the lost unreliable "reconnect" is not explained.
+  - The doors' `inter_door_coop_changelevel` is a classic `CHANGE_LEVEL( map, NULL )`, so FWGS multiplayer sends
+    `SV_BuildReconnect` and the client drops and connects from scratch.
+- **Fix**:
+  - `SV_ChangeLevel` (not from a save, not the story) sets `sv_cof_keep_connections` around `SV_FinalMessage` when
+    `SV_CoF_StoryOfficialCoop()` and the map entered is one of its maps too. `SV_CoF_StoryOfficialCoop()` covers its
+    maps, `maxclients > 1`, not a background, cryoffear and the verified DLL. A manual change to another map keeps the
+    generic reconnect, because the notice is told again only while the story or the official game runs.
+  - `SV_FinalMessage` then sends the story's `cof_story_changelevel <epoch>`, and `SV_CoF_StoryNotices` tells it again
+    in that mode too.
+  - Each kept client gets its `cl->frames` back after `SV_DeactivateServer`, as in the story.
+  - Live with the fix: 3 times in 3 the guest stayed active on p2, p3 and p4 (`status`). Any 1.1+ guest handles the
+    notice (the story has used it since before 1.1).
+- **Pickups**:
+  - `SV_CoF_StoryFrame` runs `SV_CoF_PickupsFrame` alone when the story is off and the official game is on.
+  - `CoF_PickupsOn` accepts either.
+  - In the official mode every map starts with an empty ledger: its level changes (doors, a team wipe's restart) are not
+    the story's, so `SV_CoF_TransitionReset( true )` clears it, as a new `map` does. Its rules carry inventories over
+    by name and restart a map after a team wipe, and it has no checkpoints. It is deliberately NOT cleared at the
+    find: `cof_coop_pickups` 0 then 1 on a map would hand everyone the copies again (cof_pickups_harness covers it).
+  - Live: `phase=pickups` found 6/8/11 on p2/p3/p4. A copy on take is not live-tested: that needs someone to pick up.
+- Tests: `test_enhanced_official_coop` `OfficialPickupsTests` and `OfficialLevelChangeTests`; `cof_pickups_harness.c`
+  stubs `SV_CoF_StoryOfficialCoop` and runs the official mode, including switching it off and on.
+- Review (a separate agent): no hang, leak or crash. Fixed from it: the keep applies only to another official map, and
+  the redundant ledger clear at the find is gone (with it, pickups switched off and on there handed out copies again).
+  Not fixed, same as the story: a player who renames
+  mid-map can take another copy (takers are keyed by name). Monster drops and survival-wave items are not per-player
+  (they match no map block): first come, first served.
+- Version 1.3.5, build 31 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.5.md`.
