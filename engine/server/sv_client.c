@@ -1679,12 +1679,13 @@ had left until the connect timeout dropped it. Each client's sign-on is noted he
 change and silent on this map ("new" not sent) is told again, reliably, every two seconds.
 */
 int sv_cof_notice_epoch = -1;
+qboolean sv_cof_keep_connections; // 1.3.5: a level change of Cry of Fear's own co-op keeps the connections (sv_save.c)
 static struct { int userid; int spawncount; double told; } cof_signon[MAX_CLIENTS];
 
 void SV_CoF_StoryNotices( void )
 {
 	int i;
-	if( sv_cof_notice_epoch < 0 || sv.state != ss_active || !SV_CoF_StoryCoopEnabled() ) return;
+	if( sv_cof_notice_epoch < 0 || sv.state != ss_active || !( SV_CoF_StoryCoopEnabled() || SV_CoF_StoryOfficialCoop( ))) return;
 	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];

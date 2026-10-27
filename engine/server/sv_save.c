@@ -2562,6 +2562,13 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	char		*startspot = NULL;
 	SAVERESTOREDATA	*pSaveData = NULL;
 	qboolean story = loadfromsavedgame && SV_CoF_StoryCoopEnabled();
+	// 1.3.5: Cry of Fear's own co-op (a classic level change: its doors' CHANGE_LEVEL has no landmark) keeps each
+	// guest's connection as the story does and as GoldSrc did, with the story's notice told again until the guest's
+	// "new" comes (SV_CoF_StoryNotices). The generic "reconnect" (an unreliable stufftext, sent twice, for a client to
+	// drop the connection and connect again from scratch) was never acted on by the guest, who stayed on the old map
+	// until the server timed it out (live 2026-10-27, two copies on one PC: 3 times in 3; the guest's trace of every
+	// stufftext saw no "reconnect"). Only to another of its maps: the notice is told again only while one runs.
+	qboolean keep = !story && !loadfromsavedgame && SV_CoF_StoryOfficialCoop() && SV_CoF_StoryOfficialMap( mapname );
 	if( CoF_SessionRunLoad() ) return;
 
 	if( sv.state != ss_active )
@@ -2631,14 +2638,16 @@ void SV_ChangeLevel( qboolean loadfromsavedgame, const char *mapname, const char
 	}
 
 	SV_InactivateClients ();
+	sv_cof_keep_connections = keep;
 	SV_FinalMessage( "", true );
+	sv_cof_keep_connections = false;
 	SV_DeactivateServer ();
 
 	// Deactivation released every client's delta frames; normally the client's
 	// fresh connect reallocates them. cof_story_changelevel keeps the connection
 	// instead, and SV_ReadPackets ignores a client without frames: its "new"
 	// would be acknowledged but never run (black loading screen, no sign-on).
-	for( int i = 0; story && i < svs.maxclients; i++ )
+	for( int i = 0; ( story || keep ) && i < svs.maxclients; i++ )
 	{
 		sv_client_t *cl = &svs.clients[i];
 		if( cl->state >= cs_connected && !FBitSet( cl->flags, FCL_FAKECLIENT ) && !cl->frames )

@@ -1097,7 +1097,7 @@ void SV_FinalMessage( const char *message, qboolean reconnect )
 
 	if( reconnect )
 	{
-		if( SV_CoF_TransitionActive() )
+		if( SV_CoF_TransitionActive() || sv_cof_keep_connections )
 		{
 			// Keep each authenticated netchannel and userid. Generic reconnect
 			// creates a new connection and cannot safely identify saved players.

@@ -17,6 +17,11 @@ GPL-3.0-or-later.
   keys (SV_CoF_PickupsSpawnBonus, which also lays the kit out).
 - 1.3: the room's own night vision (c_start, c_bridge) gets the bonus mark at the map's first story frame, its line
   unlocked, and is then the kit's (CoF_PickupsRoomNightVision); the room's guns were per-player already.
+- 1.3.5: Cry of Fear's own co-op too (SV_CoF_StoryOfficialCoop: its campaign, manhunt and survival maps, the story layer
+  off), from its own frame (SV_CoF_StoryFrame); there every map is a fresh visit: its rules carry each player's
+  inventory over by name (txtfiles) and start a map again after a team wipe, so the ledger starts empty at each map:
+  its level changes are not the story's and clear it (SV_ChangeLevel: SV_CoF_TransitionReset( true )), as a new map does.
+  (Not here at the find: cof_coop_pickups 0 then 1 on a map finds it again, and its copies would go to everyone.)
 cof_coop_pickups 0: the retail multiplayer rules, the first player takes the only one.
 Logs: phase=pickups (once a map), phase=pickup-taken, phase=pickup-copy, phase=pickup-gone, phase=pickups-checkpoint.
 */
@@ -533,7 +538,8 @@ static void CoF_PickupsFind( void )
 
 static qboolean CoF_PickupsOn( void )
 {
-	return cof_coop_pickups.value != 0.0f && sv.state == ss_active && sv.worldmodel && sv.worldmodel->entities && SV_CoF_StoryCoopEnabled();
+	return cof_coop_pickups.value != 0.0f && sv.state == ss_active && sv.worldmodel && sv.worldmodel->entities &&
+		( SV_CoF_StoryCoopEnabled() || SV_CoF_StoryOfficialCoop( ));
 }
 
 void SV_CoF_PickupsFrame( void )

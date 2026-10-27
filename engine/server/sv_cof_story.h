@@ -5,6 +5,8 @@ qboolean SV_CoF_StoryCoopEnabled( void );
 // 1.3.3: Cry of Fear's own co-op campaign, manhunt and survival maps (cof_*, c_cof_*), where the story layer stays off;
 // and the multiplayer rules' allocation zeroed for every multiplayer game, before each map's entities spawn.
 qboolean SV_CoF_StoryOfficialMap( const char *map );
+// 1.3.5: a game of Cry of Fear's own co-op runs now (sv_cof_pickups.c gives each player their own pickups there too)
+qboolean SV_CoF_StoryOfficialCoop( void );
 void SV_CoF_StoryRulesGuard( void );
 // The donator level every command carries to the game (cof_donator; engine/common/cof_abi.h).
 int SV_CoF_DonatorLevel( void );
@@ -47,6 +49,9 @@ qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
 // party just arrived beside is not taken by standing in it (pfnChangeLevel: true, refused).
 // the level-change notice told again to a guest still signing on to the map left (sv_client.c)
 extern int sv_cof_notice_epoch;
+// 1.3.5: while SV_FinalMessage tells the clients of a level change of Cry of Fear's own co-op (sv_save.c): the story's
+// notice, so each keeps its connection, not the generic reconnect
+extern qboolean sv_cof_keep_connections;
 void SV_CoF_StoryNotices( void );
 void SV_CoF_ArrivalReset( void );
 void SV_CoF_ArrivalLanded( const sv_client_t *cl );

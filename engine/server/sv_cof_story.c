@@ -196,6 +196,14 @@ qboolean SV_CoF_StoryOfficialMap( const char *map )
 	return map && ( !Q_strnicmp( map, "cof_", 4 ) || !Q_strnicmp( map, "c_cof_", 6 ));
 }
 
+// 1.3.5: a game of Cry of Fear's own co-op runs now (its maps, more than one player, the verified DLL), whatever
+// cof_story_coop says: the story layer is off on its maps
+qboolean SV_CoF_StoryOfficialCoop( void )
+{
+	return sv.state == ss_active && !sv.background && svs.maxclients > 1 && GI && !Q_stricmp( GI->gamefolder, "cryoffear" ) &&
+		SV_CoF_StoryOfficialMap( sv.name ) && SV_CoF_RetailDLLVerified();
+}
+
 static void CoF_StoryCloseGate( void )
 {
 	SV_CoF_Inventory12Close();
@@ -594,7 +602,13 @@ void SV_CoF_StoryUserinfo( const sv_client_t *cl, char *info, size_t size )
 
 void SV_CoF_StoryFrame( void )
 {
-	if( !SV_CoF_StoryCoopEnabled() || sv.state != ss_active ) return;
+	if( sv.state != ss_active ) return;
+	if( !SV_CoF_StoryCoopEnabled( ))
+	{
+		// 1.3.5: Cry of Fear's own co-op: every player takes their own copy of the map's pickups, as in the story
+		if( SV_CoF_StoryOfficialCoop( )) SV_CoF_PickupsFrame();
+		return;
+	}
 	CoF_StoryChapterStart(); // before the party and state frames: they hand the kit out
 	SV_CoF_GatesFrame(); // first: the game's own rules as this frame wants them
 	SV_CoF_UseProbeFrame(); // a door just started: the player where the game's +use saw them
