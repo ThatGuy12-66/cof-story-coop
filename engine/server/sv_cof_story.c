@@ -99,11 +99,13 @@ static qboolean CoF_StoryWriteGate( byte *p, const byte *expect, const byte *val
 static const byte cof_rules_new_original[6] = { 0xe8, 0x46, 0xea, 0x08, 0x00, 0x83 };
 static byte cof_rules_new_zeroed[6];
 static byte *cof_rules_new;
+static void *cof_rules_instance; // 1.3.3: the DLL instance cof_rules_new is in
 
 static void CoF_StoryRestoreRules( void )
 {
 	if( cof_rules_new ) CoF_StoryWriteGate( cof_rules_new, cof_rules_new_zeroed, cof_rules_new_original );
 	cof_rules_new = NULL;
+	cof_rules_instance = NULL;
 }
 
 #if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
@@ -129,6 +131,70 @@ static qboolean CoF_StoryZeroRules( byte *base )
 }
 #endif
 
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+// The verified game DLL's image, checked enough to patch at our RVAs, or NULL.
+static byte *CoF_StoryImage( void )
+{
+	dll_user_t *lib = (dll_user_t *)svgame.hInstance;
+	byte *base;
+	IMAGE_DOS_HEADER *dos;
+	IMAGE_NT_HEADERS *nt;
+	if( !lib || !lib->hInstance || lib->custom_loader || lib->encrypted ) return NULL;
+	base = (byte *)lib->hInstance;
+	dos = (IMAGE_DOS_HEADER *)base;
+	if( dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 || dos->e_lfanew > 4096 ) return NULL;
+	nt = (IMAGE_NT_HEADERS *)( base + dos->e_lfanew );
+	if( nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_I386 || nt->OptionalHeader.SizeOfImage < COF_OPERATOR_NEW + 1 ) return NULL;
+	return base;
+}
+#endif
+
+// 1.3.3: the multiplayer rules' allocation is zeroed in every multiplayer game of the verified DLL, not only with the
+// story layer on: Cry of Fear's own co-op campaign (the story layer is off on its maps) installs the same rules on
+// every map and meets the same recycled vote-kick state. A single-player map spawned afterwards gets the call back
+// (a single-player save loaded afterwards keeps it, harmlessly: its rules come from another allocation). Before each
+// map's entities spawn (SV_SpawnEntities: InstallGameRules runs in the world's precache) and with the story gate;
+// loaded saves and changelevel2 revisits (LoadGameState) are reached only after a guarded map in the same process.
+static qboolean CoF_StoryRulesGuard( void )
+{
+	if( cof_rules_new && cof_rules_instance != svgame.hInstance )
+	{
+		cof_rules_new = NULL; // another instance of the DLL: the patched one is gone with the last
+		cof_rules_instance = NULL;
+	}
+	if( !GI || Q_stricmp( GI->gamefolder, "cryoffear" ) || svs.maxclients <= 1 || !SV_CoF_RetailDLLVerified() )
+	{
+		CoF_StoryRestoreRules();
+		return false;
+	}
+	if( cof_rules_new && !memcmp( cof_rules_new, cof_rules_new_zeroed, sizeof( cof_rules_new_zeroed ))) return true;
+	cof_rules_new = NULL; // not (any more) ours: the bytes are looked at again below
+	cof_rules_instance = NULL;
+#if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
+	{
+		byte *base = CoF_StoryImage();
+		if( !base || !CoF_StoryZeroRules( base )) return false;
+		cof_rules_instance = svgame.hInstance;
+		Con_Printf( "cofstory phase=rules-zeroed map=%s\n", sv.name );
+		return true;
+	}
+#else
+	return false;
+#endif
+}
+
+void SV_CoF_StoryRulesGuard( void )
+{
+	CoF_StoryRulesGuard();
+}
+
+// 1.3.3: Cry of Fear's own co-op campaign, manhunt and survival maps (cof_campaign_01, cof_manhunt_campaign,
+// cof_suicide1-4, c_cof_*): the game's multiplayer rules play them as they are, never the story layer
+qboolean SV_CoF_StoryOfficialMap( const char *map )
+{
+	return map && ( !Q_strnicmp( map, "cof_", 4 ) || !Q_strnicmp( map, "c_cof_", 6 ));
+}
+
 static void CoF_StoryCloseGate( void )
 {
 	SV_CoF_Inventory12Close();
@@ -139,9 +205,7 @@ static void CoF_StoryCloseGate( void )
 		if( cof_dual_gate ) CoF_StoryWriteGate( cof_dual_gate, cof_gate_open, cof_dual_gate_original );
 		if( cof_quick_dual_gate ) CoF_StoryWriteGate( cof_quick_dual_gate, cof_gate_open, cof_quick_dual_gate_original );
 		if( cof_quick_dual_check ) CoF_StoryWriteGate( cof_quick_dual_check, cof_gate_open, cof_quick_dual_check_original );
-		CoF_StoryRestoreRules();
 	}
-	cof_rules_new = NULL;
 	cof_dual_gate = NULL;
 	cof_quick_dual_gate = NULL;
 	cof_quick_dual_check = NULL;
@@ -151,32 +215,21 @@ static void CoF_StoryCloseGate( void )
 
 qboolean SV_CoF_StoryCoopEnabled( void )
 {
-	if( !Cvar_VariableInteger( "cof_story_coop" ) || !GI || Q_stricmp( GI->gamefolder, "cryoffear" ) || svs.maxclients <= 1 || sv.background )
+	// 1.3.3: never on Cry of Fear's own co-op maps (SV_CoF_StoryOfficialMap)
+	if( !Cvar_VariableInteger( "cof_story_coop" ) || !GI || Q_stricmp( GI->gamefolder, "cryoffear" ) || svs.maxclients <= 1 || sv.background ||
+		SV_CoF_StoryOfficialMap( sv.name ))
 	{
 		CoF_StoryCloseGate();
 		return false;
 	}
 	if( !SV_CoF_RetailDLLVerified() ) return false;
 	if( cof_gate && cof_gate_instance == svgame.hInstance )
-		return !memcmp( cof_gate, cof_gate_open, sizeof( cof_gate_open )) && cof_rules_new && !memcmp( cof_rules_new, cof_rules_new_zeroed, sizeof( cof_rules_new_zeroed ));
+		return !memcmp( cof_gate, cof_gate_open, sizeof( cof_gate_open )) && CoF_StoryRulesGuard();
 #if XASH_WIN32 && XASH_X86 && defined( XASH_COF_ENTVARS_LEGACY ) && XASH_COF_ENTVARS_LEGACY
 	{
-		dll_user_t *lib = (dll_user_t *)svgame.hInstance;
-		byte *base;
-		IMAGE_DOS_HEADER *dos;
-		IMAGE_NT_HEADERS *nt;
-		if( !lib || !lib->hInstance || lib->custom_loader || lib->encrypted ) return false;
-		base = (byte *)lib->hInstance;
-		dos = (IMAGE_DOS_HEADER *)base;
-		if( dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 || dos->e_lfanew > 4096 ) return false;
-		nt = (IMAGE_NT_HEADERS *)( base + dos->e_lfanew );
-		if( nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != IMAGE_FILE_MACHINE_I386 || nt->OptionalHeader.SizeOfImage < COF_OPERATOR_NEW + 1 ) return false;
+		byte *base = CoF_StoryImage();
+		if( !base || !CoF_StoryRulesGuard()) return false;
 		if( !CoF_StoryWriteGate( base + 0x109D60, cof_gate_original, cof_gate_open )) return false;
-		if( !CoF_StoryZeroRules( base ))
-		{
-			CoF_StoryWriteGate( base + 0x109D60, cof_gate_open, cof_gate_original );
-			return false;
-		}
 		cof_gate = base + 0x109D60;
 		cof_gate_instance = svgame.hInstance;
 		// dual wield is a nicety: story co-op runs without it if the bytes differ

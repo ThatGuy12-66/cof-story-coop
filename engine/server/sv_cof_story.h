@@ -2,6 +2,10 @@
 #ifndef SV_COF_STORY_H
 #define SV_COF_STORY_H
 qboolean SV_CoF_StoryCoopEnabled( void );
+// 1.3.3: Cry of Fear's own co-op campaign, manhunt and survival maps (cof_*, c_cof_*), where the story layer stays off;
+// and the multiplayer rules' allocation zeroed for every multiplayer game, before each map's entities spawn.
+qboolean SV_CoF_StoryOfficialMap( const char *map );
+void SV_CoF_StoryRulesGuard( void );
 // The donator level every command carries to the game (cof_donator; engine/common/cof_abi.h).
 int SV_CoF_DonatorLevel( void );
 // While on, the game DLL's own messages are not sent (an AI companion dropped for a level change: its "has left").

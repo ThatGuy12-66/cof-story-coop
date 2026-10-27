@@ -5708,6 +5708,9 @@ void SV_SpawnEntities( const char *mapname )
 	svgame.globals->startspot = SV_MakeString( sv.startspot );
 	svgame.globals->time = sv.time;
 
+	// Cry of Fear: the multiplayer rules the world's precache installs are zeroed in every multiplayer game (1.3.3)
+	SV_CoF_StoryRulesGuard();
+
 	// spawn the rest of the entities on the map
 	SV_LoadFromFile( mapname, sv.worldmodel->entities );
 }

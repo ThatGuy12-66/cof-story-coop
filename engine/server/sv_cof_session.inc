@@ -17,6 +17,9 @@ static char cof_session_pending_slot[25];
 static double cof_session_wipe_after;
 static int cof_session_deferred; // the reason last logged (CoF_SessionWait): once per deferral
 static convar_t *cof_continue; // the tester app's Continue: load the latest checkpoint once the host has joined
+// 1.3.3: the checkpoint the app's Continue picked (players asked for more than one save to go back to); "" the latest
+static convar_t *cof_continue_slot;
+static const char *CoF_SessionContinueSlot( void );
 static qboolean CoF_SessionCurrentNames( char names[32][32] );
 static qboolean CoF_SessionPreflight( const byte *archive, size_t size, cof_session_data_t *metadata );
 qboolean SV_CoF_StoryKitDue( void ); // sv_cof_story.c: a chapter start's kit not yet with every player (1.1.9, I7)
@@ -626,19 +629,22 @@ void SV_CoF_SessionFrame( void )
 		cof_session_wipe_after = sv.time + 2;
 		if( first )
 		{
+			const char *chosen;
 			CoF_SessionLatest();
 			// Keep the last checkpoint for Continue to load, but only one that
 			// can be loaded: otherwise a team wipe here would find nothing.
 			// 1.1.8: only for Continue. A new game or a chapter start that kept
 			// it loaded another session's checkpoint at its first team wipe.
-			if( cof_continue && cof_continue->value && cof_session_latest[0] && CoF_SessionUsable( cof_session_latest ))
+			// 1.3.3: the one the app's Continue picked (cof_continue_slot).
+			chosen = cof_continue && cof_continue->value ? CoF_SessionContinueSlot() : cof_session_latest;
+			if( cof_continue && cof_continue->value && chosen[0] && CoF_SessionUsable( chosen ))
 			{
 				cof_session_auto_needed = false;
-				Con_Printf( "cofstory phase=session-checkpoint-preserved slot=%s\n", cof_session_latest );
+				Con_Printf( "cofstory phase=session-checkpoint-preserved slot=%s\n", chosen );
 			}
-			else if( cof_session_latest[0] )
+			else if( chosen[0] )
 				Con_Printf( "cofstory phase=session-checkpoint-%s slot=%s\n",
-					cof_continue && cof_continue->value ? "unusable" : "not-ours", cof_session_latest );
+					cof_continue && cof_continue->value ? "unusable" : "not-ours", chosen );
 		}
 	}
 	// Continue (the tester app's start option): the latest checkpoint, once,
@@ -647,9 +653,12 @@ void SV_CoF_SessionFrame( void )
 		!SV_CoF_TransitionActive() && svs.clients[0].state == cs_spawned )
 	{
 		qboolean queued;
+		char slot[25];
+		Q_strncpy( slot, CoF_SessionContinueSlot(), sizeof( slot ));
 		Cvar_DirectSet( cof_continue, "0" );
-		queued = SV_CoF_SessionLoad( NULL );
-		Con_Printf( "cofstory phase=session-continue result=%s\n", queued ? "queued" : "refused" );
+		if( cof_continue_slot ) Cvar_DirectSet( cof_continue_slot, "" );
+		queued = SV_CoF_SessionLoad( slot );
+		Con_Printf( "cofstory phase=session-continue slot=%s result=%s\n", slot[0] ? slot : "none", queued ? "queued" : "refused" );
 		if( !queued )
 		{
 			SV_CoF_RetailProFont( &svs.clients[0], 5, "The checkpoint could not be loaded: this map starts from its beginning.", true );
@@ -669,6 +678,14 @@ void SV_CoF_SessionFrame( void )
 		cof_session_save_after = sv.time + 5;
 		if( SV_CoF_SessionSave( "autosave" )) cof_session_auto_needed = false;
 	}
+}
+
+// 1.3.3: the slot Continue loads: the one the app picked, when it names a slot, else the latest
+static const char *CoF_SessionContinueSlot( void )
+{
+	if( cof_continue_slot && cof_continue_slot->string[0] && CoF_SessionSlotValid( cof_continue_slot->string ))
+		return cof_continue_slot->string;
+	return cof_session_latest;
 }
 
 void SV_CoF_SessionAutosaveSoon( void )
@@ -830,4 +847,5 @@ void SV_CoF_SessionInit( void )
 	Cmd_AddCommand( "cof_save", CoF_SessionSave_f, "story co-op: save the living party to a separate checkpoint slot" );
 	Cmd_AddCommand( "cof_load", CoF_SessionLoad_f, "story co-op: restore a checkpoint without disconnecting the party" );
 	cof_continue = Cvar_Get( "cof_continue", "0", 0, "story co-op: load the latest checkpoint once the host has joined (the tester app's Continue)" );
+	cof_continue_slot = Cvar_Get( "cof_continue_slot", "", 0, "story co-op: the checkpoint slot Continue loads (the app's pick; empty: the latest)" );
 }
