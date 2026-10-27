@@ -1346,3 +1346,7 @@ The owner: "would be cool if in the good ending both players would be on wheelch
 - **Not played**: needs two people in Ending 4's last fight. Live check: both seated (`wheelchair-seated`), both
   chairs drive and shoot, Simons shoot at both, `wheelchair-ride-over` at the boss's death, both reach the ending.
 - Version 1.3.4, build 30 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.4.md`.
+- **Published 1.3.4 2026-10-27 ~14:24 PT** (standing approval): full suite 771 OK (3 skipped), fresh install and the
+  1.3.3 -> 1.3.4 update passed (a save kept); GitHub `v1.3.4`, publish exit 0 (the releases page served it at once).
+  Zip `1C974377…`, 111,587,627 bytes. Engine `e39aa26e`, launcher `d63b2ff`. The ModDB upload is the owner's
+  (`evidence/release-1.3.4/moddb-text.txt`).
