@@ -116,6 +116,12 @@ static int logged( const char *needle )
 	return n;
 }
 
+/* 1.3.4 (sv_cof_chairs.c): the rider a book Simon should fight; every partner's chair let go before the team wipe */
+static edict_t *simon_target;
+static int releases, kills_at_release = -1;
+static edict_t *SV_CoF_ChairsSimonTarget( edict_t *simon ) { return simon == &entities[12] ? simon_target : NULL; }
+static void SV_CoF_ChairsReleaseAll( void ) { int i, n = 0; for( i = 0; i < ENTITIES; i++ ) n += kills[i]; releases++; kills_at_release = n; }
+
 #include "rescue_under_test.c"
 
 static void setup( void )
@@ -129,6 +135,7 @@ static void setup( void )
 	svgame.globals = &globals; globals.time = 100.0f;
 	memset( kills, 0, sizeof( kills )); memset( controls_given, 0, sizeof( controls_given )); memset( messages_to, 0, sizeof( messages_to ));
 	memset( hidden, 0, sizeof( hidden ));
+	simon_target = NULL; releases = 0; kills_at_release = -1;
 	message_name[0] = physics_key[0] = physics_value[0] = 0; message_size = 0;
 	for( i = 0; i < ENTITIES; i++ ) { entities[i].pvPrivateData = private_data[i]; entities[i].serialnumber = 1; }
 	for( i = 0; i < 2; i++ )
@@ -300,10 +307,15 @@ int main( void )
 		memcpy( &value, private_data[2] + 0x390, 4 ); assert( !value );                  /* the rider too */
 		assert( !strcmp( physics_key, "chr" ) && !strcmp( physics_value, "1" ));          /* walking again */
 		assert( kills[1] == 1 && kills[2] == 1 && logged( "phase=wheelchair-death-restart userid=101" ) == 1 );
-		frame( 0.1 ); assert( kills[1] == 1 && kills[2] == 1 && messages_to[2] == 1 );    /* once */
+		assert( releases == 1 && kills_at_release == 0 );       /* 1.3.4: the partners' chairs let go before anyone dies */
+		frame( 0.1 ); assert( kills[1] == 1 && kills[2] == 1 && messages_to[2] == 1 && releases == 1 ); /* once */
 		/* a living chair, or a dead one nobody rides, is left alone */
 		setup(); spawn( 8, 7, 0 ); memcpy( private_data[8] + 0x384, &rider, 4 ); frame( 0.1 ); assert( !kills[1] && !kills[2] );
-		setup(); spawn( 8, 7, 0 ); private_data[8][0x368] = 1; frame( 0.1 ); assert( !kills[1] && !kills[2] );
+		setup(); spawn( 8, 7, 0 ); private_data[8][0x368] = 1; frame( 0.1 ); assert( !kills[1] && !kills[2] && !releases );
+		/* 1.3.4: a book Simon's think: its first player is the rider sv_cof_chairs.c names (nearest chair) */
+		setup(); spawn( 12, 11, 0 ); simon_target = &entities[2];
+		assert( SV_CoF_RescueThinkFirst( &entities[12] ) == &entities[2] );
+		simon_target = NULL; assert( SV_CoF_RescueThinkFirst( &entities[12] ) == NULL );
 	}
 
 	/* The crazybitch picks her moment from her enemy (m_hEnemy +0x184) but makes INDEXENT( 1 ), the host, turn his gun

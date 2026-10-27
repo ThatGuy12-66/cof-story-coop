@@ -1305,3 +1305,44 @@ Two requests from the Discord #feedback channel; the owner: "You both."
   failed on GitHub's cache again (exit 1), `latest/download/release.json` served build 29 two minutes later. Zip
   `ACAB312E…`, 111,579,273 bytes. Engine `1dfd8f00`, launcher `d9231eb`. The ModDB upload is the owner's
   (`evidence/release-1.3.3/moddb-text.txt`).
+
+## 1.3.4: everyone in a wheelchair at the end of Ending 4 (2026-10-27)
+
+The owner: "would be cool if in the good ending both players would be on wheelchairs How hard would this be?", then
+"do it." (c_ending4b, the Ending 4 boss fight; the readme already calls it Ending 4.)
+- **The game's chair is per player** (decompilation: CoF_WheelchairPlayer.cpp, player.cpp, client.cpp): each player's
+  `m_pWheelchair` (P+0x390), each chair's raw rider (+0x384), steered by its rider's own client commands, the Browning's
+  aim from whoever sends it. The map seats only the first toucher of its spawn brush (`trigger_once` -> `multistart` ->
+  `cof_wheelchairmode 'wmode'`); `cof_stopwheelchair 'stoooop'` at the boss's death frees "the first player" only. The
+  gun book Simons (`monster_booksimon`, frags != 0) cache "the first player" (+0x38C) and fight only that one's chair.
+- **sv_cof_chairs.c** (new; decisions in `sv_cof_chairs_state.h`, harness `tests/engine/cof_chairs_harness.c`):
+  while a person rides a living chair and the map has not ended the ride, every other person (never an AI companion),
+  alive, on foot, not frozen, in no camera, boat, call or door, no scene or level change, free for 0.5 s, is moved
+  beside that chair (`SV_CoF_PartyMoveBeside`, the J landing), faced its way, and seated through the game's own
+  `StartWheelchairMode` (RVA 0xF5B30, thiscall, no arguments; `SV_CoF_StoryCallMember0`); their body is then set down
+  on the first rider's (`SV_CoF_PartyPlace`): the game leaves a rider's body where they sat down (no
+  `wheelchair_hide_spot` in the story) and PreThink makes overlapping players non-solid, so no parked body blocks a
+  chair. A failed seat retries every 2 s (`wheelchair-seat-failed reason=no-room|start`, once). An AI companion the map
+  seated is let out once a person rides. A chair that carried someone last frame, same serial, standing, alive and empty
+  now ends the ride (`wheelchair-ride-over`): every rider gets `StopWheelchairMode` (0xF5D50), nobody is seated again
+  this map (reset per `svs.spawncount`). Removed chairs (a leaver's) and dead ones (the rescue's) do not count.
+  `cof_coop_wheelchairs` 1 (0: only the first, as the game). Logs `wheelchair-seated userid chair beside`,
+  `wheelchair-out reason=ride-over|companion|restart`, `boss-target class=monster_booksimon reason=nearest-chair`.
+- **Book Simons**: `SV_CoF_RescueThinkFirst` asks `SV_CoF_ChairsSimonTarget`: while a gun Simon has nobody cached, its
+  think's first player is the living rider whose chair is nearest.
+- **Checkpoints wait during the ride** (`CoF_SessionWait` 5, "wheelchair"): `CWheelchair`'s save fields end at
+  `m_bDead`, so a checkpoint taken during the ride (the c_ending4b section's autosave came 2 s after the chair) restored
+  frozen players with no chair to drive (also with one rider, before 1.3.4; not seen live). The first rider is seated
+  at spawn (the trigger covers info_player_start), so c_ending4b itself gets no checkpoint before the ride: a team wipe
+  there loads the one before (c_ending4's, merged or not). `cof_save` says so (wait 5). Before the rescue's wipe kills everyone, `SV_CoF_ChairsReleaseAll` lets the
+  living chairs' riders out.
+- Riders' bodies are not sent to the others (`SV_CoF_WeaponModelHidden`, as the P5 rower): the chair's model
+  (`player_sick.mdl`) shows Simon in it.
+- Retail checks: `test_enhanced_chairs` reads both members' prologue and plain `ret` in the installed hl.dll.
+- Review (a separate agent): no bugs. Fixed from it: `CWheelchair::Spawn` finds the floor along `-gpGlobals->v_up`
+  (whatever the game last made vectors from; the map's own chair is moved to `wheelchstart` after), so the globals'
+  vectors are set from the seat's level facing just before the call; a seat the game refuses is not tried again this map
+  (each try moves the player); the frame does nothing on a map with no `wheelchair` entity.
+- **Not played**: needs two people in Ending 4's last fight. Live check: both seated (`wheelchair-seated`), both
+  chairs drive and shoot, Simons shoot at both, `wheelchair-ride-over` at the boss's death, both reach the ending.
+- Version 1.3.4, build 30 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.4.md`.

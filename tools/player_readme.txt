@@ -1,6 +1,16 @@
-Cry of Fear Co-op 1.3.3
+Cry of Fear Co-op 1.3.4
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.4
+- Everyone rides a wheelchair in the fight at the end of Ending 4. The game put only the
+  first player in one, and the others fought on foot. Now every player gets a chair of
+  their own and its gun, the book Simons go for whoever is nearest, and the ride ends for
+  everyone when the boss dies. The host needs 1.3.4 for this.
+- No co-op checkpoint is made during that ride any more: the chair doesn't keep who sits in
+  it, so a restart from one could leave the riders stuck. If everyone dies there, the game
+  goes back to the checkpoint before that level.
+- 1.1 to 1.3.4 can play together.
 
 WHAT'S NEW IN 1.3.3
 - Pick the save to continue from. Play solo and Host a game list every co-op checkpoint in
