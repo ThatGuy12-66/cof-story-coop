@@ -1393,3 +1393,8 @@ shared." The owner chose a live test and "Share them".
   mid-map can take another copy (takers are keyed by name). Monster drops and survival-wave items are not per-player
   (they match no map block): first come, first served.
 - Version 1.3.5, build 31 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.5.md`.
+- **Published 1.3.5 2026-10-27 ~17:20 PT** (the owner: "Do it."): the first chain failed its full suite at 16:48
+  (the two harnesses above); second run: full suite 774 OK (3 skipped), fresh install and the 1.3.4 -> 1.3.5 update
+  passed; GitHub `v1.3.5`, publish exit 0, `latest/download/release.json` build 31. Zip `DDB47FB8…`, 111,591,363
+  bytes. Engine `95af302a`, launcher `9aa3b3c` + `fcb13ce`. The ModDB upload is the owner's
+  (`evidence/release-1.3.5/moddb-text.txt`).
