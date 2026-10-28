@@ -57,6 +57,13 @@ it), which is what the co-op lobby and the HUD player list showed, so a name of
 "Unknown" is offered as the OS user name instead.
 
 Nothing here is reachable unless the running game directory is "cryoffear".
+
+Cry of Fear Co-op 1.3.6: both pages are tabs of the main menu's CO-OP window now (menus/CoFStoryCoop.cpp), out of
+Extras. Host co-op is that window's "Original co-op" (the story is hosted from its own Host co-op), and it sends
+what the Cry of Fear Co-op app sends for the game's own co-op (coop_play.official_launch: the story layer, the AI
+companions, merged maps and Continue off) before the lobby options above. Join co-op takes the app's join codes as
+well as addresses, and a password, and joins with the story settings the app joins with
+(menus/CoFStoryCoopLogic.h; tests/test_menu_coop.py).
 */
 
 #include "Framework.h"
@@ -70,6 +77,7 @@ Nothing here is reachable unless the running game directory is "cryoffear".
 #include "MenuStrings.h"
 #include "Utils.h"
 #include "CryOfFear.h"
+#include "CoFStoryCoopLogic.h"
 
 // the page settings, archived so a host does not type them twice
 #define COF_COOP_CVAR_CAMPAIGN   "cof_coop_campaign"
@@ -204,7 +212,7 @@ struct cofCoopCampaign_t
 
 static const cofCoopCampaign_t s_cofCoopCampaigns[] =
 {
-	{ "cof_campaign_01",      "Story co-op",
+	{ "cof_campaign_01",      "Co-op campaign",
 		"Chapters 9 to 12, starting with \"Where is Simon?\".\nLobby: everyone gets ready, or the autostart time runs out." },
 	{ "cof_manhunt_campaign", "Manhunt",
 		"The Manhunt campaign, from \"A new beginning\" to the cabin.\nLobby: everyone gets ready, or the autostart time runs out." },
@@ -343,10 +351,10 @@ void CMenuCoFHost::_Init( void )
 {
 	const bool theme = UI_ThemeActive();
 
-	banner.szName = L( "Host co-op" );
+	banner.szName = L( "Cry of Fear's own co-op" );
 
 	if( theme )
-		SetPanel( "HOST CO-OP", 900, 560 );
+		SetPanel( "ORIGINAL CO-OP", 900, 560 );
 
 	campaigns.SetCharSize( QM_SMALLFONT );
 	campaigns.SetupColumn( 0, L( "Campaign" ), 0.46f );
@@ -360,7 +368,7 @@ void CMenuCoFHost::_Init( void )
 	detail.szName = m_szDetail;
 
 	playerName.szName = L( "Your name" );
-	playerName.iMaxLength = 31;
+	playerName.iMaxLength = COF_STORY_NAME_MAX;
 	playerName.szStatusText = L( "Shown in the lobby and on the co-op player list" );
 
 	hostName.szName = L( "Server name" );
@@ -368,7 +376,7 @@ void CMenuCoFHost::_Init( void )
 	hostName.szStatusText = L( "The name of this game in server lists" );
 
 	password.szName = L( "Password" );
-	password.iMaxLength = 16;
+	password.iMaxLength = COF_STORY_PASSWORD_MAX;
 	password.bHideInput = true;
 	password.szStatusText = L( "Empty for an open game; never saved" );
 
@@ -541,6 +549,17 @@ bool CMenuCoFHost::Start( void )
 
 	char name[64], host[64], pass[64];
 
+	// 1.3.6: what the app refuses is refused, not changed (a password changed here would not be the one friends type)
+	if( !CoFStory_FieldValid( playerName.GetBuffer(), COF_STORY_NAME_MAX, true, true ) ||
+		!CoFStory_FieldValid( password.GetBuffer(), COF_STORY_PASSWORD_MAX, false, true ))
+	{
+		const bool badName = !CoFStory_FieldValid( playerName.GetBuffer(), COF_STORY_NAME_MAX, true, true );
+		CoFStory_FieldMessage( m_szDetail, sizeof( m_szDetail ), badName ? "Your name" : "The password",
+			badName ? COF_STORY_NAME_MAX : COF_STORY_PASSWORD_MAX, false );
+		Con_Printf( "Cry of Fear co-op: %s\n", m_szDetail );
+		return false;
+	}
+
 	UI_CoFCoopQuoteSafe( name, sizeof( name ), playerName.GetBuffer( ));
 	if( !name[0] )
 		Q_strncpy( name, UI_CoFCoopDefaultName( ), sizeof( name ));
@@ -564,26 +583,36 @@ bool CMenuCoFHost::Start( void )
 	EngFuncs::CvarSetString( COF_COOP_CVAR_HOSTNAME, host );
 	EngFuncs::CvarSetValue( COF_COOP_CVAR_LAN, (float)lan );
 
-	char cmd[1024];
+	// 1.3.6: the app's own co-op start (coop_play.official_launch), then the lobby options
+	static char cmd[COF_STORY_TEXT_MAX];
+	cofStoryOfficial_t o;
+	char storyName[64], storyPass[80];
 
-	snprintf( cmd, sizeof( cmd ),
-		"name \"%s\"\n"
-		"hostname \"%s\"\n"
-		"sv_password \"%s\"\n"
-		"sv_lan %d\n"
-		"mp_footsteps %d\n"
-		"sv_auto_respawn_time %d\n"
-		"pausable 0\n"
-		"difficulty %d\n"
-		"coop 0\n"
-		"deathmatch 1\n"
-		"maxplayers %d\n"
-		"map %s\n",
-		name, host, pass, lan, lobby, resp, skill, maxpl, c->map );
+	CoFStory_Clean( storyName, sizeof( storyName ), name, COF_STORY_NAME_MAX, true );
+	if( !storyName[0] )
+		CoFStory_Copy( storyName, sizeof( storyName ), "Player" );
+	CoFStory_Clean( storyPass, sizeof( storyPass ), pass, COF_STORY_PASSWORD_MAX, false );
+	o.name = storyName;
+	o.hostname = host;
+	o.password = storyPass;
+	o.map = c->map;
+	o.players = maxpl;
+	o.lan = lan;
+	o.autostart = lobby;
+	o.respawn = resp;
+	o.difficulty = skill;
+	if( !CoFStory_OfficialCommands( cmd, sizeof( cmd ), &o ))
+	{
+		Con_Printf( "Cry of Fear co-op: this co-op start was refused\n" );
+		return false;
+	}
 
 	Con_Printf( "Cry of Fear co-op: hosting %s (%s), difficulty %d, %d players, lobby autostart %d s, respawn %d s, %s\n",
 		c->map, c->name, skill, maxpl, lobby, resp, lan ? "LAN only" : "Internet" );
 
+	// a game opened without the app: the join check's version, so the app's Join takes this game
+	if( !EngFuncs::GetCvarString( "cof_build" )[0] )
+		EngFuncs::ClientCmd( false, "cof_build " COF_STORY_BUILD "\n" );
 	EngFuncs::ClientCmd( false, cmd );
 	UI_CloseMenu();
 	return true;
@@ -623,16 +652,30 @@ void CMenuCoFHost::SetForTest( const char *map, int skill, int maxpl, int lobby,
 // Join co-op
 // ---------------------------------------------------------------------------
 
+// the name field as the app's clean_name takes it
+static void UI_CoFStoryCleanName( char *out, size_t size, const char *in )
+{
+	CoFStory_Clean( out, size, in, COF_STORY_NAME_MAX, true );
+	if( !out[0] )
+		CoFStory_Clean( out, size, UI_CoFCoopDefaultName( ), COF_STORY_NAME_MAX, true );
+	if( !out[0] )
+		CoFStory_Copy( out, size, "Player" );
+}
+
 class CMenuCoFJoin : public CMenuFramework
 {
 public:
-	CMenuCoFJoin() : CMenuFramework( "CMenuCoFJoin" ) { }
+	CMenuCoFJoin() : CMenuFramework( "CMenuCoFJoin" ) { m_szHint[0] = 0; }
 
 	void Show() override
 	{
 		CMenuFramework::Show();
-		playerName.SetBuffer( UI_CoFCoopDefaultName( ));
+		char name[64];
+		UI_CoFStoryCleanName( name, sizeof( name ), UI_CoFCoopDefaultName( ));
+		playerName.SetBuffer( name );
 		address.SetBuffer( EngFuncs::GetCvarString( COF_COOP_CVAR_ADDRESS ));
+		password.SetBuffer( "" );
+		SetHint( NULL );
 	}
 
 	// the Connect button; also the cfg-only test hook menu_cof_join_connect
@@ -645,11 +688,15 @@ private:
 
 	void ConnectCb( void ) { Connect(); }
 	void LanCb( void );
-	void WriteName( void );
+	void WriteSettings( void );
+	void SetHint( const char *error );
 
 	CMenuField  address;
+	CMenuField  password;
 	CMenuField  playerName;
 	CMenuAction hint;
+
+	char m_szHint[400];
 };
 
 void CMenuCoFJoin::_Init( void )
@@ -661,23 +708,29 @@ void CMenuCoFJoin::_Init( void )
 	if( theme )
 		SetPanel( "JOIN CO-OP", 760, 400 );
 
-	address.szName = L( "Server address" );
-	address.iMaxLength = 63;
-	address.szStatusText = L( "IP or host name, optionally :port" );
+	address.szName = L( "Join code or address" );
+	address.iMaxLength = 127;
+	address.szStatusText = L( "The join code your host sent you (COF1-...), or an address with an optional :port" );
+
+	password.szName = L( "Password" );
+	password.iMaxLength = COF_STORY_PASSWORD_MAX;
+	password.bHideInput = true;
+	password.szStatusText = L( "Only if the host set one" );
 
 	playerName.szName = L( "Your name" );
-	playerName.iMaxLength = 31;
-	playerName.szStatusText = L( "Shown in the lobby and on the co-op player list" );
+	playerName.iMaxLength = COF_STORY_NAME_MAX;
+	playerName.szStatusText = L( "Your items come back from a checkpoint only under the same name" );
 
 	hint.iFlags = QMF_INACTIVE;
 	hint.colorBase = uiColorHelp;
 	hint.SetCharSize( QM_SMALLFONT );
-	hint.szName = L( "Ask the host for their address. The default port is 27015; over the Internet the host has to forward UDP 27015 to their computer." );
+	hint.szName = m_szHint;
 
 	if( !theme )
 		AddItem( banner );
 
 	AddItem( address );
+	AddItem( password );
 	AddItem( playerName );
 	AddItem( hint );
 
@@ -686,7 +739,7 @@ void CMenuCoFJoin::_Init( void )
 		VoidCb( &CMenuCoFJoin::LanCb ), QMF_NOTIFY );
 	AddButton( L( "GameUI_Cancel" ), L( "Go back to the Main menu" ), PC_CANCEL,
 		VoidCb( &CMenuCoFJoin::Hide ), QMF_NOTIFY );
-	AddButton( L( "Connect" ), L( "Connect to this address" ), PC_JOIN_GAME,
+	AddButton( L( "Connect" ), L( "Join this game" ), PC_JOIN_GAME,
 		VoidCb( &CMenuCoFJoin::ConnectCb ), QMF_NOTIFY );
 }
 
@@ -695,61 +748,100 @@ void CMenuCoFJoin::_VidInit( void )
 	if( IsPanel( ))
 	{
 		Rect c = ContentRect();
+		const int colW = ( c.sz.w - THEME_GUTTER2 ) / 2;
 		int y = c.pt.y + THEME_LABEL_TALL + 8;
 
 		address.SetRect( c.pt.x, y, c.sz.w, THEME_CTRL_H );
 		y += THEME_CTRL_PITCH;
-		playerName.SetRect( c.pt.x, y, c.sz.w / 2, THEME_CTRL_H );
-		y += THEME_CTRL_H + 18;
-		hint.SetRect( c.pt.x, y, c.sz.w, THEME_LABEL_TALL * 3 + 4 );
+		password.SetRect( c.pt.x, y, colW, THEME_CTRL_H );
+		playerName.SetRect( c.pt.x + colW + THEME_GUTTER2, y, colW, THEME_CTRL_H );
+		y += THEME_CTRL_H + 22;
+		hint.SetRect( c.pt.x, y, c.sz.w, THEME_LABEL_TALL * 5 + 8 );
 		return;
 	}
 
 	address.SetRect( 360, 280, 400, 32 );
-	playerName.SetRect( 360, 360, 250, 32 );
-	hint.SetRect( 360, 420, 400, 80 );
+	password.SetRect( 360, 350, 190, 32 );
+	playerName.SetRect( 570, 350, 190, 32 );
+	hint.SetRect( 360, 410, 400, 100 );
 }
 
-void CMenuCoFJoin::WriteName( void )
+void CMenuCoFJoin::SetHint( const char *error )
 {
-	char name[64];
+	if( error && error[0] )
+		snprintf( m_szHint, sizeof( m_szHint ), "%s", error );
+	else
+		Q_strncpy( m_szHint, L( "Paste the join code your host sent you (Ctrl+V), or their address. The host's "
+			"Cry of Fear Co-op app shows the code; the default port is 27015." ), sizeof( m_szHint ));
+}
 
-	UI_CoFCoopQuoteSafe( name, sizeof( name ), playerName.GetBuffer( ));
-	if( !name[0] )
-		Q_strncpy( name, UI_CoFCoopDefaultName( ), sizeof( name ));
+// the story settings, the name and the password, as the app joins (coop_play.join_launch)
+void CMenuCoFJoin::WriteSettings( void )
+{
+	char name[64], pass[80];
+	cofStoryText_t t;
+	static char text[COF_STORY_TEXT_MAX];
 
-	EngFuncs::ClientCmdF( false, "name \"%s\"\n", name );
+	UI_CoFStoryCleanName( name, sizeof( name ), playerName.GetBuffer( ));
+	CoFStory_Clean( pass, sizeof( pass ), password.GetBuffer(), COF_STORY_PASSWORD_MAX, false );
+
+	CoFStory_TextInit( &t, text, sizeof( text ));
+	CoFStory_AddSettings( &t );
+	CoFStory_TextAdd( &t, "name \"%s\"\npassword \"%s\"\n", name, pass );
+	if( !t.overflow )
+		EngFuncs::ClientCmd( false, text );
 }
 
 bool CMenuCoFJoin::Connect( void )
 {
-	const char *addr = address.GetBuffer();
+	char host[256], name[64], pass[80], refused[160];
+	int port = 0;
+	const char *error = "";
+	static char text[COF_STORY_TEXT_MAX];
 
-	if( !UI_CoFCoopAddressSafe( addr ))
+	if( !CoFStory_ParseEndpoint( address.GetBuffer(), host, sizeof( host ), &port, &error ))
 	{
-		Con_Printf( "Cry of Fear co-op: \"%s\" is not a server address\n", addr ? addr : "" );
+		Con_Printf( "Cry of Fear co-op: %s\n", error );
+		SetHint( error );
+		return false;
+	}
+	// what the app refuses is refused, not changed: a password changed here would not be the host's
+	if( !CoFStory_FieldValid( playerName.GetBuffer(), COF_STORY_NAME_MAX, true, true ) ||
+		!CoFStory_FieldValid( password.GetBuffer(), COF_STORY_PASSWORD_MAX, false, true ))
+	{
+		const bool badName = !CoFStory_FieldValid( playerName.GetBuffer(), COF_STORY_NAME_MAX, true, true );
+		CoFStory_FieldMessage( refused, sizeof( refused ), badName ? "Your name" : "The password",
+			badName ? COF_STORY_NAME_MAX : COF_STORY_PASSWORD_MAX, false );
+		Con_Printf( "Cry of Fear co-op: %s\n", refused );
+		SetHint( refused );
 		return false;
 	}
 
-	EngFuncs::CvarSetString( COF_COOP_CVAR_ADDRESS, addr );
+	UI_CoFStoryCleanName( name, sizeof( name ), playerName.GetBuffer( ));
+	CoFStory_Clean( pass, sizeof( pass ), password.GetBuffer(), COF_STORY_PASSWORD_MAX, false );
+	if( !CoFStory_JoinCommands( text, sizeof( text ), name, pass, host, port ))
+	{
+		SetHint( "This join was refused." );
+		return false;
+	}
 
-	char name[64];
-	UI_CoFCoopQuoteSafe( name, sizeof( name ), playerName.GetBuffer( ));
-	if( !name[0] )
-		Q_strncpy( name, UI_CoFCoopDefaultName( ), sizeof( name ));
+	// remember what was typed (a join code stays a join code), never the password
+	char typed[128];
+	UI_CoFCoopQuoteSafe( typed, sizeof( typed ), address.GetBuffer( ));
+	EngFuncs::CvarSetString( COF_COOP_CVAR_ADDRESS, typed );
 
-	Con_Printf( "Cry of Fear co-op: joining %s as \"%s\"\n", addr, name );
+	Con_Printf( "Cry of Fear co-op: joining %s:%d as \"%s\"\n", host, port, name );
 
 	// one write, name first so the server sees it in the connect's userinfo
-	EngFuncs::ClientCmdF( false, "name \"%s\"\nconnect %s\n", name, addr );
+	EngFuncs::ClientCmd( false, text );
 	UI_CloseMenu();
 	return true;
 }
 
 void CMenuCoFJoin::LanCb( void )
 {
-	// the stock server browser, LAN tab only; it connects on its own
-	WriteName();
+	// the stock server browser, LAN tab only; it connects on its own, with the story settings, name and password
+	WriteSettings();
 	UI_LanGame_Menu();
 }
 

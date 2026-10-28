@@ -1907,10 +1907,9 @@ static const cofTab_t g_cofOptionsTabs[] =
 	{ "GameUI_Video", "VIDEO",            UI_Video_Menu,       NULL },
 };
 
+// 1.3.6: Host co-op and Join co-op moved to the CO-OP window below
 static const cofTab_t g_cofExtrasTabs[] =
 {
-	{ "Host co-op",   "HOST CO-OP",   UI_CoFHost_Menu,        NULL },
-	{ "Join co-op",   "JOIN CO-OP",   UI_CoFJoin_Menu,        NULL },
 	{ "Unlockables",  "UNLOCKABLES",  UI_CoFUnlockables_Menu, NULL },
 	{ "Links",        "EXTRAS",       UI_CoFExtras_Menu,      NULL },
 	{ "Credits",      "CREDITS",      UI_CoFCredits_Menu,     NULL },
@@ -1922,10 +1921,21 @@ static const cofTab_t g_cofSaveLoadTabs[] =
 	{ "Save Game", "SAVE GAME", UI_SaveGame_Menu, UI_CoFSaveTabAvailable },
 };
 
+// 1.3.6: the main list's Co-op (menus/CoFStoryCoop.cpp, menus/CoFCoop.cpp), in the order of its own list
+static const cofTab_t g_cofCoopTabs[] =
+{
+	{ "Host co-op",     "HOST CO-OP",     UI_CoFStoryHost_Menu,     NULL },
+	{ "Join co-op",     "JOIN CO-OP",     UI_CoFJoin_Menu,          NULL },
+	{ "Continue",       "CONTINUE CO-OP", UI_CoFStoryContinue_Menu, NULL },
+	{ "Play with AI",   "PLAY WITH AI",   UI_CoFStorySolo_Menu,     NULL },
+	{ "Original co-op", "ORIGINAL CO-OP", UI_CoFHost_Menu,          NULL },
+};
+
 static const cofTabGroup_t g_cofTabGroups[] =
 {
 	{ "OPTIONS",     g_cofOptionsTabs,  (int)V_ARRAYSIZE( g_cofOptionsTabs ) },
 	{ "EXTRAS",      g_cofExtrasTabs,   (int)V_ARRAYSIZE( g_cofExtrasTabs ) },
+	{ "CO-OP",       g_cofCoopTabs,     (int)V_ARRAYSIZE( g_cofCoopTabs ) },
 	{ "SAVE / LOAD", g_cofSaveLoadTabs, (int)V_ARRAYSIZE( g_cofSaveLoadTabs ) },
 };
 

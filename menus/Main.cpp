@@ -160,6 +160,7 @@ private:
 	// place, with the wordmark staying where it is. See CoFSetLevel().
 	void CoFSetLevel( int level );
 	void CoFExtrasCb();
+	void CoFCoopCb();
 	void CoFBackCb();
 
 	void DisconnectCb();
@@ -187,6 +188,12 @@ private:
 
 	// Cry of Fear main-menu items
 	CMenuPicButton	cofCampaign;
+	// 1.3.6: Co-op, under New Game, opens the Co-op list: Host co-op, Join co-op (cofJoinServer), Continue co-op,
+	// Play with AI and Cry of Fear's own co-op (cofHostServer), all out of Extras (menus/CoFStoryCoop.cpp)
+	CMenuPicButton	cofCoop;
+	CMenuPicButton	cofStoryHost;
+	CMenuPicButton	cofStoryContinue;
+	CMenuPicButton	cofStorySolo;
 	CMenuPicButton	cofJoinServer;
 	CMenuPicButton	cofHostServer;
 	CMenuPicButton	cofLanguage;
@@ -216,13 +223,14 @@ private:
 	bool bCoF;
 	bool bCoFWantBackgroundMap;
 	int  iCoFBackgroundMapDelay;
-	// 0 = the main list, 1 = the Extras list. Pause menu always 0.
+	// 0 = the main list, 1 = the Extras list, 2 = the Co-op list. Pause menu always 0.
 	int  iCoFLevel;
 };
 
 // Cry of Fear main list levels
 #define COF_LEVEL_MAIN   0
 #define COF_LEVEL_EXTRAS 1
+#define COF_LEVEL_COOP   2
 
 // Frames the engine has to look completely idle before Quit to menu is allowed
 // to bring the background map back. A level change that is only queued is not
@@ -499,7 +507,10 @@ and in game
 
     Resume, Save Game, Load Game, Options, Quit to menu, Quit
 
-(Save Game only while pause-menu saves are enabled, milestone 5b)
+(Save Game only while pause-menu saves are enabled, milestone 5b). This one's
+main list is New Game, Co-op (1.3.6: Host co-op, Join co-op, Continue co-op,
+Play with AI, Cry of Fear's own co-op, Back), Load Game, Custom Campaign,
+Extras (Unlockables, Links, Credits, Back), Options, Quit,
 
 so the stock Console, Training Room, Multiplayer, Previews and Change Game
 items are not added at all. Neither are minimizeBtn and quitButton: they are
@@ -527,12 +538,38 @@ void CMenuMain::InitCoF( void )
 	// Internet browser and Create Server page - the latter issues a
 	// "disconnect" that the unified UI turns into a single-player background
 	// map, so the game started with single-player rules and no lobby
-	cofJoinServer.SetNameAndStatus( L( "Join Server" ), L( "Join a co-op game by address or on the local network" ) );
+	// 1.3.6: the Co-op list (the owner: "integrate the mod into the main menu"; his pick: its own item near the
+	// top). Each item opens its page, and the pages are one tabbed window (CO-OP, menus/CoFOptions.cpp).
+	cofCoop.SetNameAndStatus( L( "Co-op" ), L( "Play the story with friends or with AI companions, or the game's own co-op" ) );
+	cofCoop.SetPicture( PC_MULTIPLAYER );
+	cofCoop.iFlags |= QMF_NOTIFY;
+	cofCoop.onReleased = VoidCb( &CMenuMain::CoFCoopCb );
+
+	cofStoryHost.SetNameAndStatus( L( "Host co-op" ), L( "Start the story for your friends: a new game or a chapter" ) );
+	cofStoryHost.SetPicture( PC_CREATE_GAME );
+	cofStoryHost.iFlags |= QMF_NOTIFY;
+	cofStoryHost.onReleased = UI_CoFStoryHost_Menu;
+
+	cofStoryContinue.SetNameAndStatus( L( "Continue co-op" ), L( "Go on from a co-op checkpoint, hosted or with AI companions" ) );
+	cofStoryContinue.SetPicture( PC_LOAD_GAME );
+	cofStoryContinue.iFlags |= QMF_NOTIFY;
+	cofStoryContinue.onReleased = UI_CoFStoryContinue_Menu;
+
+	cofStorySolo.SetNameAndStatus( L( "Play with AI" ), L( "The story with one to three AI companions, on this PC" ) );
+	cofStorySolo.SetPicture( PC_NEW_GAME );
+	cofStorySolo.iFlags |= QMF_NOTIFY;
+	cofStorySolo.onReleased = UI_CoFStorySolo_Menu;
+
+	// co-op bridge: the Cry of Fear pages (menus/CoFCoop.cpp), not mainui's
+	// Internet browser and Create Server page - the latter issues a
+	// "disconnect" that the unified UI turns into a single-player background
+	// map, so the game started with single-player rules and no lobby
+	cofJoinServer.SetNameAndStatus( L( "Join co-op" ), L( "Join a game with the join code or address your host sent you" ) );
 	cofJoinServer.SetPicture( PC_INET_GAME );
 	cofJoinServer.iFlags |= QMF_NOTIFY;
 	cofJoinServer.onReleased = UI_CoFJoin_Menu;
 
-	cofHostServer.SetNameAndStatus( L( "Host Server" ), L( "Host a co-op game: story, Manhunt or survival" ) );
+	cofHostServer.SetNameAndStatus( L( "Cry of Fear's own co-op" ), L( "Host the game's own co-op campaign, Manhunt or survival maps" ) );
 	cofHostServer.SetPicture( PC_CREATE_GAME );
 	cofHostServer.iFlags |= QMF_NOTIFY;
 	cofHostServer.onReleased = UI_CoFHost_Menu;
@@ -555,10 +592,11 @@ void CMenuMain::InitCoF( void )
 	cofUnlockables.onReleased = UI_CoFUnlockables_Menu;
 
 	// Extras is now a second level of the same list, not a page: pressing it
-	// swaps the main list for Join Server / Host Server / Unlockables / Links /
-	// Back, drawn in the same place and the same style with the wordmark left
-	// where it is. "Links" is the old Extras page, the collection of URLs.
-	cofExtras.SetNameAndStatus( L( "Extras" ), L( "Co-op, unlockables, soundtrack and community links" ) );
+	// swaps the main list for Unlockables / Links / Credits / Back (Join Server
+	// and Host Server until 1.3.6, in Co-op since), drawn in the same place and
+	// the same style with the wordmark left where it is. "Links" is the old
+	// Extras page, the collection of URLs.
+	cofExtras.SetNameAndStatus( L( "Extras" ), L( "Unlockables, soundtrack, community links and credits" ) );
 	cofExtras.SetPicture( PC_VISIT_WEB_SITE );
 	cofExtras.iFlags |= QMF_NOTIFY;
 	cofExtras.onReleased = VoidCb( &CMenuMain::CoFExtrasCb );
@@ -609,6 +647,7 @@ void CMenuMain::InitCoF( void )
 	AddItem( cofQuickSave );
 	AddItem( resumeGame );
 	AddItem( newGame );
+	AddItem( cofCoop );
 	AddItem( cofSaveGame );
 	AddItem( saveRestore );
 	AddItem( cofCampaign );
@@ -617,12 +656,15 @@ void CMenuMain::InitCoF( void )
 	AddItem( cofQuitToMenu );
 	AddItem( quit );
 
-	// second level
-	AddItem( cofJoinServer );
-	AddItem( cofHostServer );
+	// second level: Extras, then Co-op; Back ends both
 	AddItem( cofUnlockables );
 	AddItem( cofLinks );
 	AddItem( cofCredits );
+	AddItem( cofStoryHost );
+	AddItem( cofJoinServer );
+	AddItem( cofStoryContinue );
+	AddItem( cofStorySolo );
+	AddItem( cofHostServer );
 	AddItem( cofBack );
 }
 
@@ -652,22 +694,31 @@ void CMenuMain::CoFSetLevel( int level )
 	// AdjustCursor wraps, so after a swap the cursor can land anywhere; put it
 	// on the first item of the list that is now on screen.
 	if( level == COF_LEVEL_EXTRAS )
-		SetCursorToItem( cofJoinServer, false );
+		SetCursorToItem( cofUnlockables, false );
+	else if( level == COF_LEVEL_COOP )
+		SetCursorToItem( cofStoryHost, false );
 	else
 		SetCursorToItem( newGame, false );
 }
 
 void CMenuMain::CoFExtrasCb()
 {
-	// the options relayout makes Extras one tabbed window (Host co-op, Join
-	// co-op, Unlockables, Links, Credits; menus/CoFOptions.cpp)
+	// the options relayout makes Extras one tabbed window (Unlockables, Links,
+	// Credits; menus/CoFOptions.cpp). 1.3.6: Host co-op and Join co-op went to
+	// the Co-op window, so Extras opens on Unlockables
 	if( UI_CoFOptionsLayout( ))
 	{
-		UI_CoFHost_Menu();
+		UI_CoFUnlockables_Menu();
 		return;
 	}
 
 	CoFSetLevel( COF_LEVEL_EXTRAS );
+}
+
+// 1.3.6: Co-op swaps the list for its own in every layout (the owner's pick: a list, as Extras was)
+void CMenuMain::CoFCoopCb()
+{
+	CoFSetLevel( COF_LEVEL_COOP );
 }
 
 void CMenuMain::CoFBackCb()
@@ -701,6 +752,7 @@ void CMenuMain::VidInitCoF( bool connected )
 
 	const bool lvlMain   = !connected && iCoFLevel == COF_LEVEL_MAIN;
 	const bool lvlExtras = !connected && iCoFLevel == COF_LEVEL_EXTRAS;
+	const bool lvlCoop   = !connected && iCoFLevel == COF_LEVEL_COOP;
 
 	// co-op bridge: in a multiplayer session the pause list has no Save Game
 	// and no Load Game (the engine refuses both there, and loading would end
@@ -720,12 +772,16 @@ void CMenuMain::VidInitCoF( bool connected )
 	newGame.SetVisibility( lvlMain );
 	cofCampaign.SetVisibility( lvlMain );
 	cofExtras.SetVisibility( lvlMain );
-	cofJoinServer.SetVisibility( lvlExtras );
-	cofHostServer.SetVisibility( lvlExtras );
+	cofCoop.SetVisibility( lvlMain );
+	cofStoryHost.SetVisibility( lvlCoop );
+	cofJoinServer.SetVisibility( lvlCoop );
+	cofStoryContinue.SetVisibility( lvlCoop );
+	cofStorySolo.SetVisibility( lvlCoop );
+	cofHostServer.SetVisibility( lvlCoop );
 	cofUnlockables.SetVisibility( lvlExtras );
 	cofLinks.SetVisibility( lvlExtras );
 	cofCredits.SetVisibility( lvlExtras );
-	cofBack.SetVisibility( lvlExtras );
+	cofBack.SetVisibility( lvlExtras || lvlCoop );
 	// Language left the main list; the Game options page owns it now.
 	cofLanguage.SetVisibility( false );
 	// Save Game only in game and only with pause-menu saves on; Think() lays
@@ -755,10 +811,11 @@ void CMenuMain::VidInitCoF( bool connected )
 	CMenuPicButton *order[] =
 	{
 		// pause list, and the first level of the main list
-		&cofQuickSave, &resumeGame, &newGame, &cofSaveGame, &saveRestore, &cofCampaign, &cofExtras,
+		&cofQuickSave, &resumeGame, &newGame, &cofCoop, &cofSaveGame, &saveRestore, &cofCampaign, &cofExtras,
 		&configuration, &cofQuitToMenu, &quit,
-		// second level of the main list
-		&cofJoinServer, &cofHostServer, &cofUnlockables, &cofLinks, &cofCredits,
+		// second level of the main list: Extras, Co-op, and the Back both end with
+		&cofUnlockables, &cofLinks, &cofCredits,
+		&cofStoryHost, &cofJoinServer, &cofStoryContinue, &cofStorySolo, &cofHostServer,
 		&cofBack
 	};
 	const size_t count = sizeof( order ) / sizeof( order[0] );
@@ -1006,6 +1063,12 @@ static void UI_CoFMainExtrasList( void )
 	menu_main->CoFShowLevel( COF_LEVEL_EXTRAS );
 }
 
+static void UI_CoFMainCoopList( void )
+{
+	menu_main->Show();
+	menu_main->CoFShowLevel( COF_LEVEL_COOP );
+}
+
 static void UI_CoFMainMainList( void )
 {
 	menu_main->Show();
@@ -1050,6 +1113,7 @@ static void UI_CoFSoundProbe( void )
 }
 
 ADD_COMMAND( menu_cof_extras_list, UI_CoFMainExtrasList );
+ADD_COMMAND( menu_cof_coop_list, UI_CoFMainCoopList );
 ADD_COMMAND( menu_cof_main_list, UI_CoFMainMainList );
 ADD_COMMAND( menu_cof_quit_to_menu, UI_CoFMainQuitToMenu );
 ADD_COMMAND( menu_cof_sound_probe, UI_CoFSoundProbe );

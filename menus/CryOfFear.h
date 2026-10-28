@@ -70,11 +70,18 @@ void UI_CoFUnlockables( void );
 // docs/cof-ui-death-flow.md.
 void UI_CoFDeath_Menu( void );
 
-// The co-op bridge (menus/CoFCoop.cpp): Extras > Host Server and Join Server.
+// The co-op bridge (menus/CoFCoop.cpp): Co-op > Original co-op and Join co-op (Extras until 1.3.6).
 // Host co-op starts a multiplayer listen server on a co-op entry map with the
 // original settings.scr options and no "disconnect"; Join co-op connects by
 // address. See docs/cof-coop-bridge.md.
 void UI_CoFHost_Menu( void );
 void UI_CoFJoin_Menu( void );
+
+// 1.3.6: story co-op from the main menu (menus/CoFStoryCoop.cpp): the main list's Co-op item opens a second list
+// and a CO-OP tabbed window: Host co-op, Join co-op (above), Continue co-op, Play with AI and Original co-op (the
+// Host co-op page above). Each start sends what the Cry of Fear Co-op app sends (menus/CoFStoryCoopLogic.h).
+void UI_CoFStoryHost_Menu( void );
+void UI_CoFStorySolo_Menu( void );
+void UI_CoFStoryContinue_Menu( void );
 
 #endif // MENU_CRYOFFEAR_H
