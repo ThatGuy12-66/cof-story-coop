@@ -1,6 +1,18 @@
-Cry of Fear Co-op 1.3.5
+Cry of Fear Co-op 1.3.6
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.6
+- Co-op is in the game's own main menu now. Click Open the game (next to Your name in this
+  app), then Co-op, right under New Game: Host co-op, Join co-op, Continue co-op, Play with
+  AI, and Cry of Fear's own co-op (it was under Extras). Each starts the same game this
+  app's buttons start, with the same choices.
+- Join co-op in the game takes a join code as well as an address, and a password.
+- While the game is open, this app shows your join code and asks your router to open the
+  port, as when you host from here. The game's Host co-op page shows the code too.
+- The app's own Play solo, Host a game, Join a game and Cry of Fear's own co-op work as
+  before.
+- 1.1 to 1.3.6 can play together.
 
 WHAT'S NEW IN 1.3.5
 - Cry of Fear's own co-op mode: the players who joined no longer drop out at every level

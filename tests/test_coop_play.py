@@ -186,8 +186,8 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab), 1.3.2 (the starter antivirus took for a trojan) 1.3.3 (the save picker, the game's own co-op mode) 1.3.4 (everyone in a wheelchair) and 1.3.5 (the game's own co-op keeps its guests) keep 1.1's version, so 1.1 to 1.3.5 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.5'))
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab), 1.3.2 (the starter antivirus took for a trojan) 1.3.3 (the save picker, the game's own co-op mode) 1.3.4 (everyone in a wheelchair) 1.3.5 (the game's own co-op keeps its guests) and 1.3.6 (co-op in the game's main menu) keep 1.1's version, so 1.1 to 1.3.6 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.6'))
         self.assertGreater(play.BUILD, 29)   # 1.3.3 was build 29: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
@@ -221,7 +221,7 @@ class HostReleaseTests(unittest.TestCase):
         self.assertIn(f'older than {play.VERSION_LABEL}', play.host_version_note({'cofbuild': '1.1'}))
         self.assertIn('is 1.2.5 (yours', play.host_version_note({'cofver': '1.2.5'}))
         self.assertIn('Join anyway?', play.host_version_note({'cofver': '1.2.5'}))
-        for same_or_newer in (play.VERSION_LABEL, '1.3.5', '9.9.9'):
+        for same_or_newer in (play.VERSION_LABEL, '1.3.6', '9.9.9'):
             self.assertIsNone(play.host_version_note({'cofver': same_or_newer}))
         for unreadable in ('dev', '1.2.6-test', '1..2'):
             self.assertIsNone(play.host_version_note({'cofver': unreadable}))
@@ -471,3 +471,66 @@ class SettingsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MenuLaunchTests(unittest.TestCase):
+    """1.3.6: Open the game: the game at its main menu, whose Co-op list starts the games (tests/test_menu_coop.py)."""
+
+    def test_the_game_opens_at_its_menu_with_what_only_the_app_knows(self):
+        args, config = play.menu_launch(Path('C:/copy'), name=' Bob ', port=27016, maps='0123abcd', video=['-borderless'])
+        self.assertEqual(args, [str(Path('C:/copy') / 'CoFLaunchApp.exe'), '-borderless', '-port', '27016', '-clientport',
+                                '27017', '-log', play.LOG, '-logtime', '+exec', play.SESSION_CFG])
+        self.assertNotIn('+map', args)
+        self.assertNotIn(play.STORY_CFG, args)   # the menu's background map is single-player; the pages exec nothing
+        self.assertEqual(config.splitlines(), ['name "Bob"', f'cof_build {play.VERSION}', f'cof_label {play.VERSION_LABEL}',
+                                               'set cof_menu_maps "0123abcd"'])
+        _, config = play.menu_launch(Path('C:/copy'), name='Bob', port=27015, maps='not a tag', video=[])
+        self.assertIn('set cof_menu_maps ""', config)
+        for bad in (dict(name=''), dict(name='a;b'), dict(port=80)):
+            with self.assertRaises(ValueError):
+                play.menu_launch(Path('C:/copy'), **dict(dict(name='Bob', port=27015, maps='', video=[]), **bad))
+
+    def test_the_invite_file_holds_only_what_is_known(self):
+        self.assertEqual(play.invite_text('COF1-AB-12345678', '203.0.113.7:27015', '192.168.1.5:27015'),
+                         'code COF1-AB-12345678\naddress 203.0.113.7:27015\nlan 192.168.1.5:27015\n')
+        self.assertEqual(play.invite_text(), '')
+        self.assertEqual(play.invite_text('', '203.0.113.7:27015', 'two words'), 'address 203.0.113.7:27015\n')
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / 'cryoffear').mkdir()
+            play.write_invite(Path(temp), 'COF1-AB-12345678')
+            self.assertEqual((Path(temp) / 'cryoffear' / play.INVITE).read_text(), 'code COF1-AB-12345678\n')
+            play.write_invite(Path(temp))
+            self.assertEqual((Path(temp) / 'cryoffear' / play.INVITE).read_text(), '')
+
+    def test_the_menu_watch_maps_the_port_and_names_what_the_game_does(self):
+        now = [0.0]
+        net = FakeNet(up=False)
+        watch = play.MenuWatch(27015, net=net, clock=lambda: now[0])
+        self.assertFalse(watch.lan_only)
+        watch.open_router()
+        self.assertEqual(network.parse_endpoint(watch.code), network.Endpoint('203.0.113.7', 27015))
+        now[0] = 500   # nothing answering is the menu, never "another program" on the port
+        self.assertEqual(watch.poll(True), play.MenuWatch.MENU)
+        net.up = True
+        self.assertIn('1/4', watch.poll(True))
+        net.up = False
+        now[0] = 505   # one missed answer: a level change
+        self.assertIn('1/4', watch.poll(True))
+        now[0] = 520   # back at the menu
+        self.assertEqual(watch.poll(True), play.MenuWatch.MENU)
+        self.assertIn('drop', play.close_warning(watch))
+        self.assertIn('ended', watch.poll(False))
+        self.assertEqual(net.unmapped, 1)
+
+    def test_the_join_code_leaves_the_menu_with_the_router_port(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'cryoffear').mkdir()
+            watch = play.MenuWatch(27015, runtime=root, net=FakeNet())
+            watch.open_router()
+            play.write_invite(root, watch.code, watch.address)
+            watch.close()
+            self.assertEqual((root / 'cryoffear' / play.INVITE).read_text(), '')
+            play.write_invite(root, 'COF1-AB-12345678')
+            watch.close()   # once: a later session's code stays
+            self.assertIn('COF1-AB', (root / 'cryoffear' / play.INVITE).read_text())

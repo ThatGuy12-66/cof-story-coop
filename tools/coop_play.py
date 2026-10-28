@@ -17,12 +17,13 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 to 1.3.5 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review, the antivirus notice, the Defender fix, the Chapter 4 crash, the inventory menu, the bonus night vision, the chainsaw boss's grab, the starter antivirus took for a trojan, the save picker with the game's own co-op mode, everyone in a wheelchair, and the game's own co-op keeping its guests) keep it: 1.1
-VERSION_LABEL = "1.3.5"
-BUILD = 31   # counts on (1.3.4 was 30, 1.3.3 29, 1.3.2 28, 1.3.1 27, 1.3 26; 25 was 1.3 under a withdrawn label; 1.2.9 24, 1.2.8 23, 1.2.7 22, 1.2.6 21, 1.2.5 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
+VERSION = "1.1"   # who can join whom: 1.1.1 to 1.3.6 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review, the antivirus notice, the Defender fix, the Chapter 4 crash, the inventory menu, the bonus night vision, the chainsaw boss's grab, the starter antivirus took for a trojan, the save picker with the game's own co-op mode, everyone in a wheelchair, the game's own co-op keeping its guests, and co-op in the game's main menu) keep it: 1.1
+VERSION_LABEL = "1.3.6"
+BUILD = 32   # counts on (1.3.5 was 31, 1.3.4 30, 1.3.3 29, 1.3.2 28, 1.3.1 27, 1.3 26; 25 was 1.3 under a withdrawn label; 1.2.9 24, 1.2.8 23, 1.2.7 22, 1.2.6 21, 1.2.5 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
+INVITE = "cof_invite.txt"   # 1.3.6: the join code the app found, for the game menu's Host co-op (MenuWatch)
 SETTINGS = "cof-story-coop-settings.json"
 DEFAULT_PORT = 27015
 NEW_GAME_MAP = "c_intro"
@@ -193,6 +194,34 @@ def official_launch(runtime: Path, *, name: str, map_name: str, players: int, pa
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
             "-log", LOG, "-logtime", "+exec", STORY_CFG, "+exec", SESSION_CFG, "+map", map_name]
     return args, "\n".join(lines) + "\n"
+
+
+def menu_launch(runtime: Path, *, name: str, port: int, maps: str, video: list[str]) -> tuple[list[str], str]:
+    """1.3.6 (the owner: "integrate the mod into the main menu somehow"): the game opened at its main menu, whose Co-op
+    list hosts, joins, continues or plays with AI (mainui menus/CoFStoryCoop.cpp). Those pages write the story settings
+    and the session lines of host_launch and join_launch themselves when they start a game (tests/test_menu_coop.py
+    compares them); this sets what only the app knows: the player name, the release (cof_build and cof_label, sent in
+    a hosted game's info reply) and this copy's merged-maps tag (cof_menu_maps: a page sends it as cof_maps when it
+    hosts with merged maps). No story settings at start: the menu's background map is a single-player map."""
+    name = clean_name(name)
+    port = clean_port(port)
+    lines = [f'name "{name}"', f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}",
+             f'set cof_menu_maps "{maps if _TAG.match(maps or "") else ""}"']
+    args = [str(runtime / "CoFLaunchApp.exe"), *video, "-port", str(port), "-clientport", str(port + 1),
+            "-log", LOG, "-logtime", "+exec", SESSION_CFG]
+    return args, "\n".join(lines) + "\n"
+
+
+def invite_text(code: str = "", address: str = "", lan: str = "") -> str:
+    """1.3.6: cryoffear/cof_invite.txt, read by the game menu's Host co-op (menus/CoFStoryCoopLogic.h
+    CoFStory_ParseInvite): one "key value" line for each one known, printable ASCII without spaces."""
+    known = (("code", code), ("address", address), ("lan", lan))
+    return "".join(f"{key} {value}\n" for key, value in known if value and re.fullmatch(r"[!-~]{1,95}", value))
+
+
+def write_invite(runtime: Path, code: str = "", address: str = "", lan: str = "") -> None:
+    """Empty when the game starts, so the menu never shows another session's code."""
+    (Path(runtime) / "cryoffear" / INVITE).write_text(invite_text(code, address, lan), encoding="ascii")
 
 
 def join_launch(runtime: Path, *, name: str, password: str, endpoint: str, video: list[str]) -> tuple[list[str], str]:
@@ -451,13 +480,16 @@ class HostWatch:
                         "may be using that port: close it, or pick another port.")
             return "Starting the game..."
         self.up = True
+        self.last = self.up_message(info)
+        return self.last
+
+    @staticmethod
+    def up_message(info: dict) -> str:
         people, bots = info.get('numcl', '?'), info.get('bots', '0')
         if bots not in ('', '0'):
-            self.last = (f"Your game is up: {people} {'player' if people == '1' else 'players'} and {bots} AI "
-                         f"{'companion' if bots == '1' else 'companions'} ({info.get('maxcl', '?')} places).")
-        else:
-            self.last = f"Your game is up: {people}/{info.get('maxcl', '?')} players."
-        return self.last
+            return (f"Your game is up: {people} {'player' if people == '1' else 'players'} and {bots} AI "
+                    f"{'companion' if bots == '1' else 'companions'} ({info.get('maxcl', '?')} places).")
+        return f"Your game is up: {people}/{info.get('maxcl', '?')} players."
 
     def close(self) -> None:
         if self.closed:
@@ -469,3 +501,40 @@ class HostWatch:
             except self.net.NetworkError:
                 pass
             self.mapping = None
+
+
+class MenuWatch(HostWatch):
+    """1.3.6: while the game is open at its main menu (menu_launch): the router port and the join code as for a hosted
+    game, since its Co-op list can host at any time, and what the game is doing. Nothing answering on the port is the
+    menu, a joined game or a game that has not started yet, never an error."""
+
+    MENU = "Cry of Fear is open. Host, join, continue or play with AI from Co-op in its main menu."
+
+    def __init__(self, port: int, *, runtime: Path | None = None, net=network, clock=time.monotonic):
+        super().__init__(port, lan_only=False, net=net, clock=clock)
+        self.runtime, self.seen = runtime, 0.0
+
+    def close(self) -> None:
+        """The router port goes, and with it the join code the game menu shows (cof_invite.txt)."""
+        was_open = not self.closed
+        super().close()
+        if was_open and self.runtime is not None:
+            try:
+                write_invite(self.runtime)
+            except OSError:
+                pass
+
+    def poll(self, running: bool) -> str:
+        if self.closed or not running:
+            self.close()
+            return "The game has ended."
+        try:
+            info = self.net.query_info(self.net.Endpoint("127.0.0.1", self.port), timeout=1)
+        except self.net.NetworkError:
+            if self.up and self.clock() - self.seen < 10:   # a level change can make one query time out
+                return self.last
+            self.up = False
+            return self.MENU
+        self.up, self.seen = True, self.clock()
+        self.last = self.up_message(info)
+        return self.last

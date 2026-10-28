@@ -79,7 +79,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.5")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.6")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:
@@ -250,6 +250,41 @@ class WindowTests(unittest.TestCase):
         self.assertIn("+map", game.call_args.args[1])
         self.assertIn("Playing solo", texts(self.app.body))
         self.assertTrue(app.play.load_settings(root)["first_launch_done"])
+
+    def test_open_the_game_starts_it_at_its_menu_and_shares_the_join_code_with_it(self):
+        # 1.3.6 (the owner: "integrate the mod into the main menu somehow"): the game opens at its main menu, whose
+        # Co-op list starts the games; this window keeps the router port and the join code, and the menu's Host co-op
+        # reads the code from cof_invite.txt
+        root = self.copy()
+        (root / "cryoffear" / app.play.INVITE).write_text("code COF1-OLD-00000000\n", encoding="ascii")
+        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
+            self.app.show_main(root)
+        opened = button(self.app.body, "Open the game")
+        opened.invoke()
+        self.assertEqual(str(opened.cget("state")), "disabled")   # one start at a time while the copy is checked
+        self.jobs[-1][2](ValueError("Close it first."))
+        self.assertEqual(str(opened.cget("state")), "normal")
+        opened.invoke()
+        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
+            self.jobs[-1][1](False)
+        args = game.call_args.args[1]
+        self.assertNotIn("+map", args)
+        self.assertNotIn("+connect", args)
+        self.assertEqual(args[args.index("-port") + 1], str(app.play.DEFAULT_PORT))
+        self.assertIn(f'set cof_menu_maps "{self.app.maps_tag()}"', (root / "cryoffear" / app.play.SESSION_CFG).read_text())
+        # no other session's join code in the menu, then this one's once the router answers
+        self.assertEqual((root / "cryoffear" / app.play.INVITE).read_text(), "")
+        self.assertIn("Cry of Fear is open", texts(self.app.body))
+        watch = self.app.watch
+        self.addCleanup(setattr, watch, "closed", True)
+        self.assertIsInstance(watch, app.play.MenuWatch)
+        job, routed, _ = self.jobs[-2]
+        watch.code, watch.address = "COF1-AB-12345678", "203.0.113.7:27015"
+        routed(None)
+        self.assertEqual((root / "cryoffear" / app.play.INVITE).read_text(),
+                         "code COF1-AB-12345678\naddress 203.0.113.7:27015\n")
+        self.jobs[-1][1]([{"address": "192.168.1.5"}])
+        self.assertIn("lan 192.168.1.5:27015", (root / "cryoffear" / app.play.INVITE).read_text())
 
     def test_a_copy_that_fails_its_check_is_offered_repair(self):
         # L1: at the same build no Update was offered, and the only way out was a new setup

@@ -1,4 +1,4 @@
-"""Cry of Fear story co-op: the app. Setup on first run, then Play solo, Host or Join."""
+"""Cry of Fear story co-op: the app. Setup on first run, then Open the game (its Co-op menu), Play solo, Host or Join."""
 from __future__ import annotations
 
 import argparse
@@ -521,13 +521,18 @@ class App:
         ttk = self.ttk
         self.root = Path(copy)
         self.settings = play.load_settings(self.root)
-        body = self.clear("Play the story together", "The whole campaign with friends, or alone with AI companions.")
+        body = self.clear("Play the story together", "Open the game and pick Co-op in its menu, or start from here.")
         self.update_slot = ttk.Frame(body)
         self.update_slot.pack(fill="x")
         self.show_offer()
         holder = self.row(body, "Your name", 12)
         self.name = self.tk.StringVar(value=self.settings["name"])
         ttk.Entry(holder, textvariable=self.name, width=28).pack(side="left")
+        # 1.3.6 (the owner: "integrate the mod into the main menu somehow"): the game at its main menu, whose Co-op list
+        # hosts, joins, continues or plays with AI; on the name's row, so the four cards still fit a 768 px screen
+        self.open_button = ttk.Button(holder, text="Open the game", style="Accent.TButton",
+                                      command=self.guard(self.open_game))
+        self.open_button.pack(side="right")
         ttk.Frame(body, height=8).pack()
         for title, text, action in (
                 ("Play solo", "You and up to three AI companions, on this PC.", lambda: self.show_start(solo=True)),
@@ -572,6 +577,7 @@ class App:
                 if running:
                     raise ValueError("Cry of Fear is already running from this copy. Close it first.")
                 (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
+                play.write_invite(root)   # 1.3.6: no other session's join code in the game menu
                 # 1.2.0: a co-op key the player's own config leaves unbound (O in a copy set up before it) works
                 (root / "cryoffear" / play.SESSION_CFG).write_text(config + setup_lib.missing_coop_binds(root),
                                                                    encoding="ascii")
@@ -721,6 +727,21 @@ class App:
         ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
         ttk.Label(buttons, textvariable=checking, style="Hint.TLabel").pack(side="left", padx=8)
 
+    def open_game(self):
+        """1.3.6: the game at its main menu (play.menu_launch); this window shows the join code while it runs, and the
+        menu's Host co-op shows it too (play.write_invite)."""
+        name = play.clean_name(self.name.get())
+        number = play.clean_port(str(self.settings["port"]))
+        args, config = play.menu_launch(self.root, name=name, port=number, maps=self.maps_tag(), video=self.video())
+        self.open_button.configure(state="disabled")   # one start at a time while the copy is checked
+
+        def stopped():
+            if self.open_button.winfo_exists():
+                self.open_button.configure(state="normal")
+        root = self.root
+        self.launch(args, config, lambda: self.show_running(play.MenuWatch(number, runtime=root), False, menu=True),
+                    stopped)
+
     def show_official(self):
         """1.3.3: host Cry of Fear's own co-op mode (play.OFFICIAL_CHOICES); friends join with Join a game as usual."""
         ttk, tk = self.ttk, self.tk
@@ -773,7 +794,7 @@ class App:
         ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
         ttk.Label(buttons, textvariable=checking, style="Hint.TLabel").pack(side="left", padx=8)
 
-    def show_running(self, watch, solo):
+    def show_running(self, watch, solo, menu=False):
         ttk, tk = self.ttk, self.tk
         # 1.1.9 (L14.4): a game started again before the last one's watch saw it end: that watch would close later
         # and remove the router mapping the new one has just taken over. It is closed first, off the UI thread.
@@ -786,11 +807,17 @@ class App:
                     previous.close()
                 except Exception:   # the new game's router port comes first
                     pass
-        body = self.clear("Playing solo" if solo else "Hosting",
-                          "Keep this window open while you play." if solo else
-                          "Send your friends the join code (and the password, if you set one). "
-                          "Keep this window open while you host. If Windows Firewall asks about Cry of Fear (its "
-                          "window can be hidden behind the game), click Allow access, or friends can't join.")
+        firewall = ("If Windows Firewall asks about Cry of Fear (its window can be hidden behind the game), click Allow "
+                    "access, or friends can't join.")
+        if menu:
+            body = self.clear("Cry of Fear is open", "Host, join, continue or play with AI from Co-op in the game's main "
+                              "menu. If you host, send your friends the join code (and the password, if you set one); "
+                              "Host co-op shows it too. Keep this window open while you play. " + firewall)
+        else:
+            body = self.clear("Playing solo" if solo else "Hosting",
+                              "Keep this window open while you play." if solo else
+                              "Send your friends the join code (and the password, if you set one). "
+                              "Keep this window open while you host. " + firewall)
         status = tk.StringVar(value="Starting the game...")
         state = tk.Frame(body, background=theme.PANEL, highlightthickness=1, highlightbackground=theme.LINE)
         state.pack(fill="x", pady=(0, 6))
@@ -806,13 +833,27 @@ class App:
                                                                       self.window.clipboard_append(v.get()))).pack(side="left", padx=4)
             ttk.Label(body, textvariable=router, style="Hint.TLabel", wraplength=740).pack(anchor="w", pady=8)
 
+            root = self.root
+
+            def invite():
+                # 1.3.6: the game menu's Host co-op shows what this window shows
+                if menu:
+                    try:
+                        play.write_invite(root, watch.code, watch.address, lan.get())
+                    except OSError:
+                        pass
+
             def routed(_):
                 code.set(watch.code or "(no Internet address found: use the LAN or VPN address)")
                 address.set(watch.address)
                 router.set(watch.router)
+                invite()
+
+            def found(rows):
+                lan.set(f"{rows[0]['address']}:{watch.port}" if rows else "")
+                invite()
             self.work(lambda: (release(), watch.open_router()), routed, lambda error: router.set(str(error)))
-            self.work(network.local_addresses,
-                      lambda rows: lan.set(f"{rows[0]['address']}:{watch.port}" if rows else ""), lambda _: None)
+            self.work(network.local_addresses, found, lambda _: None)
         elif previous is not None:
             self.work(release, lambda _: None, lambda _: None)
         ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=14)

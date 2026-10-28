@@ -1398,3 +1398,48 @@ shared." The owner chose a live test and "Share them".
   passed; GitHub `v1.3.5`, publish exit 0, `latest/download/release.json` build 31. Zip `DDB47FB8…`, 111,591,363
   bytes. Engine `95af302a`, launcher `9aa3b3c` + `fcb13ce`. The ModDB upload is the owner's
   (`evidence/release-1.3.5/moddb-text.txt`).
+
+## 1.3.6: co-op in the game's main menu (2026-10-28)
+
+The owner: "integrate the mod into the main menu somehow". Asked: run co-op from the menu (the app keeps setup,
+updates, the router port and the join code), Co-op as its own item near the top.
+- **mainui** (`3rdparty/mainui`, the CoF Enhanced 0.4.0-test3 baseline `15edd2b` until now; first changes of ours):
+  - `menus/Main.cpp`: Co-op under New Game swaps the list for Host co-op / Join co-op / Continue co-op / Play with
+    AI / Cry of Fear's own co-op / Back (`COF_LEVEL_COOP`, `menu_cof_coop_list`). Extras keeps Unlockables, Links,
+    Credits.
+  - `menus/CoFOptions.cpp`: a CO-OP tab group (HOST CO-OP, JOIN CO-OP, CONTINUE CO-OP, PLAY WITH AI, ORIGINAL CO-OP);
+    Extras' tabs lose Host/Join.
+  - `menus/CoFStoryCoop.cpp` (new): Host co-op and Play with AI (one class, start list = New game + CHAPTER_CHOICES,
+    name, players/password/AI fill or AI companions, bonus room, merged maps, flashlight; Host shows the join code
+    from `cryoffear/cof_invite.txt`), Continue co-op (the checkpoints of `SAVE/cofcoop` with
+    `cof_save_root_compat`, else `save/cofcoop`, newest first by file time; Play with AI / Host buttons; the name
+    warning). Settings in archived `cof_story_*` cvars, never the password. Test hooks `menu_cof_story_start
+    <host|solo> [map] [players] [companions]`, `menu_cof_story_continue <host|solo> [slot]`.
+  - `menus/CoFCoop.cpp`: Enhanced's Host co-op is ORIGINAL CO-OP ("Story co-op" was its name for cof_campaign_01:
+    "Co-op campaign" now) and sends official_launch's lines first; Join co-op takes COF1 join codes and a password,
+    joins with the story settings (LAN servers too).
+  - `menus/CoFStoryCoopLogic.h` (new, engine-free): every text a page sends. `tests/test_menu_coop.py` compiles it
+    alone (`tests/engine/cof_menu_coop_harness.cpp`) and compares with coop_play/network for the same choices: the
+    story settings, starts (host_launch: 128 combinations and refusals), party sizes, endpoints and join codes,
+    joins, name/password filtering, checkpoint parsing, slot titles, the Continue warning, the invite file,
+    official_launch. Differences by design: no cof_build/cof_label (the app sets them at launch), cof_maps and
+    cof_chapter_start always written (one process can host twice).
+- **App**: Open the game (accent button on the name row; the four cards still fit 768 px): `play.menu_launch`
+  (name, cof_build, cof_label, `set cof_menu_maps <tag>`, -port; no story cfg at start: the background map is
+  single-player), `play.MenuWatch` (router + join code at once; nothing answering is the menu, not an error),
+  `play.write_invite` (emptied at every launch, filled when the router and LAN answers come).
+- The cross-check tests pass on Linux (g++) and Windows (MSVC). menu.dll builds with MSVC.
+- Review (a separate agent; it also fuzzed the parsers under ASan/UBSan: clean; no command injection: the command
+  buffer ends a command at a newline and the fields drop " \ ; and control bytes). Fixed from it:
+  - **Extras opened the wrong page with the theme on** (`CoFExtrasCb` still called `UI_CoFHost_Menu`, now a CO-OP
+    tab): it opens Unlockables, and Unlockables/Links/Credits are reachable again.
+  - Continue took the bonus room and the flashlight from cvars nobody saw: both are checkboxes on its page now.
+  - Names and passwords the app refuses are refused with the app's message (`CoFStory_FieldValid/FieldMessage`,
+    cross-checked with `_clean`), not silently changed (a changed password would not be the host's).
+  - A game opened without the app sends `cof_build` 1.1 (`COF_STORY_BUILD`, = `play.VERSION` by test) when it hosts,
+    so the app's Join takes it.
+  - Continue lists only the folder the engine loads from, every file sorted by time before the 32 are kept.
+  - The join code leaves the menu when the app's watch closes (`MenuWatch(runtime=)` empties `cof_invite.txt`), and
+    Host co-op re-reads it every 2 s while open.
+  Not changed: the mirror's copies of four mainui files are LF (the device keeps CRLF: apply_sync preserves endings).
+- Version 1.3.6, build 32 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.6.md`.
