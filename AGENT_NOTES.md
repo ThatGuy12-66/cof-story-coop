@@ -1443,3 +1443,11 @@ updates, the router port and the join code), Co-op as its own item near the top.
     Host co-op re-reads it every 2 s while open.
   Not changed: the mirror's copies of four mainui files are LF (the device keeps CRLF: apply_sync preserves endings).
 - Version 1.3.6, build 32 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.6.md`.
+- **Not seen on screen**: the owner answered "Wait" to a test launch, then "finish the fucking update"; released without a
+  look at the pages. If a layout is off, the fix is a new release.
+- **Published 1.3.6 2026-10-28 ~01:45 PT** (the owner: "finish the fucking update"): full suite 786 OK (3 skipped), fresh
+  install and the 1.3.5 -> 1.3.6 update passed; GitHub `v1.3.6`; publish's "releases page shows the new version" check
+  failed on GitHub's cache (exit 1), `latest/download/release.json` served build 32 a minute later. Zip `7D220245…`,
+  111,636,400 bytes. mainui `8270d11e` (a stale `.git/index.lock` from 2026-10-12 moved to
+  `evidence/release-1.3.6/`), engine `99324486`, launcher `3dd17c8`. Nothing pushed. The ModDB upload is the owner's
+  (`evidence/release-1.3.6/moddb-text.txt`).
