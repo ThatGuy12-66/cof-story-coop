@@ -18,7 +18,7 @@ typedef int qboolean;
 #define FBitSet(value, flag) ((value) & (flag))
 #define SetBits(value, flag) ((value) |= (flag))
 #define Mem_Free(ptr) free(ptr)
-#define Mem_Calloc(pool, size) calloc(1, (size))
+#define Mem_Calloc(pool, size) ((void)(pool), calloc(1, (size)))
 enum { cs_free = 0, cs_zombie, cs_connected, cs_spawning, cs_spawned };
 enum { ss_dead, ss_loading, ss_active };
 typedef struct { int type, port; } netadr_t;
@@ -101,6 +101,11 @@ static void SV_ProcessFile(sv_client_t *cl, const char *name) { (void)cl; (void)
 
 /* SV_ChangeLevel dependencies */
 static qboolean SV_CoF_StoryCoopEnabled(void) { return story_enabled; }
+/* 1.3.5: a game of Cry of Fear's own co-op, its maps, and the flag SV_FinalMessage reads (sv_main.c) */
+static int official_coop, kept_during_final;
+static qboolean sv_cof_keep_connections;
+static qboolean SV_CoF_StoryOfficialCoop(void) { return official_coop; }
+static qboolean SV_CoF_StoryOfficialMap(const char *map) { return map && (!strncmp(map, "cof_", 4) || !strncmp(map, "c_cof_", 6)); }
 static qboolean CoF_BeginStoryTransition(const char *map, const char *landmark) { (void)map; (void)landmark; transition_active = true; return true; }
 static void SV_CoF_TransitionReset(qboolean clear_history) { (void)clear_history; transition_active = false; }
 static void SV_CoF_BlurLeaving(const char *map) { (void)map; }
@@ -112,7 +117,7 @@ static qboolean CoF_StoryMapSaved(const char *map)
     for (int i = 0; i < cof_story_map_count; i++) if (!strcmp(map, cof_story_maps[i])) return true;
     return false;
 }
-static void SV_FinalMessage(const char *message, qboolean reconnect) { (void)message; final_reconnects += reconnect; }
+static void SV_FinalMessage(const char *message, qboolean reconnect) { (void)message; final_reconnects += reconnect; kept_during_final += sv_cof_keep_connections; }
 static qboolean SV_SpawnServer(const char *level, const char *start, qboolean background)
 {
     (void)start; (void)background;
@@ -143,7 +148,7 @@ static void Setup(void)
         clients[i].frames[3].marker = 99; /* stale delta history from the old map */
     }
     clients[3].state = cs_spawned; clients[3].flags = FCL_FAKECLIENT; /* bots own no frames */
-    memset(executed, 0, sizeof(executed)); channel_processed = 0; final_reconnects = 0;
+    memset(executed, 0, sizeof(executed)); channel_processed = 0; final_reconnects = 0; kept_during_final = 0;
 }
 
 static void DeliverFromEveryConnection(void)
@@ -179,6 +184,32 @@ int main(void)
     for (int i = 0; i < 4; i++) assert(clients[i].frames == NULL);
     DeliverFromEveryConnection();
     assert(executed[0] == 0 && executed[1] == 0 && executed[2] == 0);
+
+    /* 1.3.5: Cry of Fear's own co-op: its doors' classic level change to another of its maps keeps the connections
+     * as the story does (SV_FinalMessage told to keep them, the frames back), from the map left only */
+    Setup();
+    story_enabled = false; official_coop = true;
+    Q_strncpy(sv.name, "cof_campaign_01_p2", sizeof(sv.name));
+    SV_ChangeLevel(false, "cof_campaign_01_p3", NULL, false);
+    assert(final_reconnects == 1 && kept_during_final == 1 && !sv_cof_keep_connections && sv.state == ss_active);
+    for (int i = 0; i < 3; i++)
+        assert(clients[i].state == cs_connected && clients[i].frames != NULL && clients[i].frames[3].marker == 0);
+    assert(clients[3].frames == NULL);
+    DeliverFromEveryConnection();
+    assert(executed[0] == 1 && executed[1] == 1 && executed[2] == 1 && executed[3] == 0);
+    /* to a map that is not one of its own: the generic reconnect, as before */
+    Setup();
+    Q_strncpy(sv.name, "cof_campaign_01_p2", sizeof(sv.name));
+    SV_ChangeLevel(false, "c_start", NULL, false);
+    assert(final_reconnects == 1 && kept_during_final == 0);
+    for (int i = 0; i < 4; i++) assert(clients[i].frames == NULL);
+    /* no game of its own co-op running: the same */
+    Setup();
+    official_coop = false;
+    Q_strncpy(sv.name, "cof_campaign_01_p2", sizeof(sv.name));
+    SV_ChangeLevel(false, "cof_campaign_01_p3", NULL, false);
+    assert(final_reconnects == 1 && kept_during_final == 0);
+    for (int i = 0; i < 4; i++) assert(clients[i].frames == NULL);
 
     puts("story server transition keeps client connections passed");
     return 0;

@@ -90,8 +90,10 @@ class WiringTests(unittest.TestCase):
         # while cof_chapter_start still names the chapter, which is then cleared: once per chapter start
         self.assertLess(start.index('SV_CoF_BonusKitChapterStart( map );'), start.index('Cvar_Set( "cof_chapter_start", "" );'))
         frame = body_of(SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame( void )')
-        # before the pickups find the map's (the kit is theirs from the first frame)
-        self.assertLess(frame.index('CoF_StoryChapterStart();'), frame.index('SV_CoF_PickupsFrame();'))
+        # before the pickups find the map's (the kit is theirs from the first frame); the story's call is the last
+        # (1.3.5: the one before it is Cry of Fear's own co-op's, which returns before the chapter start)
+        self.assertLess(frame.index('CoF_StoryChapterStart();'), frame.rindex('SV_CoF_PickupsFrame();'))
+        self.assertLess(frame.index('return;', frame.index('SV_CoF_PickupsFrame();')), frame.index('CoF_StoryChapterStart();'))
         assert_has(self, 'void SV_CoF_BonusKitChapterStart( const char *chapter );', source('sv_cof_story.h'))
 
     def test_the_kit_is_made_by_the_pickups_with_the_bonus_mark(self):

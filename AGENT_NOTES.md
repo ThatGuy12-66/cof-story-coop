@@ -1383,7 +1383,10 @@ shared." The owner chose a live test and "Share them".
     find: `cof_coop_pickups` 0 then 1 on a map would hand everyone the copies again (cof_pickups_harness covers it).
   - Live: `phase=pickups` found 6/8/11 on p2/p3/p4. A copy on take is not live-tested: that needs someone to pick up.
 - Tests: `test_enhanced_official_coop` `OfficialPickupsTests` and `OfficialLevelChangeTests`; `cof_pickups_harness.c`
-  stubs `SV_CoF_StoryOfficialCoop` and runs the official mode, including switching it off and on.
+  stubs `SV_CoF_StoryOfficialCoop` and runs the official mode, including switching it off and on;
+  `cof_server_transition_harness.c` runs the real `SV_ChangeLevel` for its doors (kept, frames back, the "new" runs), to a
+  map not its own and with no official game (generic reconnect). The first release build failed on those two harnesses'
+  missing stubs and `test_bonus_kit`'s first `SV_CoF_PickupsFrame();` (now the official one): run the full suite first.
 - Review (a separate agent): no hang, leak or crash. Fixed from it: the keep applies only to another official map, and
   the redundant ledger clear at the find is gone (with it, pickups switched off and on there handed out copies again).
   Not fixed, same as the story: a player who renames
