@@ -1476,3 +1476,9 @@ co-op into the main menu, the launcher is kind of redundant"; his picks: a one-b
     connects.
 - Readme PLAY section rewritten for the game's Co-op menu.
 - Version 1.3.7, build 33 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.7.md`.
+- **Published 1.3.7 2026-10-29 ~06:40 PT** (the owner: "Make it so"; standing approval): full suite 785 OK (3 skipped)
+  before the chain and in it, fresh install 356 s, the 1.3.6 -> 1.3.7 update **51 s** (212 s for 1.3.5 -> 1.3.6; this
+  one still remade the models and the art, the 1.3.6 copy having no recipes), a save kept. GitHub `v1.3.7`; publish's
+  "releases page shows the new version" check failed on GitHub's cache again (exit 1), `latest/download/release.json`
+  served build 33 right after. Zip `E019BC8A…`, 111,629,344 bytes. Engine `e87eb1c5`, launcher `52b687a`; no mainui
+  change. Nothing pushed. Not seen on screen: the new app screen, as the menu's pages before it.
