@@ -160,6 +160,28 @@ def write_checked(path: Path, data: bytes, expected: str) -> str:
     return digest
 
 
+def installed_group(maps_dir: Path, group: Group) -> dict | None:
+    """1.3.7: the group's two files when both are already the ones recorded (an earlier setup or update made them from
+    the same recipe), else None: nothing to make again."""
+    files = {f'maps/{group.name}.bsp': (Path(maps_dir) / f'{group.name}.bsp', group.bsp_sha256),
+             f'maps/{group.name}.sections': (Path(maps_dir) / f'{group.name}.sections', group.sections_sha256)}
+    for path, expected in files.values():
+        try:
+            if not path.is_file() or path.is_symlink() or _file_sha256(path) != expected:
+                return None
+        except OSError:
+            return None
+    return {rel: expected for rel, (_, expected) in files.items()}
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1 << 20), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def install_group(maps_dir: Path, group: Group) -> dict:
     """Build the group into maps_dir as <name>.bsp and <name>.sections; both must match the recorded hashes."""
     data, text = build_group(maps_dir, group)

@@ -79,7 +79,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.6")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.7")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:
@@ -231,35 +231,15 @@ class WindowTests(unittest.TestCase):
         self.assertEqual((started, stopped[-1]), ([1], 3))
         self.assertIn("already running", str(self.errors[-1]))
 
-    def test_the_start_screen_waits_for_the_check(self):
-        # L11 on the Start screen: Start is off while the copy is checked, then the game starts and the screen moves on
-        root = self.copy()
-        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
-            self.app.show_main(root)
-        self.app.show_start(solo=True)
-        start = button(self.app.body, "Start")
-        start.invoke()
-        self.assertEqual(str(start.cget("state")), "disabled")
-        self.assertIn("Checking your copy…", [str(w.cget("textvariable") and w.getvar(w.cget("textvariable")))
-                                              for w in widgets(self.app.body) if w.winfo_class() == "TLabel"])
-        self.jobs[-1][2](ValueError("Close it first."))   # the check failed: Start is back
-        self.assertEqual(str(start.cget("state")), "normal")
-        start.invoke()
-        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
-            self.jobs[-1][1](False)
-        self.assertIn("+map", game.call_args.args[1])
-        self.assertIn("Playing solo", texts(self.app.body))
-        self.assertTrue(app.play.load_settings(root)["first_launch_done"])
-
-    def test_open_the_game_starts_it_at_its_menu_and_shares_the_join_code_with_it(self):
+    def test_play_starts_the_game_at_its_menu_and_shares_the_join_code_with_it(self):
         # 1.3.6 (the owner: "integrate the mod into the main menu somehow"): the game opens at its main menu, whose
         # Co-op list starts the games; this window keeps the router port and the join code, and the menu's Host co-op
-        # reads the code from cof_invite.txt
+        # reads the code from cof_invite.txt. 1.3.7: that is the app's one button, Play
         root = self.copy()
         (root / "cryoffear" / app.play.INVITE).write_text("code COF1-OLD-00000000\n", encoding="ascii")
         with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
             self.app.show_main(root)
-        opened = button(self.app.body, "Open the game")
+        opened = button(self.app.body, "Play")
         opened.invoke()
         self.assertEqual(str(opened.cget("state")), "disabled")   # one start at a time while the copy is checked
         self.jobs[-1][2](ValueError("Close it first."))
@@ -271,6 +251,7 @@ class WindowTests(unittest.TestCase):
         self.assertNotIn("+map", args)
         self.assertNotIn("+connect", args)
         self.assertEqual(args[args.index("-port") + 1], str(app.play.DEFAULT_PORT))
+        self.assertTrue(app.play.load_settings(root)["first_launch_done"])
         self.assertIn(f'set cof_menu_maps "{self.app.maps_tag()}"', (root / "cryoffear" / app.play.SESSION_CFG).read_text())
         # no other session's join code in the menu, then this one's once the router answers
         self.assertEqual((root / "cryoffear" / app.play.INVITE).read_text(), "")
@@ -354,101 +335,47 @@ class WindowTests(unittest.TestCase):
         self.assertIsNone(self.app.busy)
         self.assertIn("delete the unfinished copy", self.app.panel.status.get())
 
-    def test_the_hosting_panel_names_the_firewall(self):
-        # L7: the first Host's Windows Firewall question can sit behind the borderless game
+    def test_the_running_screen_names_the_firewall(self):
+        # L7: the first host's Windows Firewall question can sit behind the borderless game
         self.copy()
-        watch = app.play.HostWatch(27015, lan_only=False)
+        watch = app.play.MenuWatch(27015, runtime=self.app.root)
         self.addCleanup(lambda: setattr(watch, "closed", True))
-        self.app.show_running(watch, solo=False)
+        with mock.patch.object(app.threading, "Thread"):
+            self.app.show_running(watch)
         self.assertTrue(any("Windows Firewall" in text for text in texts(self.app.body)))
 
-    def host_continue(self, places, players, pick=0):
-        """Host > Continue with a checkpoint saved with places, the Players box at players: what the window said.
-        1.3.3: the Continue list holds the automatic checkpoint and a tape recorder save; pick chooses one."""
-        from tkinter import messagebox
+    def test_the_main_screen_is_one_button(self):
+        # 1.3.7 (the owner: "now that we've integrated the fucking campaign co-op into the main menu, the launcher is
+        # kind of redundant"; his pick: a one-button launcher): name, port, Play; no Play solo, Host, Join or own co-op
         self.copy()
-        names = ("Bob", "Ann", "Sam", "Kim")[:places]
-        checkpoints = [app.play.Checkpoint("autosave", "c_park3", places, names, saved=2000.0),
-                       app.play.Checkpoint("tape2", "c_park2", places, names, saved=1000.0)]
-        settings = dict(app.play.DEFAULT_SETTINGS, name="Bob", players=players)
-        with mock.patch.object(app.play, "load_settings", return_value=settings), \
-                mock.patch.object(app.play, "list_checkpoints", return_value=checkpoints), \
-                mock.patch.object(app.play, "continue_warning", return_value=None):
+        self.app.check_for_update = lambda: None
+        settings = dict(app.play.DEFAULT_SETTINGS, name="Bob", port=27020)
+        with mock.patch.object(app.play, "load_settings", return_value=settings):
             self.app.show_main(self.app.root)
-            self.app.show_start(solo=False)
-            listed = next(w for w in widgets(self.app.body) if w.winfo_class() == "TCombobox"
-                          and any("Tape recorder save 2" in str(v) for v in w.cget("values")))
-            self.assertEqual([str(v) for v in listed.cget("values")],
-                             [app.play.checkpoint_choice(c) for c in checkpoints])   # newest first, as listed
-            self.assertEqual(listed.current(), 0)
-            listed.current(pick)
-            next(w for w in widgets(self.app.body) if w.winfo_class() == "TRadiobutton"
-                 and str(w.cget("text")).startswith("Continue from:")).invoke()
-            with mock.patch.object(messagebox, "showinfo") as info:
-                button(self.app.body, "Start").invoke()
-        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
-            self.jobs[-1][1](False)   # the copy's check passed: the game starts
-        self.addCleanup(setattr, self.app.watch, "closed", True)
-        self.started_map = game.call_args.args[1][-1]
-        return info, (self.app.root / "cryoffear" / app.play.SESSION_CFG).read_text().splitlines()
-
-    def test_continue_as_host_says_the_players_box_is_not_used(self):
-        # L14.6: Continue keeps the checkpoint's places; for a host the Players box was ignored without a word
-        info, config = self.host_continue(places=3, players=2)
-        info.assert_called_once()
-        self.assertIn("saved with 3 places", info.call_args.args[1])
-        self.assertIn("not 2", info.call_args.args[1])
-        self.assertIn("maxplayers 3", config)
-        info, config = self.host_continue(places=2, players=2)
-        info.assert_not_called()
-        self.assertIn("maxplayers 2", config)
-
-    def test_continue_loads_the_checkpoint_picked_in_the_list(self):
-        # 1.3.3 (players asked for more than one save to go back to): the newest is picked unless another is chosen
-        _, config = self.host_continue(places=2, players=2)
-        self.assertIn('cof_continue_slot "autosave"', config)
-        self.assertEqual(self.started_map, "c_park3")
-        _, config = self.host_continue(places=2, players=2, pick=1)
-        self.assertIn('cof_continue_slot "tape2"', config)
-        self.assertIn("cof_continue 1", config)
-        self.assertEqual(self.started_map, "c_park2")
-
-    def test_the_games_own_co_op_is_hosted_from_the_main_screen(self):
-        # 1.3.3 (a player: "it would be a dream if the actual co-op version were playable too"): a fourth card
-        self.copy()
-        cards = {}
-        settings = dict(app.play.DEFAULT_SETTINGS, name="Bob", players=1, password="s3cret", port=27016)
-        with mock.patch.object(app.play, "load_settings", return_value=settings), \
-                mock.patch.object(app.theme, "Card", side_effect=lambda tk, parent, title, text, action:
-                                  cards.__setitem__(title, action)):
-            self.app.show_main(self.app.root)
-        self.assertEqual(list(cards)[:3], ["Play solo", "Host a game", "Join a game"])
-        cards["Cry of Fear's own co-op"]()
-        self.assertIn("Cry of Fear's own co-op", texts(self.app.body))
-        mode = next(w for w in widgets(self.app.body) if w.winfo_class() == "TCombobox")
-        self.assertEqual([str(v) for v in mode.cget("values")], [label for label, _ in app.play.OFFICIAL_CHOICES])
-        self.assertEqual(mode.current(), 0)
-        players = next(w for w in widgets(self.app.body) if w.winfo_class() == "TSpinbox")
-        self.assertEqual(players.get(), "2")   # a solo player's 1 is not a co-op count
-        mode.current(5)   # Survival 1
-        players.set("3")
-        button(self.app.body, "Start").invoke()
-        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"), \
-                mock.patch.object(app.play, "save_settings") as saved:
-            self.jobs[-1][1](False)   # the copy's check passed: the game starts
+        shown = [w.cget("text") for w in widgets(self.app.body) if w.winfo_class() == "TButton"]
+        self.assertEqual(shown, ["Play"])
+        for gone in ("Play solo", "Host a game", "Join a game", "Cry of Fear's own co-op"):
+            self.assertNotIn(gone, texts(self.app.body))
+        self.assertTrue(any("Co-op" in text and "New Game" in text for text in texts(self.app.body)))
+        for name in ("show_start", "show_join", "show_official", "start_choice"):
+            self.assertFalse(hasattr(app.App, name), name)
+        # the port is the app's to set (hosting from the menu uses the one the game was started with)
+        self.assertEqual(self.app.port.get(), "27020")
+        self.app.port.set("80")
+        button(self.app.body, "Play").invoke()
+        self.assertIn("1024 to 65534", str(self.errors[-1]))
+        self.app.port.set("27030")
+        with mock.patch.object(app.play, "save_settings") as saved:
+            button(self.app.body, "Play").invoke()
+            with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
+                self.jobs[-1][1](False)
         self.addCleanup(setattr, self.app.watch, "closed", True)
         args = game.call_args.args[1]
-        self.assertEqual(args[-2:], ["+map", "cof_suicide1"])
-        self.assertIn("-port", args)
-        self.assertEqual(args[args.index("-port") + 1], "27016")
-        config = (self.app.root / "cryoffear" / app.play.SESSION_CFG).read_text().splitlines()
-        for line in ("cof_story_coop 0", "deathmatch 1", "coop 0", "maxplayers 3", 'sv_password "s3cret"'):
-            self.assertIn(line, config)
-        self.assertTrue(any(c.args[1].get("players") == 3 for c in saved.call_args_list))   # remembered for next time
-        self.assertIn("Hosting", texts(self.app.body))
+        self.assertEqual(args[args.index("-port") + 1], "27030")
+        self.assertTrue(any(c.args[1].get("port") == 27030 for c in saved.call_args_list))   # remembered
 
-    def test_the_main_screen_fits_its_window_with_four_cards(self):
-        # 1.3.3: the fourth card; the window is 760 px tall (a 768 px screen leaves 688), and an update offer adds a box
+    def test_the_main_screen_fits_its_window(self):
+        # the window is 760 px tall (a 768 px screen leaves 688), and an update offer adds a box
         import types
         self.copy()
         self.app.check_for_update = lambda: None
@@ -497,79 +424,19 @@ class WindowTests(unittest.TestCase):
             @staticmethod
             def discover_public_address():
                 return ""
-        old, new = (app.play.HostWatch(27015, lan_only=False, net=Net) for _ in range(2))
+        old, new = (app.play.MenuWatch(27015, net=Net) for _ in range(2))
         old.mapping = {"port": 27015}
         for watch in (old, new):
             self.addCleanup(setattr, watch, "closed", True)
         self.app.watch = old
         with mock.patch.object(app.threading, "Thread"):
-            self.app.show_running(new, solo=False)
+            self.app.show_running(new)
         self.assertEqual(calls, [])   # nothing on the UI thread
         self.jobs[0][0]()
         self.assertEqual(calls, ["unmap", "map"])
         self.assertTrue(old.closed)
         self.assertIs(self.app.watch, new)
-        # solo after hosting: the old watch is closed off the UI thread too
-        self.jobs.clear()
-        solo = app.play.HostWatch(27015, lan_only=True, net=Net)
-        self.addCleanup(setattr, solo, "closed", True)
-        new.mapping = {"port": 27015}
-        with mock.patch.object(app.threading, "Thread"):
-            self.app.show_running(solo, solo=True)
-        self.jobs[0][0]()
-        self.assertTrue(new.closed)
-        self.assertEqual(calls, ["unmap", "map", "unmap"])
 
-    def test_join_is_off_while_it_checks(self):
-        # L14.10: a second click started a second check and a second start
-        self.copy()
-        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
-            self.app.show_main(self.app.root)
-        self.app.show_join()
-        entry = next(w for w in widgets(self.app.body) if w.winfo_class() == "TEntry")
-        entry.insert(0, "203.0.113.7:27015")
-        join = button(self.app.body, "Join")
-        join.invoke()
-        self.assertEqual(str(join.cget("state")), "disabled")
-        job, ready, refused = self.jobs[-1]
-        with mock.patch.object(app.network, "query_info", return_value={"cofbuild": app.play.VERSION,
-                                                                       "cofmaps": "00000000"}):
-            with self.assertRaisesRegex(ValueError, "merged maps differ"):
-                job()   # L8: this copy has no merged maps, the host has others
-        refused(ValueError("The host's merged maps differ from yours."))
-        self.assertEqual(str(join.cget("state")), "normal")
-
-    def test_a_host_on_an_older_release_is_named_before_the_join(self):
-        # 1.2.6: 1.1.1 to the newest join each other, but most fixes run in the host's game
-        self.copy()
-        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
-            self.app.show_main(self.app.root)
-        self.app.show_join()
-        entry = next(w for w in widgets(self.app.body) if w.winfo_class() == "TEntry")
-        entry.insert(0, "203.0.113.7:27015")
-        join = button(self.app.body, "Join")
-        join.invoke()
-        job, ready, refused = self.jobs[-1]
-        with mock.patch.object(app.network, "query_info", return_value={"cofbuild": app.play.VERSION}):
-            note = job()   # a 1.2.5 host sends no cofver
-        self.assertIn("older than " + app.play.VERSION_LABEL, note)
-        with mock.patch.object(app.network, "query_info",
-                               return_value={"cofbuild": app.play.VERSION, "cofver": app.play.VERSION_LABEL}):
-            self.assertIsNone(job())
-        with mock.patch("tkinter.messagebox.askokcancel", return_value=False) as asked, \
-                mock.patch.object(app.play, "join_launch") as launch:
-            ready(note)   # the guest says no: nothing starts, Join is back
-        asked.assert_called_once()
-        launch.assert_not_called()
-        self.assertEqual(str(join.cget("state")), "normal")
-        join.invoke()
-        job, ready, refused = self.jobs[-1]
-        with mock.patch("tkinter.messagebox.askokcancel", return_value=True), \
-                mock.patch.object(app.play, "join_launch", return_value=(["game"], "cfg\n")) as launch, \
-                mock.patch.object(self.app, "launch") as started:
-            ready(note)   # yes: the join goes on
-        launch.assert_called_once()
-        started.assert_called_once()
 
 
 if __name__ == "__main__":

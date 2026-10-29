@@ -314,7 +314,7 @@ class UpdateWindowTests(unittest.TestCase):
         with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS)):
             self.app.show_download(self.release)
             calls["failed"](up.Cancelled())
-            self.assertIn("Play solo", self.labels(self.app.body))
+            self.assertIn("Play the story together", self.labels(self.app.body))   # the main screen (1.3.7: one button)
             self.assertEqual(errors, [])
             self.app.show_download(self.release)
             calls["failed"](ValueError("The download is damaged. Try again."))

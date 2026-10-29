@@ -1451,3 +1451,28 @@ updates, the router port and the join code), Co-op as its own item near the top.
   111,636,400 bytes. mainui `8270d11e` (a stale `.git/index.lock` from 2026-10-12 moved to
   `evidence/release-1.3.6/`), engine `99324486`, launcher `3dd17c8`. Nothing pushed. The ModDB upload is the owner's
   (`evidence/release-1.3.6/moddb-text.txt`).
+
+## 1.3.7: quicker updates, and the app as a one-button launcher (2026-10-29)
+
+The owner, watching his own 1.3.5 -> 1.3.6 update remake every model and all 29 merged maps: "You don't have to
+reinstall everything every single fucking time you update." Then: "now that we've integrated the fucking campaign
+co-op into the main menu, the launcher is kind of redundant"; his picks: a one-button launcher, both in one release.
+- **Updates keep what has not changed** (`friend_setup.update_copy`; the 1.3.6 update took 212 s in the release check,
+  its own log: engine 15 s, models 15 s, art 1 s, merged maps ~170 s):
+  - Merged maps: `merge_groups.installed_group` keeps a group whose `.bsp` and `.sections` already hash to what
+    map_groups.json records (setup and update alike); only the others are built.
+  - Models and art: the package records `recipes` in payload.json (`friend_setup.recipes`: SHA-256 of
+    `RECIPE_SOURCES`, CRLF-proof); the copy's record keeps the recipes, the models and now the art's files
+    (`make_art` returns their hashes). An update keeps a part when its recipe is the same and its files still hash as
+    recorded (`still_current`), else makes it again. Copies from before 1.3.7 (no recipes) make them once more.
+  - `restore_left_out` (walks the whole Steam game) runs once; the record says `left_out_restored`.
+  - The engine installer was already incremental (3 copied, 662 up to date). The 111 MB download is unchanged.
+- **The app**: `show_main` is one screen: name, Port (UDP), a big Play (`Play.TButton`), a line on hosting/joining
+  from the game's Co-op, the co-op keys. Play = `open_game` (play.menu_launch, MenuWatch, invite file). Removed:
+  `show_start`, `start_choice`, `show_join`, `show_official`, the host/solo `show_running` modes, `theme.Card`.
+  `coop_play.host_launch/join_launch/official_launch/check_host/list_checkpoints` stay: the reference the menu's pages
+  are compared with (tests/test_menu_coop.py), and `--self-test` uses menu_launch now.
+  - Gone with the app's Join: its pre-join check (the host's version and merged maps). The game's Join co-op just
+    connects.
+- Readme PLAY section rewritten for the game's Co-op menu.
+- Version 1.3.7, build 33 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.7.md`.

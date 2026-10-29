@@ -1,4 +1,5 @@
-"""Cry of Fear story co-op: the app. Setup on first run, then Open the game (its Co-op menu), Play solo, Host or Join."""
+"""Cry of Fear story co-op: the app. Setup on first run, updates, then Play: the game at its main menu, whose Co-op
+list hosts, joins, continues or plays with AI; this window keeps the router port and the join code meanwhile."""
 from __future__ import annotations
 
 import argparse
@@ -197,7 +198,7 @@ class App:
         self.update_slot = None    # where the main screen shows that offer
         self.checked = False
         self.busy = None           # "setup" or "update" while one runs (BUSY_WARNINGS)
-        self.launching = False     # a Start or Join is checking the copy (launch)
+        self.launching = False     # Play is checking the copy (launch)
         self.messages = queue.Queue()
         window.title("Cry of Fear Co-op")
         window.geometry(f"840x{min(760, window.winfo_screenheight() - 80)}")
@@ -518,33 +519,33 @@ class App:
 
     # main
     def show_main(self, copy):
-        ttk = self.ttk
+        """1.3.7 (the owner: "now that we've integrated the fucking campaign co-op into the main menu, the launcher is
+        kind of redundant"; his pick: a one-button launcher). Play opens the game at its main menu, whose Co-op list
+        hosts, joins, continues or plays with AI (mainui menus/CoFStoryCoop.cpp); this app keeps setup, updates, the
+        router port and the join code. Its own Play solo, Host, Join and own-co-op screens are gone (the game's
+        Co-op pages send what they sent: tests/test_menu_coop.py)."""
+        ttk, tk = self.ttk, self.tk
         self.root = Path(copy)
         self.settings = play.load_settings(self.root)
-        body = self.clear("Play the story together", "Open the game and pick Co-op in its menu, or start from here.")
+        body = self.clear("Play the story together",
+                          "Co-op is in the game's own main menu, right under New Game: host, join, continue, or play "
+                          "with AI companions.")
         self.update_slot = ttk.Frame(body)
         self.update_slot.pack(fill="x")
         self.show_offer()
         holder = self.row(body, "Your name", 12)
-        self.name = self.tk.StringVar(value=self.settings["name"])
+        self.name = tk.StringVar(value=self.settings["name"])
         ttk.Entry(holder, textvariable=self.name, width=28).pack(side="left")
-        # 1.3.6 (the owner: "integrate the mod into the main menu somehow"): the game at its main menu, whose Co-op list
-        # hosts, joins, continues or plays with AI; on the name's row, so the four cards still fit a 768 px screen
-        self.open_button = ttk.Button(holder, text="Open the game", style="Accent.TButton",
-                                      command=self.guard(self.open_game))
-        self.open_button.pack(side="right")
-        ttk.Frame(body, height=8).pack()
-        for title, text, action in (
-                ("Play solo", "You and up to three AI companions, on this PC.", lambda: self.show_start(solo=True)),
-                ("Host a game", "Start the story and send your friends the join code.",
-                 lambda: self.show_start(solo=False)),
-                ("Join a game", "Paste the join code your host sent you.", self.show_join),
-                # 1.3.3: the game's own co-op mode, which players asked for (the original game no longer runs for some)
-                ("Cry of Fear's own co-op", "Host the game's separate co-op campaign, manhunt or survival maps.",
-                 self.show_official)):
-            theme.Card(self.tk, body, title, text, action)
-        theme.section(ttk, body, "In the game", top=16)
-        theme.keycaps(self.tk, body, COOP_KEYS)
+        self.port = tk.StringVar(value=str(self.settings["port"]))
+        ttk.Entry(holder, textvariable=self.port, width=7).pack(side="right")
+        ttk.Label(holder, text="Port (UDP)", style="Field.TLabel").pack(side="right", padx=(0, 8))
+        self.open_button = ttk.Button(body, text="Play", style="Play.TButton", command=self.guard(self.open_game))
+        self.open_button.pack(fill="x", pady=(18, 8))
+        ttk.Label(body, text="Hosting: Co-op, then Host co-op in the game; send your friends the join code this window "
+                             "shows. Joining: Co-op, then Join co-op, and paste the code your host sent you.",
+                  style="Hint.TLabel", wraplength=760, justify="left").pack(anchor="w")
+        theme.section(ttk, body, "In the game", top=18)
+        theme.keycaps(tk, body, COOP_KEYS)
         self.check_for_update()
 
     def remember(self, **values):
@@ -552,7 +553,7 @@ class App:
         play.save_settings(self.root, self.settings)
 
     def maps_tag(self) -> str:
-        """This copy's merged maps for the host's cof_maps and the join check (1.1.8, L8)."""
+        """This copy's merged maps, for the cof_maps a game hosted from the menu sends (1.1.8, L8)."""
         merged = (setup_lib.installed_state(self.root) or {}).get("merged_maps")
         return play.merged_maps_tag(merged if isinstance(merged, dict) else {})
 
@@ -601,200 +602,26 @@ class App:
     def video(self):
         return play.video_flags(not self.settings["first_launch_done"], desktop_size())
 
-    def start_choice(self, body):
-        ttk, tk = self.ttk, self.tk
-        # 1.3.3: every checkpoint of the copy, newest first (players asked for more than one save to go back to)
-        checkpoints = play.list_checkpoints(self.root)
-        kind = tk.StringVar(value="new")
-        theme.section(ttk, body, "Start from", top=0)
-        ttk.Radiobutton(body, text="New game (the intro; Enter skips cutscenes)", variable=kind, value="new").pack(anchor="w")
-        holder = ttk.Frame(body)
-        holder.pack(anchor="w", fill="x")
-        ttk.Radiobutton(holder, text="Chapter:", variable=kind, value="chapter").pack(side="left")
-        chapter = ttk.Combobox(holder, values=[label for label, _ in play.CHAPTER_CHOICES], state="readonly", width=44)
-        chapter.current(1)
-        chapter.pack(side="left", padx=8, pady=2)
-        chapter.bind("<<ComboboxSelected>>", lambda _: kind.set("chapter"))
-        holder = ttk.Frame(body)
-        holder.pack(anchor="w", fill="x")
-        ttk.Radiobutton(holder, text="Continue from:" if checkpoints else "Continue (no co-op checkpoint yet)",
-                        variable=kind, value="continue", state="normal" if checkpoints else "disabled").pack(side="left")
-        saved = ttk.Combobox(holder, values=[play.checkpoint_choice(c) for c in checkpoints], state="readonly", width=52)
-        if checkpoints:
-            saved.current(0)
-            saved.pack(side="left", padx=8, pady=2)
-            saved.bind("<<ComboboxSelected>>", lambda _: kind.set("continue"))
-
-        def resolve():
-            if kind.get() == "continue":
-                checkpoint = checkpoints[max(saved.current(), 0)]
-                return checkpoint.map, checkpoint
-            if kind.get() == "chapter":
-                return play.CHAPTER_CHOICES[chapter.current()][1], None
-            return play.NEW_GAME_MAP, None
-        return resolve
-
-    def show_start(self, solo):
-        ttk, tk = self.ttk, self.tk
-        body = self.clear("Play solo" if solo else "Host a game",
-                          "You and one to three AI companions, on this PC only." if solo else
-                          "Friends join you with the join code shown after the game starts.")
-        buttons = ttk.Frame(body)   # packed first, at the bottom: a short window clips options, never Start
-        buttons.pack(side="bottom", anchor="w", fill="x", pady=(14, 0))
-        resolve = self.start_choice(body)
-        players = tk.StringVar(value=str(self.settings["players"]))
-        password = tk.StringVar(value=self.settings["password"])
-        companion = tk.BooleanVar(value=self.settings["companion"])
-        companions = tk.StringVar(value=str(self.settings["companions"]))
-        port = tk.StringVar(value=str(self.settings["port"]))
-        bonus = tk.BooleanVar(value=self.settings["bonus_room"])
-        theme.section(ttk, body, "Options")
-        ttk.Checkbutton(body, text="Bonus room unlocked (FAMAS, axe and more; a later chapter starts with them; "
-                        "O opens the wardrobe)",
-                        variable=bonus).pack(anchor="w")
-        merged = tk.BooleanVar(value=self.settings["merged_maps"])
-        ttk.Checkbutton(body, text="Merged maps (fewer loading screens; Continue keeps the checkpoint's own)",
-                        variable=merged).pack(anchor="w")
-        torch = tk.BooleanVar(value=self.settings["coop_flashlight"])
-        ttk.Checkbutton(body, text="Co-op flashlight on F (a free torch for everyone; the original has only Simon's phone)",
-                        variable=torch).pack(anchor="w")
-        if solo:
-            theme.section(ttk, body, "Party")
-            ttk.Spinbox(self.row(body, "AI companions", 14), from_=1, to=play.MAX_COMPANIONS, textvariable=companions,
-                        width=5, state="readonly").pack(side="left")
-        if not solo:
-            theme.section(ttk, body, "Hosting")
-            ttk.Spinbox(self.row(body, "Players", 12), from_=2, to=4, textvariable=players, width=5).pack(side="left")
-            holder = self.row(body, "Password", 12)
-            ttk.Entry(holder, textvariable=password, show="*", width=28).pack(side="left")
-            ttk.Label(holder, text="optional: friends need it to join", style="Hint.TLabel").pack(side="left", padx=10)
-            ttk.Entry(self.row(body, "Port (UDP)", 12), textvariable=port, width=8).pack(side="left")
-            ttk.Checkbutton(body, text="AI companions in the empty places (each makes room when a friend joins)",
-                            variable=companion).pack(anchor="w", pady=4)
-
-        def start():
-            from tkinter import messagebox
-            name = play.clean_name(self.name.get())
-            map_name, checkpoint = resolve()
-            if checkpoint:
-                warning = play.continue_warning(checkpoint, name)
-                if warning and not messagebox.askokcancel("Continue", warning, parent=self.window):
-                    return
-            ais = int(companions.get() or 1)
-            wanted = 2 if solo else play.clean_players(players.get())
-            count, ais = play.party_size(solo=solo, players=wanted,
-                                         companions=ais, fill=companion.get(),
-                                         checkpoint_players=checkpoint.players if checkpoint else None)
-            if solo and checkpoint and ais < int(companions.get() or 1):
-                messagebox.showinfo("Continue", f"This checkpoint was saved with {count} places, so {ais} AI "
-                                    f"{'companion comes' if ais == 1 else 'companions come'} along this time.",
-                                    parent=self.window)
-            if not solo and checkpoint and count != wanted:
-                # 1.1.9 (L14.6): Continue keeps the checkpoint's places (the engine needs them); the Players box was
-                # ignored without a word
-                messagebox.showinfo("Continue", f"This checkpoint was saved with {count} places, so the game has "
-                                    f"{count} places this time, not {wanted}.", parent=self.window)
-            number = play.DEFAULT_PORT if solo else play.clean_port(port.get())
-            args, config = play.host_launch(self.root, solo=solo, name=name, map_name=map_name, players=count,
-                                            password=password.get(), companions=ais, port=number,
-                                            cont=checkpoint is not None, video=self.video(), bonus_room=bonus.get(),
-                                            merged=play.merged_for_start(checkpoint, checkbox=merged.get()),
-                                            coop_flashlight=torch.get(), maps=self.maps_tag(),
-                                            slot=checkpoint.slot if checkpoint else "")
-            choices = dict(bonus_room=bonus.get(), merged_maps=merged.get(), coop_flashlight=torch.get())
-            hosting = dict(players=self.settings["players"] if checkpoint else count, password=password.get(),
-                           companion=companion.get(), port=number)
-
-            def started():
-                checking.set("")
-                self.remember(**choices)
-                if solo and not checkpoint:
-                    self.remember(companions=ais)
-                if not solo:
-                    self.remember(**hosting)
-                self.show_running(play.HostWatch(number, lan_only=solo), solo)
-
-            def stopped():
-                checking.set("")
-                if start_button.winfo_exists():
-                    start_button.configure(state="normal")
-            start_button.configure(state="disabled")   # one start at a time while the copy is checked
-            checking.set("Checking your copy…")
-            self.launch(args, config, started, stopped)
-        checking = tk.StringVar()
-        start_button = ttk.Button(buttons, text="Start", command=self.guard(start), style="Accent.TButton")
-        start_button.pack(side="left")
-        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
-        ttk.Label(buttons, textvariable=checking, style="Hint.TLabel").pack(side="left", padx=8)
-
     def open_game(self):
-        """1.3.6: the game at its main menu (play.menu_launch); this window shows the join code while it runs, and the
+        """The game at its main menu (play.menu_launch); this window then shows the join code while it runs, and the
         menu's Host co-op shows it too (play.write_invite)."""
         name = play.clean_name(self.name.get())
-        number = play.clean_port(str(self.settings["port"]))
+        number = play.clean_port(self.port.get())
         args, config = play.menu_launch(self.root, name=name, port=number, maps=self.maps_tag(), video=self.video())
         self.open_button.configure(state="disabled")   # one start at a time while the copy is checked
+        root = self.root
+
+        def started():
+            self.remember(port=number)
+            self.show_running(play.MenuWatch(number, runtime=root))
 
         def stopped():
             if self.open_button.winfo_exists():
                 self.open_button.configure(state="normal")
-        root = self.root
-        self.launch(args, config, lambda: self.show_running(play.MenuWatch(number, runtime=root), False, menu=True),
-                    stopped)
+        self.launch(args, config, started, stopped)
 
-    def show_official(self):
-        """1.3.3: host Cry of Fear's own co-op mode (play.OFFICIAL_CHOICES); friends join with Join a game as usual."""
-        ttk, tk = self.ttk, self.tk
-        body = self.clear("Cry of Fear's own co-op",
-                          "The game's separate co-op campaign, manhunt and survival maps, as the game made them. "
-                          "Friends join with Join a game, as for the story.")
-        buttons = ttk.Frame(body)
-        buttons.pack(side="bottom", anchor="w", fill="x", pady=(14, 0))
-        theme.section(ttk, body, "Start from", top=0)
-        choice = ttk.Combobox(self.row(body, "Mode", 12), values=[label for label, _ in play.OFFICIAL_CHOICES],
-                              state="readonly", width=44)
-        choice.current(0)
-        choice.pack(side="left")
-        ttk.Label(body, text="In a lobby, everyone presses the attack button when ready; the game starts a few seconds "
-                             "after the last one.", style="Hint.TLabel", wraplength=740, justify="left").pack(anchor="w", pady=4)
-        players = tk.StringVar(value=str(max(2, min(self.settings["players"], 4))))
-        password = tk.StringVar(value=self.settings["password"])
-        port = tk.StringVar(value=str(self.settings["port"]))
-        theme.section(ttk, body, "Hosting")
-        ttk.Spinbox(self.row(body, "Players", 12), from_=2, to=4, textvariable=players, width=5).pack(side="left")
-        holder = self.row(body, "Password", 12)
-        ttk.Entry(holder, textvariable=password, show="*", width=28).pack(side="left")
-        ttk.Label(holder, text="optional: friends need it to join", style="Hint.TLabel").pack(side="left", padx=10)
-        ttk.Entry(self.row(body, "Port (UDP)", 12), textvariable=port, width=8).pack(side="left")
-
-        def start():
-            count = play.clean_players(players.get())
-            number = play.clean_port(port.get())
-            args, config = play.official_launch(self.root, name=play.clean_name(self.name.get()),
-                                                map_name=play.OFFICIAL_CHOICES[choice.current()][1],
-                                                players=count, password=password.get(), port=number,
-                                                video=self.video())
-            hosting = dict(players=count, password=password.get(), port=number)
-
-            def started():
-                checking.set("")
-                self.remember(**hosting)
-                self.show_running(play.HostWatch(number, lan_only=False), False)
-
-            def stopped():
-                checking.set("")
-                if start_button.winfo_exists():
-                    start_button.configure(state="normal")
-            start_button.configure(state="disabled")
-            checking.set("Checking your copy…")
-            self.launch(args, config, started, stopped)
-        checking = tk.StringVar()
-        start_button = ttk.Button(buttons, text="Start", command=self.guard(start), style="Accent.TButton")
-        start_button.pack(side="left")
-        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
-        ttk.Label(buttons, textvariable=checking, style="Hint.TLabel").pack(side="left", padx=8)
-
-    def show_running(self, watch, solo, menu=False):
+    def show_running(self, watch):
+        """While the game runs: what it is doing, the join code, the addresses and the router port (play.MenuWatch)."""
         ttk, tk = self.ttk, self.tk
         # 1.1.9 (L14.4): a game started again before the last one's watch saw it end: that watch would close later
         # and remove the router mapping the new one has just taken over. It is closed first, off the UI thread.
@@ -807,57 +634,45 @@ class App:
                     previous.close()
                 except Exception:   # the new game's router port comes first
                     pass
-        firewall = ("If Windows Firewall asks about Cry of Fear (its window can be hidden behind the game), click Allow "
-                    "access, or friends can't join.")
-        if menu:
-            body = self.clear("Cry of Fear is open", "Host, join, continue or play with AI from Co-op in the game's main "
-                              "menu. If you host, send your friends the join code (and the password, if you set one); "
-                              "Host co-op shows it too. Keep this window open while you play. " + firewall)
-        else:
-            body = self.clear("Playing solo" if solo else "Hosting",
-                              "Keep this window open while you play." if solo else
-                              "Send your friends the join code (and the password, if you set one). "
-                              "Keep this window open while you host. " + firewall)
+        body = self.clear("Cry of Fear is open",
+                          "Pick Co-op in the game's main menu. If you host, send your friends the join code (and the "
+                          "password, if you set one); the game's Host co-op page shows it too. Keep this window open "
+                          "while you play. If Windows Firewall asks about Cry of Fear (its window can be hidden behind "
+                          "the game), click Allow access, or friends can't join.")
         status = tk.StringVar(value="Starting the game...")
         state = tk.Frame(body, background=theme.PANEL, highlightthickness=1, highlightbackground=theme.LINE)
         state.pack(fill="x", pady=(0, 6))
         tk.Frame(state, background=theme.ACCENT, width=3).pack(side="left", fill="y")
         tk.Label(state, textvariable=status, background=theme.PANEL, foreground=theme.TEXT, font=theme.FONTS.get("body"),
                  wraplength=700, justify="left", anchor="w", padx=12, pady=10).pack(side="left", fill="x", expand=True)
-        if not solo:
-            code, address, lan, router = tk.StringVar(value="(looking…)"), tk.StringVar(), tk.StringVar(), tk.StringVar()
-            for label, var in (("Join code", code), ("Internet address", address), ("Same place (LAN)", lan)):
-                holder = self.row(body, label)
-                ttk.Entry(holder, textvariable=var, state="readonly").pack(side="left", fill="x", expand=True)
-                ttk.Button(holder, text="Copy", command=lambda v=var: (self.window.clipboard_clear(),
-                                                                      self.window.clipboard_append(v.get()))).pack(side="left", padx=4)
-            ttk.Label(body, textvariable=router, style="Hint.TLabel", wraplength=740).pack(anchor="w", pady=8)
-
-            root = self.root
-
-            def invite():
-                # 1.3.6: the game menu's Host co-op shows what this window shows
-                if menu:
-                    try:
-                        play.write_invite(root, watch.code, watch.address, lan.get())
-                    except OSError:
-                        pass
-
-            def routed(_):
-                code.set(watch.code or "(no Internet address found: use the LAN or VPN address)")
-                address.set(watch.address)
-                router.set(watch.router)
-                invite()
-
-            def found(rows):
-                lan.set(f"{rows[0]['address']}:{watch.port}" if rows else "")
-                invite()
-            self.work(lambda: (release(), watch.open_router()), routed, lambda error: router.set(str(error)))
-            self.work(network.local_addresses, found, lambda _: None)
-        elif previous is not None:
-            self.work(release, lambda _: None, lambda _: None)
-        ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=14)
+        code, address, lan, router = tk.StringVar(value="(looking…)"), tk.StringVar(), tk.StringVar(), tk.StringVar()
+        for label, var in (("Join code", code), ("Internet address", address), ("Same place (LAN)", lan)):
+            holder = self.row(body, label)
+            ttk.Entry(holder, textvariable=var, state="readonly").pack(side="left", fill="x", expand=True)
+            ttk.Button(holder, text="Copy", command=lambda v=var: (self.window.clipboard_clear(),
+                                                                  self.window.clipboard_append(v.get()))).pack(side="left", padx=4)
+        ttk.Label(body, textvariable=router, style="Hint.TLabel", wraplength=740).pack(anchor="w", pady=8)
         root = self.root
+
+        def invite():
+            # 1.3.6: the game menu's Host co-op shows what this window shows
+            try:
+                play.write_invite(root, watch.code, watch.address, lan.get())
+            except OSError:
+                pass
+
+        def routed(_):
+            code.set(watch.code or "(no Internet address found: use the LAN or VPN address)")
+            address.set(watch.address)
+            router.set(watch.router)
+            invite()
+
+        def found(rows):
+            lan.set(f"{rows[0]['address']}:{watch.port}" if rows else "")
+            invite()
+        self.work(lambda: (release(), watch.open_router()), routed, lambda error: router.set(str(error)))
+        self.work(network.local_addresses, found, lambda _: None)
+        ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=14)
 
         def loop():
             time.sleep(5)
@@ -869,59 +684,6 @@ class App:
                 self.messages.put((status.set, watch.poll(running)))
                 time.sleep(3)
         threading.Thread(target=loop, daemon=True).start()
-
-    def show_join(self):
-        ttk, tk = self.ttk, self.tk
-        body = self.clear("Join a game", "Paste the join code (or the address) your host sent you.")
-        target, password = tk.StringVar(), tk.StringVar()
-        ttk.Entry(self.row(body, "Join code", 12), textvariable=target).pack(side="left", fill="x", expand=True)
-        ttk.Entry(self.row(body, "Password", 12), textvariable=password, show="*").pack(side="left", fill="x", expand=True)
-        status = tk.StringVar()
-
-        def join():
-            name = play.clean_name(self.name.get())
-            secret = play.clean_password(password.get())
-            endpoint = network.parse_endpoint(target.get())
-            status.set(f"Checking {endpoint}…")
-            button.configure(state="disabled")   # 1.1.8 (L14.10): a second click started a second check and start
-
-            def enable():
-                if button.winfo_exists():
-                    button.configure(state="normal")
-
-            def ready(note):
-                # 1.2.6: a host on an older release runs without the newest fixes: say so, the guest decides
-                if note:
-                    from tkinter import messagebox
-                    if not messagebox.askokcancel("Cry of Fear Co-op", note, parent=self.window):
-                        enable()
-                        status.set("")
-                        return
-                try:
-                    args, config = play.join_launch(self.root, name=name, password=secret, endpoint=str(endpoint),
-                                                    video=self.video())
-                except ValueError as error:
-                    refused(error)
-                    return
-                self.launch(args, config,
-                            lambda: (enable(), status.set("Joining. The game window opens in a moment.")),
-                            lambda: (enable(), status.set("")))
-
-            def refused(error):
-                enable()
-                status.set("")
-                self.error(error)
-            def check():
-                info = network.query_info(endpoint, timeout=3)
-                play.check_host(info, password=secret, maps=self.maps_tag())
-                return play.host_version_note(info)
-            self.work(check, ready, refused)
-        buttons = ttk.Frame(body)
-        buttons.pack(anchor="w", pady=18)
-        button = ttk.Button(buttons, text="Join", command=self.guard(join), style="Accent.TButton")
-        button.pack(side="left")
-        ttk.Button(buttons, text="Back", command=lambda: self.show_main(self.root)).pack(side="left", padx=8)
-        ttk.Label(body, textvariable=status, style="Hint.TLabel", wraplength=740).pack(anchor="w")
 
 
 def open_window(payload, exe, copy=None, update_from=None, wait=()):
@@ -966,8 +728,7 @@ def self_test(payload) -> int:
     if getattr(sys, "frozen", False):
         assert setup_lib.inspect_payload(payload)["build"] == play.BUILD
     assert setup_lib.merge_groups.load_groups(), "the merged-map groups are missing"
-    args, config = play.host_launch(Path("copy"), solo=True, name="Test", map_name="c_intro", players=4, password="",
-                                    companions=3, port=play.DEFAULT_PORT, cont=False, video=[])
+    args, config = play.menu_launch(Path("copy"), name="Test", port=play.DEFAULT_PORT, maps="", video=[])
     assert "cof_build " + play.VERSION in config and "-console" not in args
     return 0
 

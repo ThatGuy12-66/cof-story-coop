@@ -57,6 +57,12 @@ SETUP_STEPS = (("Checking your game", .01), ("Copying game files", .33), ("Insta
                ("Joining story maps (fewer loading screens)", .55))
 UPDATE_STEPS = (("Installing the new engine", .07), ("Making the Simon and weapon models", .07),
                 ("Making the inventory art", .01), ("Joining story maps (fewer loading screens)", .85))
+# 1.3.7 (the owner: "You don't have to reinstall everything every single fucking time you update"): what makes each
+# generated part of a copy. The package records a hash of these sources (payload.json "recipes", recipes()); an update
+# makes the models or the art again only when theirs changed or their files are not what the copy's record says, and
+# a merged map only when it is not already the one map_groups.json records (merge_groups.installed_group).
+RECIPE_SOURCES = {"models": ("tools/prepare_simon_models.py", "tools/prepare_coop_weapons.py", "cofcoop/core.py"),
+                  "art": ("tools/make_inventory12_art.py",)}
 # Upstream's installer was written for an install into the Steam folder; these of its lines do not fit a copy.
 INSTALLER_HIDDEN = ("Start Cry of Fear from Steam", "Uninstall.cmd")
 
@@ -359,18 +365,56 @@ def run_installer(destination: Path, steps=None) -> None:
         raise RuntimeError("The engine could not be installed. See friend-setup-install.log in the copy.")
 
 
-def make_art(root: Path, steps=None) -> None:
-    """The 12-slot inventory's background art, from this copy's own retail images."""
+def recipes(root: Path) -> dict[str, str]:
+    """At package time (build_tester_package): a hash of each generator's sources (RECIPE_SOURCES), line endings
+    left out, so two checkouts of the same commit agree."""
+    found = {}
+    for kind, sources in RECIPE_SOURCES.items():
+        digest = hashlib.sha256()
+        for rel in sources:
+            digest.update(rel.encode("ascii") + b"\0" + (Path(root) / rel).read_bytes().replace(b"\r\n", b"\n") + b"\0")
+        found[kind] = digest.hexdigest()
+    return found
+
+
+def recorded_files_current(base: Path, recorded) -> bool:
+    """Every file a copy's record lists, under base, is there with its recorded hash (and the record lists some)."""
+    if not isinstance(recorded, dict) or not recorded:
+        return False
+    try:
+        return all(isinstance(sha, str) and digest_file(Path(base) / rel) == sha for rel, sha in recorded.items())
+    except OSError:
+        return False
+
+
+def still_current(kind: str, manifest: dict, state: dict, base: Path, recorded) -> bool:
+    """1.3.7: an update can keep a generated part: the new package makes it the same way (its recipe) as the one that
+    made the copy's, and the copy's files are still the ones recorded."""
+    new = (manifest.get("recipes") or {}).get(kind)
+    return bool(new) and new == (state.get("recipes") or {}).get(kind) and recorded_files_current(base, recorded)
+
+
+def make_art(root: Path, steps=None) -> dict[str, str]:
+    """The 12-slot inventory's background art, from this copy's own retail images; its files (under the copy) and their
+    hashes, for the record."""
     steps = steps or Steps(())
     try:
         written = art.generate(root)
     except SystemExit as error:
         raise RuntimeError(f"The inventory art could not be made: {error}") from None
+    hashes = {}
     for path in written:
         try:
-            steps.note(f"Made {Path(path).relative_to(root).as_posix()}")
-        except ValueError:
+            rel = Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
+        except (ValueError, OSError):
             steps.note(f"Made {path}")
+            continue
+        steps.note(f"Made {rel}")
+        try:
+            hashes[rel] = digest_file(Path(root) / rel)
+        except OSError:
+            pass
+    return hashes
 
 
 def generated_models(models: Path) -> dict[str, bytes]:
@@ -552,6 +596,13 @@ def make_merged_maps(root: Path, steps=None) -> dict[str, str]:
     for number, group in enumerate(enabled, 1):
         steps.part((number - 1) / len(enabled), f"{number} of {len(enabled)}: {group.name}")
         try:
+            # 1.3.7: one already the map this package records is kept (an update made all of them again)
+            current = merge_groups.installed_group(maps, group)
+            if current:
+                made.update(current)
+                lines.append(f"{group.name}: already up to date ({' + '.join(group.members)})")
+                steps.note(f"{number} of {len(enabled)}: {lines[-1]}")
+                continue
             made.update(merge_groups.install_group(maps, group))
             lines.append(f"{group.name}: merged {' + '.join(group.members)}")
         except (merge_groups.GroupInputMismatch, merge_groups.MergeCheckFailed, RuntimeError, ValueError, OSError) as error:
@@ -593,14 +644,17 @@ def write_shortcuts(root: Path) -> bool:
 
 
 def finish(root: Path, manifest: dict, models: dict, source_game: str, exe: Path, shortcuts: bool, steps,
-           merged: dict | None = None) -> None:
-    """The parts setup and update share: the story cfg, the app in the copy, the installed record, shortcuts."""
+           merged: dict | None = None, art_files: dict | None = None) -> None:
+    """The parts setup and update share: the story cfg, the app in the copy, the installed record, shortcuts.
+    1.3.7: the record also holds the recipes the package made the models and art with, the art's files, and that the
+    files an older setup left out were looked for (restore_left_out), so a later update can skip all three."""
     (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
     install_app(Path(exe), root)
     add_coop_keys(root, steps)
     state = {"schema": 2, "version": manifest["version"], "build": manifest["build"],
              "xash_sha256": manifest["xash_sha256"], "models": models, "merged_maps": merged or {},
-             "source_game": source_game, "campaign_verified": False}
+             "source_game": source_game, "campaign_verified": False, "recipes": dict(manifest.get("recipes") or {}),
+             "art": art_files or {}, "left_out_restored": True}
     if (root / "vgui.dll").is_file():   # 1.1.8 (L1): validate_runtime checks it with xash.dll
         state["vgui_sha256"] = digest_file(root / "vgui.dll")
     (root / INSTALLED).write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
@@ -745,13 +799,13 @@ def make_copy(source: Path, destination: Path, payload: Path, exe: Path, shortcu
     steps.start("Making the Simon and weapon models")
     model_hashes = make_models(destination, steps=steps)
     steps.start("Making the inventory art")
-    make_art(destination, steps)
+    art_files = make_art(destination, steps)
     steps.start("Joining story maps (fewer loading screens)")
     merged = make_merged_maps(destination, steps=steps)
     (destination / "cryoffear/config.cfg").write_text(default_controls() + f'name "{DEFAULT_NAME}"\nsensitivity 4\n', encoding="ascii")
     (destination / "steam_appid.txt").write_text("223710\n", encoding="ascii")
     (destination / INCOMPLETE).unlink()
-    finish(destination, manifest, model_hashes, str(source), exe, shortcuts, steps, merged)
+    finish(destination, manifest, model_hashes, str(source), exe, shortcuts, steps, merged, art_files)
     return destination
 
 
@@ -820,14 +874,25 @@ def update_copy(root: Path, payload: Path, exe: Path, shortcuts: bool, steps: St
     if digest_file(root / "xash.dll") != manifest["xash_sha256"]:
         raise RuntimeError("Installed engine hash differs from the package.")
     ensure_entity_limit(root)
-    restore_left_out(root, state.get("source_game", ""), steps)
+    if not state.get("left_out_restored"):   # 1.3.7: once is enough (it walks the whole Steam game)
+        restore_left_out(root, state.get("source_game", ""), steps)
+    # 1.3.7: the models, the art and the merged maps are made again only when this package makes them differently or
+    # the copy's are not what its record says; otherwise they are kept as they are
     steps.start("Making the Simon and weapon models")
-    models = make_models(root, steps=steps)
+    if still_current("models", manifest, state, root / "cryoffear", state.get("models")):
+        models = state["models"]
+        steps.note("Already up to date: the Simon and weapon models")
+    else:
+        models = make_models(root, steps=steps)
     steps.start("Making the inventory art")
-    make_art(root, steps)
+    if still_current("art", manifest, state, root, state.get("art")):
+        art_files = state["art"]
+        steps.note("Already up to date: the inventory art")
+    else:
+        art_files = make_art(root, steps)
     steps.start("Joining story maps (fewer loading screens)")
     merged = make_merged_maps(root, steps=steps)
-    finish(root, manifest, models, state["source_game"], exe, shortcuts, steps, merged)
+    finish(root, manifest, models, state["source_game"], exe, shortcuts, steps, merged, art_files)
     return root
 
 

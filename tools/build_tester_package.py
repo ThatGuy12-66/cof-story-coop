@@ -118,7 +118,9 @@ def build(out: Path) -> dict:
     payload.mkdir()
     player_payload(Path(stage["player_zip"]), payload / setup_lib.PAYLOAD_ZIP)
     manifest = {"schema": 2, "version": play.VERSION, "build": play.BUILD,
-                "xash_sha256": stage["binaries"]["xash.dll"]["sha256"]}
+                "xash_sha256": stage["binaries"]["xash.dll"]["sha256"],
+                # 1.3.7: how this package makes the models and the art; an update made the same way keeps them
+                "recipes": setup_lib.recipes(ROOT)}
     (payload / setup_lib.PAYLOAD_JSON).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     setup_lib.inspect_payload(payload)
     (out / "version-info.txt").write_text(version_info(), encoding="utf-8")

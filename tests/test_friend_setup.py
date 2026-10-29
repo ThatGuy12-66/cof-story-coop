@@ -357,6 +357,108 @@ class FriendSetupTests(unittest.TestCase):
             self.assertEqual((state["build"], state["models"]), (2, remade))
             self.assertIn("cof_test_gun 0", (root / "cryoffear/cof_story.cfg").read_text())
 
+    def test_an_update_keeps_what_the_new_package_makes_the_same_way(self):
+        # 1.3.7 (the owner: "You don't have to reinstall everything every single fucking time you update"): the models,
+        # the art and the save sounds are kept when nothing that makes them changed; the engine is still laid over
+        with tempfile.TemporaryDirectory() as temp:
+            root, exe = Path(temp) / "CoF-Story-Coop", Path(temp) / "new.exe"
+            exe.write_bytes(b"new app")
+            files = {"xash.dll": b"old engine", "cryoffear/models/player/cof_s1/cof_s1.mdl": b"model",
+                     "cryoffear/gfx/vgui/inventory12_full.tga": b"art"}
+            for rel, data in files.items():
+                path = root / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+            models = {"models/player/cof_s1/cof_s1.mdl": hashlib.sha256(b"model").hexdigest()}
+            art_files = {"cryoffear/gfx/vgui/inventory12_full.tga": hashlib.sha256(b"art").hexdigest()}
+            recipes = {"models": "m" * 64, "art": "a" * 64}
+
+            def record(**changes):
+                state = {"schema": 2, "version": "test1", "build": 1, "xash_sha256": hashlib.sha256(b"old engine").hexdigest(),
+                         "models": models, "art": art_files, "recipes": recipes, "left_out_restored": True,
+                         "source_game": "src"}
+                state.update(changes)
+                (root / friend.INSTALLED).write_text(json.dumps(state))
+
+            def update(package_recipes):
+                payload = make_payload(Path(temp) / f"payload{len(calls)}", b"new engine", build=2)
+                manifest = json.loads((payload / friend.PAYLOAD_JSON).read_text())
+                manifest["recipes"] = package_recipes
+                (payload / friend.PAYLOAD_JSON).write_text(json.dumps(manifest))
+                with mock.patch.object(friend, "game_is_running", return_value=False), \
+                     mock.patch.object(friend.subprocess, "Popen", FakeInstaller), \
+                     mock.patch.object(friend, "make_models", return_value={"models/x.mdl": "1" * 64}) as make, \
+                     mock.patch.object(friend, "make_merged_maps", return_value={}), \
+                     mock.patch.object(friend, "restore_left_out") as restore, \
+                     mock.patch.object(friend.art, "generate", return_value=[]) as generate:
+                    friend.update(root, payload, exe=exe, shortcuts=False)
+                calls.append((make.called, generate.called, restore.called))
+                return friend.installed_state(root)
+
+            calls = []
+            record()
+            state = update(recipes)
+            self.assertEqual(calls[-1], (False, False, False))   # nothing made again
+            self.assertEqual((state["models"], state["art"], state["recipes"]), (models, art_files, recipes))
+            self.assertEqual((root / "xash.dll").read_bytes(), b"new engine")
+            self.assertIn("Already up to date: the Simon and weapon models", (root / friend.SETUP_LOG).read_text())
+            # a new way of making the models: only they are made again
+            record()
+            state = update({"models": "n" * 64, "art": "a" * 64})
+            self.assertEqual(calls[-1], (True, False, False))
+            self.assertEqual(state["recipes"]["models"], "n" * 64)
+            # a model that is not the one recorded, or a copy from before 1.3.7 (no recipes, no art record, the save
+            # sounds never looked for): made again
+            record()
+            (root / "cryoffear/models/player/cof_s1/cof_s1.mdl").write_bytes(b"changed")
+            update(recipes)
+            self.assertEqual(calls[-1], (True, False, False))
+            (root / "cryoffear/models/player/cof_s1/cof_s1.mdl").write_bytes(b"model")
+            record(recipes={}, art={}, left_out_restored=False)
+            state = update(recipes)
+            self.assertEqual(calls[-1], (True, True, True))
+            self.assertTrue(state["left_out_restored"])
+            # a package from before recipes keeps nothing
+            record()
+            update({})
+            self.assertEqual(calls[-1], (True, True, False))
+
+    def test_a_merged_map_already_as_recorded_is_kept(self):
+        from tools.map_merge import groups
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            maps = root / "cryoffear/maps"; maps.mkdir(parents=True)
+            (maps / "cm_apartment1.bsp").write_bytes(b"merged")
+            (maps / "cm_apartment1.sections").write_bytes(b"sections")
+            kept = groups.Group("cm_apartment1", ["c_apartment1", "c_apartment2"], {},
+                                hashlib.sha256(b"merged").hexdigest(), hashlib.sha256(b"sections").hexdigest(), 1, True)
+            stale = groups.Group("cm_apartment3", ["c_apartment3", "c_apartment4"], {}, "3" * 64, "4" * 64, 1, True)
+            (maps / "cm_apartment3.bsp").write_bytes(b"older build")
+            self.assertEqual(groups.installed_group(maps, kept), {"maps/cm_apartment1.bsp": kept.bsp_sha256,
+                                                                  "maps/cm_apartment1.sections": kept.sections_sha256})
+            self.assertIsNone(groups.installed_group(maps, stale))
+            made = {"maps/cm_apartment3.bsp": "3" * 64, "maps/cm_apartment3.sections": "4" * 64}
+            with mock.patch.object(friend.merge_groups, "load_groups", return_value=[kept, stale]), \
+                 mock.patch.object(friend.merge_groups, "install_group", return_value=made) as install:
+                merged = friend.make_merged_maps(root)
+            self.assertEqual([c.args[1].name for c in install.call_args_list], ["cm_apartment3"])
+            self.assertEqual(merged, {**groups.installed_group(maps, kept), **made})
+            self.assertIn("cm_apartment1: already up to date", (root / friend.MERGE_LOG).read_text(encoding="utf-8"))
+            (maps / "cm_apartment1.sections").write_bytes(b"changed")
+            self.assertIsNone(groups.installed_group(maps, kept))
+
+    def test_the_package_records_how_it_makes_the_models_and_the_art(self):
+        root = Path(__file__).resolve().parents[1]
+        found = friend.recipes(root)
+        self.assertEqual(set(found), {"models", "art"})
+        with tempfile.TemporaryDirectory() as temp:
+            for rel in {rel for sources in friend.RECIPE_SOURCES.values() for rel in sources}:
+                path = Path(temp) / rel; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes((root / rel).read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+            self.assertEqual(friend.recipes(Path(temp)), found)   # a CRLF checkout of the same commit agrees
+            (Path(temp) / "tools/make_inventory12_art.py").write_bytes(b"# changed")
+            changed = friend.recipes(Path(temp))
+            self.assertEqual(changed["models"], found["models"])
+            self.assertNotEqual(changed["art"], found["art"])
+
     def test_merged_maps_are_made_and_a_mismatched_group_is_skipped(self):
         from tools.map_merge import groups
         with tempfile.TemporaryDirectory() as temp:

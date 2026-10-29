@@ -1,6 +1,19 @@
-Cry of Fear Co-op 1.3.6
+Cry of Fear Co-op 1.3.7
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.7
+- The app is one button now: Play opens the game at its main menu, and Co-op (right under
+  New Game) has everything the app's Play solo, Host a game, Join a game and Cry of Fear's
+  own co-op screens had. The app still sets up and updates your copy, and while you play
+  it shows your join code and keeps your router port open. Your name and the port are on
+  its screen.
+- Updates are much quicker. An update used to make the Simon and weapon models, the
+  inventory art and the 29 joined story maps all over again, which took a few minutes.
+  Now it checks them and keeps every one that hasn't changed: most updates are the
+  download and the new engine. The joined maps are kept from this update on; the models
+  and the art are made once more this time (a few seconds), then kept too.
+- 1.1 to 1.3.7 can play together.
 
 WHAT'S NEW IN 1.3.6
 - Co-op is in the game's own main menu now. Click Open the game (next to Your name in this
@@ -319,21 +332,25 @@ INSTALL
    Start menu.
 
 PLAY
-- Play solo: you and one to three AI companions.
-- Host a game: friends join you. Send them the join code the app shows.
-  If they can't connect, your router didn't open the port by itself: forward UDP 27015
-  to your PC in the router, or all use a VPN such as Tailscale, ZeroTier or Radmin and
-  share that address. If Windows Firewall asks about Cry of Fear, allow it.
-- Join a game: paste the host's join code (or address) and their password, if any.
-- Cry of Fear's own co-op: host the game's separate co-op campaign, manhunt or survival
-  maps (2 to 4 players). In a lobby, everyone presses the attack button when ready; the
-  game starts a few seconds after the last one. The story's extras (AI companions, merged
-  maps, checkpoints, J to join) are off in this mode.
-Everyone needs the same version of Cry of Fear Co-op.
+Click Play in the app. Cry of Fear opens at its main menu: pick Co-op, right under New Game.
+- Host co-op: a new game or a chapter, for friends. Send them the join code the app shows
+  (the game's Host co-op page shows it too). If they can't connect, your router didn't
+  open the port by itself: forward UDP 27015 (or the port set in the app) to your PC in
+  the router, or all use a VPN such as Tailscale, ZeroTier or Radmin and share that
+  address. If Windows Firewall asks about Cry of Fear, allow it.
+- Join co-op: paste the host's join code (or address) and their password, if any.
+- Continue co-op: go on from a co-op checkpoint, hosted for friends or with AI companions.
+- Play with AI: you and one to three AI companions.
+- Cry of Fear's own co-op: the game's separate co-op campaign, manhunt or survival maps
+  (2 to 4 players). In a lobby, everyone presses the attack button when ready; the game
+  starts a few seconds after the last one. The story's extras (AI companions, merged maps,
+  checkpoints, J to join) are off in this mode.
+Everyone needs the same version of Cry of Fear Co-op. Keep the app's window open while you
+play: it keeps your router port open and shows your join code.
 
-Start a new game (the intro), any chapter, or Continue from a co-op checkpoint.
+Start a new game (the intro), any chapter, or continue from a co-op checkpoint.
 The game makes a co-op checkpoint by itself after every level change, and the host's tape
-recorder saves are checkpoints too: pick one in the list next to "Continue from".
+recorder saves are checkpoints too: pick one in Continue co-op's list.
 Tick "Bonus room unlocked" to open the bonus room (FAMAS, axe and more) for everyone.
 Starting a later chapter lays its weapons out next to you, and O opens the wardrobe.
 Dual wield (two pistols, or a pistol and a light) works from the inventory menu.

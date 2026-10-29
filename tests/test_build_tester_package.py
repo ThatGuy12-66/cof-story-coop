@@ -25,14 +25,14 @@ class BuilderTests(unittest.TestCase):
                         "source-and-licences/notices/PYTHON-LICENSE.txt"):
                 (folder / rel).parent.mkdir(parents=True, exist_ok=True)
                 (folder / rel).write_bytes(b"x")
-            path = Path(temp) / "CoF-Story-Coop-1.3.6.zip"
+            path = Path(temp) / "CoF-Story-Coop-1.3.7.zip"
             builder.write_zip(folder, path)
             with zipfile.ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 self.assertEqual(sorted(archive.namelist()), [
                     "CoF Story Co-op.exe", "READ ME FIRST.txt", "source-and-licences/corresponding-source.zip",
                     "source-and-licences/notices/PYTHON-LICENSE.txt"])
-        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.3.6.zip")
+        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.3.7.zip")
 
     def test_the_app_carries_the_merged_map_groups(self):
         out, payload = Path("C:/out"), Path("C:/out/payload")
@@ -64,9 +64,9 @@ class BuilderTests(unittest.TestCase):
 
     def test_readme_names_the_release_and_no_test_or_dev_tools(self):
         text = builder.README.read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("Cry of Fear Co-op 1.3.6\n"))
-        self.assertIn("WHAT'S NEW IN 1.3.6", text)
-        self.assertIn("1.1 to 1.3.6 can play together", text)
+        self.assertTrue(text.startswith("Cry of Fear Co-op 1.3.7\n"))
+        self.assertIn("WHAT'S NEW IN 1.3.7", text)
+        self.assertIn("1.1 to 1.3.7 can play together", text)
         self.assertIn("https://discord.gg/4uwV6jmmY7", text)
         for word in ("protocol", "sha256", "rcon", "console", "test build", "test package", "tester", "cheat"):
             self.assertNotIn(word, text.lower())
@@ -103,3 +103,12 @@ class BuilderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecipeTests(unittest.TestCase):
+    def test_the_payload_records_how_it_makes_the_models_and_the_art(self):
+        # 1.3.7: an update keeps the copy's models and art when the package makes them the same way
+        import inspect
+        build = inspect.getsource(builder.build)
+        self.assertIn('"recipes": setup_lib.recipes(ROOT)', build)
+        self.assertLess(build.index('"recipes": setup_lib.recipes(ROOT)'), build.index('setup_lib.PAYLOAD_JSON).write_text('))

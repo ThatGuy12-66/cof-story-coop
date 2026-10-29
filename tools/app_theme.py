@@ -149,6 +149,14 @@ def apply(window) -> None:
                                                                   ("pressed", ACCENT_LO), ("active", ACCENT_HI)],
               lightcolor=[("disabled", "#3a1f1d"), ("pressed", ACCENT_LO), ("active", ACCENT_HI)],
               darkcolor=[("disabled", "#3a1f1d"), ("pressed", ACCENT_LO), ("active", ACCENT_HI)])
+    # 1.3.7: the one-button launcher's Play
+    style.configure("Play.TButton", background=ACCENT, foreground="#ffffff", bordercolor=ACCENT, lightcolor=ACCENT,
+                    darkcolor=ACCENT, padding=(30, 14), font=FONTS["title"])
+    style.map("Play.TButton", background=[("disabled", "#3a1f1d"), ("pressed", ACCENT_LO), ("active", ACCENT_HI)],
+              foreground=[("disabled", "#8d7774")], bordercolor=[("disabled", "#3a1f1d"), ("focus", "#f0d6d3"),
+                                                                  ("pressed", ACCENT_LO), ("active", ACCENT_HI)],
+              lightcolor=[("disabled", "#3a1f1d"), ("pressed", ACCENT_LO), ("active", ACCENT_HI)],
+              darkcolor=[("disabled", "#3a1f1d"), ("pressed", ACCENT_LO), ("active", ACCENT_HI)])
     style.configure("Ghost.TButton", background=BG, foreground=MUTED, bordercolor=BG, lightcolor=BG, darkcolor=BG,
                     padding=(10, 5), font=FONTS["small"])
     style.map("Ghost.TButton", background=[("pressed", PANEL), ("active", PANEL)], foreground=[("active", TEXT)],
@@ -229,46 +237,6 @@ class Header:
                                width=0)
         c.create_text(26, 38, text="CRY OF FEAR", anchor="w", fill=TEXT, font=FONTS.get("display"))
         c.create_text(28, 66, text=tracked("STORY CO-OP"), anchor="w", fill=ACCENT_HI, font=FONTS.get("label"))
-
-
-class Card:
-    """A main-screen choice: a title, one line on what it does and an arrow; the whole card is the button (mouse,
-    Tab then Enter or Space)."""
-
-    def __init__(self, tk, parent, title: str, text: str, command):
-        self.command = command
-        self.frame = tk.Frame(parent, background=PANEL, highlightthickness=1, highlightbackground=LINE,
-                              highlightcolor=ACCENT, takefocus=1, cursor="hand2")
-        self.frame.pack(fill="x", pady=4)
-        self.bar = tk.Frame(self.frame, background=PANEL, width=3)
-        self.bar.pack(side="left", fill="y")
-        self.arrow = tk.Label(self.frame, text="›", background=PANEL, foreground=FAINT, font=(FONTS["title"][0], 22))
-        self.arrow.pack(side="right", padx=(0, 18))
-        inner = tk.Frame(self.frame, background=PANEL)
-        inner.pack(side="left", fill="both", expand=True, padx=(14, 0), pady=7)   # 1.3.3: a fourth card fits
-        self.title = tk.Label(inner, text=title, background=PANEL, foreground=TEXT, font=FONTS["heading"], anchor="w")
-        self.title.pack(fill="x")
-        self.text = tk.Label(inner, text=text, background=PANEL, foreground=MUTED, font=FONTS["small"], anchor="w")
-        self.text.pack(fill="x")
-        self.parts = (self.frame, inner, self.title, self.text, self.arrow)
-        for part in self.parts:
-            part.bind("<Enter>", lambda _: self.lit(True))
-            part.bind("<Leave>", lambda _: self.lit(self.frame.focus_get() is self.frame))
-            part.bind("<Button-1>", lambda _: self.invoke())
-        self.frame.bind("<FocusIn>", lambda _: self.lit(True))
-        self.frame.bind("<FocusOut>", lambda _: self.lit(False))
-        self.frame.bind("<Return>", lambda _: self.invoke())
-        self.frame.bind("<space>", lambda _: self.invoke())
-
-    def lit(self, on: bool):
-        colour = PANEL_HI if on else PANEL
-        for part in self.parts:
-            part.configure(background=colour)
-        self.bar.configure(background=ACCENT if on else PANEL)
-        self.arrow.configure(foreground=ACCENT_HI if on else FAINT)
-
-    def invoke(self):
-        self.command()
 
 
 def keycaps(tk, parent, keys) -> None:
