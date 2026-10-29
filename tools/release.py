@@ -185,7 +185,7 @@ def moddb_text(readme: str, zip_sha: str) -> str:
               "4. Start it from the \"Cry of Fear Co-op\" shortcut on your desktop or Start menu.", "",
               "You need Windows 10 or 11, Cry of Fear installed from Steam (it's free) with Steam running, and about "
               "6 GB of free space.", "", "In the zip", "",
-              "- CoF Story Co-op.exe: the app (setup, update, Play solo, Host, Join)",
+              "- CoF Story Co-op.exe: the app (setup, update, Play)",
               "- coop-app: the app's own files (keep it next to the exe)",
               "- READ ME FIRST.txt: install, hosting and co-op keys",
               "- source-and-licences: the engine source (GPL) and licences"]
