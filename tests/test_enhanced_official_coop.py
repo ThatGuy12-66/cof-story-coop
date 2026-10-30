@@ -55,7 +55,7 @@ class OfficialPickupsTests(unittest.TestCase):
     def test_the_pickups_run_in_the_games_own_co_op_from_the_story_frame(self):
         frame = body_of(ENGINE_SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame( void )')
         off = frame[:frame.index('CoF_StoryChapterStart();')]
-        assert_has(self, 'if( SV_CoF_StoryOfficialCoop( )) SV_CoF_PickupsFrame();', off)
+        assert_has(self, 'if( SV_CoF_StoryOfficialCoop( ))\n\t\t{\n\t\t\tSV_CoF_PickupsFrame();', off)
         official = body_of(ENGINE_SERVER / 'sv_cof_story.c', 'qboolean SV_CoF_StoryOfficialCoop( void )')
         for part in ('svs.maxclients > 1', '"cryoffear"', 'SV_CoF_StoryOfficialMap( sv.name )', 'SV_CoF_RetailDLLVerified()', '!sv.background'):
             assert_has(self, part, official)
@@ -72,6 +72,36 @@ class OfficialPickupsTests(unittest.TestCase):
         assert_has(self, 'memset( &cof_pickups_ledger, 0, sizeof( cof_pickups_ledger ));', body_of(ENGINE_SERVER / 'sv_cof_pickups.c', 'void SV_CoF_PickupsReset( void )'))
         # not at the find: cof_coop_pickups 0 then 1 on a map finds it again, and the copies lying there would go to all
         self.assertNotIn('cof_pickups_ledger, 0', body_of(ENGINE_SERVER / 'sv_cof_pickups.c', 'static void CoF_PickupsFind( void )'))
+
+
+class OfficialWeaponsTests(unittest.TestCase):
+    """1.3.9 (a player, in the game's own co-op: "After a player is revived, they are sometimes unable to use their
+    weapons if they drop them and pick them up again, Cry of Fear crashes"): retail leftovers put right before each
+    PostThink (sv_cof_retail.c SV_CoF_RetailItemsRepair, its scenarios in tests/engine/cof_retail_harness.c), and the
+    story's CPR, syringe and fall repairs run in the game's own co-op too."""
+
+    def test_the_repair_runs_before_each_post_think_in_both_co_ops(self):
+        run = (ENGINE_SERVER / 'sv_pmove.c').read_text(encoding='latin-1')
+        before = run[run.index('cof_dead = SV_CoF_PartyDead( clent );'):run.index('svgame.dllFuncs.pfnPlayerPostThink( clent );')]
+        assert_has(self, 'if( SV_CoF_StoryCoopEnabled() || SV_CoF_StoryOfficialCoop( ))\n'
+                         '\t\tSV_CoF_RetailItemsRepair( cl, cof_dead && !SV_CoF_PartyDead( clent ));', before)
+        self.assertLess(before.index('svgame.dllFuncs.pfnPlayerPreThink( clent );'), before.index('SV_CoF_RetailItemsRepair'))
+
+    def test_the_cpr_syringe_and_fall_repairs_run_in_the_games_own_co_op(self):
+        frame = body_of(ENGINE_SERVER / 'sv_cof_story.c', 'void SV_CoF_StoryFrame( void )')
+        off = frame[:frame.index('CoF_StoryChapterStart();')]
+        assert_has(self, 'SV_CoF_PickupsFrame();\n\t\t\tSV_CoF_RetailCprRepair();', off)
+
+    def test_the_weapon_fields_are_the_games(self):
+        # the save table's offsets (sv_cof_retail_inventory.c, read from the retail DLL) and the four-byte pointers
+        fields = (ENGINE_SERVER / 'sv_cof_retail_inventory.c').read_text(encoding='latin-1')
+        retail = (ENGINE_SERVER / 'sv_cof_retail.c').read_text(encoding='latin-1')
+        for name, offset, define in (('m_pActiveItem', '0x252C', 'COF_RETAIL_ACTIVE_ITEM'), ('m_pLastItem', '0x2534', 'COF_RETAIL_LAST_ITEM'),
+                                     ('m_pNextItem', '0x2538', 'COF_RETAIL_NEXT_ITEM'), ('m_pStoredActionItem', '0x253C', 'COF_RETAIL_STORED_ACTION'),
+                                     ('m_pStoredNightVisionWeapon', '0x3F0', 'COF_RETAIL_STORED_NV')):
+            assert_has(self, f'"{name}", {offset},', fields)
+            self.assertRegex(retail, rf'#define {define} +0x0*{offset[2:]} ')
+        assert_has(self, 'typedef uint32_t cof_retail_ptr_t;', retail)
 
 
 class OfficialLevelChangeTests(unittest.TestCase):

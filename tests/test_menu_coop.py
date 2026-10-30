@@ -203,6 +203,17 @@ class MenuLogicTests(unittest.TestCase):
                      'difficulty 2', 'hostname "Bob\'s co-op"'):
             self.assertIn(line, sent)
 
+    def test_the_games_own_co_op_offers_every_map_the_app_did(self):
+        # 1.3.9 (a player: "it would be great to have the option to select a specific level"): the app's own co-op
+        # page (1.3.3 to 1.3.6) offered the co-op campaign's later parts; the menu's list had only its first map
+        listed = text(OFFICIAL)
+        listed = listed[listed.index('s_cofCoopCampaigns[] ='):listed.index('#define COF_COOP_NUM_CAMPAIGNS')]
+        maps = [map_name for _, map_name in play.OFFICIAL_CHOICES]
+        answers = run_cases(self, [('official', 'Bob', 'x', '', m, '2', '0', '120', '384', '2') for m in maps])
+        for map_name, answer in zip(maps, answers):
+            self.assertIn(f'{{ "{map_name}",', listed)
+            self.assertEqual(answer.splitlines()[-1], f'map {map_name}')
+
 
 class MenuWiringTests(unittest.TestCase):
     """The pages send what the logic builds, from the right places in the main menu."""

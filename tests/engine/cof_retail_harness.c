@@ -41,7 +41,7 @@ static size_t Q_strncpy( char *dst, const char *src, size_t size )
 	return n;
 }
 typedef float vec3_t[3];
-typedef struct { float health, fuser3; int deadflag, flags, spawnflags, iuser1; string_t classname, target, targetname, message; vec3_t absmin, absmax; } entvars_t;
+typedef struct { float health, fuser3; int deadflag, flags, spawnflags, iuser1; string_t classname, target, targetname, message, viewmodel, weaponmodel; vec3_t absmin, absmax; } entvars_t;
 typedef struct edict_s { int free, serialnumber; void *pvPrivateData; entvars_t v; } edict_t;
 typedef struct { int cursize; } sizebuf_t;
 typedef struct { int state, userid; unsigned int flags; char name[32]; edict_t *edict, *pViewEntity; struct { sizebuf_t message; } netchan; } sv_client_t;
@@ -163,6 +163,7 @@ static void handle( byte *field, edict_t *e ) { int serial = e ? e->serialnumber
 static void put_int( byte *field, int value ) { memcpy( field, &value, sizeof( value )); }
 static void put_float( byte *field, float value ) { memcpy( field, &value, sizeof( value )); }
 static void put_pointer( byte *field, const void *value ) { memcpy( field, &value, sizeof( value )); }
+static uint32_t get32( const byte *field ) { uint32_t value; memcpy( &value, field, sizeof( value )); return value; }
 /* A carried weapon: entity i, its object, its owner, m_iId, clip and ammo type. */
 static void weapon( int i, int w, string_t classname, byte *owner, int id, int clip, int type )
 {
@@ -870,6 +871,97 @@ int main( void )
 		assert( SV_CoF_RetailHostile( &edicts[8] ) == 1 ); /* a stale handle */
 		gate = 0; assert( SV_CoF_RetailHostile( &edicts[8] ) == 0 ); gate = 1; /* no verified game: no table to read */
 		assert( SV_CoF_RetailHostile( NULL ) == 0 );
+	}
+
+	/* 1.3.9: a player's weapons after a revive (SV_CoF_RetailItemsRepair): the weapon pointers in game memory, four
+	 * bytes each as in the 32-bit game (m_pActiveItem +0x252C, m_pLastItem +0x2534, m_pNextItem +0x2538,
+	 * m_pStoredActionItem +0x253C, m_pStoredNightVisionWeapon +0x3F0), the inventory chain (m_rgpPlayerItems +0x2514,
+	 * each item's m_pNext +0x164), the queued deploy +0x1EF9, and fuser3 */
+	{
+#define PTR32( p ) ( (uint32_t)(uintptr_t)( p ))
+#define SET32( offset, p ) do { uint32_t v_ = PTR32( p ); memcpy( private_data[0] + ( offset ), &v_, 4 ); } while( 0 )
+#define GET32( offset ) get32( private_data[0] + ( offset ))
+#define NEXT32( w, p ) do { uint32_t v_ = PTR32( p ); memcpy( weapon_private[w] + 0x164, &v_, 4 ); } while( 0 )
+		edict_t kept[9];
+		int kept_count = svgame.numEntities, e;
+		memcpy( kept, &edicts[3], sizeof( kept ));
+		for( e = 3; e < 12; e++ ) { memset( &edicts[e], 0, sizeof( edicts[e] )); edicts[e].free = 1; } /* only this test's */
+		svgame.numEntities = 12;
+		edicts[1].v.health = 100; edicts[1].v.deadflag = DEAD_NO; edicts[1].v.fuser3 = 0.0f;
+		weapon( 9, 3, 5, private_data[0], 2, 7, 1 );   /* a glock in hand, on the slot 1 chain */
+		weapon( 10, 4, 8, NULL, 7, 4, 3 );            /* a shotgun dropped on the floor: m_pPlayer NULL */
+		NEXT32( 3, NULL ); NEXT32( 4, NULL ); SET32( 0x2514 + 4, weapon_private[3] );
+		/* weapon_private[5]: freed, no edict holds it */
+		SET32( 0x252C, weapon_private[3] ); SET32( 0x2534, weapon_private[4] ); SET32( 0x2538, weapon_private[4] );
+		SET32( 0x253C, weapon_private[5] ); SET32( 0x3F0, weapon_private[3] );
+		private_data[0][0x1EF9] = 1; /* a switch under way to the shotgun just dropped */
+		console_length = 0; console[0] = 0;
+		SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( GET32( 0x252C ) == PTR32( weapon_private[3] )); /* theirs: kept */
+		assert( GET32( 0x2534 ) == 0 );
+		assert( GET32( 0x2538 ) == PTR32( weapon_private[3] ) && private_data[0][0x1EF9] == 1 ); /* the one in hand instead */
+		assert( GET32( 0x253C ) == 0 && GET32( 0x3F0 ) == PTR32( weapon_private[3] ));
+		assert( strstr( console, "phase=item-unlinked userid=1 field=last why=dropped" ) &&
+			strstr( console, "field=next why=dropped" ) && strstr( console, "field=stored-action why=gone" ) &&
+			!strstr( console, "field=active" ) && !strstr( console, "field=stored-nightvision" ));
+		/* all theirs: nothing to say */
+		console_length = 0; console[0] = 0;
+		SV_CoF_RetailItemsRepair( &clients[0], false ); assert( !console[0] && private_data[0][0x1EF9] == 1 );
+		/* a weapon another player picked up, in hand: cleared as RemovePlayerItem does; nothing to deploy then */
+		put_pointer( weapon_private[4] + 0x160, private_data[1] );
+		SET32( 0x252C, weapon_private[4] ); SET32( 0x2538, NULL ); SET32( 0x3F0, NULL );
+		edicts[1].v.viewmodel = 3; edicts[1].v.weaponmodel = 3;
+		SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( GET32( 0x252C ) == 0 && !edicts[1].v.viewmodel && !edicts[1].v.weaponmodel && !private_data[0][0x1EF9] );
+		assert( strstr( console, "field=active why=another's" ) && GET32( 0x2538 ) == 0 );
+		/* a knock-down's get-up queues a deploy of nothing (a fresh life): the weapon in hand */
+		SET32( 0x252C, weapon_private[3] ); private_data[0][0x1EF9] = 1;
+		console_length = 0; console[0] = 0;
+		SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( GET32( 0x2538 ) == PTR32( weapon_private[3] ) && private_data[0][0x1EF9] == 1 && strstr( console, "field=next why=empty-switch" ));
+		/* a weapon on its way out (FL_KILLME): cleared */
+		edicts[9].v.flags = FL_KILLME; SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( GET32( 0x252C ) == 0 && strstr( console, "field=active why=removed" ));
+		edicts[9].v.flags = 0; SET32( 0x2538, NULL ); private_data[0][0x1EF9] = 0;
+		/* off the chain but still saying it is theirs (RemoveAllItems at a respawn, DestroyItem: removed 0.1 s
+		 * later): cleared; further down a slot's chain, through m_pNext: theirs */
+		weapon( 11, 5, 8, private_data[0], 7, 4, 3 ); NEXT32( 5, NULL );
+		SET32( 0x252C, weapon_private[3] ); SET32( 0x2534, weapon_private[5] ); SET32( 0x2514 + 4, NULL );
+		console_length = 0; console[0] = 0;
+		SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( GET32( 0x252C ) == 0 && GET32( 0x2534 ) == 0 && strstr( console, "field=active why=leaving" ) &&
+			strstr( console, "field=last why=leaving" ));
+		SET32( 0x2514 + 4, weapon_private[3] ); NEXT32( 3, weapon_private[5] );
+		SET32( 0x252C, weapon_private[3] ); SET32( 0x2534, weapon_private[5] );
+		console_length = 0; console[0] = 0;
+		SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( GET32( 0x252C ) == PTR32( weapon_private[3] ) && GET32( 0x2534 ) == PTR32( weapon_private[5] ) && !console[0] );
+		NEXT32( 5, weapon_private[3] ); /* a chain that loops: read once round, nothing hangs */
+		SV_CoF_RetailItemsRepair( &clients[0], false ); assert( GET32( 0x2534 ) == PTR32( weapon_private[5] ) && !console[0] );
+		/* the chain decides, not the class: something else on it stays, off it goes */
+		edicts[11].v.classname = 4; SV_CoF_RetailItemsRepair( &clients[0], false ); assert( GET32( 0x2534 ) == PTR32( weapon_private[5] ));
+		NEXT32( 3, NULL ); SV_CoF_RetailItemsRepair( &clients[0], false ); assert( GET32( 0x2534 ) == 0 );
+		SET32( 0x252C, NULL ); SET32( 0x2514 + 4, NULL );
+		/* fuser3: a living player at 3 (a respawn during a revive's get-up) can attack again; any leftover after a
+		 * respawn goes, the syringe's and the call's view lock with it; the game's own states stay otherwise */
+		console_length = 0; console[0] = 0;
+		edicts[1].v.fuser3 = 3.0f; SV_CoF_RetailItemsRepair( &clients[0], false );
+		assert( edicts[1].v.fuser3 == 0.0f && strstr( console, "phase=weapons-unstuck userid=1 fuser3=3 respawned=0" ));
+		edicts[1].v.fuser3 = 25.0f; SV_CoF_RetailItemsRepair( &clients[0], false ); assert( edicts[1].v.fuser3 == 25.0f );
+		last_msg_name[0] = 0;
+		SV_CoF_RetailItemsRepair( &clients[0], true ); assert( edicts[1].v.fuser3 == 0.0f && !strcmp( last_msg_name, "ViewLock" ));
+		edicts[1].v.fuser3 = 10.0f; SV_CoF_RetailItemsRepair( &clients[0], true ); assert( edicts[1].v.fuser3 == 0.0f );
+		edicts[1].v.fuser3 = 2.0f; SV_CoF_RetailItemsRepair( &clients[0], false ); assert( edicts[1].v.fuser3 == 2.0f );
+		edicts[1].v.fuser3 = 3.0f; edicts[1].v.health = 0; edicts[1].v.deadflag = DEAD_DEAD;
+		SV_CoF_RetailItemsRepair( &clients[0], false ); assert( edicts[1].v.fuser3 == 3.0f ); /* the get-up itself */
+		edicts[1].v.fuser3 = 0.0f; edicts[1].v.health = 100; edicts[1].v.deadflag = DEAD_NO;
+		SET32( 0x2534, NULL ); SET32( 0x253C, NULL ); SET32( 0x3F0, NULL ); SET32( 0x2538, NULL );
+		memcpy( &edicts[3], kept, sizeof( kept ));
+		svgame.numEntities = kept_count;
+#undef PTR32
+#undef SET32
+#undef GET32
+#undef NEXT32
 	}
 
 	puts( "retail scenarios passed" );

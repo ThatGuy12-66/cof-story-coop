@@ -1,6 +1,25 @@
-Cry of Fear Co-op 1.3.8
+Cry of Fear Co-op 1.3.9
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.9
+- Cry of Fear's own co-op can start the co-op campaign from any of its four maps again:
+  Co-op campaign, part 2, 3 or 4 in its list in the game's Co-op menu. A later part has
+  no lobby and everyone starts with that part's weapons. The app's own co-op page had
+  them; they went away with it in 1.3.7.
+- Weapons after a revive: a player who respawned (jump, or the respawn timer) while a
+  partner's revive was getting them up could never fire again in that life, and monsters
+  ignored them. Now their weapons work as soon as they are back.
+- A crash after dropping a weapon: the game kept pointing at a weapon after it was dropped,
+  and a later switch (getting up after a knock-down, putting the night vision away and
+  others) could take the one lying on the floor and crash. Those leftovers are cleared
+  now. This was found in the game's code, not seen happen: if Cry of Fear still crashes
+  around a revive or a drop, please send your log on Discord.
+- In Cry of Fear's own co-op too: a reviver whose partner left, a syringe heal cut short
+  and a fall a cutscene interrupted no longer leave a player stuck (the story already had
+  these fixes).
+- Both co-op modes get the weapon fixes. 1.1 to 1.3.9 can play together; the fixes are in
+  the host's game, so the host should update.
 
 WHAT'S NEW IN 1.3.8
 - What you've unlocked in Cry of Fear itself now counts in co-op. Each time you click Play,
@@ -357,9 +376,10 @@ Click Play in the app. Cry of Fear opens at its main menu: pick Co-op, right und
 - Continue co-op: go on from a co-op checkpoint, hosted for friends or with AI companions.
 - Play with AI: you and one to three AI companions.
 - Cry of Fear's own co-op: the game's separate co-op campaign, manhunt or survival maps
-  (2 to 4 players). In a lobby, everyone presses the attack button when ready; the game
-  starts a few seconds after the last one. The story's extras (AI companions, merged maps,
-  checkpoints, J to join) are off in this mode.
+  (2 to 4 players). The co-op campaign can start from any of its four maps; a later one
+  has no lobby and everyone starts with that part's weapons. In a lobby, everyone presses
+  the attack button when ready; the game starts a few seconds after the last one. The
+  story's extras (AI companions, merged maps, checkpoints, J to join) are off in this mode.
 Everyone needs the same version of Cry of Fear Co-op. Keep the app's window open while you
 play: it keeps your router port open and shows your join code.
 

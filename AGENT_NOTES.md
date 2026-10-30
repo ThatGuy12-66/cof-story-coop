@@ -1514,3 +1514,46 @@ then "i mean that the unlocks you already unlocked, would transfer to the simon'
   `v1.3.8`; publish's page check failed on GitHub's cache again (exit 1), `latest/download/release.json` served build 34
   a minute later. Zip `706ADE0E…`, 111,635,888 bytes. mainui `d4aa8fdf`, engine `3b90ec07`, launcher `9580a0d`.
   Nothing pushed. The ModDB upload is the owner's (`evidence/release-1.3.8/moddb-text.txt`).
+
+## 1.3.9: weapons after a revive, and the co-op campaign's later maps (2026-10-30)
+
+A player ("Mr.Sack"), in Cry of Fear's own co-op: "After a player is revived, they are sometimes unable to use their
+weapons if they drop them and pick them up again, Cry of Fear crashes. When playing the original co-op version, it
+would be great to have the option to select a specific level." Research by a read-only subagent in the decompilation
+(`caixax/cof-decompiled`, sparse clone in the session scratchpad); the report is
+`evidence/release-1.3.9/revive-weapons-re.md`. Everything below is the retail hl.dll's own code (none of our engine's
+1.3.5 changes touch a dropped weapon); none of it was seen live.
+- **Can't fire after a revive**: RevivePlayer sets fuser3 3 on the still-dead body for its get-up; PreThink's respawn
+  (jump after 60 s, or `sv_auto_respawn_time`, which RevivePlayer does not clear: player.cpp:4004) runs Spawn, which
+  keeps fuser3; every attack wants fuser3 <= 0 (weapons.cpp:1303-1324) and FVisible/monsters skip a player at 3.
+  Spawn keeps 10 (a gun's suicide struggle), 25 (a syringe hold) and 5 (a call) too.
+- **The crash (LIKELY)**: RemovePlayerItem (a drop) clears m_pActiveItem or else m_pLastItem, never m_pNextItem,
+  m_pStoredActionItem or m_pStoredNightVisionWeapon; m_pNextItem equals the weapon in hand after every switch, so a
+  dropped weapon stays queued. A later deploy of it (PostThink 6389 after a knock-down's get-up sets the flag at
+  6556/6571 without m_pNextItem; SelectLastItem; the action and night-vision restores) Deploys a floor weapon whose
+  m_pPlayer is NULL (CGlock::Deploy reads through it) or a freed one. A get-up with m_pNextItem NULL (a fresh life)
+  also emptied the player's hands.
+- **Fix** (`sv_cof_retail.c` `SV_CoF_RetailItemsRepair`, called in `sv_pmove.c` right before PlayerPostThink, story
+  co-op and the game's own co-op): a living player at fuser3 3, or any nonzero fuser3 on a player respawned in this
+  command, back to 0 (ViewLock 0 for 25 and 5; log `phase=weapons-unstuck`); each of the five pointers (offsets from
+  the save table in `sv_cof_retail_inventory.c`; four-byte values, `cof_retail_ptr_t`) that points at no edict, a
+  FL_KILLME one, or one not on the player's inventory chain (m_rgpPlayerItems +0x2514, 6 slots, through m_pNext
+  +0x164; each pointer looked up as an edict, never followed; loop-guarded) is cleared (m_pActiveItem with viewmodel
+  and weaponmodel, as RemovePlayerItem); m_pNextItem falls back to m_pActiveItem, or the queued deploy (+0x1EF9) is
+  cleared; a queued deploy of NULL takes m_pActiveItem (log `phase=item-unlinked`, why gone/removed/leaving/dropped/
+  another's).
+- **Independent review** (a fresh subagent, the diff and the decompilation): nothing HIGH. MEDIUM, fixed: the first
+  version trusted m_pPlayer, which a weapon leaving the inventory keeps until it is removed 0.1 s later (RemoveAllItems
+  at a respawn, DestroyItem, DropPlayerItem's gNoWeaponDrop branch): a death mid-switch then a respawn deployed it and
+  used it freed; now the chain decides. LOW, folded in: the chain test covers a hand the game would re-own itself
+  (ItemPostFrame sets a NULL m_pPlayer) and a freed weapon's memory reused by another class; "respawned" is also true
+  for a revive's get-up in that command (harmless, commented in sv_pmove.c). Checked: offsets, fuser3 meanings,
+  weapon_action, dual wield (the pistols stay on their chains), night vision, bots, CprRepair on the official maps.
+- **The game's own co-op** also runs `SV_CoF_RetailCprRepair` each frame now (the story's CPR-unlink, reviver
+  get-up, syringe hold and fall repairs: the same retail states).
+- **Level select**: mainui `CoFCoop.cpp` `s_cofCoopCampaigns` gets cof_campaign_01_p2..p4 (the app's
+  `OFFICIAL_CHOICES` had them, 1.3.3-1.3.6; the 1.3.6 menu listed only entry maps; 1.3.7 removed the app's page). A
+  later part has no lobby; a new player gets `maps/<map>.cfg`'s weapons (ApplyCFGSettingToPlayerLate, the game's
+  own late-joiner rule). Test: `test_menu_coop` (every OFFICIAL_CHOICES map is listed and sent).
+- Tests: `cof_retail_harness.c` (the repair's scenarios, four-byte pointers), `test_enhanced_official_coop`
+  OfficialWeaponsTests. Not played. Version 1.3.9, build 35; release notes `docs/releases/1.3.9.md`.
