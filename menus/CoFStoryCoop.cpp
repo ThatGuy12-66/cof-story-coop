@@ -282,8 +282,8 @@ void CMenuCoFStoryStart::_Init( void )
 	companions.SetCharSize( QM_SMALLFONT );
 	companions.szStatusText = L( "One to three AI companions play with you, on this PC only" );
 
-	bonus.szName = L( "Bonus room unlocked" );
-	bonus.szStatusText = L( "The FAMAS, the axe and more; a later chapter starts with them; O opens the wardrobe" );
+	bonus.szName = L( "Open the bonus room" );
+	bonus.szStatusText = L( "Ticked: open for everyone. Unticked: as far as you unlocked it in Cry of Fear" );
 
 	merged.szName = L( "Merged maps" );
 	merged.szStatusText = L( "Fewer loading screens: door-joined story maps load as one" );
@@ -672,8 +672,8 @@ void CMenuCoFStoryContinue::_Init( void )
 	companions.szStatusText = L( "Play with AI: as many as the checkpoint has places for" );
 
 	// the app's Continue shows these too; merged maps is the checkpoint's own
-	bonus.szName = L( "Bonus room unlocked" );
-	bonus.szStatusText = L( "The FAMAS, the axe and more; O opens the wardrobe" );
+	bonus.szName = L( "Open the bonus room" );
+	bonus.szStatusText = L( "Ticked: open for everyone. Unticked: as far as you unlocked it in Cry of Fear" );
 
 	torch.szName = L( "Co-op flashlight on F" );
 	torch.szStatusText = L( "A free torch for everyone; the original has only Simon's phone" );

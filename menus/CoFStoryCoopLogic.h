@@ -280,7 +280,7 @@ struct cofStoryStart_t
 	const char *maps;       // this copy's merged-maps tag (the app's cof_menu_maps), or ""
 	int         places;     // maxplayers, from CoFStory_PartySize
 	int         companions; // AI companions, from CoFStory_PartySize
-	bool        bonusRoom;
+	bool        bonusRoom;  // the bonus room open for everyone; unticked, as far as the host has unlocked it (1.3.8)
 	bool        merged;     // merged story maps; Continue passes the checkpoint's own
 	bool        flashlight; // the co-op flashlight on F
 };
@@ -321,7 +321,9 @@ static bool CoFStory_StartCommands( char *out, size_t size, const cofStoryStart_
 	CoFStory_TextAdd( &t, "cof_companion %d\n", s->companions );
 	CoFStory_TextAdd( &t, "cof_companion_drive 0\n" );
 	CoFStory_TextAdd( &t, "cof_continue %d\n", s->cont ? 1 : 0 );
-	CoFStory_TextAdd( &t, "cof_bonus_room %d\n", s->bonusRoom ? 1 : 0 );
+	// 1.3.8: unticked, the host's own unlocks decide (-1: scriptsettings.dat, which the app brings up to date from
+	// the player's own Cry of Fear); it was 0, shut whatever they had unlocked
+	CoFStory_TextAdd( &t, "cof_bonus_room %d\n", s->bonusRoom ? 1 : -1 );
 	CoFStory_TextAdd( &t, "cof_merged_maps %d\n", s->merged ? 1 : 0 );
 	CoFStory_TextAdd( &t, "cof_coop_flashlight %d\n", s->flashlight ? 1 : 0 );
 	CoFStory_TextAdd( &t, "cof_continue_slot \"%s\"\n", s->slot ? s->slot : "" );
