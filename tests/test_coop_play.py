@@ -62,10 +62,12 @@ class StartTests(unittest.TestCase):
         self.assertEqual(play.party_size(solo=True, players=2, companions=9, fill=False, checkpoint_players=None), (4, 3))
         self.assertEqual(play.DEFAULT_SETTINGS['companions'], 1)
 
-    def test_bonus_room_is_the_hosts_choice_and_shut_by_default(self):
+    def test_bonus_room_is_the_hosts_choice_and_as_unlocked_by_default(self):
+        # 1.3.8 (a player: "the unlocks you already unlocked, would transfer to the simon's story with friends"):
+        # unticked, the host's own unlocks decide (it was 0: shut, whatever the host had unlocked)
         _, cfg = play.host_launch(Path('copy'), solo=True, name='Bob', map_name='c_start', players=2, password='',
                                   companions=1, port=27015, cont=False, video=[])
-        self.assertIn('cof_bonus_room 0\n', cfg)                       # shut, whatever the tester's own game says
+        self.assertIn('cof_bonus_room -1\n', cfg)
         _, cfg = play.host_launch(Path('copy'), solo=False, name='Bob', map_name='c_start', players=2, password='',
                                   companions=0, port=27015, cont=False, video=[], bonus_room=True)
         self.assertIn('cof_bonus_room 1\n', cfg)
@@ -186,8 +188,8 @@ class StartTests(unittest.TestCase):
 class ReleaseTests(unittest.TestCase):
     def test_the_release_is_1_1_5_and_updates_1_1_4(self):
         # 1.1.1 (J), 1.1.2 (the blur), 1.1.3 and 1.1.4 (AMD graphics), 1.1.5 (a join crash), 1.1.6 (level changes), 1.1.7 (faster
-        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab), 1.3.2 (the starter antivirus took for a trojan) 1.3.3 (the save picker, the game's own co-op mode) 1.3.4 (everyone in a wheelchair) 1.3.5 (the game's own co-op keeps its guests) 1.3.6 (co-op in the game's main menu) and 1.3.7 (quicker updates) keep 1.1's version, so 1.1 to 1.3.7 players join
-        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.7'))
+        # level changes), 1.1.8 (the debug pass), 1.1.9 (the polish) and 1.2.0 (the bonus kit), 1.2.1 (the antivirus fix), 1.2.2 (the bounce fix), 1.2.3 (the black rooms), 1.2.4 (the quiet screen), 1.2.5 (quick dual wield), 1.2.6 (the code review), 1.2.7 (the antivirus notice), 1.2.8 (the Defender fix), 1.2.9 (the Chapter 4 crash), 1.3 (the inventory menu, the bonus night vision) 1.3.1 (the chainsaw boss's grab), 1.3.2 (the starter antivirus took for a trojan) 1.3.3 (the save picker, the game's own co-op mode) 1.3.4 (everyone in a wheelchair) 1.3.5 (the game's own co-op keeps its guests) 1.3.6 (co-op in the game's main menu), 1.3.7 (quicker updates) and 1.3.8 (the player's own unlocks) keep 1.1's version, so 1.1 to 1.3.8 players join
+        self.assertEqual((play.VERSION, play.VERSION_LABEL), ('1.1', '1.3.8'))
         self.assertGreater(play.BUILD, 29)   # 1.3.3 was build 29: its copies must be offered the update
 
     def test_bug_reports_go_to_the_public_discord(self):
@@ -221,7 +223,7 @@ class HostReleaseTests(unittest.TestCase):
         self.assertIn(f'older than {play.VERSION_LABEL}', play.host_version_note({'cofbuild': '1.1'}))
         self.assertIn('is 1.2.5 (yours', play.host_version_note({'cofver': '1.2.5'}))
         self.assertIn('Join anyway?', play.host_version_note({'cofver': '1.2.5'}))
-        for same_or_newer in (play.VERSION_LABEL, '1.3.7', '9.9.9'):
+        for same_or_newer in (play.VERSION_LABEL, '1.3.8', '9.9.9'):
             self.assertIsNone(play.host_version_note({'cofver': same_or_newer}))
         for unreadable in ('dev', '1.2.6-test', '1..2'):
             self.assertIsNone(play.host_version_note({'cofver': unreadable}))

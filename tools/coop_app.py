@@ -20,6 +20,7 @@ from tools import app_theme as theme
 from tools import app_update
 from tools import coop_play as play
 from tools import friend_setup as setup_lib
+from tools import unlocks
 
 DEFAULT_COPY = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CoF-Story-Coop"
 COPY_POINTER = DEFAULT_COPY.with_name("CoF-Story-Coop.txt")   # where setup last made a copy
@@ -60,6 +61,16 @@ def start_game(root: Path, args: list[str]) -> subprocess.Popen:
     opened a console window beside the game (and closing that window would close the game)."""
     return subprocess.Popen(args, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, creationflags=0x08000000)   # CREATE_NO_WINDOW
+
+
+def carry_unlocks(root: Path) -> list[str]:
+    """1.3.8: the unlocks of the player's own Cry of Fear (the game the copy was made from) into the copy before the
+    game starts (tools/unlocks.py); never in the way of starting it."""
+    try:
+        state = setup_lib.installed_state(root) or {}
+        return unlocks.carry_into_copy(root, state.get("source_game"))
+    except (OSError, ValueError):
+        return []
 
 
 def footer_text() -> str:
@@ -156,7 +167,8 @@ class ProgressPanel:
 
 # the co-op keys the main screen shows (friend_setup.COOP_KEYS binds them)
 COOP_KEYS = (("J", "join your partner"), ("Enter", "skip a cutscene for everyone"),
-             ("H", "AI companions wait or follow"), ("O", "the wardrobe (with the bonus room)"))
+             ("H", "AI companions wait or follow"), ("O", "the wardrobe (with the bonus room)"),
+             ("Y", "text chat"), ("K", "voice chat (hold to talk)"))   # 1.3.8: bound since 1.0, never shown
 
 # 1.1.8 (L14.2): closing the window ends a setup or update part way (its worker thread dies with the app)
 BUSY_WARNINGS = {
@@ -579,6 +591,7 @@ class App:
                     raise ValueError("Cry of Fear is already running from this copy. Close it first.")
                 (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
                 play.write_invite(root)   # 1.3.6: no other session's join code in the game menu
+                carry_unlocks(root)       # 1.3.8: what the player has unlocked in their own Cry of Fear
                 # 1.2.0: a co-op key the player's own config leaves unbound (O in a copy set up before it) works
                 (root / "cryoffear" / play.SESSION_CFG).write_text(config + setup_lib.missing_coop_binds(root),
                                                                    encoding="ascii")

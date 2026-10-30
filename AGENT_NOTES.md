@@ -1482,3 +1482,30 @@ co-op into the main menu, the launcher is kind of redundant"; his picks: a one-b
   "releases page shows the new version" check failed on GitHub's cache again (exit 1), `latest/download/release.json`
   served build 33 right after. Zip `E019BC8A…`, 111,629,344 bytes. Engine `e87eb1c5`, launcher `52b687a`; no mainui
   change. Nothing pushed. Not seen on screen: the new app screen, as the menu's pages before it.
+
+## 1.3.8: the player's own unlocks in co-op, and the chat keys (2026-10-30)
+
+A player on the Discord ("pola bear"): "would be also cool if your unlocks from the main game would come to co-op",
+then "i mean that the unlocks you already unlocked, would transfer to the simon's story with friends". The owner: "YEA".
+- **Before**: setup copied `cryoffear/scriptsettings.dat` from the player's game once; nothing refreshed it. The menu's
+  Host/Continue checkbox wrote `cof_bonus_room 1|0`, so unticked was shut whatever the host had unlocked; outfits were
+  already all open (`cof_costumes 1`).
+- **`tools/unlocks.py`**: the game's full table (the 32 bits and the two ending flags, lines 47/48), read from
+  `CBasePlayer::CheckingEndingOrUnlockables` in the decompilation (`caixax/cof-decompiled` player.cpp:15313-15935,
+  sparse clone in the session scratchpad); it matches the dev PC's two files (`baseline`: all locked; `runtimes/enhanced`:
+  all but 0x40000000 and ending 6) and `sv_cof_bonus.h`'s 23 lines. `lines()` counts as the game's `strtok( buf, "\n" )`
+  does. `carry(game, copy)` turns a locked line unlocked where the player's game has it unlocked (one character, in
+  place); never the other way. `carry_into_copy(root, source_game)`: the installed record's `source_game`, written
+  through `.cof-new` + `os.replace`; a copy without the file gets the player's; the player's game is only read.
+- **App**: `coop_app.carry_unlocks(root)` in `launch`'s `checked`, before `start_game`, every Play; errors never stop
+  the start.
+- **Menu** (mainui `CoFStoryCoopLogic.h`, `CoFStoryCoop.cpp`): unticked now writes `cof_bonus_room -1` (the engine's
+  "as scriptsettings.dat says", already there: room, items, chapter-start kit, O); the checkbox is "Open the bonus
+  room", status "Ticked: open for everyone. Unticked: as far as you unlocked it in Cry of Fear". `coop_play.host_launch`
+  (the menu's reference, tests/test_menu_coop.py) the same. The game's own co-op mode keeps `cof_bonus_room 0`.
+- **Keys**: Y (`messagemode`) and K (`+voicerecord`) were bound by setup since 1.0 and listed nowhere: now in the
+  readme's CO-OP KEYS and the app's "In the game" keys.
+- Tests: `tests/test_unlocks.py` (table, the engine's lines, the game's line counting, carry, the copy, the real files
+  on the dev PC), `test_coop_app` (a start brings the unlocks; a failing carry still starts), `test_coop_play`.
+- Version 1.3.8, build 34 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.8.md`. Not played; the menu pages
+  are still unseen on screen.

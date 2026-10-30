@@ -17,9 +17,9 @@ import time
 from cofcoop import network
 from cofcoop.core import CHAPTERS
 
-VERSION = "1.1"   # who can join whom: 1.1.1 to 1.3.7 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review, the antivirus notice, the Defender fix, the Chapter 4 crash, the inventory menu, the bonus night vision, the chainsaw boss's grab, the starter antivirus took for a trojan, the save picker with the game's own co-op mode, everyone in a wheelchair, the game's own co-op keeping its guests, co-op in the game's main menu, and quicker updates) keep it: 1.1
-VERSION_LABEL = "1.3.7"
-BUILD = 33   # counts on (1.3.6 was 32, 1.3.5 31, 1.3.4 30, 1.3.3 29, 1.3.2 28, 1.3.1 27, 1.3 26; 25 was 1.3 under a withdrawn label; 1.2.9 24, 1.2.8 23, 1.2.7 22, 1.2.6 21, 1.2.5 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
+VERSION = "1.1"   # who can join whom: 1.1.1 to 1.3.8 (J, the blur, AMD graphics, a join crash, level changes, faster level changes, the debug pass, the polish, the bonus kit, the antivirus fix, the bounce fix, the black rooms, the quiet screen, quick dual wield, the code review, the antivirus notice, the Defender fix, the Chapter 4 crash, the inventory menu, the bonus night vision, the chainsaw boss's grab, the starter antivirus took for a trojan, the save picker with the game's own co-op mode, everyone in a wheelchair, the game's own co-op keeping its guests, co-op in the game's main menu, quicker updates, and the player's own unlocks) keep it: 1.1
+VERSION_LABEL = "1.3.8"
+BUILD = 34   # counts on (1.3.7 was 33, 1.3.6 32, 1.3.5 31, 1.3.4 30, 1.3.3 29, 1.3.2 28, 1.3.1 27, 1.3 26; 25 was 1.3 under a withdrawn label; 1.2.9 24, 1.2.8 23, 1.2.7 22, 1.2.6 21, 1.2.5 20, 1.2.4 19, 1.2.3 18, 1.2.2 17, 1.2.1 16, 1.2.0 15, 1.1.9 14, 1.1.8 13, 1.1.7 12, 1.1.6 11, 1.1.5 10, 1.1.4 9, 1.1.3 8, 1.1.2 7, 1.1.1 6, 1.1 5, 1.0 4, test packages 1-3), so older copies update
 LOG = "story-session.log"
 STORY_CFG = "cof_story.cfg"
 SESSION_CFG = "cof_story_session.cfg"
@@ -141,7 +141,8 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
 
     companions: how many AI companion bots to keep (each gives its place to a friend who joins).
     bonus_room opens the bonus room of c_start and c_bridge (the FAMAS, the axe and the
-    rest) for everyone in this game; shut otherwise, whatever the host's own game says.
+    rest) for everyone in this game; otherwise (1.3.8) it is as far as the host has unlocked it (cof_bonus_room -1:
+    the copy's scriptsettings.dat, which the app brings up to date from the player's own game, tools/unlocks.py).
     merged: door-joined story maps load as one map (fewer loading screens); a continued
     session keeps the mode it was saved with (Checkpoint.merged).
     coop_flashlight: F gives everyone a free torch (Cry of Fear's co-op mode); off, the light is Simon's phone and
@@ -162,7 +163,7 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {companions}", "cof_companion_drive 0",
-             f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else 0}",
+             f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else -1}",
              f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}",
              f'cof_continue_slot "{slot}"']
     if merged and _TAG.match(maps):

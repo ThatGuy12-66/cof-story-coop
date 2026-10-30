@@ -1,6 +1,21 @@
-Cry of Fear Co-op 1.3.7
+Cry of Fear Co-op 1.3.8
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.3.8
+- What you've unlocked in Cry of Fear itself now counts in co-op. Each time you click Play,
+  the app copies everything you've unlocked in your own game (the endings, the bonus
+  room's weapons, the developer commentary and the rest) into the co-op copy.
+  Before, the copy only had what was unlocked when you set it up. It only ever adds: what
+  you unlock in co-op stays, and your own game isn't changed.
+- "Bonus room unlocked" is now "Open the bonus room". Unticked, the bonus room and its
+  items are open as far as the host has unlocked them (it used to be shut); ticked, all of
+  it is open for everyone, as before. The host's unlocks count, since the host's game
+  runs the level.
+- Y opens the text chat and K is push-to-talk voice chat. Both have worked since 1.0 but
+  weren't listed anywhere; they're in CO-OP KEYS below and in the app now.
+- 1.1 to 1.3.8 can play together. The unlocks come from the host's game, so the host
+  should update.
 
 WHAT'S NEW IN 1.3.7
 - The app is one button now: Play opens the game at its main menu, and Co-op (right under
@@ -351,7 +366,8 @@ play: it keeps your router port open and shows your join code.
 Start a new game (the intro), any chapter, or continue from a co-op checkpoint.
 The game makes a co-op checkpoint by itself after every level change, and the host's tape
 recorder saves are checkpoints too: pick one in Continue co-op's list.
-Tick "Bonus room unlocked" to open the bonus room (FAMAS, axe and more) for everyone.
+The bonus room (FAMAS, axe and more) is open as far as the host has unlocked it in Cry of
+Fear; tick "Open the bonus room" to open all of it for everyone.
 Starting a later chapter lays its weapons out next to you, and O opens the wardrobe.
 Dual wield (two pistols, or a pistol and a light) works from the inventory menu.
 "Merged maps" (on by default) loads neighbouring levels as one map, so there are fewer
@@ -362,7 +378,9 @@ CO-OP KEYS
 J      join your partner (when the screen says "Press J to join")
 Enter  skip a cutscene for everyone (press again to watch the rest)
 H      tell the AI companions to wait or to follow
-O      open the wardrobe (outfits) anywhere, when the bonus room is ticked
+O      open the wardrobe (outfits) anywhere, when the bonus room is open
+Y      text chat
+K      voice chat (hold to talk)
 Space  when dead: respawn next to your partner after about 10 seconds
 
 UPDATES

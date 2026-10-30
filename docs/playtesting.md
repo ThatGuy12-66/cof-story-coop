@@ -62,9 +62,11 @@ Solo and Host both start with **New game** (the intro), a **chapter**, or **Cont
 last co-op checkpoint (experimental). The game makes a checkpoint by itself after every level
 change. Continue gives your items back only under the name you saved with.
 
-**Bonus room unlocked** (Solo and Host) opens the bonus room of Chapter 1 and the bridge, with the
-FAMAS, the axe and the other bonus items, for everyone in that game. Unticked, it stays shut, even
-if your own Cry of Fear has it unlocked.
+**Open the bonus room** (the game menu's Host co-op, Play with AI and Continue co-op; "Bonus room
+unlocked" before 1.3.8) opens the bonus room of Chapter 1 and the bridge, with the FAMAS, the axe
+and the other bonus items, for everyone in that game. Unticked, it is open as far as the host has
+unlocked it: since 1.3.8 the app copies the unlocks of your own Cry of Fear into the co-op copy
+each time you click Play (before, it stayed shut).
 
 The first game opens full screen at your desktop's size; change it in the game's Options.
 

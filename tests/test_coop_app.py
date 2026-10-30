@@ -79,7 +79,7 @@ class StartTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_the_footer_names_the_release_not_a_test_build(self):
-        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.7")
+        self.assertEqual(app.footer_text(), "Cry of Fear Co-op 1.3.8")
 
     def test_report_a_bug_opens_the_discord(self):
         with mock.patch.object(app.webbrowser, "open") as browser:
@@ -230,6 +230,36 @@ class WindowTests(unittest.TestCase):
         start.assert_not_called()
         self.assertEqual((started, stopped[-1]), ([1], 3))
         self.assertIn("already running", str(self.errors[-1]))
+
+    def test_a_start_brings_the_players_own_unlocks(self):
+        # 1.3.8 (a player: "the unlocks you already unlocked, would transfer to the simon's story with friends")
+        from tests.test_unlocks import settings
+        root = self.copy()
+        game = self.temp / "Cry of Fear"
+        (game / "cryoffear").mkdir(parents=True)
+        (game / app.unlocks.SETTINGS).write_bytes(settings({"ending 1", "the axe"}))
+        (root / app.unlocks.SETTINGS).write_bytes(settings())
+        state = json.loads((root / friend.INSTALLED).read_text())
+        (root / friend.INSTALLED).write_text(json.dumps(dict(state, source_game=str(game))))
+        with mock.patch.object(friend, "validate_runtime"), mock.patch.object(friend, "game_is_running",
+                                                                               return_value=False):
+            self.app.launch(["game"], "cfg\n", lambda: None)
+            job, done, _ = self.jobs[-1]
+            running = job()
+        with mock.patch.object(app, "start_game") as start:
+            done(running)
+        start.assert_called_once()
+        self.assertEqual(app.unlocks.unlocked_names((root / app.unlocks.SETTINGS).read_bytes()), ["ending 1", "the axe"])
+        # never in the way of starting the game
+        with mock.patch.object(app.unlocks, "carry_into_copy", side_effect=PermissionError("in use")), \
+                mock.patch.object(friend, "validate_runtime"), mock.patch.object(friend, "game_is_running",
+                                                                                 return_value=False):
+            self.app.launch(["game"], "cfg\n", lambda: None)
+            job, done, _ = self.jobs[-1]
+            running = job()
+            with mock.patch.object(app, "start_game") as start:
+                done(running)
+        start.assert_called_once()
 
     def test_play_starts_the_game_at_its_menu_and_shares_the_join_code_with_it(self):
         # 1.3.6 (the owner: "integrate the mod into the main menu somehow"): the game opens at its main menu, whose
