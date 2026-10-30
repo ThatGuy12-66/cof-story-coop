@@ -200,8 +200,9 @@ static int UI_CoFCoopClampInt( float value, int lo, int hi )
 The entry maps, measured from the shipped entity lumps
 (stage1/coop-investigation-20260922/RESULTS.md section 1.6). The two with a
 lobby (worldspawn iuser1) are cof_campaign_01 and cof_manhunt_campaign; the
-survival maps start at once and run a 30-minute timer. A map that is not
-installed is left off the list.
+survival maps start at once and run a 30-minute timer. 1.3.9: the co-op
+campaign's later maps too (coop_play.OFFICIAL_CHOICES), no lobby. A map that is
+not installed is left off the list.
 */
 struct cofCoopCampaign_t
 {
@@ -214,6 +215,15 @@ static const cofCoopCampaign_t s_cofCoopCampaigns[] =
 {
 	{ "cof_campaign_01",      "Co-op campaign",
 		"Chapters 9 to 12, starting with \"Where is Simon?\".\nLobby: everyone gets ready, or the autostart time runs out." },
+	// 1.3.9: a later part of the campaign, as the app's own co-op page had them (a player: "it would be great to
+	// have the option to select a specific level"); a player new to the game gets the part's own weapons
+	// (maps/<map>.cfg, ApplyCFGSettingToPlayerLate in the game's rules)
+	{ "cof_campaign_01_p2",   "Co-op campaign, part 2",
+		"The co-op campaign from its second map.\nNo lobby: the game starts at once, with that part's weapons." },
+	{ "cof_campaign_01_p3",   "Co-op campaign, part 3",
+		"The co-op campaign from its third map.\nNo lobby: the game starts at once, with that part's weapons." },
+	{ "cof_campaign_01_p4",   "Co-op campaign, part 4",
+		"The co-op campaign from its last map.\nNo lobby: the game starts at once, with that part's weapons." },
 	{ "cof_manhunt_campaign", "Manhunt",
 		"The Manhunt campaign, from \"A new beginning\" to the cabin.\nLobby: everyone gets ready, or the autostart time runs out." },
 	{ "cof_suicide1",         "Survival 1",
