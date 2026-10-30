@@ -1509,3 +1509,8 @@ then "i mean that the unlocks you already unlocked, would transfer to the simon'
   on the dev PC), `test_coop_app` (a start brings the unlocks; a failing carry still starts), `test_coop_play`.
 - Version 1.3.8, build 34 (`VERSION` stays 1.1). Release notes `docs/releases/1.3.8.md`. Not played; the menu pages
   are still unseen on screen.
+- **Published 1.3.8 2026-10-30 ~09:47 PT** (the owner: "YEA"; standing approval): full suite 796 OK (3 skipped), fresh
+  install 544 s, the 1.3.7 -> 1.3.8 update **29 s** (the models, art and merged maps all kept), a save kept. GitHub
+  `v1.3.8`; publish's page check failed on GitHub's cache again (exit 1), `latest/download/release.json` served build 34
+  a minute later. Zip `706ADE0E…`, 111,635,888 bytes. mainui `d4aa8fdf`, engine `3b90ec07`, launcher `9580a0d`.
+  Nothing pushed. The ModDB upload is the owner's (`evidence/release-1.3.8/moddb-text.txt`).
