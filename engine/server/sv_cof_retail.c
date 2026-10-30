@@ -1141,6 +1141,157 @@ void SV_CoF_RetailCprRepair( void )
 	}
 }
 
+/*
+1.3.9: a player's weapons after a revive (a player, in Cry of Fear's own co-op: "After a player is revived, they are
+sometimes unable to use their weapons if they drop them and pick them up again, Cry of Fear crashes"). Two retail
+leftovers, read in the decompilation (player.cpp; evidence/release-1.3.9/revive-weapons-re.md on the dev PC):
+- A revive's get-up plays while the body is still dead, at fuser3 3 (RevivePlayer). A respawn then (PreThink: jump
+  after 60 s, or sv_auto_respawn_time, which RevivePlayer does not clear) runs Spawn, which keeps fuser3: every attack
+  wants fuser3 <= 0 (CBasePlayerWeapon::ItemPostFrame) and monsters do not see a player at 3, for that whole life.
+  Spawn keeps the other leftovers of a death too (10 a gun's suicide struggle, 25 a syringe hold, 5 a phone call).
+- RemovePlayerItem (a drop) clears m_pActiveItem, or else m_pLastItem, and never m_pNextItem (the last switch's
+  weapon), m_pStoredActionItem or m_pStoredNightVisionWeapon; a later switch (a get-up's queued deploy, PostThink
+  6389; SelectLastItem; the action or night-vision restore) then Deploys a weapon lying on the floor with m_pPlayer
+  NULL (CGlock::Deploy reads through it) or one already freed. A get-up from a knock-down (fuser3 2) also queues a
+  deploy of m_pNextItem whatever it holds: NULL (a fresh life) left the player with nothing in hand.
+Before each PostThink (SV_RunCmd): a respawned player's fuser3 back to 0, a living one's 3 too; each of those weapon
+pointers that is not on the player's inventory chain (m_rgpPlayerItems through m_pNext: a weapon leaving it keeps its
+m_pPlayer until removed 0.1 s later, RemoveAllItems at a respawn, DestroyItem; independent review) is cleared as
+RemovePlayerItem would; a queued deploy of nothing deploys the weapon in hand, as it is after every switch.
+*/
+#define COF_RETAIL_LAST_ITEM      0x2534 // CBasePlayerItem *m_pLastItem
+#define COF_RETAIL_STORED_ACTION  0x253C // CBasePlayerItem *m_pStoredActionItem: back in hand after a weapon_action
+#define COF_RETAIL_STORED_NV      0x03F0 // CBasePlayerWeapon *m_pStoredNightVisionWeapon: back after the night vision
+#define COF_RETAIL_ITEMS          0x2514 // CBasePlayerItem *m_rgpPlayerItems[6]: each slot's chain, through m_pNext
+#define COF_RETAIL_ITEM_SLOTS     6
+#define COF_RETAIL_ITEM_NEXT      0x0164 // CBasePlayerItem *m_pNext (after m_pPlayer +0x160, before m_iId +0x168)
+#define COF_RETAIL_ITEM_NEED      0x0168 // every CBasePlayerItem holds m_pPlayer and m_pNext
+#define COF_RETAIL_CHAIN_MOST     48     // the inventory chain read: more is not a sane inventory (a loop)
+static const struct { int offset; const char *name; } cof_retail_item_fields[] =
+{
+	{ COF_RETAIL_ACTIVE_ITEM, "active" }, // first: a queued deploy of nothing takes the weapon in hand
+	{ COF_RETAIL_LAST_ITEM, "last" },
+	{ COF_RETAIL_STORED_ACTION, "stored-action" },
+	{ COF_RETAIL_STORED_NV, "stored-nightvision" },
+	{ COF_RETAIL_NEXT_ITEM, "next" },
+};
+#define COF_RETAIL_ITEM_FIELDS ( (int)ARRAYSIZE( cof_retail_item_fields ))
+static int cof_retail_item_hint[MAX_CLIENTS][COF_RETAIL_ITEM_FIELDS];
+static int cof_retail_chain_hint[MAX_CLIENTS][COF_RETAIL_CHAIN_MOST];
+
+// The game is 32-bit: these fields are four-byte pointers four bytes apart, read and written as such (an offline
+// 64-bit test build compares their low four bytes); never followed, only compared with the edicts' game objects.
+typedef uint32_t cof_retail_ptr_t;
+#define COF_RETAIL_PTR( p ) ( (cof_retail_ptr_t)(uintptr_t)( p ))
+
+// The edict whose game object this is, or NULL: none any more.
+static edict_t *CoF_RetailObjectEdict( cof_retail_ptr_t object, int *hint )
+{
+	int i;
+	if( *hint > svs.maxclients && *hint < svgame.numEntities )
+	{
+		edict_t *e = SV_EdictNum( *hint );
+		if( !e->free && e->pvPrivateData && COF_RETAIL_PTR( e->pvPrivateData ) == object ) return e;
+	}
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *e = SV_EdictNum( i );
+		if( e->free || !e->pvPrivateData || COF_RETAIL_PTR( e->pvPrivateData ) != object ) continue;
+		*hint = i;
+		return e;
+	}
+	return NULL;
+}
+
+// The player's inventory chain: each slot's items through m_pNext, every pointer looked up as an edict first (a value
+// never followed); stops at an item that is gone, at a loop, at COF_RETAIL_CHAIN_MOST.
+static int CoF_RetailItemChain( int client, const byte *player, cof_retail_ptr_t *chain )
+{
+	int n = 0, slot, seen;
+	for( slot = 0; slot < COF_RETAIL_ITEM_SLOTS; slot++ )
+	{
+		cof_retail_ptr_t item;
+		memcpy( &item, player + COF_RETAIL_ITEMS + slot * sizeof( item ), sizeof( item ));
+		while( item && n < COF_RETAIL_CHAIN_MOST )
+		{
+			edict_t *e;
+			byte *pv;
+			for( seen = 0; seen < n && chain[seen] != item; seen++ );
+			if( seen < n ) break;
+			e = CoF_RetailObjectEdict( item, &cof_retail_chain_hint[client][n] );
+			if( !e || !( pv = CoF_RetailPrivate( e, COF_RETAIL_ITEM_NEED + sizeof( item )))) break;
+			chain[n++] = item;
+			memcpy( &item, pv + COF_RETAIL_ITEM_NEXT, sizeof( item ));
+		}
+	}
+	return n;
+}
+
+// Why this weapon pointer of the player's is not theirs any more, or NULL: on their inventory chain.
+static const char *CoF_RetailItemStale( const byte *player, cof_retail_ptr_t object, int *hint, const cof_retail_ptr_t *chain, int count )
+{
+	edict_t *e = CoF_RetailObjectEdict( object, hint );
+	cof_retail_ptr_t owner = 0;
+	byte *pv;
+	int i;
+	if( !e ) return "gone";
+	if( FBitSet( e->v.flags, FL_KILLME )) return "removed";
+	for( i = 0; i < count; i++ )
+		if( chain[i] == object ) return NULL;
+	if(( pv = CoF_RetailPrivate( e, COF_RETAIL_ITEM_NEED ))) memcpy( &owner, pv + COF_RETAIL_WEAPON_PLAYER, sizeof( owner ));
+	if( owner == COF_RETAIL_PTR( player )) return "leaving"; // out of the inventory, removed in a moment
+	return owner ? "another's" : "dropped";
+}
+
+void SV_CoF_RetailItemsRepair( sv_client_t *cl, qboolean respawned )
+{
+	static const byte unlock[3] = { 0, 0, 0 }; // ViewLock( byte 0, coord 0 )
+	byte *player = CoF_RetailStoryPlayer( cl );
+	cof_retail_ptr_t object, active, chain[COF_RETAIL_CHAIN_MOST];
+	int i, k, count = 0;
+	qboolean chained = false;
+	if( !player || ( i = (int)( cl - svs.clients )) < 0 || i >= MAX_CLIENTS ) return;
+	if( CoF_RetailAlive( cl->edict ) && cl->edict->v.fuser3 != 0.0f && ( respawned || cl->edict->v.fuser3 == 3.0f ))
+	{
+		float was = cl->edict->v.fuser3;
+		cl->edict->v.fuser3 = 0.0f;
+		if( was == 25.0f || was == 5.0f ) SV_CoF_SendUserMessage( cl->edict, "ViewLock", unlock, sizeof( unlock ), true );
+		Con_Printf( "cofstory phase=weapons-unstuck userid=%d fuser3=%d respawned=%d\n", cl->userid, (int)was, respawned ? 1 : 0 );
+	}
+	for( k = 0; k < COF_RETAIL_ITEM_FIELDS; k++ )
+	{
+		const int offset = cof_retail_item_fields[k].offset;
+		const char *why;
+		memcpy( &object, player + offset, sizeof( object ));
+		if( offset == COF_RETAIL_NEXT_ITEM && !object && player[COF_RETAIL_DEFER_DEPLOY] )
+		{
+			// a queued deploy of nothing (a knock-down's get-up): the weapon in hand, as after every switch
+			memcpy( &active, player + COF_RETAIL_ACTIVE_ITEM, sizeof( active ));
+			if( !active ) player[COF_RETAIL_DEFER_DEPLOY] = 0;
+			memcpy( player + offset, &active, sizeof( active ));
+			if( active ) Con_Printf( "cofstory phase=item-unlinked userid=%d field=next why=empty-switch\n", cl->userid );
+			continue;
+		}
+		if( !object ) continue;
+		if( !chained ) { count = CoF_RetailItemChain( i, player, chain ); chained = true; } // once, when a pointer is set
+		if( !( why = CoF_RetailItemStale( player, object, &cof_retail_item_hint[i][k], chain, count ))) continue;
+		object = 0;
+		if( offset == COF_RETAIL_NEXT_ITEM )
+		{
+			// a switch under way to it: the weapon in hand instead (checked above), or none
+			memcpy( &object, player + COF_RETAIL_ACTIVE_ITEM, sizeof( object ));
+			if( !object ) player[COF_RETAIL_DEFER_DEPLOY] = 0;
+		}
+		memcpy( player + offset, &object, sizeof( object ));
+		if( offset == COF_RETAIL_ACTIVE_ITEM )
+		{
+			cl->edict->v.viewmodel = 0; // as RemovePlayerItem does
+			cl->edict->v.weaponmodel = 0;
+		}
+		Con_Printf( "cofstory phase=item-unlinked userid=%d field=%s why=%s\n", cl->userid, cof_retail_item_fields[k].name, why );
+	}
+}
+
 qboolean SV_CoF_RetailFallen( sv_client_t *cl )
 {
 	byte *player = CoF_RetailStoryPlayer( cl );

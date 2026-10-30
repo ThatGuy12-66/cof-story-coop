@@ -23,6 +23,7 @@ GNU General Public License for more details.
 #include "sv_cof_party.h"
 #include "sv_cof_cmdclock.h"
 #include "sv_cof_pickups.h"
+#include "sv_cof_retail.h"
 #include "cof_abi.h"
 #include "pm_local.h"
 #include "event_flags.h"
@@ -1213,6 +1214,13 @@ void SV_RunCmd( sv_client_t *cl, usercmd_t *ucmd, int random_seed )
 	svgame.pmove->numtouch = 0;
 	svgame.globals->time = cl->timebase;
 	svgame.globals->frametime = frametime;
+
+	// Cry of Fear co-op 1.3.9: a respawn during a revive's get-up left the weapons unusable, and a drop left the game
+	// pointers to the weapon on the floor that a later switch deployed (sv_cof_retail.c): put right before PostThink.
+	// "Respawned" is also true when a revive's get-up ran in this command (the death think): that leaves fuser3 0
+	// itself, so only a fuser3 a trigger set during this command's move goes, and the trigger sets it again.
+	if( SV_CoF_StoryCoopEnabled() || SV_CoF_StoryOfficialCoop( ))
+		SV_CoF_RetailItemsRepair( cl, cof_dead && !SV_CoF_PartyDead( clent ));
 
 	// run post-think
 	svgame.dllFuncs.pfnPlayerPostThink( clent );

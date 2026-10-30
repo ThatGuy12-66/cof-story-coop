@@ -606,7 +606,13 @@ void SV_CoF_StoryFrame( void )
 	if( !SV_CoF_StoryCoopEnabled( ))
 	{
 		// 1.3.5: Cry of Fear's own co-op: every player takes their own copy of the map's pickups, as in the story
-		if( SV_CoF_StoryOfficialCoop( )) SV_CoF_PickupsFrame();
+		// 1.3.9: and the story's CPR, syringe and fall repairs (sv_cof_retail.c): the same game code leaves the same
+		// players stuck (a reviver whose patient left, a syringe hold, a get-up an EnableControl cancelled)
+		if( SV_CoF_StoryOfficialCoop( ))
+		{
+			SV_CoF_PickupsFrame();
+			SV_CoF_RetailCprRepair();
+		}
 		return;
 	}
 	CoF_StoryChapterStart(); // before the party and state frames: they hand the kit out

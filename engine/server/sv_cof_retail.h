@@ -131,6 +131,10 @@ qboolean SV_CoF_RetailRevive( sv_client_t *reviver, sv_client_t *body );
 // left in its CPR state: let it get up. A trip or knock-down whose fall flag an
 // EnableControl cleared: let it get up too (1.1.8).
 void SV_CoF_RetailCprRepair( void );
+// 1.3.9: before each PostThink, in story co-op and Cry of Fear's own co-op: a player respawned in this command
+// (respawned) or living at fuser3 3 (a revive's get-up) can attack again; a weapon pointer of theirs (in hand, last,
+// next, stored) that is not their weapon any more is cleared, a queued deploy of nothing takes the weapon in hand.
+void SV_CoF_RetailItemsRepair( sv_client_t *cl, qboolean respawned );
 // A hard landing holds the player down until the getting-up command.
 qboolean SV_CoF_RetailFallen( sv_client_t *cl );
 // The game plays a whole-body animation of its own on the player now (m_flSequenceOverrideTime not passed: a get-up,
