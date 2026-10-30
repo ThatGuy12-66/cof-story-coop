@@ -1557,3 +1557,8 @@ would be great to have the option to select a specific level." Research by a rea
   own late-joiner rule). Test: `test_menu_coop` (every OFFICIAL_CHOICES map is listed and sent).
 - Tests: `cof_retail_harness.c` (the repair's scenarios, four-byte pointers), `test_enhanced_official_coop`
   OfficialWeaponsTests. Not played. Version 1.3.9, build 35; release notes `docs/releases/1.3.9.md`.
+- **Published 1.3.9 2026-10-30 ~15:47 PT** (standing approval, after a player's report the owner forwarded): full suite
+  800 OK (3 skipped), fresh install 500 s, the 1.3.8 -> 1.3.9 update 26 s, a save kept; publish passed every check this
+  time (the releases page served 1.3.9 at once). GitHub `v1.3.9`, `latest/download/release.json` build 35. Zip
+  `0D2BD952…`, 111,641,736 bytes. mainui `65bfb164`, engine `3c02bdde`, launcher `9fdfa71`. Nothing pushed. Not
+  played. The ModDB upload is the owner's (`evidence/release-1.3.9/moddb-text.txt`).
