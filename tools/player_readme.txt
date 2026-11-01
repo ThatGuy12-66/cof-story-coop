@@ -1,6 +1,16 @@
-Cry of Fear Co-op 1.3.9
+Cry of Fear Co-op 1.4
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.4
+- The chainsaw that wouldn't stop: after the masked chainsaw man (and the chainsaw boss)
+  showed up, other enemies seemed to make his idle chainsaw noise, on a loop, until the
+  game was restarted. He starts that noise each time he spots someone, which in co-op is
+  again and again, and the game stopped only one copy of it, or none when the level
+  removes him at the end of the chase; a copy left over kept playing and moved to the
+  next enemy that took his place. Now every copy stops when he dies or is removed.
+- 1.1 to 1.4 can play together. The fix is mostly in the host's game, so the host should
+  update; everyone should, to stop leftover copies themselves.
 
 WHAT'S NEW IN 1.3.9
 - Cry of Fear's own co-op can start the co-op campaign from any of its four maps again:

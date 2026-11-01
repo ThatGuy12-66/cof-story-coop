@@ -1562,3 +1562,29 @@ would be great to have the option to select a specific level." Research by a rea
   time (the releases page served 1.3.9 at once). GitHub `v1.3.9`, `latest/download/release.json` build 35. Zip
   `0D2BD952…`, 111,641,736 bytes. mainui `65bfb164`, engine `3c02bdde`, launcher `9fdfa71`. Nothing pushed. Not
   played. The ModDB upload is the owner's (`evidence/release-1.3.9/moddb-text.txt`).
+
+## 1.4: the chainsaw loop that moved to other enemies (2026-10-31)
+
+A player ("Yuri", the story, 1.3.8, no log, a video on Discord): after "the part where the sawcrazy enemy appears and
+you gotta kill one and then run away from the masked one", "The idle chainsaw noise that the sawcrazy has, thats the
+sound that replaced the idling sound of normal enemies, their death sound too, and since that sound is on loop it kept
+playing"; "we had to restart the game for it to go away". (The story's forest: c_forest3's Sawrunner, cm_forest2.)
+- **Cause** (decompilation + engine source; not reproduced): CSawrunner::AlertSound and CChainsawBoss::AlertSound
+  start `boss/sawer/chainsaw_loop.wav` (a cue chunk: it loops) with EMIT_SOUND on CHAN_AUTO, a new client channel each
+  time; in co-op the monster is alerted again whenever it takes another player or companion as its enemy. Its death
+  sends one STOP_SOUND, and the client's S_AlterChannel stopped only the first matching channel; c_forest3 spawns its
+  Sawrunner from a monstermaker (netname "sawrunner") and removes it with `killtarget sawrunner` (trigger_relay
+  "killsawrunner"), which stops nothing. Clients play a sound at its entity number: the copies left kept looping there
+  and followed whatever was given the freed edict next (a monstermaker's monster, a pickup copy). A real level change
+  stops all sounds (CL_ClearState, svc_changing); a merged map has none for longer.
+- **Fix**, host (`engine/server/sv_cof_dynloops.h/.c`): SV_StartSound reports each sound sent (`SV_CoF_DynLoopSent`,
+  after the multicast); a start of a sample whose wav has a "cue " chunk (chunk headers read once a map through the
+  engine FS, as the client's loader walks them) on a channel other than CHAN_STATIC/CHAN_STREAM counts a copy per
+  (entity, serial, channel, sound index); the game's stop is sent again for each other copy (`SV_CoF_StopSoundNum`,
+  MSG_ALL reliable); `SV_FreeEdict` stops a freed entity's copies (`SV_CoF_DynLoopsFreed`, only while ss_active). The
+  list is the map's (svs.spawncount). Logs `phase=dynloop-stopped ... why=stop|freed`, `phase=dynloops-full`.
+- **Fix**, client (`client/sound/s_main.c` S_AlterChannel): a SND_STOP stops every matching channel, not the first.
+  A volume/pitch change still alters the first only, as before. Starts are untouched (no suppression, no restarts).
+- Tests: `tests/test_enhanced_dynloops.py` (the count and the cue check, `cof_dynloops_harness.c`, with the real
+  chainsaw_loop.wav/death.wav/dblsawloop.wav on the dev PC; the hooks' places; the client's stop).
+- Version 1.4, build 36 (no part past 9). Release notes `docs/releases/1.4.md`. Not played.
