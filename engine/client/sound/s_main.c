@@ -514,17 +514,23 @@ static int S_AlterChannel( int entnum, int channel, const sfx_t *sfx, int vol, i
 	// at a time, so we can just shut off
 	// any channel that has ch->is_sentence >= 0 and matches the entnum.
 	qboolean is_sentence = S_TestSoundChar( sfx->name, '!' );
+	qboolean stopped = false;
 
 	for( int i = NUM_AMBIENTS; i < snd.total_channels; i++ )
 	{
 		channel_t *ch = &snd.channels[i];
 
-		if( S_MaybeAlterChannel( ch, entnum, channel, flags, is_sentence ? NULL : sfx, pitch, vol ))
+		if( !S_MaybeAlterChannel( ch, entnum, channel, flags, is_sentence ? NULL : sfx, pitch, vol ))
+			continue;
+		// Cry of Fear co-op 1.4: a stop stops every copy, not the first only: CHAN_AUTO starts a new channel each
+		// time, so a looping sound started twice (a chainsaw monster alerted again) kept looping after its stop
+		if( !FBitSet( flags, SND_STOP ))
 			return true;
+		stopped = true;
 	}
 
 	// channel not found
-	return false;
+	return stopped;
 }
 
 /*

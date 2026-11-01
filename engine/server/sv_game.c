@@ -1208,6 +1208,10 @@ void SV_FreeEdict( edict_t *pEdict )
 	Assert( pEdict != NULL );
 	if( pEdict->free ) return;
 
+	// Cry of Fear co-op 1.4: the looping sounds it started on a dynamic channel stop on the clients, or they would
+	// keep playing at this number and seem to come from the next entity given it (sv_cof_dynloops.c)
+	SV_CoF_DynLoopsFreed( pEdict );
+
 	// unlink from world
 	SV_UnlinkEdict( pEdict );
 
@@ -2343,6 +2347,20 @@ int SV_BuildSoundMsgNum( sizebuf_t *msg, int entityIndex, int chan, const char *
 
 /*
 =================
+SV_CoF_StopSoundNum
+
+Cry of Fear co-op 1.4: a stop of an entity number's sample on a channel, to every client, as the game's own stop
+is sent (sv_cof_dynloops.c: a looping sound's other copies, and those of an entity being freed)
+=================
+*/
+void SV_CoF_StopSoundNum( int entnum, int chan, const char *sample, const vec3_t origin )
+{
+	if( SV_BuildSoundMsgNum( &sv.multicast, entnum, chan, sample, 0, ATTN_NONE, SND_STOP, PITCH_NORM, origin ))
+		SV_Multicast( MSG_ALL, origin, NULL, false, false );
+}
+
+/*
+=================
 SV_StartSound
 
 =================
@@ -2381,6 +2399,8 @@ void GAME_EXPORT SV_StartSound( edict_t *ent, int chan, const char *sample, floa
 	if( SV_BuildSoundMsg( &sv.multicast, ent, chan, sample, vol * 255, attn, flags, pitch, origin ))
 		SV_Multicast( msg_dest, origin, NULL, false, filter );
 	cof_multicast_section = -1;
+	// Cry of Fear co-op 1.4: a looping sound's copies on a dynamic channel, stopped with their entity
+	SV_CoF_DynLoopSent( ent, chan, sample, flags );
 }
 
 /*

@@ -619,6 +619,11 @@ void SV_PlaybackEventFull( int flags, const edict_t *pInvoker, word eventindex, 
 	float *angles, float fparam1, float fparam2, int iparam1, int iparam2, int bparam1, int bparam2 );
 int SV_BuildSoundMsg( sizebuf_t *msg, edict_t *ent, int chan, const char *sample, int vol, float attn, int flags, int pitch, const vec3_t pos );
 int SV_BuildSoundMsgNum( sizebuf_t *msg, int entityIndex, int chan, const char *sample, int vol, float attn, int flags, int pitch, const vec3_t pos );
+// Cry of Fear co-op 1.4: a stop of an entity number's sample on a channel, to every client (reliable)
+void SV_CoF_StopSoundNum( int entnum, int chan, const char *sample, const vec3_t origin );
+// sv_cof_dynloops.c: looping sounds on dynamic channels counted per entity, stopped with it
+void SV_CoF_DynLoopSent( edict_t *ent, int chan, const char *sample, int flags );
+void SV_CoF_DynLoopsFreed( edict_t *ent );
 qboolean SV_BoxInPVS( const vec3_t org, const vec3_t absmin, const vec3_t absmax );
 void SV_QueueChangeLevel( const char *level, const char *landname );
 void SV_WriteEntityPatch( const char *filename );
