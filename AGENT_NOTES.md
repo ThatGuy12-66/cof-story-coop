@@ -1588,3 +1588,8 @@ playing"; "we had to restart the game for it to go away". (The story's forest: c
 - Tests: `tests/test_enhanced_dynloops.py` (the count and the cue check, `cof_dynloops_harness.c`, with the real
   chainsaw_loop.wav/death.wav/dblsawloop.wav on the dev PC; the hooks' places; the client's stop).
 - Version 1.4, build 36 (no part past 9). Release notes `docs/releases/1.4.md`. Not played.
+- **Published 1.4 2026-10-31 ~18:52 PT** (standing approval, after a player's report the owner forwarded): full suite
+  804 OK (3 skipped), fresh install 325 s, the 1.3.9 -> 1.4 update 31 s, a save kept; publish exit 1 on its
+  releases-page check only (GitHub lag: `latest/download/release.json` served 1.4 build 36 afterwards). GitHub `v1.4`.
+  Zip `F178E57C…`, 111,650,262 bytes. Engine `5628e5f7`, launcher `10b445d`. Nothing pushed. Not played. The ModDB
+  upload is the owner's (`evidence/release-1.4/moddb-text.txt`).
