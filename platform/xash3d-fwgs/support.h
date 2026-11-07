@@ -12,6 +12,7 @@
 
 #include "vgui_api.h"
 #include "coffont.h"
+#include "cof_text_logic.h"
 
 namespace vgui
 {
@@ -155,6 +156,7 @@ private:
 	};
 
 	// vgui doesn't make font atlas, we handle that ourselves
+	struct CofCpPages;
 	struct FontCache
 	{
 		int           id;                   // Font::getId()
@@ -163,6 +165,11 @@ private:
 		int           texture[MAX_FONT_PAGES];
 		float         coord[256][4];        // s0, t0, s1, t1
 		int           generation;
+		// Cry of Fear text beyond one byte per glyph: whole characters past the byte table (a UTF-8 font's
+		// Chinese), rasterised as they are needed onto pages of their own (cofCpGlyph in surface.cpp)
+		CofCpPages   *cp;
+
+		~FontCache();
 	};
 
 	struct PaintState
@@ -248,7 +255,8 @@ private:
 		int        x, y;      // already translated, pre-clip
 		int        w, tall;
 		int        color[4];
-		FontCache *cache;
+		int        tex;       // the page it is on, and where
+		float      coord[4];
 	};
 
 	struct BackingLine
@@ -270,6 +278,24 @@ private:
 	const char  *textRole;
 
 	bool deferBackingGlyph( int ch, int x, int y, int w, int tall, const int *color );
+	// the same for a quad already resolved: a whole UTF-8 character (texture and coordinates of its page)
+	bool deferBackingQuad( int x, int y, int w, int tall, const int *color, int tex, const float *coord );
+
+	// Cry of Fear text beyond one byte per glyph. A UTF-8 font's character reaches drawPrintText one byte at a time
+	// (TextImage draws per byte): it is drawn when its last byte arrives, at the place its lead byte was given, in
+	// the cell the lead byte's width gave it.
+	struct CofCpGlyph;
+	CofCpGlyph *cofCpGlyph( FontCache *cache, CofFont *cof, uint32_t cp );
+	void cofCpUpload( FontCache *cache );
+	void cofCpWarm( FontCache *cache, CofFont *cof );
+	void cofDrawCp( uint32_t cp, int x, int y, int cellw, const int *color );
+public:
+	// every character of a text the current font is about to draw, rasterised and uploaded in one go
+	// (TextImage::paint through Text_Prepare), so a page of Chinese is one upload, not one per character
+	void cofPrepareText( const char *text );
+private:
+	cof_text_stream_t cofStream;
+	int cofLeadX, cofLeadY, cofLeadCell;
 	// returns how far the run was moved, so flushBackingText() can move the
 	// clip rectangle the same distance
 	int  applyTextYTarget( void );

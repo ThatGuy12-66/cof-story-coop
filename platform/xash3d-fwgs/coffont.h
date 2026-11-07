@@ -5,6 +5,7 @@
 #define VGUI_XASH3D_COFFONT_H
 
 #include "font.h"
+#include <stdint.h>
 
 namespace vgui
 {
@@ -28,6 +29,13 @@ public:
 
 	int deviceTall() const;
 	void deviceABCwide( int ch, int &a, int &b, int &c );
+
+	// Cry of Fear text beyond one byte per glyph (engine/cof_text_logic.h): the font's text is UTF-8 (a Chinese
+	// pack), and one whole character's metrics (logical, device) and bitmap (device, the atlas cell layout)
+	bool utf8() const;
+	void cpABC( uint32_t cp, int &a, int &b, int &c );
+	void cpDeviceABC( uint32_t cp, int &a, int &b, int &c );
+	void cpRGBA( uint32_t cp, int rgbaX, int rgbaY, int rgbaWide, int rgbaTall, unsigned char *rgba );
 
 private:
 	FontPlat_Inter *plat;

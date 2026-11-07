@@ -155,6 +155,30 @@ private:
 
 static vgui::FontSubstituteFn g_fontSubstituteHook = nullptr;
 static vgui::FontCreatedFn g_fontCreatedHook = nullptr;
+static vgui::FontUtf8Fn g_fontUtf8Hook = nullptr;
+
+void vgui::Font_SetUtf8Hook( FontUtf8Fn fn )
+{
+	g_fontUtf8Hook = fn;
+}
+
+bool vgui::Font_IsUtf8( Font *font )
+{
+	return font && g_fontUtf8Hook && g_fontUtf8Hook( font );
+}
+
+static vgui::TextPrepareFn g_textPrepareHook = nullptr;
+
+void vgui::Text_SetPrepareHook( TextPrepareFn fn )
+{
+	g_textPrepareHook = fn;
+}
+
+void vgui::Text_Prepare( const char *text )
+{
+	if( text && g_textPrepareHook )
+		g_textPrepareHook( text );
+}
 
 int vgui::Font_AllocId( void )
 {

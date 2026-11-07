@@ -9,6 +9,7 @@
 #include "inputstream.h"
 #include "fileimage.h"
 #include "font.h"
+#include "cof_text_logic.h" // Cry of Fear: UTF-8 words (engine/cof_text_logic.h)
 
 using namespace vgui;
 
@@ -490,6 +491,54 @@ quickexit:
 	return true;
 }
 
+/*
+CofWordLength - Cry of Fear text beyond one byte per glyph
+
+The bytes of the word that starts at text[i]: up to a space or a line end, as stock VGUI wraps. In UTF-8 text a word
+also ends where a line may break between two characters that touch (engine/cof_text_logic.h): Chinese has no spaces,
+so every Chinese character is a place to break, except before closing punctuation and after opening punctuation. A
+UTF-8 character is never split.
+*/
+static int CofWordLength( const char *text, int i, bool utf8 )
+{
+	const unsigned char *s = (const unsigned char *)text;
+	uint32_t prev = 0, next = 0;
+	int word, n;
+
+	if( !utf8 )
+	{
+		for( word = 1; ; word++ )
+		{
+			int ch2 = s[i + word];
+
+			if( ch2 == '\0' || ch2 == '\n' || ch2 == '\r' || ch2 == ' ' )
+				break;
+		}
+		return word;
+	}
+
+	word = CoF_Text_Next( s + i, 4, COF_CP_UTF8, 0, &prev );
+	if( word < 1 )
+		word = 1;
+
+	for( ;; )
+	{
+		int ch2 = s[i + word];
+
+		if( ch2 == '\0' || ch2 == '\n' || ch2 == '\r' || ch2 == ' ' )
+			break;
+
+		n = CoF_Text_Next( s + i + word, 4, COF_CP_UTF8, 0, &next );
+		if( n < 1 || CoF_Text_BreakBetween( prev, next ))
+			break;
+
+		prev = next;
+		word += n;
+	}
+
+	return word;
+}
+
 TextImage::TextImage(int len, const char *str)
 {
 	init( len, str );
@@ -521,7 +570,12 @@ void TextImage::paint( Panel *p )
 	drawSetTextFont( f );
 
 	Font *af = Font_Active( f );
+	const bool utf8 = Font_IsUtf8( af );
 	int x = 0, y = 0, tall = af->getTall();
+
+	// Cry of Fear: the characters this text needs that the font has no glyph for yet, in one upload
+	if( utf8 )
+		Text_Prepare( text );
 	for( int i = 0; ; i++ )
 	{
 		// the cast is load bearing: text is char*, so a byte in 0x80..0xFF
@@ -565,15 +619,11 @@ void TextImage::paint( Panel *p )
 			continue;
 		}
 
-		int word;
-		for( word = 1; ; word++ )
+		// Cry of Fear: the word, measured byte by byte as it is drawn (CofWordLength)
+		int word = CofWordLength( text, i, utf8 );
+		for( int k = 1; k < word; k++ )
 		{
-			int ch2 = (unsigned char)text[i + word];
-
-			if( ch2 == '\0' || ch2 == '\n' || ch2 == '\r' || ch2 == ' ' )
-				break;
-
-			af->getCharABCwide( ch2, a, b, c );
+			af->getCharABCwide( (unsigned char)text[i + k], a, b, c );
 			len += a + b + c;
 		}
 
@@ -647,6 +697,7 @@ void TextImage::getTextSizeWrapped( int &wide, int &tall )
 
 	Font *f = getFont();
 	Font *af = Font_Active( f );
+	const bool utf8 = Font_IsUtf8( af );
 	int x = 0, y = 0, lineTall = af->getTall();
 
 	for( int i = 0; ; i++ )
@@ -689,15 +740,11 @@ void TextImage::getTextSizeWrapped( int &wide, int &tall )
 			continue;
 		}
 
-		int word;
-		for( word = 1; ; word++ )
+		// Cry of Fear: the word, measured byte by byte as it is drawn (CofWordLength)
+		int word = CofWordLength( text, i, utf8 );
+		for( int k = 1; k < word; k++ )
 		{
-			int ch2 = (unsigned char)text[i + word];
-
-			if( ch2 == '\0' || ch2 == '\n' || ch2 == '\r' || ch2 == ' ' )
-				break;
-
-			af->getCharABCwide( ch2, a, b, c );
+			af->getCharABCwide( (unsigned char)text[i + k], a, b, c );
 			len += a + b + c;
 		}
 

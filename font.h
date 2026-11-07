@@ -64,6 +64,21 @@ void Font_SetSubstituteHook( FontSubstituteFn fn );
 void Font_SetCreatedHook( FontCreatedFn fn );
 Font *Font_Active( Font *font );
 
+// Cry of Fear text beyond one byte per glyph: is this (active) font's text UTF-8? TextImage then measures and breaks
+// lines by whole characters, and may break between Chinese characters, which have no spaces between them. False
+// without the hook.
+typedef bool ( *FontUtf8Fn )( Font *font );
+
+void Font_SetUtf8Hook( FontUtf8Fn fn );
+bool Font_IsUtf8( Font *font );
+
+// ... and before a TextImage draws, every character of its text is handed to the surface in one go, so the glyphs it
+// lacks are rasterised and uploaded once rather than one character at a time.
+typedef void ( *TextPrepareFn )( const char *text );
+
+void Text_SetPrepareHook( TextPrepareFn fn );
+void Text_Prepare( const char *text );
+
 // Cry of Fear language packs (cof_language). The captions compiled into
 // the game DLLs have no file slot at all, so they are swapped at draw
 // time from the active pack's table. The hook lives with the font hooks

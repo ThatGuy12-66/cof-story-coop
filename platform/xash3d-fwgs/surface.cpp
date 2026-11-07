@@ -10,11 +10,267 @@
 using namespace vgui;
 
 Dar<XashSurface::FontCache *> XashSurface::fontCacheDar;
+
+static void CofDrawStyledQuad( vpoint_t topLeft, vpoint_t bottomRight, const int *color, bool styled, int pass, int tall );
+#define CofDrawStyledQuadPublic CofDrawStyledQuad
 int XashSurface::fontGeneration = 0;
 
 static bool Q_isspace( int ch ) // locale independent
 {
 	return ch == ' ' || ( ch >= '\t' && ch <= '\r' );
+}
+
+/*
+====================
+Cry of Fear text beyond one byte per glyph
+
+A UTF-8 font (a Chinese language pack, engine/cof_text_logic.h) has no 256-cell atlas for what it draws: its
+characters are rasterised from the CJK face as they are first needed onto pages of their own, 1024 px square, cells
+one line tall like the byte atlas. The pack's whole character set (its strings/glyphs.txt, through the engine) is
+rasterised the first time a body-text size is drawn, and every page is uploaded once; a text that still meets a new
+character (chat, a larger title) gets it before it is drawn, through TextImage's Text_Prepare.
+====================
+*/
+enum
+{
+	COF_CP_PAGE      = 1024,
+	COF_CP_PAGES     = 16,
+	COF_CP_HASH      = 1024,
+	COF_CP_WARM_TALL = 64,	// device cell heights up to this get the pack's whole set at once
+};
+
+struct XashSurface::CofCpGlyph
+{
+	uint32_t	cp;
+	int		tex;
+	float		coord[4];
+	int		deviceW;	// the cell's ink width, device pixels
+	int		a, b, c;	// logical metrics
+	CofCpGlyph	*next;
+};
+
+struct XashSurface::CofCpPages
+{
+	int		tex[COF_CP_PAGES];
+	unsigned char	*rgba[COF_CP_PAGES];
+	bool		dirty[COF_CP_PAGES];
+	int		pages, cx, cy, tall;
+	bool		full, warmed;
+	int		warmedGeneration;
+	CofCpGlyph	*hash[COF_CP_HASH];
+};
+
+XashSurface::FontCache::~FontCache()
+{
+	if( !cp )
+		return;
+
+	for( int i = 0; i < COF_CP_PAGES; i++ )
+		delete[] cp->rgba[i];
+
+	for( int i = 0; i < COF_CP_HASH; i++ )
+	{
+		CofCpGlyph *g = cp->hash[i];
+
+		while( g )
+		{
+			CofCpGlyph *next = g->next;
+			delete g;
+			g = next;
+		}
+	}
+
+	delete cp;
+	cp = nullptr;
+}
+
+XashSurface::CofCpGlyph *XashSurface::cofCpGlyph( FontCache *cache, CofFont *cof, uint32_t cp )
+{
+	if( !cache || !cof )
+		return nullptr;
+
+	if( !cache->cp )
+	{
+		cache->cp = new CofCpPages;
+		memset( cache->cp, 0, sizeof( *cache->cp ));
+		cache->cp->tall = cof->deviceTall();
+	}
+
+	CofCpPages *pages = cache->cp;
+	unsigned int key = ( cp * 2654435761u ) & ( COF_CP_HASH - 1 );
+
+	for( CofCpGlyph *g = pages->hash[key]; g; g = g->next )
+	{
+		if( g->cp == cp )
+			return g;
+	}
+
+	int a, b, c, da, db, dc;
+
+	cof->cpABC( cp, a, b, c );
+	cof->cpDeviceABC( cp, da, db, dc );
+
+	CofCpGlyph *g = new CofCpGlyph;
+
+	memset( g, 0, sizeof( *g ));
+	g->cp = cp;
+	g->a = a;
+	g->b = b;
+	g->c = c;
+	g->next = pages->hash[key];
+	pages->hash[key] = g;
+
+	if( db <= 0 || pages->full )
+		return g; // no ink (or no room left): advances, draws nothing
+
+	int tall = pages->tall;
+
+	if( pages->pages == 0 || pages->cx + db + 1 > COF_CP_PAGE )
+	{
+		pages->cx = 0;
+		pages->cy += pages->pages ? tall + 1 : 0;
+	}
+
+	if( pages->pages == 0 || pages->cy + tall > COF_CP_PAGE )
+	{
+		if( pages->pages >= COF_CP_PAGES )
+		{
+			pages->full = true;
+			return g;
+		}
+
+		int index = pages->pages++;
+
+		pages->rgba[index] = new unsigned char[COF_CP_PAGE * COF_CP_PAGE * 4];
+		memset( pages->rgba[index], 0, COF_CP_PAGE * COF_CP_PAGE * 4 );
+		pages->tex[index] = g_engine->GenerateTexture();
+		pages->cx = pages->cy = 0;
+	}
+
+	int index = pages->pages - 1;
+
+	cof->cpRGBA( cp, pages->cx, pages->cy, COF_CP_PAGE, COF_CP_PAGE, pages->rgba[index] );
+	pages->dirty[index] = true;
+
+	g->tex = pages->tex[index];
+	g->deviceW = db;
+	g->coord[0] = (float)((double)pages->cx / COF_CP_PAGE );
+	g->coord[1] = (float)((double)pages->cy / COF_CP_PAGE );
+	g->coord[2] = (float)((double)( pages->cx + db ) / COF_CP_PAGE );
+	g->coord[3] = (float)((double)( pages->cy + tall ) / COF_CP_PAGE );
+	pages->cx += db + 1;
+
+	return g;
+}
+
+void XashSurface::cofCpUpload( FontCache *cache )
+{
+	if( !cache || !cache->cp )
+		return;
+
+	for( int i = 0; i < cache->cp->pages; i++ )
+	{
+		if( !cache->cp->dirty[i] )
+			continue;
+
+		cache->cp->dirty[i] = false;
+
+		if( g_engine->CofUpdateTexture )
+			g_engine->CofUpdateTexture( cache->cp->tex[i], (const char *)cache->cp->rgba[i], COF_CP_PAGE, COF_CP_PAGE );
+		else g_engine->UploadTexture( cache->cp->tex[i], (const char *)cache->cp->rgba[i], COF_CP_PAGE, COF_CP_PAGE );
+	}
+}
+
+// the pack's whole character set, the first time a body-text size of this font is drawn
+void XashSurface::cofCpWarm( FontCache *cache, CofFont *cof )
+{
+	const unsigned int *list = nullptr;
+	int generation = 0, count;
+
+	if( !cache || !cof || !g_engine->CofTextGlyphs || cof->deviceTall() > COF_CP_WARM_TALL )
+		return;
+
+	count = g_engine->CofTextGlyphs( &list, &generation );
+
+	if( cache->cp && cache->cp->warmed && cache->cp->warmedGeneration == generation )
+		return;
+
+	for( int i = 0; i < count && list; i++ )
+		cofCpGlyph( cache, cof, list[i] );
+
+	if( cache->cp )
+	{
+		cache->cp->warmed = true;
+		cache->cp->warmedGeneration = generation;
+	}
+}
+
+void XashSurface::cofPrepareText( const char *text )
+{
+	CofFont *cof = CofFont_Cast( currentFont );
+	uint32_t cp;
+	int n;
+
+	if( !text || !cof || !cof->utf8() || !currentFontCache )
+		return;
+
+	cofCpWarm( currentFontCache, cof );
+
+	for( const unsigned char *s = (const unsigned char *)text; *s; s += n )
+	{
+		n = CoF_Text_Next( s, 4, COF_CP_UTF8, 0, &cp );
+		if( n < 1 )
+			break;
+		if( cp >= 0x80 )
+			cofCpGlyph( currentFontCache, cof, cp );
+	}
+
+	cofCpUpload( currentFontCache );
+}
+
+// one whole UTF-8 character, centred in the cell its lead byte was given (logical pixels, already translated)
+void XashSurface::cofDrawCp( uint32_t cp, int x, int y, int cellw, const int *color )
+{
+	CofFont *cof = CofFont_Cast( currentFont );
+	CofCpGlyph *g;
+
+	if( !cof || !currentFontCache || cp == 0xFFFD )
+		return;
+
+	cofCpWarm( currentFontCache, cof );
+
+	if(( g = cofCpGlyph( currentFontCache, cof, cp )) == nullptr || !g->tex )
+		return;
+
+	cofCpUpload( currentFontCache );
+
+	int tall = currentFont->getTall();
+	int left = x + ( cellw - ( g->a + g->b + g->c )) / 2 + g->a;
+
+	if(( backingAlpha > 0 || textTrace || textYTarget >= 0 || textMessageStyle ) &&
+		deferBackingQuad( left, y, g->b, tall, color, g->tex, g->coord ))
+		return; // collected, drawn in flushBackingText() after this line's backing strip
+
+	vpoint_t topLeft, bottomRight;
+
+	topLeft.point[0] = left;
+	topLeft.point[1] = y;
+	bottomRight.point[0] = left + g->b;
+	bottomRight.point[1] = y + tall;
+	topLeft.coord[0] = g->coord[0];
+	topLeft.coord[1] = g->coord[1];
+	bottomRight.coord[0] = g->coord[2];
+	bottomRight.coord[1] = g->coord[3];
+
+	g_engine->BindTexture( g->tex );
+	if( textMessageStyle ) CofDrawStyledQuadPublic( topLeft, bottomRight, color, true, 0, tall );
+	CofDrawStyledQuadPublic( topLeft, bottomRight, color, textMessageStyle, 1, tall );
+}
+
+static void CofPrepareHook( const char *text )
+{
+	if( g_surface )
+		g_surface->cofPrepareText( text );
 }
 
 XashSurface::XashSurface( Panel *embeddedPanel ) :
@@ -24,6 +280,10 @@ XashSurface::XashSurface( Panel *embeddedPanel ) :
 	backingGlyphCount( 0 ), backingLineCount( 0 ), backingAlpha( 0 ), textMessageStyle( false ),
 	textYTarget( -1 ), textTrace( 0 ), textRole( "" )
 {
+	CoF_Text_StreamReset( &cofStream );
+	cofLeadX = cofLeadY = cofLeadCell = 0;
+	Text_SetPrepareHook( CofPrepareHook );
+
 	// don't forget alpha is inverted in VGUI... 255 means fully transparent
 	for( int i = 0; i < 4; i++ )
 		drawColor[i] = textColor[i] = 255;
@@ -253,7 +513,7 @@ XashSurface::FontCache *XashSurface::buildFontCache( Font *font )
 	int x = 0, y = 0, pageIndex = 0;
 	bool pageLimitHit = false;
 
-	memset( cache, 0, sizeof( *cache ));
+	memset( (void *)cache, 0, sizeof( *cache )); // plain data, and cp (the character pages) null
 	memset( pixels, 0, pageBytes );
 
 	// Cry of Fear engine-rasterised fonts: the atlas is packed and rasterised
@@ -275,6 +535,10 @@ XashSurface::FontCache *XashSurface::buildFontCache( Font *font )
 
 		// whitespace is never drawn and a wide space glyph would waste a lot of the page
 		if( Q_isspace( ch ))
+			continue;
+
+		// a byte of UTF-8 is no glyph: whole characters go onto the character pages (cofCpGlyph)
+		if( cof && cof->utf8() && ch >= 0x80 )
 			continue;
 
 		if( cof )
@@ -489,8 +753,43 @@ void XashSurface::drawPrintText( const char *text, int textLen )
 	int tall = currentFont->getTall();
 	int advance = 0;
 
+	CofFont *cofUtf8 = CofFont_Cast( currentFont );
+
+	if( cofUtf8 && !cofUtf8->utf8( ))
+		cofUtf8 = nullptr;
+
 	for( int i = 0; i < textLen; i++ )
 	{
+		// Cry of Fear text beyond one byte per glyph: in UTF-8 a lead byte gets the whole character's cell and its
+		// continuation bytes none (CofFont's byte metrics); the character is drawn when its last byte arrives, at
+		// the place and in the cell of its lead byte. TextImage hands text over one byte per call, so the state
+		// lives in the surface.
+		if( cofUtf8 )
+		{
+			int bt = (unsigned char)text[i], a, b, c;
+			uint32_t cp;
+
+			if( bt < 0x80 )
+				CoF_Text_StreamReset( &cofStream );
+			else
+			{
+				currentFont->getCharABCwide( bt, a, b, c );
+
+				if( CoF_Text_Utf8Len( bt ) >= 2 )
+				{
+					cofLeadX = x + advance;
+					cofLeadY = y;
+					cofLeadCell = a + b + c;
+				}
+
+				if( CoF_Text_Feed( &cofStream, bt, &cp ))
+					cofDrawCp( cp, cofLeadX, cofLeadY, cofLeadCell, color );
+
+				advance += a + b + c;
+				continue;
+			}
+		}
+
 		int ch = g_engine->ProcessUtfChar( (unsigned char)text[i] );
 
 		if( !ch ) // incomplete multi-byte sequence
@@ -639,8 +938,25 @@ bool XashSurface::deferBackingGlyph( int ch, int x, int y, int w, int tall, cons
 	g.color[1] = color[1];
 	g.color[2] = color[2];
 	g.color[3] = color[3];
-	g.cache = currentFontCache;
+	g.tex = currentFontCache ? currentFontCache->texture[currentFontCache->page[ch & 255]] : 0;
+	for( int k = 0; k < 4; k++ )
+		g.coord[k] = currentFontCache ? currentFontCache->coord[ch & 255][k] : 0.0f;
 	line->count++;
+
+	return true;
+}
+
+// a whole UTF-8 character (cofDrawCp): collected like a byte glyph, with its own page and coordinates
+bool XashSurface::deferBackingQuad( int x, int y, int w, int tall, const int *color, int tex, const float *coord )
+{
+	if( !deferBackingGlyph( 'x', x, y, w, tall, color ))
+		return false;
+
+	BackingGlyph &g = backingGlyphs[backingGlyphCount - 1];
+
+	g.tex = tex;
+	for( int k = 0; k < 4; k++ )
+		g.coord[k] = coord[k];
 
 	return true;
 }
@@ -1004,19 +1320,19 @@ void XashSurface::flushBackingText( void )
 			const BackingGlyph &g = backingGlyphs[line.first + j];
 			vpoint_t topLeft, bottomRight, clippedTopLeft, clippedBottomRight;
 
-			if( !g.cache )
+			if( !g.tex )
 				continue;
 
 			topLeft.point[0] = g.x;
 			topLeft.point[1] = g.y;
 			bottomRight.point[0] = g.x + g.w;
 			bottomRight.point[1] = g.y + g.tall;
-			topLeft.coord[0] = g.cache->coord[g.ch][0];
-			topLeft.coord[1] = g.cache->coord[g.ch][1];
-			bottomRight.coord[0] = g.cache->coord[g.ch][2];
-			bottomRight.coord[1] = g.cache->coord[g.ch][3];
+			topLeft.coord[0] = g.coord[0];
+			topLeft.coord[1] = g.coord[1];
+			bottomRight.coord[0] = g.coord[2];
+			bottomRight.coord[1] = g.coord[3];
 
-			g_engine->BindTexture( g.cache->texture[g.cache->page[g.ch]] );
+			g_engine->BindTexture( g.tex );
 			CofDrawStyledQuad( topLeft, bottomRight, g.color, textMessageStyle, pass, g.tall );
 		}
 

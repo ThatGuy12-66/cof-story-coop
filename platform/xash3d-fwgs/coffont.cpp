@@ -112,6 +112,7 @@ static const unsigned short g_cp1252[128] =
 
 
 #include "coffont.h"
+#include "cof_text_logic.h"
 
 namespace vgui
 {
@@ -129,6 +130,7 @@ static int CofDecode( int codepage, int ch )
 	{
 	case 1250: table = g_cp1250; break;
 	case 1251: table = g_cp1251; break;
+	case COF_CP_UTF8: return 0; // a byte of UTF-8 is no character on its own (CofFont::cpABC draws whole ones)
 	default:   table = g_cp1252; break;
 	}
 
@@ -141,7 +143,8 @@ static int CofDecode( int codepage, int ch )
 class FontPlat_Inter : public BaseFontPlat
 {
 public:
-	static FontPlat_Inter *Create( const unsigned char *ttf, int ttfSize, int devicePx, int logicalPx, int codepage )
+	static FontPlat_Inter *Create( const unsigned char *ttf, int ttfSize, int devicePx, int logicalPx, int codepage,
+		const unsigned char *cjkTtf, int cjkSize )
 	{
 		FontPlat_Inter *self = new FontPlat_Inter;
 
@@ -153,7 +156,7 @@ public:
 
 		self->devicePx = Q_max( 4, devicePx );
 		self->logicalPx = Q_max( 4, logicalPx );
-		self->codepage = codepage;
+		self->codepage = CoF_Text_Codepage( codepage );
 		self->scaleDevice = stbtt_ScaleForPixelHeight( &self->info, (float)self->devicePx );
 		self->scaleLogical = stbtt_ScaleForPixelHeight( &self->info, (float)self->logicalPx );
 
@@ -165,10 +168,125 @@ public:
 		for( int i = 0; i < 256; i++ )
 			self->glyph[i].resolved = false;
 
+		// Cry of Fear text beyond one byte per glyph: the CJK face, at Inter's em, so a Chinese character is as tall
+		// as the Latin text around it
+		self->hasCjk = false;
+		if( cjkTtf && cjkSize > 0 && stbtt_InitFont( &self->cjk, cjkTtf, stbtt_GetFontOffsetForIndex( cjkTtf, 0 )))
+		{
+			float interEm = 1.0f / stbtt_ScaleForMappingEmToPixels( &self->info, 1.0f );
+			float cjkEm = 1.0f / stbtt_ScaleForMappingEmToPixels( &self->cjk, 1.0f );
+
+			self->hasCjk = true;
+			self->cjkScaleDevice = self->scaleDevice * interEm / cjkEm;
+			self->cjkScaleLogical = self->scaleLogical * interEm / cjkEm;
+		}
+
+		memset( self->cpHash, 0, sizeof( self->cpHash ));
+		self->cellResolved = false;
+
 		return self;
 	}
 
-	virtual ~FontPlat_Inter() override { }
+	virtual ~FontPlat_Inter() override
+	{
+		for( int i = 0; i < CP_HASH; i++ )
+		{
+			CpGlyph *g = cpHash[i];
+
+			while( g )
+			{
+				CpGlyph *next = g->next;
+				delete g;
+				g = next;
+			}
+		}
+	}
+
+	bool utf8() const { return codepage == COF_CP_UTF8; }
+
+	// one character beyond the byte table: its metrics, logical or device
+	void cpABC( uint32_t cp, bool device, int &a, int &b, int &c )
+	{
+		const CpGlyph *g = resolveCp( cp );
+
+		if( !g || g->index <= 0 )
+		{
+			a = b = c = 0;
+			return;
+		}
+
+		a = device ? g->deviceA : g->logicalA;
+		b = device ? g->deviceW : g->logicalW;
+		c = device ? g->deviceC : g->logicalC;
+	}
+
+	// its bitmap, the same layout getCharRGBA writes: the cell is the line, the glyph sits on the baseline
+	void cpRGBA( uint32_t cp, int rgbaX, int rgbaY, int rgbaWide, int rgbaTall, unsigned char *rgba )
+	{
+		const CpGlyph *g = resolveCp( cp );
+
+		if( !g || g->index <= 0 || g->deviceW <= 0 || g->deviceH <= 0 || !rgba )
+			return;
+
+		stbtt_fontinfo *face = g->cjk ? &cjk : &info;
+		float scale = g->cjk ? cjkScaleDevice : scaleDevice;
+		unsigned char *bitmap = (unsigned char *)malloc( (size_t)g->deviceW * g->deviceH );
+
+		if( !bitmap )
+			return;
+
+		memset( bitmap, 0, (size_t)g->deviceW * g->deviceH );
+		stbtt_MakeGlyphBitmap( face, bitmap, g->deviceW, g->deviceH, g->deviceW, scale, scale, g->index );
+
+		for( int y = 0; y < g->deviceH; y++ )
+		{
+			int outY = rgbaY + g->deviceTop + y;
+
+			if( outY < 0 || outY >= rgbaTall )
+				continue;
+
+			for( int x = 0; x < g->deviceW; x++ )
+			{
+				int outX = rgbaX + x;
+
+				if( outX >= 0 && outX < rgbaWide )
+					memset( &rgba[( outY * rgbaWide + outX ) * 4], bitmap[y * g->deviceW + x], 4 );
+			}
+		}
+
+		free( bitmap );
+	}
+
+	// UTF-8: the cell a lead byte carries, the width of a Chinese character (一)
+	int cellFull( bool device )
+	{
+		if( !cellResolved )
+		{
+			int a, b, c;
+
+			cellResolved = true;
+			cpABC( 0x4E00, true, a, b, c );
+			cellDevice = a + b + c > 0 ? a + b + c : devicePx;
+			cpABC( 0x4E00, false, a, b, c );
+			cellLogical = a + b + c > 0 ? a + b + c : logicalPx;
+		}
+
+		return device ? cellDevice : cellLogical;
+	}
+
+	// a byte of UTF-8 text in the client's byte-wise layout: a lead byte the whole character's cell, the rest none
+	void utf8ByteABC( int ch, bool device, int &a, int &b, int &c )
+	{
+		int full = cellFull( device );
+
+		a = c = 0;
+		switch( CoF_Text_Utf8ByteCell( ch ))
+		{
+		case 2: b = full; break;
+		case 1: b = ( full + 1 ) / 2; break;
+		default: b = 0; break;
+		}
+	}
 
 	virtual bool equals( const char *, int, int, float, int, bool, bool, bool, bool ) override
 	{
@@ -177,6 +295,9 @@ public:
 
 	virtual void getCharRGBA( int ch, int rgbaX, int rgbaY, int rgbaWide, int rgbaTall, unsigned char *rgba ) override
 	{
+		if( utf8() && ( ch & 0xFF ) >= 0x80 )
+			return; // a byte of a UTF-8 character: whole characters come through cpRGBA
+
 		const Glyph &g = resolve( ch );
 
 		if( !rgba || g.index <= 0 || g.deviceW <= 0 || g.deviceH <= 0 )
@@ -216,6 +337,12 @@ public:
 
 	virtual void getCharABCwide( int ch, int &a, int &b, int &c ) override
 	{
+		if( utf8() && ( ch & 0xFF ) >= 0x80 )
+		{
+			utf8ByteABC( ch & 0xFF, true, a, b, c );
+			return;
+		}
+
 		const Glyph &g = resolve( ch );
 
 		a = g.deviceA;
@@ -229,6 +356,12 @@ public:
 
 	void logicalABCwide( int ch, int &a, int &b, int &c )
 	{
+		if( utf8() && ( ch & 0xFF ) >= 0x80 )
+		{
+			utf8ByteABC( ch & 0xFF, false, a, b, c );
+			return;
+		}
+
 		const Glyph &g = resolve( ch );
 
 		a = g.logicalA;
@@ -248,8 +381,77 @@ private:
 		int	logicalA, logicalW, logicalC;
 	};
 
+	struct CpGlyph
+	{
+		uint32_t	cp;
+		bool		cjk;	// drawn from the CJK face
+		int		index;
+		int		deviceA, deviceW, deviceC, deviceH, deviceTop;
+		int		logicalA, logicalW, logicalC;
+		CpGlyph		*next;
+	};
+
+	enum { CP_HASH = 1024 };
+
+	// a character beyond the byte table: from Inter, or from the CJK face when it is Chinese or Inter lacks it
+	const CpGlyph *resolveCp( uint32_t cp )
+	{
+		CpGlyph *g;
+		unsigned int key = ( cp * 2654435761u ) & ( CP_HASH - 1 );
+
+		for( g = cpHash[key]; g; g = g->next )
+		{
+			if( g->cp == cp )
+				return g;
+		}
+
+		g = new CpGlyph;
+		memset( g, 0, sizeof( *g ));
+		g->cp = cp;
+		g->next = cpHash[key];
+		cpHash[key] = g;
+
+		int latin = stbtt_FindGlyphIndex( &info, (int)cp );
+		int wide = hasCjk ? stbtt_FindGlyphIndex( &cjk, (int)cp ) : 0;
+
+		if( latin > 0 && ( !CoF_Text_PreferCJK( cp, utf8( )) || wide <= 0 ))
+			g->index = latin;
+		else if( wide > 0 )
+		{
+			g->index = wide;
+			g->cjk = true;
+		}
+
+		if( g->index <= 0 )
+			return g;
+
+		stbtt_fontinfo *face = g->cjk ? &cjk : &info;
+		measureFace( face, g->index, g->cjk ? cjkScaleDevice : scaleDevice, baselineDevice, g->deviceA, g->deviceW, g->deviceC, &g->deviceH, &g->deviceTop );
+		measureFace( face, g->index, g->cjk ? cjkScaleLogical : scaleLogical, 0, g->logicalA, g->logicalW, g->logicalC, nullptr, nullptr );
+		return g;
+	}
+
+	static void measureFace( stbtt_fontinfo *face, int index, float scale, int baseline, int &a, int &w, int &c, int *h, int *top )
+	{
+		int advance, lsb, x0, y0, x1, y1;
+
+		stbtt_GetGlyphHMetrics( face, index, &advance, &lsb );
+		stbtt_GetGlyphBitmapBox( face, index, scale, scale, &x0, &y0, &x1, &y1 );
+
+		int total = (int)( advance * scale + 0.5f );
+
+		a = x0;
+		w = x1 - x0;
+		c = total - a - w;
+
+		if( h ) *h = y1 - y0;
+		if( top ) *top = baseline + y0;
+	}
+
 	FontPlat_Inter() : devicePx( 0 ), logicalPx( 0 ), codepage( 1252 ),
-		scaleDevice( 0.0f ), scaleLogical( 0.0f ), baselineDevice( 0 ) { }
+		scaleDevice( 0.0f ), scaleLogical( 0.0f ), baselineDevice( 0 ),
+		hasCjk( false ), cjkScaleDevice( 0.0f ), cjkScaleLogical( 0.0f ),
+		cellResolved( false ), cellDevice( 0 ), cellLogical( 0 ) { }
 
 	const Glyph &resolve( int ch )
 	{
@@ -300,6 +502,13 @@ private:
 	float		scaleDevice, scaleLogical;
 	int		baselineDevice;
 	Glyph		glyph[256];
+
+	stbtt_fontinfo	cjk;
+	bool		hasCjk;
+	float		cjkScaleDevice, cjkScaleLogical;
+	CpGlyph		*cpHash[CP_HASH];
+	bool		cellResolved;
+	int		cellDevice, cellLogical;
 };
 
 /*
@@ -343,6 +552,26 @@ int CofFont::deviceTall() const
 void CofFont::deviceABCwide( int ch, int &a, int &b, int &c )
 {
 	plat->getCharABCwide( ch, a, b, c );
+}
+
+bool CofFont::utf8() const
+{
+	return plat->utf8();
+}
+
+void CofFont::cpABC( uint32_t cp, int &a, int &b, int &c )
+{
+	plat->cpABC( cp, false, a, b, c );
+}
+
+void CofFont::cpDeviceABC( uint32_t cp, int &a, int &b, int &c )
+{
+	plat->cpABC( cp, true, a, b, c );
+}
+
+void CofFont::cpRGBA( uint32_t cp, int rgbaX, int rgbaY, int rgbaWide, int rgbaTall, unsigned char *rgba )
+{
+	plat->cpRGBA( cp, rgbaX, rgbaY, rgbaWide, rgbaTall, rgba );
 }
 
 } // namespace vgui
@@ -403,13 +632,14 @@ CofFont *CofFindOrCreate( const char *role, const cof_vgui_font_t &desc )
 	if( g_cacheCount >= COF_FONT_CACHE )
 		return nullptr; // a session that changed resolution two dozen times; fall back
 
-	int size = 0;
+	int size = 0, cjkSize = 0;
 	const unsigned char *ttf = g_engine->CofFontFile( desc.semibold, &size );
+	const unsigned char *cjkTtf = g_engine->CofFontFileCJK ? g_engine->CofFontFileCJK( desc.semibold ? 1 : 0, &cjkSize ) : nullptr;
 
 	if( !ttf || size <= 0 )
 		return nullptr;
 
-	FontPlat_Inter *plat = FontPlat_Inter::Create( ttf, size, desc.devicePx, desc.logicalPx, desc.codepage );
+	FontPlat_Inter *plat = FontPlat_Inter::Create( ttf, size, desc.devicePx, desc.logicalPx, desc.codepage, cjkTtf, cjkSize );
 
 	if( !plat )
 		return nullptr;
@@ -502,10 +732,19 @@ static const char *CofLangSubstitute( const char *str )
 
 } // anonymous namespace
 
+// TextImage asks whether a font's text is UTF-8, to break Chinese lines between characters
+static bool CofFontIsUtf8( vgui::Font *font )
+{
+	vgui::CofFont *cof = vgui::CofFont_Cast( font );
+
+	return cof && cof->utf8();
+}
+
 void vgui::CofFont_Install( void )
 {
 	Font_SetSubstituteHook( CofFontSubstitute );
 	Font_SetCreatedHook( CofFontCreated );
+	Font_SetUtf8Hook( CofFontIsUtf8 );
 	Text_SetSubstituteHook( CofLangSubstitute );
 }
 
