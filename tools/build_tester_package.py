@@ -94,7 +94,8 @@ def version_info() -> str:
 
 def pyinstaller_command(out: Path, payload: Path) -> list:
     """The one-folder app (1.2.1; it was one file, unpacked to a temporary folder at every start): the window, the
-    payload, and the merged-map group list (tools.map_merge.groups_path), in setup_lib.APP_FILES next to the exe;
+    payload, the merged-map group list (tools.map_merge.groups_path) and the window's language tables (tools/app_lang/),
+    in setup_lib.APP_FILES next to the exe;
     its own icon and version details; no UPX."""
     return [sys.executable, "-m", "PyInstaller", "--noconfirm", "--onedir", "--windowed", "--noupx",
             "--contents-directory", setup_lib.APP_FILES, "--icon", str(ICON),
@@ -103,6 +104,8 @@ def pyinstaller_command(out: Path, payload: Path) -> list:
             "--add-data", f"{payload}{os.pathsep}payload",
             "--add-data", f"{ROOT / 'tools/map_groups.json'}{os.pathsep}tools",
             "--add-data", f"{ICON}{os.pathsep}tools",
+            # 1.5: the window's text in the player's language (tools/app_lang.py)
+            "--add-data", f"{ROOT / 'tools/app_lang'}{os.pathsep}tools/app_lang",
             "--distpath", str(out / "dist"), "--workpath", str(out / "work"), "--specpath", str(out),
             str(ROOT / "tools/coop_app.py")]
 

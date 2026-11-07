@@ -16,11 +16,13 @@ import webbrowser
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cofcoop import network
+from tools import app_lang
 from tools import app_theme as theme
 from tools import app_update
 from tools import coop_play as play
 from tools import friend_setup as setup_lib
 from tools import unlocks
+from tools.app_lang import T
 
 DEFAULT_COPY = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CoF-Story-Coop"
 COPY_POINTER = DEFAULT_COPY.with_name("CoF-Story-Coop.txt")   # where setup last made a copy
@@ -103,8 +105,8 @@ def stamped(text: str) -> str:
 
 def update_error(error) -> str:
     if isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError)):
-        return "Couldn't download the update. Check your internet connection and try again."
-    return f"The update stopped: {error}"
+        return T("Couldn't download the update. Check your internet connection and try again.")
+    return T("The update stopped: {error}", error=T(str(error)))
 
 
 def elapsed_text(seconds: float) -> str:
@@ -139,13 +141,13 @@ class ProgressPanel:
 
     def start(self):
         self.started = self.clock()
-        self.elapsed.set(f"{elapsed_text(0)} so far")
+        self.elapsed.set(T("{time} so far", time=elapsed_text(0)))
         self.job = self.box.after(1000, self.tick)
 
     def tick(self):
         if self.job:
             self.box.after_cancel(self.job)
-        self.elapsed.set(f"{elapsed_text(self.clock() - self.started)} so far")
+        self.elapsed.set(T("{time} so far", time=elapsed_text(self.clock() - self.started)))
         self.job = self.box.after(1000, self.tick)
 
     def stop(self):
@@ -154,7 +156,7 @@ class ProgressPanel:
         self.job = None
 
     def show(self, status, part, line):
-        self.status.set(status)
+        self.status.set(T(status))   # setup's and update's steps come in English (friend_setup.Steps)
         self.bar.configure(value=part * 100)
         if line:
             self.box.configure(state="normal")
@@ -211,6 +213,7 @@ class App:
         self.checked = False
         self.busy = None           # "setup" or "update" while one runs (BUSY_WARNINGS)
         self.launching = False     # Play is checking the copy (launch)
+        self.redraw = None         # draws the current screen again in another language (None: not this screen)
         self.messages = queue.Queue()
         window.title("Cry of Fear Co-op")
         window.geometry(f"840x{min(760, window.winfo_screenheight() - 80)}")
@@ -221,13 +224,51 @@ class App:
         foot.pack(fill="x", side="bottom")
         ttk.Frame(window, height=1, style="Line.TFrame").pack(fill="x", side="bottom")
         ttk.Label(foot, text=footer_text(), style="Faint.TLabel").pack(side="left")
-        ttk.Button(foot, text="Report a bug", command=report_bug, style="Ghost.TButton").pack(side="right")
-        ttk.Button(foot, text="Open logs folder", command=self.guard(self.open_logs),
-                   style="Ghost.TButton").pack(side="right", padx=4)
+        # 1.5: the window's language, the same setting as the game's Options > Game > Language (app_lang)
+        self.language = tk.StringVar(value=app_lang.NAMES[app_lang.current()])
+        picker = ttk.Combobox(foot, textvariable=self.language, state="readonly", width=12,
+                              values=[name for _code, name, *_ in app_lang.LANGUAGES])
+        picker.pack(side="left", padx=(16, 0))
+        picker.bind("<<ComboboxSelected>>", lambda _: self.guard(self.pick_language)())
+        self.report_button = ttk.Button(foot, text=T("Report a bug"), command=report_bug, style="Ghost.TButton")
+        self.report_button.pack(side="right")
+        self.logs_button = ttk.Button(foot, text=T("Open logs folder"), command=self.guard(self.open_logs),
+                                      style="Ghost.TButton")
+        self.logs_button.pack(side="right", padx=4)
         self.body = ttk.Frame(window, padding=(26, 18, 26, 14))
         self.body.pack(fill="both", expand=True)
         window.protocol("WM_DELETE_WINDOW", self.close)
         window.after(100, self.pump)
+
+    # the language (1.5)
+    def pick_language(self):
+        """The list in the footer: the window in that language now, the game in it from its next start (the copy's
+        config.cfg; the game writes its own choice back there when it quits, and the main screen takes it)."""
+        code = next((c for c, name, *_ in app_lang.LANGUAGES if name == self.language.get()), "english")
+        if code == app_lang.current():
+            return
+        app_lang.set_current(code)
+        app_lang.save_choice(code)
+        self.report_button.configure(text=T("Report a bug"))
+        self.logs_button.configure(text=T("Open logs folder"))
+        root = self.root
+        if root is not None:
+            def job():
+                if not setup_lib.game_is_running(root, unknown=True):
+                    app_lang.write_game_language(root, code)
+            self.work(job, lambda _: None, lambda _: None)
+        if self.redraw is not None:
+            self.redraw()
+
+    def adopt_game_language(self):
+        """The game's own Language option, when the player last changed it there: its config.cfg names it."""
+        code = app_lang.read_game_language(self.root) if self.root else None
+        if code and code != app_lang.current():
+            app_lang.set_current(code)
+            app_lang.save_choice(code)
+            self.language.set(app_lang.NAMES[code])
+            self.report_button.configure(text=T("Report a bug"))
+            self.logs_button.configure(text=T("Open logs folder"))
 
     # plumbing
     def clear(self, title, subtitle=""):
@@ -264,7 +305,7 @@ class App:
 
     def error(self, error):
         from tkinter import messagebox
-        messagebox.showerror("Cry of Fear Co-op", str(error), parent=self.window)
+        messagebox.showerror("Cry of Fear Co-op", T(str(error)), parent=self.window)
 
     def guard(self, action):
         def run(*_):
@@ -277,7 +318,7 @@ class App:
     def close(self):
         from tkinter import messagebox
         warning = BUSY_WARNINGS.get(self.busy) or play.close_warning(self.watch)
-        if warning and not messagebox.askokcancel("Cry of Fear Co-op", warning, parent=self.window):
+        if warning and not messagebox.askokcancel("Cry of Fear Co-op", T(warning), parent=self.window):
             return
         if self.watch:
             self.watch.close()
@@ -285,7 +326,7 @@ class App:
 
     def open_logs(self):
         if not self.root:
-            raise ValueError("Set up the co-op copy first.")
+            raise ValueError(T("Set up the co-op copy first."))
         log = self.root / play.LOG
         if log.is_file():
             subprocess.Popen(["explorer", "/select,", str(log)])
@@ -295,39 +336,40 @@ class App:
     def row(self, parent, label, width=16):
         holder = self.ttk.Frame(parent)
         holder.pack(fill="x", pady=3)
-        self.ttk.Label(holder, text=label, width=width, style="Field.TLabel").pack(side="left")
+        self.ttk.Label(holder, text=T(label), width=width, style="Field.TLabel").pack(side="left")
         return holder
 
     # setup and update
     def show_setup(self):
         ttk, tk = self.ttk, self.tk
-        body = self.clear("Set up story co-op", "The app makes a separate copy of Cry of Fear for co-op. Your Steam "
-                          "game, saves and settings are not changed. About 6 GB of free space is needed.")
+        self.redraw = None if self.busy else self.show_setup
+        body = self.clear(T("Set up story co-op"), T("The app makes a separate copy of Cry of Fear for co-op. Your "
+                          "Steam game, saves and settings are not changed. About 6 GB of free space is needed."))
         source = tk.StringVar()
         destination = tk.StringVar(value=str(DEFAULT_COPY))
         for label, var, pick in (("Cry of Fear folder", source, self.pick_folder), ("Co-op copy", destination, self.pick_parent)):
             holder = self.row(body, label, 18)
             ttk.Entry(holder, textvariable=var).pack(side="left", fill="x", expand=True)
-            ttk.Button(holder, text="Browse…", command=lambda v=var, p=pick: p(v)).pack(side="left", padx=4)
-        button = ttk.Button(body, text="Set up", style="Accent.TButton")
+            ttk.Button(holder, text=T("Browse…"), command=lambda v=var, p=pick: p(v)).pack(side="left", padx=4)
+        button = ttk.Button(body, text=T("Set up"), style="Accent.TButton")
         button.pack(anchor="w", pady=16)
         panel = self.progress_panel(body)
-        panel.status.set("Looking for Cry of Fear in Steam…")
+        panel.status.set(T("Looking for Cry of Fear in Steam…"))
 
         def found(candidates):
             if candidates and not source.get():
                 source.set(str(candidates[0]))
             if panel.started is None:   # not once setup has begun
-                panel.status.set("Ready: click Set up." if source.get() else
-                                 "Pick your Cry of Fear folder (the one with CoFLaunchApp.exe).")
+                panel.status.set(T("Ready: click Set up.") if source.get() else
+                                 T("Pick your Cry of Fear folder (the one with CoFLaunchApp.exe)."))
 
         def stopped(error):
             panel.stop()
             self.busy = None
             button.configure(state="normal")
             left = setup_lib.incomplete_copy(Path(destination.get()))
-            panel.status.set("Setup stopped. Your Steam game is unchanged." +
-                             (" Click Set up to delete the unfinished copy and try again." if left else ""))
+            panel.status.set(T("Setup stopped. Your Steam game is unchanged. Click Set up to delete the unfinished copy "
+                               "and try again.") if left else T("Setup stopped. Your Steam game is unchanged."))
             self.error(error)
 
         def made(copy):
@@ -341,12 +383,13 @@ class App:
             src, dst = Path(source.get()), Path(destination.get())
             # 1.1.8 (L4): a setup that stopped leaves its copy (up to 5 GB) in the folder, which setup never reuses
             replace = setup_lib.incomplete_copy(dst)
-            if replace and not messagebox.askyesno("Set up", f"{dst} holds the unfinished copy of a setup that "
-                                                   "stopped. Delete it and set up again?", parent=self.window):
+            if replace and not messagebox.askyesno(T("Set up"), T("{folder} holds the unfinished copy of a setup that "
+                                                   "stopped. Delete it and set up again?", folder=dst), parent=self.window):
                 return
             button.configure(state="disabled")
             panel.start()
             self.busy = "setup"
+            self.redraw = None
             self.work(lambda: setup_lib.setup(src, dst, self.payload, exe=self.exe, progress=self.reporter(panel),
                                               replace_incomplete=replace),
                       made, stopped)
@@ -355,13 +398,13 @@ class App:
 
     def pick_folder(self, var):
         from tkinter import filedialog
-        chosen = filedialog.askdirectory(parent=self.window, title="The Cry of Fear folder (with CoFLaunchApp.exe)")
+        chosen = filedialog.askdirectory(parent=self.window, title=T("The Cry of Fear folder (with CoFLaunchApp.exe)"))
         if chosen:
             var.set(chosen)
 
     def pick_parent(self, var):
         from tkinter import filedialog
-        chosen = filedialog.askdirectory(parent=self.window, title="Where should the CoF-Story-Coop folder go?")
+        chosen = filedialog.askdirectory(parent=self.window, title=T("Where should the CoF-Story-Coop folder go?"))
         if chosen:
             var.set(str(Path(chosen) / "CoF-Story-Coop"))
 
@@ -369,14 +412,15 @@ class App:
         """auto: started by the previous version's "Update now", which is closing: wait for it, then update.
         repair: the same update over a copy of this build that fails its install check (offer_repair)."""
         ttk = self.ttk
+        self.redraw = None
         if repair:
-            body = self.clear("Repair story co-op", f"Version {play.VERSION_LABEL} is installed again over your copy "
-                              f"in {copy}, and its models and merged maps are made again from its own game files. "
-                              "Your saves and settings are kept.")
+            body = self.clear(T("Repair story co-op"), T("Version {version} is installed again over your copy in "
+                              "{copy}, and its models and merged maps are made again from its own game files. Your "
+                              "saves and settings are kept.", version=play.VERSION_LABEL, copy=copy))
         else:
-            body = self.clear("Update story co-op", f"Version {play.VERSION_LABEL} is ready to install over your copy "
-                              f"in {copy}. Your saves and settings are kept.")
-        button = ttk.Button(body, text="Repair" if repair else "Update", style="Accent.TButton")
+            body = self.clear(T("Update story co-op"), T("Version {version} is ready to install over your copy in "
+                              "{copy}. Your saves and settings are kept.", version=play.VERSION_LABEL, copy=copy))
+        button = ttk.Button(body, text=T("Repair") if repair else T("Update"), style="Accent.TButton")
         button.pack(anchor="w", pady=16)
         panel = self.progress_panel(body)
         report = self.reporter(panel)
@@ -394,7 +438,7 @@ class App:
 
         def job():
             if wait:
-                report("Waiting for the old version to close…", 0, stamped("Waiting for the old version to close"))
+                report(T("Waiting for the old version to close…"), 0, stamped("Waiting for the old version to close"))
                 app_update.wait_for_exit(list(wait))
             return setup_lib.update(copy, self.payload, exe=self.exe, progress=report)
 
@@ -416,19 +460,21 @@ class App:
         if self.payload is None or not state or state["build"] > play.BUILD:
             self.error(error)
             return
-        if messagebox.askyesno("Repair", f"{error.problem}\n\nRepair it now? The co-op engine is installed again "
-                               "and the models and merged maps are made again from the copy's own game files (a few "
-                               "minutes). Your saves and settings are kept.", parent=self.window):
+        if messagebox.askyesno(T("Repair"), T(error.problem) + "\n\n" + T(
+                               "Repair it now? The co-op engine is installed again and the models and merged maps are "
+                               "made again from the copy's own game files (a few minutes). Your saves and settings are "
+                               "kept."), parent=self.window):
             self.show_update(self.root, auto=True, repair=True)
 
     def show_download(self, release):
         """The main screen's "Update now": the new version's zip, then the new app takes over and this one closes."""
         ttk = self.ttk
-        body = self.clear(f"Update to {release.label}", f"Downloading version {release.label} "
-                          f"({setup_lib.size_text(release.size)}). When it's done this window closes and the new "
-                          "version updates your copy. Your saves and settings are kept.")
+        self.redraw = None
+        body = self.clear(T("Update to {label}", label=release.label), T(
+            "Downloading version {label} ({size}). When it's done this window closes and the new version updates your "
+            "copy. Your saves and settings are kept.", label=release.label, size=setup_lib.size_text(release.size)))
         stop = threading.Event()
-        cancel = ttk.Button(body, text="Cancel", command=stop.set)
+        cancel = ttk.Button(body, text=T("Cancel"), command=stop.set)
         cancel.pack(anchor="w", pady=14)
         panel = self.progress_panel(body)
         report = self.reporter(panel)
@@ -439,15 +485,16 @@ class App:
             percent = done * 100 // total
             if percent != shown[0]:
                 shown[0] = percent
-                report(f"Downloading {release.label}: {setup_lib.size_text(done)} of {setup_lib.size_text(total)}",
-                       done / total * .9, None)
+                report(T("Downloading {label}: {done} of {total}", label=release.label,
+                         done=setup_lib.size_text(done), total=setup_lib.size_text(total)), done / total * .9, None)
 
         def job():
-            report(f"Downloading {release.label}", 0, stamped(f"Downloading {release.zip} from the releases page"))
+            report(T("Downloading {label}", label=release.label), 0,
+                   stamped(f"Downloading {release.zip} from the releases page"))
             path = app_update.download(release, folder, progress, stop.is_set)
-            report("Unpacking", .92, stamped("Downloaded; its size and SHA-256 match the release"))
+            report(T("Unpacking"), .92, stamped("Downloaded; its size and SHA-256 match the release"))
             exe = app_update.extract_app(path, folder)
-            report("Starting the new version", 1, stamped("Unpacked the new app; starting it"))
+            report(T("Starting the new version"), 1, stamped("Unpacked the new app; starting it"))
             return exe
 
         def ready(exe):
@@ -456,7 +503,7 @@ class App:
                 app_update.start_new_app(exe, self.root, app_update.pids_to_wait())
             except OSError as error:
                 self.show_main(self.root)
-                self.error(f"The new version didn't start: {error}")
+                self.error(T("The new version didn't start: {error}", error=error))
                 return
             if self.watch:
                 self.watch.close()
@@ -499,17 +546,17 @@ class App:
         self.tk.Frame(box, background=theme.ACCENT, width=3).pack(side="left", fill="y")
         inner = ttk.Frame(box, style="Card.TFrame", padding=(14, 10, 12, 10))
         inner.pack(side="left", fill="both", expand=True)
-        ttk.Button(inner, text="What's new", command=lambda: webbrowser.open(release.page_url)).pack(side="right")
-        ttk.Button(inner, text="Update now", command=self.guard(self.update_now),
+        ttk.Button(inner, text=T("What's new"), command=lambda: webbrowser.open(release.page_url)).pack(side="right")
+        ttk.Button(inner, text=T("Update now"), command=self.guard(self.update_now),
                    style="Accent.TButton").pack(side="right", padx=8)
-        ttk.Label(inner, text=f"Version {release.label} is out", style="Offer.TLabel").pack(anchor="w")
-        ttk.Label(inner, text="Saves and settings are kept.", style="OfferText.TLabel").pack(anchor="w")
+        ttk.Label(inner, text=T("Version {label} is out", label=release.label), style="Offer.TLabel").pack(anchor="w")
+        ttk.Label(inner, text=T("Saves and settings are kept."), style="OfferText.TLabel").pack(anchor="w")
 
     def update_now(self):
         if not self.root or self.offer is None:
-            raise ValueError("Set up the co-op copy first.")
+            raise ValueError(T("Set up the co-op copy first."))
         if setup_lib.game_is_running(self.root):
-            raise ValueError("Close Cry of Fear first, then update.")
+            raise ValueError(T("Close Cry of Fear first, then update."))
         self.show_download(self.offer)
 
     def progress_panel(self, parent, clock=time.monotonic):
@@ -524,13 +571,14 @@ class App:
         """1.1.9 (L14.11): a copy newer than this app. Its main screen would start the newer engine with this older
         app's settings and version check, so the copy's own app is the only way offered."""
         self.root = Path(copy)
-        self.clear("Use the Cry of Fear Co-op shortcut",
-                   f"Your co-op copy in {copy} has a newer version than this app ({play.VERSION_LABEL}). Start it "
-                   f"from the Cry of Fear Co-op shortcut on your desktop or in the Start menu, or run "
-                   f"{setup_lib.APP_EXE} in that folder.")
+        self.redraw = lambda: self.show_newer(copy)
+        self.clear(T("Use the Cry of Fear Co-op shortcut"),
+                   T("Your co-op copy in {copy} has a newer version than this app ({version}). Start it from the Cry "
+                     "of Fear Co-op shortcut on your desktop or in the Start menu, or run {exe} in that folder.",
+                     copy=copy, version=play.VERSION_LABEL, exe=setup_lib.APP_EXE))
 
     # main
-    def show_main(self, copy):
+    def show_main(self, copy, adopt=True):
         """1.3.7 (the owner: "now that we've integrated the fucking campaign co-op into the main menu, the launcher is
         kind of redundant"; his pick: a one-button launcher). Play opens the game at its main menu, whose Co-op list
         hosts, joins, continues or plays with AI (mainui menus/CoFStoryCoop.cpp); this app keeps setup, updates, the
@@ -539,25 +587,29 @@ class App:
         ttk, tk = self.ttk, self.tk
         self.root = Path(copy)
         self.settings = play.load_settings(self.root)
-        body = self.clear("Play the story together",
-                          "Co-op is in the game's own main menu, right under New Game: host, join, continue, or play "
-                          "with AI companions.")
+        self.redraw = lambda: self.show_main(copy, adopt=False)
+        if adopt:   # not when the footer's list just drew it again: config.cfg may still have the old language
+            self.adopt_game_language()
+        body = self.clear(T("Play the story together"),
+                          T("Co-op is in the game's own main menu, right under New Game: host, join, continue, or "
+                            "play with AI companions."))
         self.update_slot = ttk.Frame(body)
         self.update_slot.pack(fill="x")
         self.show_offer()
         holder = self.row(body, "Your name", 12)
-        self.name = tk.StringVar(value=self.settings["name"])
+        self.name = tk.StringVar(value=getattr(self, "typed_name", None) or self.settings["name"])
+        self.name.trace_add("write", lambda *_: setattr(self, "typed_name", self.name.get()))
         ttk.Entry(holder, textvariable=self.name, width=28).pack(side="left")
         self.port = tk.StringVar(value=str(self.settings["port"]))
         ttk.Entry(holder, textvariable=self.port, width=7).pack(side="right")
-        ttk.Label(holder, text="Port (UDP)", style="Field.TLabel").pack(side="right", padx=(0, 8))
-        self.open_button = ttk.Button(body, text="Play", style="Play.TButton", command=self.guard(self.open_game))
+        ttk.Label(holder, text=T("Port (UDP)"), style="Field.TLabel").pack(side="right", padx=(0, 8))
+        self.open_button = ttk.Button(body, text=T("Play"), style="Play.TButton", command=self.guard(self.open_game))
         self.open_button.pack(fill="x", pady=(18, 8))
-        ttk.Label(body, text="Hosting: Co-op, then Host co-op in the game; send your friends the join code this window "
-                             "shows. Joining: Co-op, then Join co-op, and paste the code your host sent you.",
+        ttk.Label(body, text=T("Hosting: Co-op, then Host co-op in the game; send your friends the join code this "
+                               "window shows. Joining: Co-op, then Join co-op, and paste the code your host sent you."),
                   style="Hint.TLabel", wraplength=760, justify="left").pack(anchor="w")
-        theme.section(ttk, body, "In the game", top=18)
-        theme.keycaps(tk, body, COOP_KEYS)
+        theme.section(ttk, body, T("In the game"), top=18)
+        theme.keycaps(tk, body, [(key, T(text)) for key, text in COOP_KEYS])
         self.check_for_update()
 
     def remember(self, **values):
@@ -575,7 +627,7 @@ class App:
         window); a copy that fails its install check is offered Repair (L1)."""
         if self.launching:
             stopped()
-            self.error("Cry of Fear is starting already. Wait a moment.")
+            self.error(T("Cry of Fear is starting already. Wait a moment."))
             return
         self.launching = True
         root = self.root
@@ -588,7 +640,8 @@ class App:
             self.launching = False
             try:
                 if running:
-                    raise ValueError("Cry of Fear is already running from this copy. Close it first.")
+                    raise ValueError(T("Cry of Fear is already running from this copy. Close it first."))
+                app_lang.write_game_language(root, app_lang.current())   # 1.5: the window's language, the game's
                 (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
                 play.write_invite(root)   # 1.3.6: no other session's join code in the game menu
                 carry_unlocks(root)       # 1.3.8: what the player has unlocked in their own Cry of Fear
@@ -640,6 +693,7 @@ class App:
         # and remove the router mapping the new one has just taken over. It is closed first, off the UI thread.
         previous = self.watch if self.watch is not watch else None
         self.watch = watch
+        self.redraw = None
 
         def release():
             if previous is not None:
@@ -647,22 +701,22 @@ class App:
                     previous.close()
                 except Exception:   # the new game's router port comes first
                     pass
-        body = self.clear("Cry of Fear is open",
-                          "Pick Co-op in the game's main menu. If you host, send your friends the join code (and the "
-                          "password, if you set one); the game's Host co-op page shows it too. Keep this window open "
-                          "while you play. If Windows Firewall asks about Cry of Fear (its window can be hidden behind "
-                          "the game), click Allow access, or friends can't join.")
-        status = tk.StringVar(value="Starting the game...")
+        body = self.clear(T("Cry of Fear is open"),
+                          T("Pick Co-op in the game's main menu. If you host, send your friends the join code (and the "
+                            "password, if you set one); the game's Host co-op page shows it too. Keep this window open "
+                            "while you play. If Windows Firewall asks about Cry of Fear (its window can be hidden "
+                            "behind the game), click Allow access, or friends can't join."))
+        status = tk.StringVar(value=T("Starting the game..."))
         state = tk.Frame(body, background=theme.PANEL, highlightthickness=1, highlightbackground=theme.LINE)
         state.pack(fill="x", pady=(0, 6))
         tk.Frame(state, background=theme.ACCENT, width=3).pack(side="left", fill="y")
         tk.Label(state, textvariable=status, background=theme.PANEL, foreground=theme.TEXT, font=theme.FONTS.get("body"),
                  wraplength=700, justify="left", anchor="w", padx=12, pady=10).pack(side="left", fill="x", expand=True)
-        code, address, lan, router = tk.StringVar(value="(looking…)"), tk.StringVar(), tk.StringVar(), tk.StringVar()
+        code, address, lan, router = tk.StringVar(value=T("(looking…)")), tk.StringVar(), tk.StringVar(), tk.StringVar()
         for label, var in (("Join code", code), ("Internet address", address), ("Same place (LAN)", lan)):
             holder = self.row(body, label)
             ttk.Entry(holder, textvariable=var, state="readonly").pack(side="left", fill="x", expand=True)
-            ttk.Button(holder, text="Copy", command=lambda v=var: (self.window.clipboard_clear(),
+            ttk.Button(holder, text=T("Copy"), command=lambda v=var: (self.window.clipboard_clear(),
                                                                   self.window.clipboard_append(v.get()))).pack(side="left", padx=4)
         ttk.Label(body, textvariable=router, style="Hint.TLabel", wraplength=740).pack(anchor="w", pady=8)
         root = self.root
@@ -675,17 +729,17 @@ class App:
                 pass
 
         def routed(_):
-            code.set(watch.code or "(no Internet address found: use the LAN or VPN address)")
+            code.set(watch.code or T("(no Internet address found: use the LAN or VPN address)"))
             address.set(watch.address)
-            router.set(watch.router)
+            router.set(T(watch.router))
             invite()
 
         def found(rows):
             lan.set(f"{rows[0]['address']}:{watch.port}" if rows else "")
             invite()
-        self.work(lambda: (release(), watch.open_router()), routed, lambda error: router.set(str(error)))
+        self.work(lambda: (release(), watch.open_router()), routed, lambda error: router.set(T(str(error))))
         self.work(network.local_addresses, found, lambda _: None)
-        ttk.Button(body, text="Back", command=lambda: self.show_main(self.root)).pack(anchor="w", pady=14)
+        ttk.Button(body, text=T("Back"), command=lambda: self.show_main(self.root)).pack(anchor="w", pady=14)
 
         def loop():
             time.sleep(5)
@@ -694,7 +748,7 @@ class App:
                     running = setup_lib.game_is_running(root, unknown=True)
                 except (OSError, ValueError, subprocess.SubprocessError):
                     running = True
-                self.messages.put((status.set, watch.poll(running)))
+                self.messages.put((status.set, T(watch.poll(running))))
                 time.sleep(3)
         threading.Thread(target=loop, daemon=True).start()
 
@@ -702,6 +756,7 @@ class App:
 def open_window(payload, exe, copy=None, update_from=None, wait=()):
     import tkinter as tk
     dpi_aware()
+    app_lang.init()
     window = tk.Tk()
     app = App(window, payload, exe)
     theme.dark_title_bar(window)
