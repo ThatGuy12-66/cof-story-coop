@@ -407,6 +407,17 @@ typedef struct  vguiapi_s
 	// (cof_inventory12.c): the COF_INV_OP_* calls above. xash.dll and vgui.dll
 	// must come from the same build.
 	int	(*CofInventory)( int op, int arg, void *buf, int size );
+
+	// Cry of Fear text beyond one byte per glyph (engine/cof_text_logic.h, engine/client/cof_glyphs.c).
+	// CofFontFileCJK: the bundled CJK face (gfx/fonts/CoFSansSC-*.otf, bold 0 or 1), engine-owned, valid until
+	// shutdown, NULL when not installed. CofTextGlyphs: the characters the active language pack's text uses
+	// beyond ASCII (its strings/glyphs.txt), to rasterise in one go; returns the count, the list in *out (valid
+	// until the pack changes) and in *generation a number that changes with the list. CofUpdateTexture: upload an
+	// RGBA texture again under the same id (a glyph page that gained glyphs; UploadTexture keeps an id's first
+	// upload). xash.dll and vgui.dll come from the same build.
+	const unsigned char *(*CofFontFileCJK)( int bold, int *size );
+	int	(*CofTextGlyphs)( const unsigned int **out, int *generation );
+	void	(*CofUpdateTexture)( int id, const char *rgba, int width, int height );
 } vguiapi_t;
 
 enum

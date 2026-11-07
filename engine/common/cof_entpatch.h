@@ -39,4 +39,19 @@ typedef void (*cof_entpatch_log_t)( void *ctx, const char *msg );
 char *CoF_EntPatch_Apply( const char *base, size_t baselen, const char *patch, size_t patchlen,
 	size_t *outlen, cof_entpatch_stats_t *stats, cof_entpatch_log_t log, void *ctx );
 
+// The pack-wide entity text table (strings/entity-strings.tsv): every value of
+// a key that carries player-visible text in Cry of Fear's entities (a door's
+// lockedmsg, a game_text's message, a tape recorder's location name, ...;
+// CoF_EntText_Translatable) whose bytes equal an English row is replaced by
+// the row's translation, in every map: the story's, the co-op's, the merged
+// maps the app builds from them and any other that uses the same lines.
+// lookup returns the translation of a value (len bytes, not terminated) or
+// NULL. Returns a malloc'd result as CoF_EntPatch_Apply does, or NULL when
+// nothing was replaced or the base cannot be parsed; *replaced counts the values.
+typedef const char *(*cof_enttext_lookup_t)( void *ctx, const char *value, int len );
+
+int CoF_EntText_Translatable( const char *classname, int clen, const char *key, int klen );
+char *CoF_EntText_Apply( const char *base, size_t baselen, cof_enttext_lookup_t lookup, void *ctx,
+	size_t *outlen, int *replaced );
+
 #endif // COF_ENTPATCH_H

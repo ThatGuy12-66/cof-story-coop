@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "client.h"
+#include "cof_glyphs.h"
 #include "library.h"
 #include "cl_tent.h"
 #include "platform/platform.h"
@@ -606,6 +607,9 @@ void R_Shutdown( void )
 {
 	int i;
 	model_t *mod;
+
+	// Cry of Fear (cof_glyphs.c): the glyph pages are textures of this renderer
+	CoF_Glyphs_Shutdown();
 
 	// release SpriteTextures
 	for( i = 1, mod = clgame.sprites; i < MAX_CLIENT_SPRITES; i++, mod++ )

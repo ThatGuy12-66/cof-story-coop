@@ -65,6 +65,7 @@ into cof_text_codepage so the Inter font layer decodes the pack's bytes.
 #include "platform/platform.h"
 #include "cof_language.h"
 #include "cof_entpatch.h"
+#include "cof_text_logic.h"
 #include "studio.h"
 #include "utflib.h"
 
@@ -77,6 +78,7 @@ static CVAR_DEFINE_AUTO( cof_language_strings, "1", FCVAR_ARCHIVE, "substitute t
 static CVAR_DEFINE_AUTO( cof_language_files, "1", FCVAR_ARCHIVE, "redirect the game DLLs' own txtfiles/, notes/ and inventoryitems/ reads into the active pack" );
 static CVAR_DEFINE_AUTO( cof_language_trace, "0", 0, "developer: log every file the hooked game DLLs open through CreateFileW, redirected or not" );
 
+#define COF_LANG_MAX_GLYPHS	8192	// characters a pack's strings/glyphs.txt may list
 #define COF_LANG_MAX_PARTS	8	// placeholders in one table entry, + 1 literal
 #define COF_LANG_HASH		256
 #define COF_LANG_MAX_STRING	1024
@@ -90,12 +92,21 @@ typedef struct cof_lang_entry_s
 	char			*dst;		// localised, in the pack's code page (VGUI)
 	char			*dst_utf8;	// localised, UTF-8, folded for the engine font
 	char			*dst_cp;	// localised, pack code page, folded for the engine font
+	char			*dst_utf8_full;	// localised, UTF-8, unfolded: the engine fonts with cof_text_glyphs (cof_glyphs.c)
 	int			src_len;
 	int			nparts;		// literal pieces of src; 1 == no placeholder
 	int			literal_len;	// total length of those pieces
 	char			*part[COF_LANG_MAX_PARTS + 1];
 	int			part_len[COF_LANG_MAX_PARTS + 1];
 } cof_lang_entry_t;
+
+typedef struct cof_lang_enttext_s
+{
+	struct cof_lang_enttext_s	*next;
+	char			*src;		// English, the map's bytes
+	char			*dst;		// the pack's code page (the map's text is the game's own bytes)
+	int			src_len;
+} cof_lang_enttext_t;
 
 #if XASH_WIN32
 typedef struct
@@ -118,6 +129,11 @@ static struct
 	int		codepage;
 	qboolean	codepage_pending;	// cof_text_codepage did not exist yet
 
+	// strings/glyphs.txt: the characters the pack's text uses (CoF_Lang_LoadGlyphs)
+	uint32_t	glyphs[COF_LANG_MAX_GLYPHS];
+	int		num_glyphs;
+	int		glyphs_generation;
+
 	// string table
 	poolhandle_t		mempool;
 	int			num_entries;
@@ -125,6 +141,10 @@ static struct
 	cof_lang_entry_t	*fmt_head;
 	int			num_fmt;
 	int			num_hits;
+
+	// strings/entity-strings.tsv: map text, applied to every map's entity string (CoF_Lang_EntityText)
+	struct cof_lang_enttext_s	*enttext[COF_LANG_HASH];
+	int			num_enttext;
 
 #if XASH_WIN32
 	// everything the CreateFileW shim reads is guarded by this lock: the shim
@@ -309,6 +329,7 @@ typedef enum
 	COF_ENC_CODEPAGE = 0,	// the pack's code page, verbatim
 	COF_ENC_CODEPAGE_FOLDED,	// the pack's code page, folded for the engine font
 	COF_ENC_UTF8_FOLDED,	// UTF-8, folded for the engine font
+	COF_ENC_UTF8_FULL,	// UTF-8, every character: the engine fonts with cof_text_glyphs, and UTF-8 packs
 } cof_lang_enc_t;
 
 /*
@@ -359,10 +380,14 @@ static void CoF_Lang_Convert( char *out, size_t size, const char *in, int codepa
 		if( !uc )
 			continue; // incomplete sequence, feed more
 
-		if( enc != COF_ENC_CODEPAGE )
+		// a UTF-8 pack (Chinese) is UTF-8 everywhere and never folded: no single-byte sheet could draw it anyway
+		if( codepage == COF_CP_UTF8 )
+			enc = COF_ENC_UTF8_FULL;
+
+		if( enc != COF_ENC_CODEPAGE && enc != COF_ENC_UTF8_FULL )
 			uc = CoF_Lang_Fold( uc );
 
-		if( enc == COF_ENC_UTF8_FOLDED )
+		if( enc == COF_ENC_UTF8_FOLDED || enc == COF_ENC_UTF8_FULL )
 		{
 			char tmp[4];
 			size_t n = Q_EncodeUTF8( tmp, uc );
@@ -508,6 +533,8 @@ static void CoF_Lang_FreeStrings( void )
 	cof_lang.num_entries = 0;
 	cof_lang.num_fmt = 0;
 	cof_lang.num_hits = 0;
+	memset( cof_lang.enttext, 0, sizeof( cof_lang.enttext ));
+	cof_lang.num_enttext = 0;
 }
 
 static char *CoF_Lang_CopyString( const char *s )
@@ -561,6 +588,8 @@ static void CoF_Lang_AddEntry( const char *english, const char *localised )
 	e->dst_utf8 = CoF_Lang_CopyString( folded );
 	CoF_Lang_Convert( folded, sizeof( folded ), localised, cof_lang.codepage, COF_ENC_CODEPAGE_FOLDED );
 	e->dst_cp = CoF_Lang_CopyString( folded );
+	CoF_Lang_Convert( folded, sizeof( folded ), localised, cof_lang.codepage, COF_ENC_UTF8_FULL );
+	e->dst_utf8_full = CoF_Lang_CopyString( folded );
 
 	e->hash_next = cof_lang.hash[key];
 	cof_lang.hash[key] = e;
@@ -668,14 +697,152 @@ static void CoF_Lang_LoadStrings( void )
 
 /*
 ====================
+CoF_Lang_LoadEntityText
+
+<pack>/strings/entity-strings.tsv: a header row, then english <TAB> localised.
+Map text (door lines, game_text messages, location names) a pack translates
+once for every map instead of per map (maps/<map>.entpatch): the merged maps
+the co-op app builds at setup have no patch of their own, and the same line
+repeats in dozens of maps. UTF-8 like dll-strings.tsv; the translation is
+converted to the pack's code page, the bytes the game's text is in.
+====================
+*/
+static void CoF_Lang_LoadEntityText( void )
+{
+	char path[MAX_QPATH];
+	fs_offset_t len = 0;
+	byte *raw;
+	char *p, *end;
+	qboolean first = true;
+
+	if( !cof_lang.active || !cof_lang.mempool )
+		return;
+
+	Q_snprintf( path, sizeof( path ), "%s/strings/entity-strings.tsv", cof_lang.dir );
+	if( !FS_FileExists( path, true ) || ( raw = FS_LoadFile( path, &len, true )) == NULL )
+		return;
+
+	for( p = (char *)raw, end = p + len; p < end; )
+	{
+		char plain[COF_LANG_MAX_STRING], converted[COF_LANG_MAX_STRING];
+		char *line = p, *tab1, *tab2;
+		cof_lang_enttext_t *e;
+		uint key;
+		size_t l;
+
+		while( p < end && *p != '\n' )
+			p++;
+		*p = '\0';
+		if( p < end )
+			p++;
+
+		l = Q_strlen( line );
+		if( l && line[l - 1] == '\r' )
+			line[l - 1] = '\0';
+
+		if( first )
+		{
+			first = false;
+			if( (byte)line[0] == 0xEF && (byte)line[1] == 0xBB && (byte)line[2] == 0xBF )
+				line += 3;
+			if( !Q_strncmp( line, "english\t", 8 ))
+				continue;
+		}
+
+		if( !line[0] || line[0] == '#' || ( tab1 = Q_strchr( line, '\t' )) == NULL )
+			continue;
+		*tab1++ = '\0';
+		if(( tab2 = Q_strchr( tab1, '\t' )) != NULL )
+			*tab2 = '\0';
+
+		// the English side is the map's bytes (Windows-1252, the game's own text); never folded
+		CoF_Lang_Convert( plain, sizeof( plain ), line, 1252, COF_ENC_CODEPAGE );
+		CoF_Lang_Convert( converted, sizeof( converted ), tab1, cof_lang.codepage, COF_ENC_CODEPAGE );
+
+		if( !plain[0] || !converted[0] || !Q_strcmp( plain, converted ) || Q_strchr( converted, '"' ))
+			continue;
+
+		key = CoF_Lang_HashKey( plain );
+		for( e = cof_lang.enttext[key]; e; e = e->next )
+		{
+			if( !Q_strcmp( e->src, plain ))
+				break;
+		}
+		if( e )
+			continue; // first row wins
+
+		e = Mem_Calloc( cof_lang.mempool, sizeof( *e ));
+		e->src = CoF_Lang_CopyString( plain );
+		e->dst = CoF_Lang_CopyString( converted );
+		e->src_len = Q_strlen( plain );
+		e->next = cof_lang.enttext[key];
+		cof_lang.enttext[key] = e;
+		cof_lang.num_enttext++;
+	}
+
+	Mem_Free( raw );
+	CoF_Lang_Note( "cof_language: %i map text lines from %s\n", cof_lang.num_enttext, path );
+}
+
+static const char *CoF_Lang_EntityTextLookup( void *ctx, const char *value, int len )
+{
+	char key[COF_LANG_MAX_STRING];
+	cof_lang_enttext_t *e;
+
+	if( len <= 0 || len >= (int)sizeof( key ))
+		return NULL;
+
+	memcpy( key, value, len );
+	key[len] = '\0';
+
+	for( e = cof_lang.enttext[CoF_Lang_HashKey( key )]; e; e = e->next )
+	{
+		if( e->src_len == len && !Q_strcmp( e->src, key ))
+			return e->dst;
+	}
+	return NULL;
+}
+
+/*
+====================
 CoF_Lang_Rebuild
 
 Drop the captured argument text into the template's placeholders, left to
 right. A template with fewer placeholders than captures drops the rest; one
-with more drops its surplus placeholders rather than drawing "%s".
+with more drops its surplus placeholders rather than drawing "%s". A capture
+that is itself an exact entry is put in translated ("Your partner", an item
+name a host in another language sent).
 ====================
 */
-static const char *CoF_Lang_Rebuild( const char *tmpl, const char **cap, const int *caplen, int ncap )
+static const char *CoF_Lang_Exact( const char *s, int len, cof_lang_enc_t enc )
+{
+	char key[COF_LANG_MAX_STRING];
+	cof_lang_entry_t *e;
+
+	if( len <= 0 || len >= (int)sizeof( key ))
+		return NULL;
+
+	memcpy( key, s, len );
+	key[len] = '\0';
+
+	for( e = cof_lang.hash[CoF_Lang_HashKey( key )]; e; e = e->hash_next )
+	{
+		if( e->src_len != len || Q_strcmp( e->src, key ))
+			continue;
+
+		switch( enc )
+		{
+		case COF_ENC_UTF8_FOLDED: return e->dst_utf8;
+		case COF_ENC_UTF8_FULL: return e->dst_utf8_full;
+		case COF_ENC_CODEPAGE_FOLDED: return e->dst_cp;
+		default: return e->dst;
+		}
+	}
+
+	return NULL;
+}
+
+static const char *CoF_Lang_Rebuild( const char *tmpl, const char **cap, const int *caplen, int ncap, cof_lang_enc_t enc )
 {
 	static char	result[4][COF_LANG_MAX_STRING];
 	static int	which = 0;
@@ -696,12 +863,16 @@ static const char *CoF_Lang_Rebuild( const char *tmpl, const char **cap, const i
 		{
 			if( used < ncap )
 			{
-				size_t c = caplen[used];
+				const char *put = CoF_Lang_Exact( cap[used], caplen[used], enc );
+				size_t c = put ? Q_strlen( put ) : (size_t)caplen[used];
+
+				if( !put )
+					put = cap[used];
 
 				if( o + c + 1 >= room )
 					c = room - o - 1;
 
-				memcpy( out + o, cap[used], c );
+				memcpy( out + o, put, c );
 				o += c;
 			}
 
@@ -752,6 +923,7 @@ static const char *CoF_Lang_Lookup( const char *str, cof_lang_enc_t enc )
 			switch( enc )
 			{
 			case COF_ENC_UTF8_FOLDED: return e->dst_utf8;
+			case COF_ENC_UTF8_FULL: return e->dst_utf8_full;
 			case COF_ENC_CODEPAGE_FOLDED: return e->dst_cp;
 			default: return e->dst;
 			}
@@ -814,9 +986,10 @@ static const char *CoF_Lang_Lookup( const char *str, cof_lang_enc_t enc )
 
 		switch( enc )
 		{
-		case COF_ENC_UTF8_FOLDED: return CoF_Lang_Rebuild( e->dst_utf8, cap, caplen, ncap );
-		case COF_ENC_CODEPAGE_FOLDED: return CoF_Lang_Rebuild( e->dst_cp, cap, caplen, ncap );
-		default: return CoF_Lang_Rebuild( e->dst, cap, caplen, ncap );
+		case COF_ENC_UTF8_FOLDED: return CoF_Lang_Rebuild( e->dst_utf8, cap, caplen, ncap, enc );
+		case COF_ENC_UTF8_FULL: return CoF_Lang_Rebuild( e->dst_utf8_full, cap, caplen, ncap, enc );
+		case COF_ENC_CODEPAGE_FOLDED: return CoF_Lang_Rebuild( e->dst_cp, cap, caplen, ncap, enc );
+		default: return CoF_Lang_Rebuild( e->dst, cap, caplen, ncap, enc );
 		}
 	}
 
@@ -828,8 +1001,17 @@ const char *CoF_Lang_String( const char *str )
 	return CoF_Lang_Lookup( str, COF_ENC_CODEPAGE );
 }
 
+// the engine fonts draw every character of the code page with cof_text_glyphs (engine/client/cof_glyphs.c); the
+// cvar is the client's, so a dedicated server (no fonts at all) reads 0 here
+static qboolean CoF_Lang_EngineGlyphs( void )
+{
+	return Cvar_VariableValue( "cof_text_glyphs" ) != 0.0f;
+}
+
 const char *CoF_Lang_StringEngineFont( const char *str, qboolean utf8 )
 {
+	if( CoF_Lang_EngineGlyphs( ))
+		return CoF_Lang_Lookup( str, utf8 ? COF_ENC_UTF8_FULL : COF_ENC_CODEPAGE );
 	return CoF_Lang_Lookup( str, utf8 ? COF_ENC_UTF8_FOLDED : COF_ENC_CODEPAGE_FOLDED );
 }
 
@@ -882,8 +1064,9 @@ char *CoF_Lang_ApplyEntityPatch( const char *entfilename, const char *entdata, s
 	cof_entpatch_stats_t st;
 	fs_offset_t patchsize;
 	byte *patch;
-	char *res, *out;
-	size_t len;
+	char *res, *out = NULL;
+	size_t len = 0;
+	int replaced = 0;
 
 	if( !cof_lang.active || COM_StringEmptyOrNULL( entfilename ) || !entdata || !outsize )
 		return NULL;
@@ -897,27 +1080,47 @@ char *CoF_Lang_ApplyEntityPatch( const char *entfilename, const char *entdata, s
 	Q_strncpy( path, ent, sizeof( path ));
 	COM_ReplaceExtension( path, ".entpatch", sizeof( path ));
 
-	if( !FS_FileExists( path, true ))
-		return NULL;
-
-	if(( patch = FS_LoadFile( path, &patchsize, true )) == NULL )
-		return NULL;
-
-	res = CoF_EntPatch_Apply( entdata, entdatasize, (const char *)patch, (size_t)patchsize, &len, &st, CoF_Lang_EntPatchLog, path );
-	Mem_Free( patch );
-
-	if( !res )
+	if( FS_FileExists( path, true ) && ( patch = FS_LoadFile( path, &patchsize, true )) != NULL )
 	{
-		Con_Printf( S_WARN "cof_language: %s not applied\n", path );
-		return NULL;
+		res = CoF_EntPatch_Apply( entdata, entdatasize, (const char *)patch, (size_t)patchsize, &len, &st, CoF_Lang_EntPatchLog, path );
+		Mem_Free( patch );
+
+		if( res )
+		{
+			out = Mem_Malloc( host.mempool, len + 1 );
+			memcpy( out, res, len + 1 );
+			free( res );
+
+			Con_Printf( "^2Applied entity patch:^7 %s (%d value(s), %d removed, %d added, %d skipped)\n",
+				path, st.edited, st.removed, st.added, st.skipped );
+		}
+		else Con_Printf( S_WARN "cof_language: %s not applied\n", path );
 	}
 
-	out = Mem_Malloc( host.mempool, len + 1 );
-	memcpy( out, res, len + 1 );
-	free( res );
+	// the pack-wide map text (strings/entity-strings.tsv), over the patch if there was one
+	if( cof_lang.num_enttext )
+	{
+		const char *base = out ? out : entdata;
+		size_t baselen = out ? len : entdatasize;
+		size_t textlen = 0;
 
-	Con_Printf( "^2Applied entity patch:^7 %s (%d value(s), %d removed, %d added, %d skipped)\n",
-		path, st.edited, st.removed, st.added, st.skipped );
+		res = CoF_EntText_Apply( base, baselen, CoF_Lang_EntityTextLookup, NULL, &textlen, &replaced );
+		if( res )
+		{
+			if( out )
+				Mem_Free( out );
+			out = Mem_Malloc( host.mempool, textlen + 1 );
+			memcpy( out, res, textlen + 1 );
+			free( res );
+			len = textlen;
+
+			Con_Printf( "^2Applied map text:^7 %s, %d value(s) from %s/strings/entity-strings.tsv\n",
+				COM_FileWithoutPath( entfilename ), replaced, cof_lang.dir );
+		}
+	}
+
+	if( !out )
+		return NULL;
 
 	*outsize = len;
 	return out;
@@ -1722,14 +1925,14 @@ static qboolean CoF_Lang_ParseManifest( const char *code, char *display, size_t 
 		if( !Q_stricmp( line, "display_name" ))
 			Q_strncpy( display, eq, display_size );
 		else if( !Q_stricmp( line, "codepage" ))
-			*codepage = Q_atoi( eq );
+			*codepage = !Q_stricmp( eq, "utf-8" ) || !Q_stricmp( eq, "utf8" ) ? COF_CP_UTF8 : Q_atoi( eq );
 		else if( !Q_stricmp( line, "authors" ))
 			Q_strncpy( authors, eq, authors_size );
 	}
 
 	Mem_Free( raw );
 
-	if( *codepage != 1250 && *codepage != 1251 && *codepage != 1252 )
+	if( *codepage != 1250 && *codepage != 1251 && *codepage != 1252 && *codepage != COF_CP_UTF8 )
 	{
 		CoF_Lang_Note( S_WARN "cof_language: pack %s declares code page %i, which the font layer has no table for; using 1252\n", code, *codepage );
 		*codepage = 1252;
@@ -1783,6 +1986,56 @@ void CoF_Lang_Remount( void )
 
 	g_fsapi.AddGameDirectory( buf, FS_GAMEDIR_PATH | FS_NOWRITE_PATH | FS_CUSTOM_PATH );
 	CoF_Lang_Note( "[cof-lang] mounted %s at the top of the search path\n", buf );
+}
+
+/*
+====================
+CoF_Lang_LoadGlyphs
+
+<pack>/strings/glyphs.txt: every character the pack's text uses beyond ASCII, UTF-8 (the pack builder writes it).
+The engine fonts (cof_glyphs.c) and the VGUI library rasterise these in one go the first time a face is drawn at a
+size, so a Chinese note does not upload its glyph pages a character at a time. A pack without the file still works.
+====================
+*/
+static void CoF_Lang_LoadGlyphs( void )
+{
+	char path[MAX_QPATH];
+	fs_offset_t len = 0;
+	byte *raw;
+	utfstate_t state;
+	fs_offset_t i;
+
+	cof_lang.num_glyphs = 0;
+	cof_lang.glyphs_generation++;
+
+	if( !cof_lang.active )
+		return;
+
+	Q_snprintf( path, sizeof( path ), "%s/strings/glyphs.txt", cof_lang.dir );
+	if(( raw = FS_LoadFile( path, &len, true )) == NULL )
+		return;
+
+	memset( &state, 0, sizeof( state ));
+
+	for( i = 0; i < len && cof_lang.num_glyphs < COF_LANG_MAX_GLYPHS; i++ )
+	{
+		uint32_t uc = Q_DecodeUTF8( &state, raw[i] );
+
+		if( uc > 0x7F && uc != 0xFEFF )
+			cof_lang.glyphs[cof_lang.num_glyphs++] = uc;
+	}
+
+	Mem_Free( raw );
+	CoF_Lang_Note( "cof_language: %i characters to prepare (%s)\n", cof_lang.num_glyphs, path );
+}
+
+int CoF_Lang_Glyphs( const uint32_t **out, int *generation )
+{
+	if( out )
+		*out = cof_lang.glyphs;
+	if( generation )
+		*generation = cof_lang.glyphs_generation;
+	return cof_lang.active ? cof_lang.num_glyphs : 0;
 }
 
 /*
@@ -1872,6 +2125,8 @@ static void CoF_Lang_Apply( void )
 	}
 
 	CoF_Lang_LoadStrings();
+	CoF_Lang_LoadEntityText();
+	CoF_Lang_LoadGlyphs();
 
 	// rebuild the search path: this both drops the previous pack's overlay
 	// and puts the new one on, and it is exactly what the stock fs_rescan

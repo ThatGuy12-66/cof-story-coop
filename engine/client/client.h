@@ -358,6 +358,13 @@ typedef struct
 	int      type;            // fixed width font or variable
 	convar_t *rendermode;     // user-defined default rendermode
 	qboolean	valid;           // all rectangles are valid
+
+	// Cry of Fear: what the font draws beyond its atlas (cof_glyphs.c)
+	int      cofFace;               // COF_FACE_*: the TrueType face its atlas was made from
+	int      cofAtlasPage;          // the code page of its cells: 1252 (0), or 1251 for the stock cp1251 fonts
+	int      cofCodepage;           // the text code page charWidths[0x80..0xFF] were last set for
+	qboolean cofAtlasKept;          // cofAtlasWidths holds the atlas's own widths
+	byte     cofAtlasWidths[256];   // the atlas's own scaled widths; charWidths[0x80..] follow the text code page
 } cl_font_t;
 
 typedef struct scissor_state_s
@@ -900,6 +907,10 @@ model_t *CL_LoadClientSprite( const char *filename );
 model_t *CL_LoadModel( const char *modelname, int *index );
 HSPRITE pfnSPR_LoadExt( const char *szPicName, uint texFlags );
 void SPR_AdjustSize( float *x, float *y, float *w, float *h );
+int CL_DrawCodepoint( float x, float y, uint32_t cp, const rgba_t color, cl_font_t *font, int flags, int cellw );
+int CL_CodepointWidth( cl_font_t *font, uint32_t cp );
+int CL_CoF_StringNext( const char *s, int flags, uint32_t *cp );
+void Con_CoF_FontsCodepageChanged( void );
 int CL_GetScreenInfo( SCREENINFO *pscrinfo );
 pmtrace_t *PM_CL_TraceLine( float *start, float *end, int flags, int usehull, int ignore_pe );
 const char *PM_CL_TraceTexture( int ground, float *vstart, float *vend );

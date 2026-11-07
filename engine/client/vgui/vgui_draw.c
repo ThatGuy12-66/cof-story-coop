@@ -23,6 +23,7 @@ GNU General Public License for more details.
 #include "input.h"
 #include "platform/platform.h"
 #include "cof_language.h"
+#include "cof_glyphs.h"
 
 #define VGUI_MAX_TEXTURES 1024
 
@@ -350,6 +351,45 @@ static const char *GAME_EXPORT VGUI_CofLangString( const char *str )
 	return CoF_Lang_String( str );
 }
 
+static const unsigned char *GAME_EXPORT VGUI_CofFontFileCJK( int bold, int *size )
+{
+	return CoF_Glyphs_CJKFile( bold, size );
+}
+
+static int GAME_EXPORT VGUI_CofTextGlyphs( const unsigned int **out, int *generation )
+{
+	const uint32_t *list = NULL;
+	int count = CoF_Lang_Glyphs( &list, generation );
+
+	if( out )
+		*out = (const unsigned int *)list;
+	return count;
+}
+
+// a glyph page that gained glyphs: the same id, its pixels again (VGUI_UploadTexture keeps an id's first upload)
+static void GAME_EXPORT VGUI_CofUpdateTexture( int id, const char *rgba, int width, int height )
+{
+	char texName[32];
+
+	if( id <= 0 || id >= vgui.max_textures || width <= 0 || height <= 0 || !rgba )
+		return;
+
+	Q_snprintf( texName, sizeof( texName ), "*vgui%i", id );
+
+	rgbdata_t r_image = {
+		.width = width,
+		.height = height,
+		.type = PF_RGBA_32,
+		.size = width * height * 4,
+		.flags = IMAGE_HAS_COLOR|IMAGE_HAS_ALPHA,
+		.buffer = (byte*)rgba,
+	};
+
+	vgui.textures[id].gl_texturenum = ref.dllFuncs.GL_LoadTextureFromBuffer( texName, &r_image, TF_IMAGE, vgui.textures[id].gl_texturenum != 0 );
+	memset( vgui.textures[id].hash, 0, sizeof( vgui.textures[id].hash )); // never a copy source: it changes
+	vgui.textures[id].cof_hud_kind = 0;
+}
+
 static int GAME_EXPORT VGUI_CofFontProbe( char *text, int size, char *role, int roleSize )
 {
 	return CL_CoF_FontProbe( text, size, role, roleSize );
@@ -489,6 +529,9 @@ static const vguiapi_t gEngfuncs =
 	CL_CoF_PanelImageLatch,
 	NULL, // CofPanelAction, filled in by the support library
 	CL_CoF_Inventory12Api, // CofInventory (cof_inventory12.c)
+	VGUI_CofFontFileCJK,
+	VGUI_CofTextGlyphs,
+	VGUI_CofUpdateTexture,
 };
 
 qboolean VGui_LoadProgs( HINSTANCE hInstance )

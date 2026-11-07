@@ -91,4 +91,8 @@ qboolean CoF_Lang_TextureReplacement( char *out, size_t size, const char *texnam
 const char *CoF_Lang_String( const char *str );
 const char *CoF_Lang_StringEngineFont( const char *str, qboolean utf8 );
 
+// the characters the active pack's text uses beyond ASCII (strings/glyphs.txt): their count, the list in *out
+// (valid until the pack changes) and a number that changes whenever the list does. 0 with no pack or no list.
+int CoF_Lang_Glyphs( const uint32_t **out, int *generation );
+
 #endif // COF_LANGUAGE_H

@@ -39,6 +39,7 @@ GNU General Public License for more details.
 #include "sound.h"		// SND_STOP_LOOPING
 #include "platform/platform.h"
 #include "cof_language.h"
+#include "cof_glyphs.h"
 #include "cof_strip.h"
 #include "cof_merged.h"
 #include "cof_levelname.h"
@@ -311,7 +312,7 @@ void CL_CenterPrint( const char *text, float y )
 	// Cry of Fear language packs: a centre print is text from the game DLLs
 	// (pfnCenterPrint, svc_centerprint); it is drawn one UTF-8 character at
 	// a time below, so the table's engine-font UTF-8 variant goes in here
-	text = CoF_Lang_StringEngineFont( text, true );
+	text = CoF_Lang_StringEngineFont( text, cls.accept_utf8 );
 	Q_strncpy( clgame.centerPrint.message, text, sizeof( clgame.centerPrint.message ));
 
 	CL_DrawStringLen( font,
@@ -525,6 +526,39 @@ void CL_DrawCenterPrint( void )
 	{
 		int lineLength = 0;
 		int width = 0;
+
+		// Cry of Fear (cof_glyphs.c): whole characters, a Chinese one as much as a Latin one
+		if( CoF_Glyphs_On( ))
+		{
+			uint32_t chars[MAX_LINELENGTH];
+
+			while( *pText && *pText != '\n' && lineLength < MAX_LINELENGTH - 1 )
+			{
+				uint32_t cp;
+
+				pText += CL_CoF_StringNext( pText, FONT_DRAW_UTF8, &cp );
+				if( !cp )
+					continue;
+
+				chars[lineLength++] = cp;
+				width += CL_CodepointWidth( font, cp );
+			}
+
+			while( *pText && *pText != '\n' )
+				pText++; // the rest of an overlong line
+			if( *pText )
+				pText++; // Skip LineFeed
+
+			int x = CL_AdjustXPos( -1, width, clgame.centerPrint.totalWidth );
+
+			for( int j = 0; j < lineLength; j++ )
+			{
+				if( x >= 0 && y >= 0 && x <= refState.width )
+					x += CL_DrawCodepoint( x, y, chars[j], NULL, font, FONT_DRAW_HUD | FONT_DRAW_NORENDERMODE | FONT_DRAW_NOCOLOR, 0 );
+			}
+			y += charHeight;
+			continue;
+		}
 
 		while( *pText && *pText != '\n' && lineLength < MAX_LINELENGTH )
 		{
@@ -2290,7 +2324,8 @@ too, because their advance depends on the pen position at draw time.
 typedef struct
 {
 	int	x, y;
-	int	number;
+	int	number;		// the byte, or with cof_text_glyphs the character (cof_glyphs.c)
+	int	cellw;		// > 0: a UTF-8 character, centred in the cell the client gave its lead byte
 	rgba_t	color;
 } cof_hudtext_glyph_t;
 
@@ -2320,14 +2355,22 @@ static qboolean CL_CoF_HudStyleActive( void )
 	return cof_hud_text_style.value && hud_utf8.value == 0.0f && GI && !Q_stricmp( GI->gamefolder, "cryoffear" );
 }
 
-static int CL_CoF_DrawStyledHudChar( int x, int y, int number, const rgba_t color, cl_font_t *font, int flags, int pass )
+// one HUD character: a byte the stock way, or with cof_text_glyphs a character (cof_glyphs.c)
+static int CL_CoF_DrawHudChar( float x, float y, int number, int cellw, const rgba_t color, cl_font_t *font, int flags )
+{
+	if( CoF_Glyphs_On( ))
+		return CL_DrawCodepoint( x, y, (uint32_t)number, color, font, flags, cellw );
+	return CL_DrawCharacter( x, y, number, color, font, flags );
+}
+
+static int CL_CoF_DrawStyledHudChar( int x, int y, int number, int cellw, const rgba_t color, cl_font_t *font, int flags, int pass )
 {
 	int ink[4]; rgba_t draw;
 	CoF_TextStyleColor( color[0], color[1], color[2], color[3], 1, ink );
 	if( pass == 1 )
 	{
 		for( int i = 0; i < 4; i++ ) draw[i] = (byte)ink[i];
-		return CL_DrawCharacter( x, y, number, draw, font, flags );
+		return CL_CoF_DrawHudChar( x, y, number, cellw, draw, font, flags );
 	}
 	for( int tap = 0; tap < 5; tap++ )
 	{
@@ -2335,7 +2378,7 @@ static int CL_CoF_DrawStyledHudChar( int x, int y, int number, const rgba_t colo
 		CoF_TextShadowTap( font->charHeight, tap, &dx, &dy, &weight );
 		draw[0] = 24; draw[1] = 25; draw[2] = 27;
 		draw[3] = (byte)( ink[3] * weight / 255 );
-		if( draw[3] ) CL_DrawCharacter( x + dx, y + dy, number, draw, font, flags );
+		if( draw[3] ) CL_CoF_DrawHudChar( x + dx, y + dy, number, cellw, draw, font, flags );
 	}
 	return 0;
 }
@@ -2410,7 +2453,7 @@ Collect one glyph instead of drawing it. Returns false when the caller has to
 draw it itself after all (feature off, tab stop, list full).
 ====================
 */
-static qboolean CL_CoF_HudTextDefer( int x, int y, int number, const rgba_t color )
+static qboolean CL_CoF_HudTextDefer( int x, int y, int number, int cellw, const rgba_t color )
 {
 	cof_hudtext_line_t	*line = NULL;
 	cof_hudtext_glyph_t	*glyph;
@@ -2420,9 +2463,13 @@ static qboolean CL_CoF_HudTextDefer( int x, int y, int number, const rgba_t colo
 	if( number == '\t' )
 		return false;	// advance depends on the pen position, see the header
 
-	number &= 255;
+	// a byte, or with cof_text_glyphs a character (cof_glyphs.c)
+	if( !CoF_Glyphs_On( ))
+		number &= 255;
 
-	if( number <= 32 || !font->charWidths[number] )
+	w = cellw > 0 ? cellw : CoF_Glyphs_On( ) ? CL_CodepointWidth( font, (uint32_t)number ) : font->charWidths[number];
+
+	if( number <= 32 || w <= 0 )
 		return true;	// nothing to draw, and the caller returns the advance
 
 	if( cof_hudtext.numGlyphs >= COF_HUDTEXT_MAX_GLYPHS )
@@ -2435,8 +2482,6 @@ static qboolean CL_CoF_HudTextDefer( int x, int y, int number, const rgba_t colo
 		}
 		return false;
 	}
-
-	w = font->charWidths[number];
 
 	// the line this glyph belongs to: same baseline y. Searched from the end
 	// because a client lays a paragraph out one line at a time
@@ -2476,6 +2521,7 @@ static qboolean CL_CoF_HudTextDefer( int x, int y, int number, const rgba_t colo
 	glyph->x = x;
 	glyph->y = y;
 	glyph->number = number;
+	glyph->cellw = cellw;
 	Vector4Copy( color, glyph->color );
 	line->count++;
 
@@ -2559,8 +2605,8 @@ void CL_CoF_HudTextFlush( void )
 		{
 			const cof_hudtext_glyph_t *glyph = &cof_hudtext.glyphs[line->first + j];
 			if( CL_CoF_HudStyleActive( ))
-				CL_CoF_DrawStyledHudChar( glyph->x, glyph->y, glyph->number, glyph->color, font, FONT_DRAW_HUD, pass );
-			else CL_DrawCharacter( glyph->x, glyph->y, glyph->number, glyph->color, font, FONT_DRAW_HUD );
+				CL_CoF_DrawStyledHudChar( glyph->x, glyph->y, glyph->number, glyph->cellw, glyph->color, font, FONT_DRAW_HUD, pass );
+			else CL_CoF_DrawHudChar( glyph->x, glyph->y, glyph->number, glyph->cellw, glyph->color, font, FONT_DRAW_HUD );
 		}
 	}
 
@@ -2575,10 +2621,16 @@ pfnDrawCharacter
 returns drawed chachter width (in real screen pixels)
 =============
 */
+// Cry of Fear (cof_glyphs.c): the UTF-8 character pfnDrawCharacter is part way through
+static cof_text_stream_t cof_hud_utf8;
+static int cof_hud_utf8_x, cof_hud_utf8_y, cof_hud_utf8_cell;
+
 static int GAME_EXPORT pfnDrawCharacter( int x, int y, int number, int r, int g, int b )
 {
 	rgba_t color = { r, g, b, 255 };
 	int flags = FONT_DRAW_HUD;
+	cl_font_t *font = &cls.creditsFont;
+	int cellw = 0, advance, bt = number & 255;
 
 	if( hud_utf8.value )
 		flags |= FONT_DRAW_UTF8;
@@ -2587,10 +2639,65 @@ static int GAME_EXPORT pfnDrawCharacter( int x, int y, int number, int r, int g,
 	// would have put it, before anything else looks at the coordinate
 	y += CL_CoF_HudTextYOffset();
 
-	// ... and collect it, so the backing strip can be drawn under the line
-	if( CL_CoF_HudTextDeferActive( ) && CL_CoF_HudTextDefer( x, y, number, color ))
+	// Cry of Fear (cof_glyphs.c): the client hands its HUD text over one byte at a time and lays it out with the
+	// width table, so a byte of the text code page is a character here. In UTF-8 the client gave a lead byte the
+	// whole character's cell and its continuation bytes none: the character is drawn when its last byte arrives,
+	// in the lead byte's cell.
+	if( CoF_Glyphs_On( ) && !hud_utf8.value )
 	{
-		cl_font_t *font = &cls.creditsFont;
+		qboolean utf8 = CoF_Glyphs_Codepage() == COF_CP_UTF8;
+		uint32_t cp = (uint32_t)bt;
+
+		advance = font->valid ? font->charWidths[bt] : 0;
+
+		if( bt < 0x80 )
+		{
+			if( utf8 )
+				CoF_Text_StreamReset( &cof_hud_utf8 );
+		}
+		else if( utf8 )
+		{
+			if( CoF_Text_Utf8Len( bt ) >= 2 )
+			{
+				cof_hud_utf8_x = x;
+				cof_hud_utf8_y = y;
+				cof_hud_utf8_cell = advance;
+			}
+
+			if( !CoF_Text_Feed( &cof_hud_utf8, bt, &cp ) || cp == 0xFFFD )
+				return advance;
+
+			x = cof_hud_utf8_x;
+			y = cof_hud_utf8_y;
+			cellw = Q_max( 1, cof_hud_utf8_cell );
+		}
+		else if(( cp = CoF_Text_Byte( CoF_Glyphs_Codepage(), bt )) == 0 )
+			return advance;
+
+		if( cp == '\t' )
+			return CL_DrawCharacter( x, y, '\t', color, font, flags ); // advance depends on the pen position
+		if( cp == ' ' )
+			return font->valid ? font->charWidths[' '] : 0;
+		if( cp < ' ' )
+			return 0;
+
+		if( CL_CoF_HudTextDeferActive( ) && CL_CoF_HudTextDefer( x, y, (int)cp, cellw, color ))
+			return advance;
+
+		if( CL_CoF_HudStyleActive( ))
+		{
+			CL_CoF_DrawStyledHudChar( x, y, (int)cp, cellw, color, font, flags, 0 );
+			CL_CoF_DrawStyledHudChar( x, y, (int)cp, cellw, color, font, flags, 1 );
+			return advance;
+		}
+
+		CL_DrawCodepoint( x, y, cp, color, font, flags, cellw );
+		return advance;
+	}
+
+	// ... and collect it, so the backing strip can be drawn under the line
+	if( CL_CoF_HudTextDeferActive( ) && CL_CoF_HudTextDefer( x, y, number, 0, color ))
+	{
 		int idx = number & 255;
 
 		if( idx == ' ' )
@@ -2603,10 +2710,10 @@ static int GAME_EXPORT pfnDrawCharacter( int x, int y, int number, int r, int g,
 
 	if( CL_CoF_HudStyleActive( ))
 	{
-		CL_CoF_DrawStyledHudChar( x, y, number, color, &cls.creditsFont, flags, 0 );
-		return CL_CoF_DrawStyledHudChar( x, y, number, color, &cls.creditsFont, flags, 1 );
+		CL_CoF_DrawStyledHudChar( x, y, number, 0, color, font, flags, 0 );
+		return CL_CoF_DrawStyledHudChar( x, y, number, 0, color, font, flags, 1 );
 	}
-	return CL_DrawCharacter( x, y, number, color, &cls.creditsFont, flags );
+	return CL_DrawCharacter( x, y, number, color, font, flags );
 }
 
 /*

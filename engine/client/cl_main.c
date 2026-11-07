@@ -16,6 +16,7 @@ GNU General Public License for more details.
 #include <inttypes.h>
 #include "common.h"
 #include "client.h"
+#include "cof_glyphs.h"
 #include "net_encode.h"
 #include "cl_tent.h"
 #include "input.h"
@@ -113,7 +114,7 @@ CVAR_DEFINE_AUTO( cof_ui_scale_user, "1.0", FCVAR_ARCHIVE, "user multiplier on t
 CVAR_DEFINE_AUTO( cof_ui_scale_sprites, "1", FCVAR_ARCHIVE, "let cof_ui_scale also scale the client's classic HUD sprites (ammo counter, icons); 0 leaves the engine sprite path at native size" );
 CVAR_DEFINE_AUTO( cof_ui_inter_fonts, "1", FCVAR_ARCHIVE, "rasterise the client's VGUI text from the shipped Inter faces at a size derived from the render height; 0 restores the game's own fixed-size bitmap font strips, 2 also traces every scheme latch and size decision" );
 CVAR_DEFINE_AUTO( cof_font_probe, "", 0, "developer: draw this string in the top-left corner with an engine-rasterised VGUI font, to check a code page without loading a map. Prefix with \"<role> \" to pick a scheme, e.g. \"chaptertitle Hello\"" );
-CVAR_DEFINE_AUTO( cof_text_codepage, "1252", FCVAR_ARCHIVE, "code page the engine-rasterised VGUI fonts decode text bytes with: 1252 (Western), 1250 (Central European, Polish) or 1251 (Cyrillic). Language packs set this" );
+CVAR_DEFINE_AUTO( cof_text_codepage, "1252", FCVAR_ARCHIVE, "code page every font decodes the game's text bytes with: 1252 (Western), 1250 (Central European, Polish), 1251 (Cyrillic) or 65001 (UTF-8: Chinese). Language packs set this" );
 CVAR_DEFINE_AUTO( cof_hud_text_height_pct, "1.76", FCVAR_ARCHIVE, "target height of the engine HUD font (hints, subtitles, pickup text) as a percentage of the render height, never below the shipped size; 0 = stock fixed bitmap size" );
 // Milestone 4b, the engine HUD text legibility round. All archived: they are
 // display preferences. cof_hud_text_font needs a font reload, the other two are
@@ -842,10 +843,7 @@ qboolean CL_CoF_FontDesc( const char *role, cof_vgui_font_t *out )
 	device = fraction * refState.height * CL_CoF_UIScaleUser();
 	device = bound( 8.0f, device, 256.0f );
 
-	codepage = (int)cof_text_codepage.value;
-
-	if( codepage != 1250 && codepage != 1251 && codepage != 1252 )
-		codepage = 1252;
+	codepage = CoF_Text_Codepage((int)cof_text_codepage.value ); // 1250, 1251, 1252 or 65001 (cof_text_logic.h)
 
 	if( cof_ui_inter_fonts.value > 1.0f )
 	{
@@ -6231,6 +6229,7 @@ static void CL_InitLocal( void )
 	Cvar_RegisterVariable( &cof_ui_scale_user );
 	Cvar_RegisterVariable( &cof_ui_inter_fonts );
 	Cvar_RegisterVariable( &cof_text_codepage );
+	CoF_Glyphs_Init();
 	Cvar_RegisterVariable( &cof_font_probe );
 	Cvar_RegisterVariable( &cof_ui_scale_sprites );
 	Cvar_RegisterVariable( &cof_hud_text_height_pct );

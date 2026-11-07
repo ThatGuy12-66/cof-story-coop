@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "client.h"
+#include "cof_glyphs.h"
 #include "vgui_draw.h"
 #include "qfont.h"
 #include "input.h"
@@ -720,6 +721,13 @@ void SCR_UpdateScreen( void )
 
 	if( !V_PreRender( )) return;
 
+	// Cry of Fear (cof_glyphs.c): a language pack switched the text code page: the fonts' width tables follow
+	if( FBitSet( cof_text_codepage.flags, FCVAR_CHANGED ))
+	{
+		ClearBits( cof_text_codepage.flags, FCVAR_CHANGED );
+		CoF_Glyphs_CodepageChanged();
+	}
+
 	switch( cls.state )
 	{
 	case ca_disconnected:
@@ -1005,6 +1013,15 @@ void SCR_LoadCreditsFont( void )
 	// Cry of Fear engine HUD text sizing: resize BEFORE the metrics are copied
 	// out, so the client lays its hints and subtitles out at the new size
 	SCR_ScaleCreditsFont( font, scale, shipped );
+
+	// Cry of Fear (cof_glyphs.c): what the HUD text draws beyond its cp1252 atlas, and the width table bytes
+	// 0x80..0xFF for the language pack's code page, before the client copies it
+	if( success )
+	{
+		font->cofAtlasPage = 1252;
+		font->cofFace = SCR_HudTextUseAtlas( ) ? ( cof_hud_text_style.value ? COF_FACE_BOLD : COF_FACE_SEMIBOLD ) : COF_FACE_REGULAR;
+		CoF_Glyphs_FontWidths( font );
+	}
 
 	// copy font size for client.dll
 	if( success )

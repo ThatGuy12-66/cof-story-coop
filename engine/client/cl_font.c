@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "qfont.h"
 #include "swaplib.h"
 #include "cof_language.h"
+#include "cof_glyphs.h"
 
 le_struct_begin( charinfo_swap )
 	le_struct_field( charinfo, startoffset )
@@ -190,32 +191,18 @@ static int CL_CalcTabStop( const cl_font_t *font, int x )
 	return stop;
 }
 
-int CL_DrawCharacter( float x, float y, int number, const rgba_t color, cl_font_t *font, int flags )
+// One atlas cell, as the stock CL_DrawCharacter drew it; returns the atlas's own width for it.
+static int CL_DrawAtlasCell( float x, float y, int number, const rgba_t color, cl_font_t *font, int flags )
 {
-	if( !font || !font->valid || y < -font->charHeight )
-		return 0;
+	int advance = font->cofAtlasKept ? font->cofAtlasWidths[number & 255] : font->charWidths[number & 255];
 
-	// check if printable
-	if( number <= 32 )
-	{
-		if( number == ' ' )
-			return font->charWidths[' '];
-		else if( number == '\t' )
-			return CL_CalcTabStop( font, x );
-		return 0;
-	}
-
-	if( FBitSet( flags, FONT_DRAW_UTF8 ))
-		number = Con_UtfProcessChar( number & 255 );
-	else number &= 255;
-
-	if( !number || !font->charWidths[number])
+	if( !number || !advance )
 		return 0;
 
 	int texw, texh;
 	R_GetTextureParms( &texw, &texh, font->hFontTexture );
 	if( !texw || !texh )
-		return font->charWidths[number];
+		return advance;
 
 	wrect_t *rc = &font->fontRc[number];
 	float half = 0.5f;
@@ -241,7 +228,134 @@ int CL_DrawCharacter( float x, float y, int number, const rgba_t color, cl_font_
 
 	ref.dllFuncs.R_DrawStretchPic( x, y, w, h, s1, t1, s2, t2, font->hFontTexture );
 
-	return font->charWidths[number];
+	return advance;
+}
+
+int CL_DrawCharacter( float x, float y, int number, const rgba_t color, cl_font_t *font, int flags )
+{
+	if( !font || !font->valid || y < -font->charHeight )
+		return 0;
+
+	// check if printable
+	if( number <= 32 )
+	{
+		if( number == ' ' )
+			return font->charWidths[' '];
+		else if( number == '\t' )
+			return CL_CalcTabStop( font, x );
+		return 0;
+	}
+
+	// Cry of Fear (cof_glyphs.c): a byte of the text code page is a character, drawn from the atlas when the atlas
+	// has it and from TrueType when not. A byte of UTF-8 is only part of one: whole characters come through
+	// CL_DrawCodepoint, from the decoding string paths and pfnDrawCharacter.
+	if( CoF_Glyphs_On( ) && !FBitSet( flags, FONT_DRAW_UTF8 ) && ( number & 255 ) >= 0x80 )
+	{
+		int codepage = CoF_Glyphs_Codepage();
+		uint32_t cp;
+
+		if( codepage == COF_CP_UTF8 )
+			return font->charWidths[number & 255];
+
+		if(( cp = CoF_Text_Byte( codepage, number )) == 0 )
+			return 0;
+
+		return CL_DrawCodepoint( x, y, cp, color, font, flags, 0 );
+	}
+
+	if( FBitSet( flags, FONT_DRAW_UTF8 ))
+		number = Con_UtfProcessChar( number & 255 );
+	else number &= 255;
+
+	if( !number || !font->charWidths[number])
+		return 0;
+
+	return CL_DrawAtlasCell( x, y, number, color, font, flags );
+}
+
+/*
+====================
+CL_DrawCodepoint
+
+Cry of Fear (cof_glyphs.c): one character, from the atlas when it has it, else from TrueType. cellw > 0 centres it in
+a cell of that width (the client's byte-by-byte layout of UTF-8 text). Returns the advance in the font's pixels.
+====================
+*/
+int CL_DrawCodepoint( float x, float y, uint32_t cp, const rgba_t color, cl_font_t *font, int flags, int cellw )
+{
+	int cell;
+
+	if( !font || !font->valid || y < -font->charHeight )
+		return 0;
+
+	if( cp <= 32 )
+		return CL_DrawCharacter( x, y, (int)cp, color, font, flags & ~FONT_DRAW_UTF8 );
+
+	if(( cell = CoF_Glyphs_AtlasCell( font, cp )) != 0 )
+	{
+		if( cellw > 0 )
+			x += ( cellw - CoF_Glyphs_Width( font, cp )) / 2;
+		return CL_DrawAtlasCell( x, y, cell, color, font, flags );
+	}
+
+	if( !CoF_Glyphs_On( ))
+		return 0;
+
+	if( !FBitSet( flags, FONT_DRAW_NORENDERMODE ))
+		CL_SetFontRendermode( font );
+
+	if( !FBitSet( flags, FONT_DRAW_NOCOLOR ))
+		CL_SetFontColor( font, color );
+
+	return CoF_Glyphs_Draw( x, y, cp, font, flags, cellw );
+}
+
+int CL_CodepointWidth( cl_font_t *font, uint32_t cp )
+{
+	if( !font || !font->valid )
+		return 0;
+
+	if( cp == '\t' )
+		return CL_CalcTabStop( font, 0 );
+
+	if( cp < 32 )
+		return 0;
+
+	return CoF_Glyphs_Width( font, cp );
+}
+
+/*
+====================
+CL_CoF_StringNext
+
+Cry of Fear (cof_glyphs.c): the next character of a string the engine draws. FONT_DRAW_UTF8 text is UTF-8 when the
+client accepts UTF-8 (cl_charset utf-8), with a byte that is no part of a sequence read in the text code page; any
+other text is in the text code page (cof_text_codepage), and in cp1252 a whole UTF-8 sequence in it still reads as
+UTF-8 (a Chinese host's text reaching an English player). Returns the bytes taken, at least 1.
+====================
+*/
+int CL_CoF_StringNext( const char *s, int flags, uint32_t *cp )
+{
+	const byte *b = (const byte *)s;
+	int codepage = CoF_Glyphs_Codepage(), n;
+
+	if( b[0] < 0x80 )
+	{
+		*cp = b[0];
+		return 1;
+	}
+
+	if( FBitSet( flags, FONT_DRAW_UTF8 ) && cls.accept_utf8 )
+	{
+		if(( n = CoF_Text_Utf8Seq( b, 4, cp )) > 0 )
+			return n;
+
+		*cp = CoF_Text_Byte( codepage == COF_CP_UTF8 ? 1252 : codepage, b[0] );
+		return 1;
+	}
+
+	n = CoF_Text_Next( b, 4, codepage, true, cp );
+	return n > 0 ? n : 1;
 }
 
 int CL_DrawString( float x, float y, const char *s, const rgba_t color, cl_font_t *font, int flags )
@@ -260,7 +374,7 @@ int CL_DrawString( float x, float y, const char *s, const rgba_t color, cl_font_
 	// below does the same, or the measured width would no longer match the
 	// drawn text.
 	if( FBitSet( flags, FONT_DRAW_COF_LANG ))
-		s = CoF_Lang_StringEngineFont( s, FBitSet( flags, FONT_DRAW_UTF8 ));
+		s = CoF_Lang_StringEngineFont( s, FBitSet( flags, FONT_DRAW_UTF8 ) && cls.accept_utf8 );
 
 	if( FBitSet( flags, FONT_DRAW_UTF8 ))
 		Con_UtfProcessChar( 0 ); // clear utf state
@@ -303,6 +417,18 @@ int CL_DrawString( float x, float y, const char *s, const rgba_t color, cl_font_
 			continue;
 		}
 
+		// Cry of Fear (cof_glyphs.c): whole characters
+		if( CoF_Glyphs_On( ))
+		{
+			uint32_t cp;
+			int n = CL_CoF_StringNext( s, flags, &cp );
+
+			if( cp )
+				draw_len += CL_DrawCodepoint( x + draw_len, y, cp, NULL, font, flags, 0 );
+			s += n;
+			continue;
+		}
+
 		// skip setting rendermode, it was changed for this string already
 		draw_len += CL_DrawCharacter( x + draw_len, y, (byte)*s, NULL, font, flags );
 
@@ -331,6 +457,8 @@ void CL_DrawCharacterLen( cl_font_t *font, int number, int *width, int *height )
 	{
 		if( number == '\t' )
 			*width = CL_CalcTabStop( font, 0 ); // at least return max tabstop
+		else if( number > 0xFF && CoF_Glyphs_On( ))
+			*width = CL_CodepointWidth( font, (uint32_t)number ); // Cry of Fear: a code point (cof_glyphs.c)
 		else *width = font->charWidths[number & 255];
 	}
 	if( height ) *height = font->charHeight;
@@ -354,7 +482,7 @@ void CL_DrawStringLen( cl_font_t *font, const char *s, int *width, int *height, 
 
 	// see CL_DrawString
 	if( FBitSet( flags, FONT_DRAW_COF_LANG ))
-		s = CoF_Lang_StringEngineFont( s, FBitSet( flags, FONT_DRAW_UTF8 ));
+		s = CoF_Lang_StringEngineFont( s, FBitSet( flags, FONT_DRAW_UTF8 ) && cls.accept_utf8 );
 
 	if( FBitSet( flags, FONT_DRAW_UTF8 ))
 		Con_UtfProcessChar( 0 ); // reset utf state
@@ -386,6 +514,19 @@ void CL_DrawStringLen( cl_font_t *font, const char *s, int *width, int *height, 
 		if( IsColorString( s ))
 		{
 			s += 2;
+			continue;
+		}
+
+		// Cry of Fear (cof_glyphs.c): whole characters, measured as CL_DrawString draws them
+		if( CoF_Glyphs_On( ))
+		{
+			uint32_t cp;
+			int n = CL_CoF_StringNext( s, flags, &cp );
+
+			draw_len += CL_CodepointWidth( font, cp );
+			if( width && draw_len > *width )
+				*width = draw_len;
+			s += n;
 			continue;
 		}
 

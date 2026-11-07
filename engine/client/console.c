@@ -15,6 +15,7 @@ GNU General Public License for more details.
 
 #include "common.h"
 #include "client.h"
+#include "cof_glyphs.h"
 #include "keydefs.h"
 #include "protocol.h"		// get the protocol version
 #include "con_nprint.h"
@@ -784,6 +785,8 @@ static void Con_LoadConsoleFont( int fontNumber, cl_font_t *font )
 
 		Q_snprintf( path, sizeof( path ), "fonts/cof_console%i.fnt", fontNumber );
 		success = Con_LoadVariableWidthFont( path, font, scale, &con_fontrender, texFlags );
+		if( success )
+			font->cofAtlasPage = 1252; // Cry of Fear (cof_glyphs.c): the generated atlases are cp1252
 	}
 
 	if( success )
@@ -936,8 +939,35 @@ static void Con_LoadConchars( void )
 		}
 	}
 
+	// Cry of Fear (cof_glyphs.c): the cells' code page, and the width table for the text code page, once scaled
+	for( int i = 0; i < CON_NUMFONTS; i++ )
+	{
+		if( !fresh[i] || !con.chars[i].valid )
+			continue;
+		if( !con.chars[i].cofAtlasPage )
+			con.chars[i].cofAtlasPage = g_codepage == 1251 ? 1251 : 1252;
+		con.chars[i].cofFace = COF_FACE_REGULAR;
+		CoF_Glyphs_FontWidths( &con.chars[i] );
+	}
+
 	// sets the current font
 	con.curFont = &con.chars[fontSize];
+}
+
+/*
+================
+Con_CoF_FontsCodepageChanged
+
+Cry of Fear (cof_glyphs.c): the text code page changed (a language pack was switched): the width tables follow it.
+================
+*/
+void Con_CoF_FontsCodepageChanged( void )
+{
+	for( int i = 0; i < CON_NUMFONTS; i++ )
+	{
+		if( con.chars[i].valid )
+			CoF_Glyphs_FontWidths( &con.chars[i] );
+	}
 }
 
 /*
@@ -2564,6 +2594,18 @@ static int Con_DrawStringClipped( int x, int y, int maxWidth, const char *s, con
 
 		if( draw_len + widest > maxWidth )
 			break;
+
+		// Cry of Fear (cof_glyphs.c): whole characters
+		if( CoF_Glyphs_On( ))
+		{
+			uint32_t cp;
+			int n = CL_CoF_StringNext( s, FONT_DRAW_UTF8, &cp );
+
+			if( cp )
+				draw_len += CL_DrawCodepoint( x + draw_len, y, cp, cur, font, FONT_DRAW_UTF8 | FONT_DRAW_NORENDERMODE, 0 );
+			s += n;
+			continue;
+		}
 
 		draw_len += CL_DrawCharacter( x + draw_len, y, (byte)*s, cur, font,
 			FONT_DRAW_UTF8 | FONT_DRAW_NORENDERMODE );

@@ -676,3 +676,129 @@ done:
 	if( stats ) *stats = st;
 	return result;
 }
+
+/*
+====================================================================
+The pack-wide entity text table
+
+The (classname, key) pairs whose values Cry of Fear draws as text: found by
+reading the entity lumps of every map the story, the Doctor's story and the
+game's co-op reach (tools/langpack in the co-op launcher). A value is only
+ever replaced when its bytes equal an English row exactly, so an identifier
+that happens to share a key ("poofpride" in an inter_door's message, a
+cof_hint's hint name) is never touched unless a row names it.
+====================================================================
+*/
+static const struct { const char *classname; const char *keys; } ep_text_keys[] =
+{
+	{ "inter_door",         " lockedmsg unlockedmsg message " },
+	{ "trigger_checkbrush", " message lockedmsg " },
+	{ "func_button",        " lockedmsg unlockedmsg " },
+	{ "func_valve",         " lockedmsg unlockedmsg " },
+	{ "cof_billboard",      " text " },
+	{ "cof_chapter",        " message " },
+	{ "cof_simpletext",     " message " },
+	{ "cof_giveitems",      " custommsg " },
+	{ "cof_yesno",          " noitemmsg " },
+	{ "cof_hint",           " message " },
+	{ "trigger_subwaywall", " message " },
+	{ "trigger_once",       " message " },
+	{ "boat_exit",          " message " },
+	{ "tape_recorder",      " message custommsg " },
+	{ "env_message",        " message " },
+	{ "env_model",          " unlockedmsg " },
+	{ "game_text",          " message " },
+};
+
+int CoF_EntText_Translatable( const char *classname, int clen, const char *key, int klen )
+{
+	size_t i;
+
+	if( klen <= 0 || klen > 32 )
+		return 0;
+
+	for( i = 0; i < sizeof( ep_text_keys ) / sizeof( ep_text_keys[0] ); i++ )
+	{
+		const char *k;
+
+		if( !EP_EqStr( classname, clen, ep_text_keys[i].classname ))
+			continue;
+
+		for( k = ep_text_keys[i].keys; ( k = strstr( k, " " )) != NULL && k[1]; k++ )
+		{
+			if( !strncmp( k + 1, key, (size_t)klen ) && k[1 + klen] == ' ' )
+				return 1;
+		}
+		return 0;
+	}
+	return 0;
+}
+
+char *CoF_EntText_Apply( const char *base, size_t baselen, cof_enttext_lookup_t lookup, void *ctx,
+	size_t *outlen, int *replaced )
+{
+	ep_vec_t ents = { NULL, 0, 0, sizeof( ep_ent_t ) };
+	ep_vec_t pairs = { NULL, 0, 0, sizeof( ep_pair_t ) };
+	ep_buf_t out = { NULL, 0, 0, 0 };
+	char *result = NULL;
+	int n, i, cur = 0, count = 0;
+
+	if( replaced ) *replaced = 0;
+
+	if( !base || !lookup )
+		return NULL;
+
+	n = (int)baselen;
+	while( n > 0 && base[n - 1] == 0 )
+		n--;
+
+	if( !EP_ParseBase( base, n, &ents, &pairs ))
+		goto done;
+
+	for( i = 0; i < ents.count; i++ )
+	{
+		const ep_ent_t *e = (const ep_ent_t *)ents.items + i;
+		const ep_pair_t *P = (const ep_pair_t *)pairs.items + e->first;
+		int c = EP_FindKey( base, e, (const ep_pair_t *)pairs.items, "classname", 9 );
+		int j;
+
+		if( c < 0 )
+			continue;
+
+		for( j = 0; j < e->count; j++ )
+		{
+			const char *put;
+
+			if( j == c - e->first || P[j].ve <= P[j].vs )
+				continue;
+			if( !CoF_EntText_Translatable( base + P[c - e->first].vs, P[c - e->first].ve - P[c - e->first].vs,
+				base + P[j].ks, P[j].ke - P[j].ks ))
+				continue;
+			if(( put = lookup( ctx, base + P[j].vs, P[j].ve - P[j].vs )) == NULL || strchr( put, '"' ))
+				continue;
+
+			EP_Put( &out, base + cur, (size_t)( P[j].vs - cur ));
+			EP_Put( &out, put, strlen( put ));
+			cur = P[j].ve;
+			count++;
+		}
+	}
+
+	if( !count )
+		goto done;
+
+	EP_Put( &out, base + cur, (size_t)( n - cur ));
+	if( out.failed || !out.data )
+		goto done;
+
+	result = out.data;
+	out.data = NULL;
+	if( outlen ) *outlen = out.len;
+	if( replaced ) *replaced = count;
+
+done:
+	free( out.data );
+	free( ents.items );
+	free( pairs.items );
+	return result;
+}
