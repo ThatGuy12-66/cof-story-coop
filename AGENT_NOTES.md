@@ -1625,4 +1625,17 @@ one release; for the six subtitle languages text only (no art). Everything is ma
 - Tests: `test_app_lang.py`, `test_enhanced_lang_text.py`, `test_langpack_art.py` (the art tests skip without
   OpenCV), `test_inventory12_art.py`.
 - Version 1.5, build 37 (network version still 1.1: 1.1 to 1.5 play together). Release notes `docs/releases/1.5.md`.
-  Not played yet (no launch without the owner's go-ahead).
+  Not played (the owner: "No in-game tests needed. Just make sure all the files work correctly").
+- The engine stamp needs console.c rebuilt: waf misses `cof_version.h` (`__has_include`); its object was moved to
+  `evidence/release-1.5/console.c.2.o.pre-1.5` before the build, as in 1.4.
+- Install checks: the baseline's hl.dll is patched and the old smoke source (D:\Offload) is gone, so
+  `evidence/release-1.5/smoke-source/Cry of Fear` is a new hardlink mirror of the baseline (no logs, the stock
+  hl.dll from hl.dll.orig); `make_smoke.py` beside it. Pass it as `--source`.
+- Files checked from the payload by `evidence/lang-1/verify_lang_files_b.py`: every pack's MANIFEST.tsv, TSVs, code
+  pages, and the ru/zh art's formats and sizes against the game's: 0 problems. The fresh install had the 12-slot art
+  for polish, russian and schinese.
+- **Published 1.5 2026-11-06 18:51 PT** (standing approval; the owner: "then we're going to post it"): full suite 832
+  OK (10 skipped: the art tests without OpenCV, evidence data no longer on the PC), fresh install 304 s, the 1.4 -> 1.5
+  update 43 s, a save kept. GitHub `v1.5`. Zip `FA7F30A2…`, 157,878,252 bytes (the art adds ~46 MB). Launcher
+  `788de6e`, engine `0af7474e`, FreeVGUI `24ed352`, Enhanced `59e14dd`. Nothing pushed. The ModDB upload is the
+  owner's (`evidence/release-1.5/moddb-text.txt`).
