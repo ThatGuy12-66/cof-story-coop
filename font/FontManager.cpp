@@ -103,11 +103,41 @@ CFontManager::~CFontManager()
 	m_FontFiles.Purge();
 }
 
+// Cry of Fear text beyond the fixed glyph ranges: the hash of the character set
+// the atlases were built with (UI_LangGlyphs); a new set rebuilds them
+unsigned int g_uiFontGlyphHash;
+static float s_fontPrevScale;
+
+/*
+=================
+CFontManager::LangFrame
+
+A language pack's menu strings or display names need characters the atlases
+lack (Chinese): build every font again, at the same handles. True when it did,
+so the open pages are laid out again.
+=================
+*/
+bool CFontManager::LangFrame( void )
+{
+	unsigned int hash = 0;
+
+	UI_LangGlyphs( NULL, &hash );
+
+	if( hash == g_uiFontGlyphHash || !s_fontPrevScale )
+		return false;
+
+	s_fontPrevScale = 0; // VidInit builds them again
+	VidInit();
+	return true;
+}
+
 void CFontManager::VidInit( void )
 {
-	static float prevScale = 0;
+	float &prevScale = s_fontPrevScale;
 
 	float scale = uiStatic.scaleY;
+
+	UI_LangGlyphs( NULL, &g_uiFontGlyphHash );
 
 	if( !prevScale
 #ifndef SCALE_FONTS // complete disables font re-rendering
@@ -345,6 +375,9 @@ int CFontManager::CutText(HFont fontHandle, const char *text, int height, int vi
 #endif
 
 	int whiteSpacePos = 0;
+	// Cry of Fear: where the character being decoded began, so a cut never
+	// splits a UTF-8 sequence (the cut used to land on its last byte)
+	const char *charStart = text;
 
 	// calculate full text wide
 	while( *ch )
@@ -355,6 +388,9 @@ int CFontManager::CutText(HFont fontHandle, const char *text, int height, int vi
 			ch += 2;
 			continue;
 		}
+
+		if(( (uint8_t)*ch & 0xC0 ) != 0x80 )
+			charStart = ch;
 
 		int uch = state.Decode((uint8_t)*ch );
 		int x = 0;
@@ -374,10 +410,19 @@ int CFontManager::CutText(HFont fontHandle, const char *text, int height, int vi
 			{
 				whiteSpacePos = ch - text;
 			}
+			// Cry of Fear: Chinese has no spaces; a line may break before any wide
+			// character except closing punctuation
+			else if( UI_CharIsWide( uch ) && !UI_CharNoBreakBefore( uch ) && charStart > text )
+			{
+				whiteSpacePos = charStart - text;
+			}
 		}
 
 		if( !reverse && _wide + x >= visibleSize )
+		{
+			ch = charStart;
 			break;
+		}
 
 		ch++;
 		_wide += x;
@@ -521,6 +566,9 @@ void CFontManager::UploadTextureForFont(CBaseFont *font)
 	// upload only latin needed for english and cyrillic needed for russian
 	// maybe it would be extended someday...
 
+	const unsigned int *glyphs = NULL;
+	int numGlyphs = UI_LangGlyphs( &glyphs, NULL );
+
 	charRange_t range[] =
 	{
 	{ 0x0021, 0x007E, NULL, 0 }, // ascii printable range
@@ -530,9 +578,12 @@ void CFontManager::UploadTextureForFont(CBaseFont *font)
 	{ 0x0100, 0x017F, NULL, 0 }, // latin extended a
 	{ 0x0400, 0x045F, NULL, 0 }, // cyrillic range
 	{ 0, 0, table_cp1251, V_ARRAYSIZE( table_cp1251 ) }, // cp1251
+	// Cry of Fear: what the language packs' menu strings and names need beyond
+	// these (Chinese), from the bundled CJK face (StbFont.cpp)
+	{ 0, 0, (const uint32_t *)glyphs, (size_t)numGlyphs },
 	};
 
-	font->UploadGlyphsForRanges( range, V_ARRAYSIZE( range ) );
+	font->UploadGlyphsForRanges( range, numGlyphs > 0 ? V_ARRAYSIZE( range ) : V_ARRAYSIZE( range ) - 1 );
 }
 
 int CFontManager::DrawCharacter(HFont fontHandle, int ch, Point pt, int charH, const unsigned int color, bool forceAdditive )

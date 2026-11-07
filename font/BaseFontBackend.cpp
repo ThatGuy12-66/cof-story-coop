@@ -59,6 +59,14 @@ void CBaseFont::GetTextureName( char *dst, size_t len ) const
 		int chars = snprintf( attribs + i, sizeof( attribs ) - 1 - i, "s%i%.2f", m_iScanlineOffset, m_fScanlineScale );
 		i += chars;
 	}
+	// Cry of Fear: a language pack's extra characters are part of the atlas, so
+	// the set is part of its name (and of the on-disk cache's)
+	extern unsigned int g_uiFontGlyphHash;
+	if( g_uiFontGlyphHash )
+	{
+		int chars = snprintf( attribs + i, sizeof( attribs ) - 1 - i, "x%08x", g_uiFontGlyphHash );
+		i += chars;
+	}
 	attribs[i] = 0;
 
 	// faster loading: don't query filesystem, tell engine to skip everything and load only from buffer

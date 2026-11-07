@@ -44,6 +44,14 @@ private:
 
 	double scale;
 
+	// Cry of Fear: what the face lacks (Chinese) comes from the bundled CJK
+	// face (gfx/fonts/CoFSansSC-*.otf), scaled to the same em
+	bool PickFace( int ch, const stbtt_fontinfo **face, double *faceScale ) const;
+	byte *m_pCjkData;
+	stbtt_fontinfo m_cjkInfo;
+	bool m_hasCjk;
+	double m_cjkScale;
+
 	friend class CFontManager;
 };
 

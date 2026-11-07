@@ -158,6 +158,34 @@ const char *L( const char *szStr ); // L means Localize!
 const char *UI_LangText( const char *text );
 bool UI_LangFrame( void );
 void UI_LangHold( bool hold );
+
+// Cry of Fear text beyond the fixed glyph ranges: every character the active
+// pack's menu strings and every pack's display name use past Latin Extended-A
+// and Cyrillic (Chinese), sorted; and a hash of the list, which the font
+// atlases are named and rebuilt by (FontManager.cpp).
+int UI_LangGlyphs( const unsigned int **out, unsigned int *hash );
+
+// A Chinese/Japanese/Korean character or full-width form: wide, drawn from the
+// bundled CJK face, and a place a line may break (Chinese has no spaces).
+inline bool UI_CharIsWide( unsigned int cp )
+{
+	return ( cp >= 0x1100 && cp <= 0x115F ) || ( cp >= 0x2E80 && cp <= 0x303E ) || ( cp >= 0x3040 && cp <= 0x33FF ) ||
+		( cp >= 0x3400 && cp <= 0x4DBF ) || ( cp >= 0x4E00 && cp <= 0x9FFF ) || ( cp >= 0xA000 && cp <= 0xA4CF ) ||
+		( cp >= 0xAC00 && cp <= 0xD7A3 ) || ( cp >= 0xF900 && cp <= 0xFAFF ) || ( cp >= 0xFE30 && cp <= 0xFE4F ) ||
+		( cp >= 0xFF00 && cp <= 0xFF60 ) || ( cp >= 0xFFE0 && cp <= 0xFFE6 );
+}
+
+// closing punctuation never starts a line: 。，、！？：；）」』】》
+inline bool UI_CharNoBreakBefore( unsigned int cp )
+{
+	switch( cp )
+	{
+	case 0x3001: case 0x3002: case 0xFF0C: case 0xFF0E: case 0xFF01: case 0xFF1F: case 0xFF1A: case 0xFF1B:
+	case 0xFF09: case 0x300D: case 0x300F: case 0x3011: case 0x300B: case 0x3009: case 0x2026: case 0x2014:
+		return true;
+	}
+	return false;
+}
 class CUILangHold
 {
 public:

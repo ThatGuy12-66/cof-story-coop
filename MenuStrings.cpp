@@ -1135,6 +1135,63 @@ static const char *Lang_Lookup( const char *text )
 	return NULL;
 }
 
+/*
+=================
+Lang_LookupLines
+
+A text the pages build from pieces (the co-op Continue page's detail: a
+title line, "Saved by ...", a warning) has no row of its own: each of its
+lines is looked up instead, exactly or by pattern. NULL when no line has a
+translation.
+=================
+*/
+static const char *Lang_LookupLines( const char *text )
+{
+	char line[LANG_OUT_SIZE];
+	char joined[LANG_OUT_SIZE];
+	size_t o = 0;
+	bool changed = false;
+
+	for( const char *s = text; ; )
+	{
+		const char *end = strchr( s, '\n' );
+		size_t n = end ? (size_t)( end - s ) : strlen( s );
+
+		if( n >= sizeof( line ))
+			return NULL;
+
+		memcpy( line, s, n );
+		line[n] = 0;
+
+		const char *put = n ? Lang_Lookup( line ) : NULL;
+
+		if( put )
+			changed = true;
+		else
+			put = line;
+
+		for( ; *put && o + 1 < sizeof( joined ); put++ )
+			joined[o++] = *put;
+
+		if( !end )
+			break;
+
+		if( o + 1 < sizeof( joined ))
+			joined[o++] = '\n';
+		s = end + 1;
+	}
+
+	if( !changed )
+		return NULL;
+
+	joined[o] = 0;
+
+	char *out = s_langRing[s_langRingPos];
+	s_langRingPos = ( s_langRingPos + 1 ) % LANG_RING;
+	Q_strncpy( out, joined, LANG_OUT_SIZE );
+	return out;
+}
+
 const char *UI_LangText( const char *text )
 {
 	if( !text || !text[0] || s_langHold > 0 || !s_langExact.Count( ))
@@ -1143,6 +1200,9 @@ const char *UI_LangText( const char *text )
 	const char *out = Lang_Lookup( text );
 
 	if( out )
+		return out;
+
+	if( strchr( text, '\n' ) && ( out = Lang_LookupLines( text )))
 		return out;
 
 	// text wrapped in ^N colour codes (the Controls list builds its rows as
@@ -1189,6 +1249,119 @@ it changes. Returns true when the language changed after the first load, so
 the caller re-lays out the open pages.
 =================
 */
+/*
+=================
+Lang_CollectGlyphs
+
+Cry of Fear text beyond the fixed glyph ranges (FontManager.cpp uploads ASCII,
+Latin-1, Latin Extended-A and Cyrillic): every other character the active
+table's translations use, and every installed pack's display name - the
+Language option lists them all in their own script ("简体中文"). Sorted, no
+duplicates, with a hash the font atlases are named by.
+=================
+*/
+#define LANG_MAX_GLYPHS	8192
+
+static unsigned int s_langGlyphs[LANG_MAX_GLYPHS];
+static int s_langNumGlyphs;
+static unsigned int s_langGlyphHash;
+
+static bool Lang_GlyphInFixedRanges( unsigned int cp )
+{
+	return cp < 0x180 || ( cp >= 0x400 && cp <= 0x45F );
+}
+
+static void Lang_AddGlyphs( const char *text )
+{
+	utfstate_t state;
+
+	for( const char *p = text; p && *p && s_langNumGlyphs < LANG_MAX_GLYPHS; p++ )
+	{
+		unsigned int cp = state.Decode( (uint8_t)*p );
+
+		if( cp && !Lang_GlyphInFixedRanges( cp ) && cp != 0xFFFD && cp != 0xFEFF )
+			s_langGlyphs[s_langNumGlyphs++] = cp;
+	}
+}
+
+static int Lang_GlyphCompare( const void *a, const void *b )
+{
+	unsigned int x = *(const unsigned int *)a, y = *(const unsigned int *)b;
+	return x < y ? -1 : x > y ? 1 : 0;
+}
+
+static void Lang_CollectGlyphs( void )
+{
+	s_langNumGlyphs = 0;
+
+	FOR_EACH_HASHMAP( s_langExact, i )
+		Lang_AddGlyphs( s_langExact.Element( i ));
+
+	// every pack's display name: the manifests are tiny
+	int numFiles = 0;
+	char **files = EngFuncs::GetFilesList( "languages/*", &numFiles, 1 );
+
+	for( int i = 0; files && i < numFiles; i++ )
+	{
+		char path[160];
+		int length = 0;
+		const char *code = strrchr( files[i], '/' );
+
+		code = code ? code + 1 : files[i];
+		if( !code[0] || strpbrk( code, ".:\\/" ) || strlen( code ) > 60 )
+			continue;
+
+		snprintf( path, sizeof( path ), "languages/%s/manifest.txt", code );
+		char *raw = (char *)EngFuncs::COM_LoadFile( path, &length );
+
+		if( !raw )
+			continue;
+
+		char *text = new char[length + 1];
+		memcpy( text, raw, length );
+		text[length] = 0;
+		EngFuncs::COM_FreeFile( raw );
+
+		for( char *line = text; line && *line; )
+		{
+			char *next = strchr( line, '\n' );
+
+			if( next )
+				*next++ = 0;
+			if( !strnicmp( line, "display_name=", 13 ))
+				Lang_AddGlyphs( line + 13 );
+			line = next;
+		}
+
+		delete[] text;
+	}
+
+	qsort( s_langGlyphs, s_langNumGlyphs, sizeof( s_langGlyphs[0] ), Lang_GlyphCompare );
+
+	int n = 0;
+	for( int i = 0; i < s_langNumGlyphs; i++ )
+	{
+		if( !n || s_langGlyphs[n - 1] != s_langGlyphs[i] )
+			s_langGlyphs[n++] = s_langGlyphs[i];
+	}
+	s_langNumGlyphs = n;
+
+	s_langGlyphHash = 2166136261u;
+	for( int i = 0; i < s_langNumGlyphs; i++ )
+		s_langGlyphHash = ( s_langGlyphHash ^ s_langGlyphs[i] ) * 16777619u;
+	if( !s_langNumGlyphs )
+		s_langGlyphHash = 0;
+}
+
+int UI_LangGlyphs( const unsigned int **out, unsigned int *hash )
+{
+	if( out )
+		*out = s_langGlyphs;
+	if( hash )
+		*hash = s_langGlyphHash;
+	return s_langNumGlyphs;
+}
+
 bool UI_LangFrame( void )
 {
 	const char *code = EngFuncs::GetCvarString( "cof_language" );
@@ -1202,6 +1375,7 @@ bool UI_LangFrame( void )
 	bool changed = s_langLoaded;
 
 	Lang_Load( code );
+	Lang_CollectGlyphs();
 	return changed;
 }
 

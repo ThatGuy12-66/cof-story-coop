@@ -684,8 +684,16 @@ void UI_UpdateMenu( float flTime )
 	// Cry of Fear language packs: the menu's own strings follow cof_language;
 	// on a change the open pages are laid out again, since their widths
 	// depend on the text (MenuStrings.cpp)
-	if( UI_LangFrame( ))
-		uiStatic.menu.VidInit( true );
+	{
+		bool relayout = UI_LangFrame( );
+
+		// Cry of Fear: the new strings may need characters the font atlases lack
+		if( g_FontMgr && g_FontMgr->LangFrame( ))
+			relayout = true;
+
+		if( relayout )
+			uiStatic.menu.VidInit( true );
+	}
 
 	UI_DrawFinalCredits ();
 

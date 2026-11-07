@@ -38,8 +38,35 @@ GNU General Public License for more details.
 #include "Utils.h"
 
 CStbFont::CStbFont() : CBaseFont(),
-	m_pFontData( NULL )
+	m_pFontData( NULL ), m_pCjkData( NULL ), m_hasCjk( false ), m_cjkScale( 0 )
 {
+}
+
+/*
+=================
+CStbFont::PickFace
+
+Cry of Fear: a Chinese character, or one the face lacks, from the CJK face when
+it has it; anything else from the face itself.
+=================
+*/
+bool CStbFont::PickFace( int ch, const stbtt_fontinfo **face, double *faceScale ) const
+{
+	*face = &m_fontInfo;
+	*faceScale = scale;
+
+	if( !m_hasCjk || ch < 0x100 )
+		return false;
+
+	if( !stbtt_FindGlyphIndex( &m_cjkInfo, ch ))
+		return false;
+
+	if( !UI_CharIsWide( ch ) && stbtt_FindGlyphIndex( &m_fontInfo, ch ))
+		return false;
+
+	*face = &m_cjkInfo;
+	*faceScale = m_cjkScale;
+	return true;
 }
 
 CStbFont::~CStbFont()
@@ -97,6 +124,24 @@ bool CStbFont::Create( const char *name, int tall, int weight, int blur, float b
 	m_iHeight = round(( y1 - y0 ) * scale ); // maybe wrong!
 	m_iMaxCharWidth = round(( x1 - x0 ) * scale ); // maybe wrong!
 
+	// Cry of Fear: the CJK face, at this face's em, for the characters it lacks
+	m_hasCjk = false;
+	m_pCjkData = g_FontMgr->LoadFontDataFile( weight >= 600 ? "gfx/fonts/CoFSansSC-Bold.otf" : "gfx/fonts/CoFSansSC-Regular.otf" );
+
+	if( m_pCjkData && stbtt_InitFont( &m_cjkInfo, m_pCjkData, stbtt_GetFontOffsetForIndex( m_pCjkData, 0 )))
+	{
+		double em = 1.0 / stbtt_ScaleForMappingEmToPixels( &m_fontInfo, 1.0f );
+		double cjkEm = 1.0 / stbtt_ScaleForMappingEmToPixels( &m_cjkInfo, 1.0f );
+
+		m_cjkScale = scale * em / cjkEm;
+		m_hasCjk = true;
+
+		// a CJK glyph is about an em wide: the atlas's per-glyph scratch must hold one
+		int cjkWide = (int)ceil( em * scale ) + 2;
+		if( m_iMaxCharWidth < cjkWide )
+			m_iMaxCharWidth = cjkWide;
+	}
+
 	return true;
 }
 
@@ -108,8 +153,17 @@ void CStbFont::GetCharRGBA(int ch, Point pt, Size sz, unsigned char *rgba, Size 
 	GetCharABCWidths( ch, a, b, c ); // speed up cache
 
 	int bm_top, bm_left, bm_rows, bm_width;
+	const stbtt_fontinfo *face;
+	double faceScale;
 
-	buf = stbtt_GetCodepointBitmap( &m_fontInfo, scale, scale, ch, &bm_width, &bm_rows, &bm_left, &bm_top );
+	PickFace( ch, &face, &faceScale );
+	byte *bitmap = buf = stbtt_GetCodepointBitmap( face, faceScale, faceScale, ch, &bm_width, &bm_rows, &bm_left, &bm_top );
+
+	if( !buf )
+	{
+		drawSize.w = drawSize.h = 0;
+		return;
+	}
 
 	// see where we should start rendering
 	const int pushDown = m_iAscent + bm_top;
@@ -157,6 +211,8 @@ void CStbFont::GetCharRGBA(int ch, Point pt, Size sz, unsigned char *rgba, Size 
 	drawSize.w = xend - xstart + m_iBlur * 2 + m_iOutlineSize * 2;
 	drawSize.h = yend - ystart + m_iBlur * 2 + m_iOutlineSize * 2;
 
+	stbtt_FreeBitmap( bitmap, NULL );
+
 	ApplyBlur( sz, rgba );
 	ApplyOutline( Point( xstart, ystart ), sz, rgba );
 	ApplyScanline( sz, rgba );
@@ -165,18 +221,23 @@ void CStbFont::GetCharRGBA(int ch, Point pt, Size sz, unsigned char *rgba, Size 
 
 void CStbFont::GetCharABCWidthsNoCache(int ch, int &a, int &b, int &c)
 {
-	int glyphId = stbtt_FindGlyphIndex( &m_fontInfo, ch );
+	const stbtt_fontinfo *face;
+	double faceScale;
 
-	int x0, x1;
+	PickFace( ch, &face, &faceScale );
+
+	int glyphId = stbtt_FindGlyphIndex( face, ch );
+
+	int x0 = 0, x1 = 0;
 	int width, horiBearingX, horiAdvance;
 
-	stbtt_GetGlyphBox( &m_fontInfo, glyphId, &x0, NULL, &x1, NULL );
-	stbtt_GetCodepointHMetrics( &m_fontInfo, ch, &horiAdvance, &horiBearingX );
+	stbtt_GetGlyphBox( face, glyphId, &x0, NULL, &x1, NULL );
+	stbtt_GetCodepointHMetrics( face, ch, &horiAdvance, &horiBearingX );
 	width = x1 - x0;
 
-	a = round( horiBearingX * scale );
-	b = round( width * scale );
-	c = round(( horiAdvance - horiBearingX - width ) * scale );
+	a = round( horiBearingX * faceScale );
+	b = round( width * faceScale );
+	c = round(( horiAdvance - horiBearingX - width ) * faceScale );
 }
 
 bool CStbFont::HasChar(int ch) const

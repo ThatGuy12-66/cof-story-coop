@@ -34,6 +34,7 @@ public:
 	~CFontManager();
 
 	void VidInit();
+	bool LangFrame();
 
 	void DeleteAllFonts();
 	void DeleteFont( HFont hFont );
