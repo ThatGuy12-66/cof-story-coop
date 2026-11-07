@@ -1,6 +1,28 @@
-Cry of Fear Co-op 1.4
+Cry of Fear Co-op 1.5
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.5
+- A language setting. The list at the bottom of the app picks the language of the app and
+  the game together: English, Deutsch, Español, Français, Nederlands, Norsk, Polski,
+  Русский, Svenska and 简体中文 (Simplified Chinese). The game's own Options > Game >
+  Language is the same setting: change it in either place and the other follows. The first
+  time, the app takes your Windows language.
+- Russian and Simplified Chinese are new and complete: subtitles, notes, hints, endings,
+  the phone's messages, item names, map text (doors, chapter titles, save points), the
+  menus, the co-op pages and messages, and the pictures with English on them (item and
+  weapon cards, the inventory, the yes/no questions, game over, the introductions, signs
+  and the writing on the walls).
+- German, Spanish, French, Dutch, Norwegian and Swedish now also have the item names, the
+  map text and the game's messages, which Cry of Fear only ever showed in English. Polish
+  gets the co-op pages.
+- Chinese characters show everywhere: the menus, subtitles, notes, the chat and player
+  names.
+- These translations were drafted by AI and haven't been checked by native speakers yet.
+  If something reads wrong, tell us on Discord (the line and what it should say).
+- Everyone picks their own language. Some map messages come from the host's game, in the
+  host's language.
+- 1.1 to 1.5 can play together.
 
 WHAT'S NEW IN 1.4
 - The chainsaw that wouldn't stop: after the masked chainsaw man (and the chainsaw boss)

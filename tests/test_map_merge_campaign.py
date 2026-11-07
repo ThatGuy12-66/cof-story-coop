@@ -99,6 +99,8 @@ class CheckTests(unittest.TestCase):
 class RetailCampaignTests(unittest.TestCase):
     def test_every_story_exit_works_through_the_recorded_groups(self):
         retail('c_start')
+        if not campaign.STORY_MAPS.is_file():   # research data under evidence/ (not in git), like the retail maps
+            self.skipTest(f'the story map list is not on this PC: {campaign.STORY_MAPS}')
         ents = {m: bsp.Bsp.read(MAPS / f'{m}.bsp').ents for m in campaign.story_maps()}
         report = campaign.check(ents, campaign.recorded(MAPS))
         self.assertEqual(report.exits, 197)

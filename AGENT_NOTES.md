@@ -1593,3 +1593,36 @@ playing"; "we had to restart the game for it to go away". (The story's forest: c
   releases-page check only (GitHub lag: `latest/download/release.json` served 1.4 build 36 afterwards). GitHub `v1.4`.
   Zip `F178E57C…`, 111,650,262 bytes. Engine `5628e5f7`, launcher `10b445d`. Nothing pushed. Not played. The ModDB
   upload is the owner's (`evidence/release-1.4/moddb-text.txt`).
+
+## 1.5: the language setting, and Russian and Simplified Chinese (2026-11-06)
+
+The owner: "there's a huge Chinese player base for the mod" ... "I just want a full language setting built in."
+Chosen (his answers): the 7 languages the game already has plus Simplified Chinese and Russian, all translated by us,
+one release; for the six subtitle languages text only (no art). Everything is machine-drafted and waits for review.
+- **The setting** (`tools/app_lang.py`, `tools/app_lang/<code>.json`): one list in the app's footer; the app's own
+  text through `T()` (exact rows and `{name}` patterns, captured pieces translated as rows). Kept in step with the
+  game's Options > Game > Language through the copy's `cryoffear/config.cfg` (`cof_language`, the client's
+  `cof_subtitlelanguage`; the six game languages are pack + slot 2..7): the app reads it when it shows the main
+  screen, writes its choice before the game starts. First run: the Windows UI language. Choice file
+  `%LOCALAPPDATA%/CoF-Story-Coop-language.txt`.
+- **Packs** (`upstream/cof-enhanced/languages/<code>/`, built by `tools/langpack/build_packs.py` from
+  `tools/langpack/text/<code>/`): russian (cp1251) and schinese (UTF-8) are whole packs; the six get item names, DLL
+  strings and `strings/entity-strings.tsv`; polish gets the co-op menu rows and engine messages. The engine: map
+  text applied pack-wide by (classname, key) (`CoF_EntText_Apply`, server side, so a guest sees the host's map text),
+  `CoF_Lang_Exact` for a co-op message's quoted pieces, UTF-8 and code pages (`engine/cof_text_logic.h`), the menu's
+  multi-line texts line by line (mainui `Lang_LookupLines`). Chinese glyphs: CoF Sans SC (a GB2312 subset of Noto
+  Sans SC) as every font's fallback.
+- **Art** (`tools/langpack/art/make_art.py`, specs `cards_spec.py` -> `cards.json`, `labels_spec.py` ->
+  `labels.json`; originals by `tools/langpack/gather_art.py`): 186 images per pack (114 overlay, 48 world textures,
+  24 model textures; Swedish signs and ads left). Cards: the English caption found by drawing it, its shadow (black,
+  offset 3,4, blur 2.2, 70%) divided out, letters inpainted. Other images: per pixel the English or the Polish
+  repaint, whichever is not lettering there ("polish"), or inpainting/patches; then the translation in a style
+  (STYLES). Interface TGAs are written uncompressed (VGUI1 reads an RLE TGA's alpha inverted: the Polish files store
+  it so); model textures 8-bit in the model's palette (the engine's `CoF_Lang_StudioTextures`). Fonts: Liberation,
+  Noto CJK, Google Fonts (Rubik, Oswald, Neucha, Amatic SC, LongCang, Ma Shan Zheng), `COF_ART_FONTS`. Made in the
+  cloud container (the PC has no OpenCV); `build_packs.py --art <out>` puts it in the packs, a later run without
+  `--art` keeps it. `tools/make_inventory12_art.py` now makes the 12-slot art for every pack with a 640_inventory.
+- Tests: `test_app_lang.py`, `test_enhanced_lang_text.py`, `test_langpack_art.py` (the art tests skip without
+  OpenCV), `test_inventory12_art.py`.
+- Version 1.5, build 37 (network version still 1.1: 1.1 to 1.5 play together). Release notes `docs/releases/1.5.md`.
+  Not played yet (no launch without the owner's go-ahead).
