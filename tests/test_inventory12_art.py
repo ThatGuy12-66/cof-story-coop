@@ -136,6 +136,9 @@ class ArtTests(unittest.TestCase):
             art.write_tga(vgui / '640_inventory.tga', synthetic())
             art.write_tga(vgui / '640_inventory_three.tga', synthetic(three=True))
             art.write_tga(polish / '640_inventory.tga', synthetic())
+            chinese = game / 'cryoffear/languages/schinese/overlay/cryoffear/gfx/vgui'
+            art.write_tga(chinese / '640_inventory_three.tga', synthetic(three=True))
+            (game / 'cryoffear/languages/german/strings').mkdir(parents=True)   # a pack without art
             written = art.generate(game)
             self.assertEqual(sorted(p.relative_to(game).as_posix() for p in written), sorted([
                 'cryoffear/gfx/vgui/inventory12_left.tga',
@@ -143,7 +146,9 @@ class ArtTests(unittest.TestCase):
                 'cryoffear/gfx/vgui/inventory12_left_three.tga',
                 'cryoffear/gfx/vgui/inventory12_full_three.tga',
                 'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/inventory12_left.tga',
-                'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/inventory12_full.tga']))
+                'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui/inventory12_full.tga',
+                'cryoffear/languages/schinese/overlay/cryoffear/gfx/vgui/inventory12_left_three.tga',
+                'cryoffear/languages/schinese/overlay/cryoffear/gfx/vgui/inventory12_full_three.tga']))
             back = art.read_tga(vgui / 'inventory12_left.tga')
             left = art.compose(synthetic(), three=False)
             self.assertEqual(back.pixels, left.pixels)

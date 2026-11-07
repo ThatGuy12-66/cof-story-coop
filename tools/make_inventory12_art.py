@@ -7,7 +7,8 @@ DESCRIPTION labels and the description box moved, and 12 (or 3) boxes of 72 px d
 in 3rdparty/freevgui/platform/xash3d-fwgs/cofinventory_logic.h. Also inventory12_full.tga /
 inventory12_full_three.tga: the whole 748x480 background with that left half, which the grid puts
 in place of the retail picture (the inventory is drawn see-through, so retail art left under the
-grid showed through it). The Polish overlay gets the same when its originals are present. The
+grid showed through it). Every language pack's overlay (Polish, and since 1.5 Russian and Chinese)
+gets the same when it repaints 640_inventory.tga. The
 retail files are only read; nothing copied from the game is stored in the repository.
 
     python -m tools.make_inventory12_art <game folder>     (the folder that holds cryoffear/)
@@ -190,7 +191,10 @@ def full(src, left):
 def generate(game):
     """The art for one game folder (the folder that holds cryoffear/); the files written."""
     game = Path(game)
-    folders = (game / 'cryoffear/gfx/vgui', game / 'cryoffear/languages/polish/overlay/cryoffear/gfx/vgui')
+    # the game's own art, then every language pack that repaints the inventory (Polish, Russian, Chinese)
+    folders = (game / 'cryoffear/gfx/vgui',) + tuple(sorted(
+        p / 'overlay/cryoffear/gfx/vgui' for p in (game / 'cryoffear/languages').glob('*')
+        if (p / 'overlay/cryoffear/gfx/vgui').is_dir()))
     if not (folders[0] / '640_inventory.tga').is_file():
         raise SystemExit(f'{folders[0] / "640_inventory.tga"} is missing: is {game} a Cry of Fear folder?')
     written = []
@@ -203,7 +207,7 @@ def generate(game):
                 except (ValueError, struct.error, IndexError) as error:
                     if folder is folders[0]:
                         raise
-                    print(f'skipped {folder / source}: {error}', file=sys.stderr)   # the Polish overlay is optional
+                    print(f'skipped {folder / source}: {error}', file=sys.stderr)   # a pack's overlay is optional
                     continue
                 for target, picture in ((f'inventory12_left{suffix}.tga', image), (f'inventory12_full{suffix}.tga', full(src, image))):
                     write_tga(folder / target, picture)
