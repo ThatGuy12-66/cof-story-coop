@@ -20,8 +20,10 @@
  * four more bounds: a particle system's source entity and Cg water's water
  * entities, up to edict 8191 (docs/research/2026-10-18-cof-decompilation-survey.md
  * section 3, the launcher repo); the night vision light gets a key of its
- * own, so it is one light, not two on every other frame; and a level's own
- * decals move to engine storage, 1024 instead of 256.
+ * own, so it is one light, not two on every other frame; a level's own
+ * decals move to engine storage, 1024 instead of 256; and the players' lights
+ * (phone, flashlight, co-op torch) get keys of their own, so player 1's no
+ * longer replaces the local phone light.
  * Inventory and checks: evidence/map-merge-spike-20261016/client-renderer-patch-plan.md.
  *
  * Every edit compares its stock bytes first (absolute operands relocated to the
@@ -43,7 +45,7 @@
 #define COF_RP_DECAL_BYTES ( COF_RP_DECALS_MAX * 32 )   /* customdecal: surface, point, normal, texinfo */
 #define COF_RP_LINKED      0x10000000u                  /* the image base the absolute operands were linked for */
 #define COF_RP_SET1        0x1CBF70                     /* RVA of the three set bases (GL names) */
-#define COF_RP_SITES       34
+#define COF_RP_SITES       35
 
 enum { COF_RP_NONE, COF_RP_PAGES, COF_RP_PAGES2, COF_RP_CHAINS, COF_RP_ENTLIST, COF_RP_DECALS }; /* what a patched operand points at */
 
@@ -109,9 +111,21 @@ static const cof_rp_site_t cof_rp_sites[COF_RP_SITES] =
 	/* the night vision light (view.cpp:1276, V_CalcRefdef): MY_AllocDlight( 0 ) -> ( -100 ). Remade every frame with
 	 * die = time + 0.01; key 0 took a new slot each time, so a frame under 10 ms drew last frame's light too and the
 	 * green light doubled on about half the frames (the strobe). A key reuses one slot. Keys in use: -1, -2, -8, -50,
-	 * -66, -300, -1..-32 for the players' lights and entity indices. test [flags],40h / jz / push / call rel32 */
+	 * -66, -300, -128..-192 for the players' lights (-128 - i, the site below) and entity indices.
+	 * test [flags],40h / jz / push / call rel32 */
 	{ 0xB14AB, 10, 0, 0, COF_RP_NONE, { 0x40, 0x74, 0x59, 0x6A, 0x00, 0xE8, 0x3B, 0xAC, 0xFA, 0xFF },
 		{ 0x40, 0x74, 0x59, 0x6A, 0x9C, 0xE8, 0x3B, 0xAC, 0xFA, 0xFF } },
+	/* the players' lights (DrawPlayerFlashlights 10065260, gl_studiomodel.cpp:642, run from every StudioCalcAttachments
+	 * in multiplayer): player i's phone (frags 1), flashlight (8) and co-op torch (32) take MY_AllocDlight( -i ), the
+	 * key a counter at [ebp-0Ch] holds (0, then dec per player; pushed at 100653BF, 1006548F, 10065626 and used for
+	 * nothing else). Player 1 is the listen host, and -1 is the local phone light's own key (view.cpp:2913
+	 * SetupFlashlight: a spotlight from the view, turning with the camera). An exact key match is wiped and reused
+	 * (MY_AllocDlight memsets it), so on the host its own phone spotlight became a radius-60 point light at its chest
+	 * every frame (lit, but not turning with the view), and on a guest the host's light took the guest's. The
+	 * alignment nop before the loop now starts the counter at -128: keys -128 - i (-128..-192 for the 65 entries),
+	 * clear of 0, -1, -2, -8, -50, -66, -100, -300, -665, -666 and entity indices.
+	 * nop word [eax+eax] -> add dword [ebp-0Ch],-128 / xchg ax,ax */
+	{ 0x6529A, 6, 0, 0, COF_RP_NONE, { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 }, { 0x83, 0x45, 0xF4, 0x80, 0x66, 0x90 } },
 	/* a level's own decals (env_static_decal, gl_decals.cpp): 256 -> 1024. A merged map joins up to four maps; the
 	 * merged subway (273) dropped 17 with "too many static decals on level!". The array has two references (the
 	 * relocation table): AllocStaticDecal 10057990 and the draw loop in DrawDecals */

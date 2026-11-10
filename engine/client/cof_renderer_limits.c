@@ -84,7 +84,8 @@ void CL_CoF_RendererLimitsLoad( void *module )
 		return;
 	}
 	CL_CoF_RendererNote( "[cof-renderer] client.dll's renderer: %d lightmap pages, %d brush entities a frame, edicts up to 8191, "
-		"%d static decals, one night vision light\n", COF_RP_PAGES_MAX, COF_RP_ENTITIES, COF_RP_DECALS_MAX );
+		"%d static decals, one night vision light, the players' lights keyed apart\n", COF_RP_PAGES_MAX, COF_RP_ENTITIES,
+		COF_RP_DECALS_MAX );
 #else
 	(void)module;
 #endif
