@@ -36,6 +36,13 @@ class RetailClientTests(unittest.TestCase):
         }, [CLIENT_DLL])
         self.assertIn('renderer patch sites passed', out)
 
+    def test_the_players_lights_no_longer_take_the_local_phone_lights_key(self):
+        # client.dll keys player i's phone/flashlight/torch light -i; the listen host is player 1 and -1 is the
+        # local phone spotlight's key, so the host's own phone light was replaced by a point light at its chest
+        patch = (ENGINE_CLIENT / 'cof_renderer_patch.h').read_text()
+        self.assertIn('{ 0x6529A, 6, 0, 0, COF_RP_NONE, { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 }, '
+                      '{ 0x83, 0x45, 0xF4, 0x80, 0x66, 0x90 } }', patch)
+
     def test_lightmaps_and_brush_entities_run_against_retail_client(self):
         out = run_x86(self, 'cof_renderpatch_run_harness.c', {
             'patch_under_test.h': (ENGINE_CLIENT / 'cof_renderer_patch.h').read_text(),

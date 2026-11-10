@@ -55,8 +55,29 @@ int main( int argc, char **argv )
 	decals = (unsigned char *)VirtualAlloc( NULL, COF_RP_DECAL_BYTES, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 	assert( pages && chains && ents && decals );
 
-	/* the table: 34 code edits and three data words */
-	assert( COF_RP_SITES == 34 );
+	/* the table: 35 code edits and three data words */
+	assert( COF_RP_SITES == 35 );
+
+	/* the players' lights, stock: the key counter at [ebp-0Ch] is set to 0 (mov [ebp-0Ch],eax after xor eax,eax),
+	 * the alignment nop falls through into the loop, the counter is decremented once per player, and it is read
+	 * only as MY_AllocDlight's argument (push [ebp-0Ch] / call 1005C0F0) for the phone, flashlight and co-op torch */
+	assert( !memcmp( base + 0x6527D, "\x33\xC0", 2 ));
+	assert( !memcmp( base + 0x6528F, "\x89\x45\xF4", 3 ));
+	assert( !memcmp( base + 0x6529A, "\x66\x0F\x1F\x44\x00\x00", 6 ));
+	assert( !memcmp( base + 0x652DB, "\xFF\x4D\xF4", 3 ));
+	assert( !memcmp( base + 0x652F0, "\x7C\xAE", 2 ));                      /* jl back to 100652A0, past the nop */
+	{
+		static const unsigned keys[3] = { 0x653BF, 0x6548F, 0x65626 };
+		for( i = 0; i < 3; i++ )
+		{
+			unsigned char *call = base + keys[i] + ( keys[i] == 0x65626 ? 8 : 5 );
+			int rel;
+			assert( !memcmp( base + keys[i], "\xFF\x75\xF4", 3 ));
+			assert( call[0] == 0xE8 );
+			memcpy( &rel, call + 1, 4 );
+			assert( call + 5 + rel == base + 0x5C0F0 ); /* MY_AllocDlight */
+		}
+	}
 
 	/* applied: every site holds its new code, with the real addresses of the new storage */
 	assert( CoF_RenderPatchApply( &patch, base, pages, chains, ents, decals ));
@@ -93,6 +114,9 @@ int main( int argc, char **argv )
 	/* the night vision light: test [flash flags],40h / jz / push -100 / call MY_AllocDlight. Key 0 took a new slot
 	 * every frame, so a frame under its 10 ms life drew last frame's light as well: twice the green, every other frame */
 	assert( !memcmp( base + 0xB14AB, "\x40\x74\x59\x6A\x9C\xE8\x3B\xAC\xFA\xFF", 10 ));
+	/* the players' lights: the counter starts at -128 (add [ebp-0Ch],-128 / xchg ax,ax), so player i's key is
+	 * -128 - i and player 1 (the listen host) no longer takes -1, the local phone light's key */
+	assert( !memcmp( base + 0x6529A, "\x83\x45\xF4\x80\x66\x90", 6 ));
 	/* static decals: 1024 a level, in the new storage (the allocator and the draw loop) */
 	assert( !memcmp( base + 0x57996, "\x81\xF9\x00\x04\x00\x00", 6 ));
 	assert( base[0x579A3] == 0x05 && Abs32( base + 0x579A4 ) == (unsigned)(size_t)decals );
