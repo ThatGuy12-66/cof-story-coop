@@ -1,6 +1,18 @@
-Cry of Fear Co-op 1.5.1
+Cry of Fear Co-op 1.5.2
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.5.2
+- The host's phone light turns with the camera again. In co-op, the host's phone light
+  stayed at the chest and only lit up the area around you, as if the phone were in a bag.
+  Now it points where you look.
+- The host's phone light also no longer takes over a guest's phone light while it is on.
+- This was an old clash in Cry of Fear's own game code, there since the first co-op
+  version. It also hit Play with AI and the first player on a dedicated server.
+- This fix hasn't been tried in a real game yet. If the phone light still misbehaves, tell
+  us on Discord.
+- 1.1 to 1.5.2 can play together. The fix is in each player's own game, so everyone
+  should update.
 
 WHAT'S NEW IN 1.5.1
 - Player tools, new in this version: F3 gets you unstuck (out of a wall or a prop, or next

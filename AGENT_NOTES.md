@@ -1,6 +1,6 @@
 # Cry of Fear co-op: persistent shared agent notes
 
-Last updated: 2026-11-10: 1.5.1 (build 38) prepared from the player-tools batch, which is now committed (see "1.5.1: the player tools" at the end; "Player tools (2026-11-09)" is its design). Version source of truth is `tools/coop_play.py`: `VERSION` `"1.1"` (join compatibility 1.1–1.5.1), `VERSION_LABEL` `"1.5.1"`. Do not treat the 1.1.9 status as the code state.
+Last updated: 2026-11-10: 1.5.2 (build 39), the host's phone-light fix (see "1.5.2: the host's phone light" at the end). Version source of truth is `tools/coop_play.py`: `VERSION` `"1.1"` (join compatibility 1.1–1.5.2), `VERSION_LABEL` `"1.5.2"`. Before that, 2026-11-10: 1.5.1 (build 38) prepared from the player-tools batch, which is now committed (see "1.5.1: the player tools" at the end; "Player tools (2026-11-09)" is its design). Version source of truth is `tools/coop_play.py`: `VERSION` `"1.1"` (join compatibility 1.1–1.5.1), `VERSION_LABEL` `"1.5.1"`. Do not treat the 1.1.9 status as the code state.
 
 ## Player tools (2026-11-09): coded, not played
 
@@ -1678,3 +1678,31 @@ The owner: "push the updated cry of fear coop to all relevant platforms as v 1.5
   OK (10 skipped), fresh install 279 s, the 1.5 -> 1.5.1 update passed, a save kept; publish exit 0. GitHub 1.5.1.
   Zip E28E57C8…, 157,912,370 bytes. Launcher 435f18d, engine 8270e89, mainui 1dbbd86, FreeVGUI 24ed352,
   Enhanced 59e14dd. Nothing pushed (as 1.5). The ModDB upload is the owner's (vidence/release-1.5.1/moddb-text.txt).
+
+## 1.5.2: the host's phone light (2026-11-10)
+
+The owner's bug report: on 1.5 and 1.5.1, every map, 2 players, host: the phone's light lit up the area around the body
+and did not turn with the camera ("like putting it in a bag"). The owner: "Fix the bug.", then "Ship it after that."
+- Cause (Dev 1, Dev 2 and Dev 3 separately, from the DeCoF decompilation and the retail bytes; not checked live): retail
+  client.dll `SetupFlashlight` (view.cpp:2913) makes the local phone spotlight with dlight key -1 every frame, and in MP
+  `DrawPlayerFlashlights` (gl_studiomodel.cpp:642, retail 0x10065260) calls `MY_AllocDlight(-i)` for every player with
+  frags bits 1/8/32, the local player included. The listen host is player 1, so its spotlight was wiped every frame and
+  replaced by a radius-60 light at the chest attachment (launcher d9cb87a gave Simon police1's chest as attachment 4).
+  A guest's own phone light (also -1) was taken while the host's light was on; -2 clashed with the holstered-phone light.
+  Present since the first co-op build (engine 0b8b06b0, launcher 5005823); story co-op exposed it (police co-op had no
+  phone). Also hit Play with AI, CoF's own co-op and slot 1 on a dedicated server. Single player is not affected.
+  `docs/research/2026-10-18-cof-decompilation-survey.md` (~line 198) had noted the clash.
+- Fix: renderer patch site 35 (`engine/client/cof_renderer_patch.h`, `COF_RP_SITES` 35) at RVA 0x6529A: the pre-loop
+  padding `66 0F 1F 44 00 00` becomes `83 45 F4 80 66 90` (add dword [ebp-0Ch],-128), so players' keys are -128 - i
+  (-128..-192), clear of the other client keys. Log line: "[cof-renderer] ... the players' lights keyed apart".
+  Dev 2's server-side alternative (per-client ScoreInfo without bits 1 and 8) was reverted and kept at
+  `evidence/host-phone-light-20261110/server-own-row-alternative.patch`.
+- Commits: engine `34b2cc14` (the fix) and `62b2f879` (stamp 1.5.2); launcher `ce01729` (harness site 35,
+  `test_enhanced_renderer_limits`, Dev 2's `tests/test_simon_chest_attachment.py`) and the release commit.
+- Version 1.5.2, build 39 (network version still 1.1: 1.1 to 1.5.2 play together; the fix is client-side, in each
+  player's engine). Notes `docs/releases/1.5.2.md`, readme WHAT'S NEW IN 1.5.2. Not played.
+- The engine was rebuilt (`tools\build_enhanced.cmd`) with console.c's object moved to
+  `evidence/release-1.5.2/console.c.2.o.pre-1.5.2` first (the stamp). Install checks use
+  `evidence/release-1.5/smoke-source/Cry of Fear` (`--source`).
+- Still to check in game: the host's phone light turns with the camera; a guest's phone stays a spotlight while the
+  host's light is on; the log line appears.
