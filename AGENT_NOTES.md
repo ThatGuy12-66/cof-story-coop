@@ -1674,3 +1674,7 @@ The owner: "push the updated cry of fear coop to all relevant platforms as v 1.5
 - The engine was rebuilt (`tools\build_enhanced.cmd`) with console.c's object moved to
   `evidence/release-1.5.1/console.c.2.o.pre-1.5.1` first (the stamp), as in 1.4 and 1.5. Install checks use
   `evidence/release-1.5/smoke-source/Cry of Fear` (`--source`).
+- **Published 1.5.1 2026-11-10 07:00 PT** (the owner: "push the updated cry of fear coop to all relevant platforms as v 1.5.1"): full suite 863
+  OK (10 skipped), fresh install 279 s, the 1.5 -> 1.5.1 update passed, a save kept; publish exit 0. GitHub 1.5.1.
+  Zip E28E57C8…, 157,912,370 bytes. Launcher 435f18d, engine 8270e89, mainui 1dbbd86, FreeVGUI 24ed352,
+  Enhanced 59e14dd. Nothing pushed (as 1.5). The ModDB upload is the owner's (vidence/release-1.5.1/moddb-text.txt).
