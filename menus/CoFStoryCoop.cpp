@@ -150,6 +150,17 @@ static bool UI_CoFStoryFieldsValid( CMenuField &name, CMenuField *password, char
 	return true;
 }
 
+// player tools (2026-11-09): the host's revive time, auto-respawn time and teammate outlines, as set now (the last game's,
+// the console's, or the default when the game has not set the cvar yet); no widgets for them on any page
+static void UI_CoFStoryHostTunables( cofStoryStart_t *s )
+{
+	s->cprTime = CoFStory_HostTunable( EngFuncs::GetCvarFloat( COF_STORY_CVAR_CPR ),
+		COF_STORY_CPR_MIN, COF_STORY_CPR_MAX, COF_STORY_CPR_DEFAULT );
+	s->respawnDelay = CoFStory_HostTunable( EngFuncs::GetCvarFloat( COF_STORY_CVAR_RESPAWN ),
+		COF_STORY_RESPAWN_MIN, COF_STORY_RESPAWN_MAX, COF_STORY_RESPAWN_DEFAULT );
+	s->outlines = CoFStory_HostTunable( EngFuncs::GetCvarFloat( COF_STORY_CVAR_OUTLINES ), 0, 1, 0 ) == 1;
+}
+
 static void UI_CoFStoryRun( const char *what, const char *text )
 {
 	Con_Printf( "Cry of Fear co-op: %s\n", what );
@@ -451,6 +462,7 @@ bool CMenuCoFStoryStart::Start( void )
 	s.bonusRoom = bonus.bChecked;
 	s.merged = merged.bChecked;
 	s.flashlight = torch.bChecked;
+	UI_CoFStoryHostTunables( &s );
 
 	static char text[COF_STORY_TEXT_MAX];
 	if( !CoFStory_StartCommands( text, sizeof( text ), &s ))
@@ -829,6 +841,7 @@ bool CMenuCoFStoryContinue::Start( bool solo )
 	s.bonusRoom = bonus.bChecked;
 	s.merged = c->merged;	// a continued session keeps the mode it was saved with
 	s.flashlight = torch.bChecked;
+	UI_CoFStoryHostTunables( &s );
 
 	static char text[COF_STORY_TEXT_MAX];
 	if( !CoFStory_StartCommands( text, sizeof( text ), &s ))

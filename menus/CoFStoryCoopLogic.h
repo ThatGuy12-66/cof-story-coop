@@ -43,6 +43,19 @@ text with the app's own for the same choices. Plain C++ with no STL and no excep
 // not set it (the game opened without the app), so the app's Join takes it
 #define COF_STORY_BUILD          "1.1"
 
+// player tools (2026-11-09), coop_play.CPR_TIME and RESPAWN_DELAY: the host's revive time (seconds of CPR), auto-respawn
+// time (this project's delay, not retail 384) and teammate outlines when far (off). A start writes them; Host and
+// Continue read them from these cvars (CoFStory_HostTunable), with no page of their own.
+#define COF_STORY_CVAR_CPR       "sv_coopcprtime"
+#define COF_STORY_CVAR_RESPAWN   "cof_story_respawn_delay"
+#define COF_STORY_CVAR_OUTLINES  "cof_outlines"
+#define COF_STORY_CPR_MIN        1
+#define COF_STORY_CPR_MAX        20
+#define COF_STORY_CPR_DEFAULT    5
+#define COF_STORY_RESPAWN_MIN    5
+#define COF_STORY_RESPAWN_MAX    90
+#define COF_STORY_RESPAWN_DEFAULT 10
+
 // coop_play.STORY_SETTINGS, in order: every game the app starts (story co-op on, the test tools off, the movement
 // and network rates of 1.1.9)
 static const char *const g_cofStorySettings[] =
@@ -283,7 +296,19 @@ struct cofStoryStart_t
 	bool        bonusRoom;  // the bonus room open for everyone; unticked, as far as the host has unlocked it (1.3.8)
 	bool        merged;     // merged story maps; Continue passes the checkpoint's own
 	bool        flashlight; // the co-op flashlight on F
+	int         cprTime;      // sv_coopcprtime, COF_STORY_CPR_MIN to _MAX (player tools)
+	int         respawnDelay; // cof_story_respawn_delay, COF_STORY_RESPAWN_MIN to _MAX
+	bool        outlines;     // cof_outlines
 };
+
+// a host setting as a page reads it from its cvar: a whole number in range is kept, anything else (out of range, not
+// set yet: 0) is the default
+static int CoFStory_HostTunable( float value, int lo, int hi, int def )
+{
+	const int v = (int)value;
+
+	return (float)v == value && v >= lo && v <= hi ? v : def;
+}
 
 static void CoFStory_AddSettings( cofStoryText_t *t )
 {
@@ -305,7 +330,9 @@ static bool CoFStory_StartCommands( char *out, size_t size, const cofStoryStart_
 
 	if( !s->name || !s->name[0] || !CoFStory_MapValid( s->map ) || s->places < 2 || s->places > 32 ||
 		s->companions < ( s->solo ? 1 : 0 ) || s->companions > s->places - 1 ||
-		( s->slot && s->slot[0] && ( !s->cont || !CoFStory_SlotValid( s->slot ))))
+		( s->slot && s->slot[0] && ( !s->cont || !CoFStory_SlotValid( s->slot ))) ||
+		s->cprTime < COF_STORY_CPR_MIN || s->cprTime > COF_STORY_CPR_MAX ||
+		s->respawnDelay < COF_STORY_RESPAWN_MIN || s->respawnDelay > COF_STORY_RESPAWN_MAX )
 	{
 		if( size ) out[0] = 0;
 		return false;
@@ -326,6 +353,9 @@ static bool CoFStory_StartCommands( char *out, size_t size, const cofStoryStart_
 	CoFStory_TextAdd( &t, "cof_bonus_room %d\n", s->bonusRoom ? 1 : -1 );
 	CoFStory_TextAdd( &t, "cof_merged_maps %d\n", s->merged ? 1 : 0 );
 	CoFStory_TextAdd( &t, "cof_coop_flashlight %d\n", s->flashlight ? 1 : 0 );
+	CoFStory_TextAdd( &t, COF_STORY_CVAR_CPR " %d\n", s->cprTime );
+	CoFStory_TextAdd( &t, COF_STORY_CVAR_RESPAWN " %d\n", s->respawnDelay );
+	CoFStory_TextAdd( &t, COF_STORY_CVAR_OUTLINES " %d\n", s->outlines ? 1 : 0 );
 	CoFStory_TextAdd( &t, "cof_continue_slot \"%s\"\n", s->slot ? s->slot : "" );
 	CoFStory_TextAdd( &t, "cof_maps \"%s\"\n", s->merged && CoFStory_TagValid( s->maps ) ? s->maps : "" );
 	// a chapter start: the engine hands out what the story would have given by then (1.1.8)
