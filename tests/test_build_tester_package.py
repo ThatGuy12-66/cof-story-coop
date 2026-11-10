@@ -25,14 +25,14 @@ class BuilderTests(unittest.TestCase):
                         "source-and-licences/notices/PYTHON-LICENSE.txt"):
                 (folder / rel).parent.mkdir(parents=True, exist_ok=True)
                 (folder / rel).write_bytes(b"x")
-            path = Path(temp) / "CoF-Story-Coop-1.5.zip"
+            path = Path(temp) / "CoF-Story-Coop-1.5.1.zip"
             builder.write_zip(folder, path)
             with zipfile.ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 self.assertEqual(sorted(archive.namelist()), [
                     "CoF Story Co-op.exe", "READ ME FIRST.txt", "source-and-licences/corresponding-source.zip",
                     "source-and-licences/notices/PYTHON-LICENSE.txt"])
-        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.5.zip")
+        self.assertEqual(builder.ZIP_NAME, "CoF-Story-Coop-1.5.1.zip")
 
     def test_the_app_carries_the_merged_map_groups(self):
         out, payload = Path("C:/out"), Path("C:/out/payload")
@@ -64,9 +64,9 @@ class BuilderTests(unittest.TestCase):
 
     def test_readme_names_the_release_and_no_test_or_dev_tools(self):
         text = builder.README.read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("Cry of Fear Co-op 1.5\n"))
-        self.assertIn("WHAT'S NEW IN 1.5", text)
-        self.assertIn("1.1 to 1.5 can play together", text)
+        self.assertTrue(text.startswith("Cry of Fear Co-op 1.5.1\n"))
+        self.assertIn("WHAT'S NEW IN 1.5.1", text)
+        self.assertIn("1.1 to 1.5.1 can play together", text)
         self.assertIn("https://discord.gg/4uwV6jmmY7", text)
         for word in ("protocol", "sha256", "rcon", "console", "test build", "test package", "tester", "cheat"):
             self.assertNotIn(word, text.lower())

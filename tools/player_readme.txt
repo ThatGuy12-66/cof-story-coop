@@ -1,6 +1,27 @@
-Cry of Fear Co-op 1.5
+Cry of Fear Co-op 1.5.1
 
 Play the Cry of Fear campaign together (2 to 4 players), or alone with AI companions.
+
+WHAT'S NEW IN 1.5.1
+- Player tools, new in this version: F3 gets you unstuck (out of a wall or a prop, or next
+  to your partner); G tells everyone where you are (your name and how far away);
+  V scares the nearest teammate (a message only, no sound yet); Q drops one box of your
+  spare ammo for someone else; F6 hides or shows the HUD; T sprays your own picture.
+  These keys are only set where your own controls leave them free.
+- A Comfort row in the app: field of view, head bob, a faint light around you in the
+  dark, black and white, hide the HUD, and your spray (a .png or .bmp picture). They
+  apply to every game the app starts, hosting or joining.
+- "Name is down" when a teammate goes down, and the objective is shown again when you
+  join late, after a respawn and after getting unstuck.
+- The app remembers the last game you joined over the network and offers to rejoin it
+  (Dismiss hides it).
+- For hosts: the revive time, the respawn time and outlines on teammates far away are now
+  settings the game reads when a co-op game starts (by default 5 seconds, 10 seconds and
+  off). The app has no buttons for them yet.
+- These tools were made for this version and haven't been tried in a real game yet. If
+  one misbehaves, tell us on Discord.
+- 1.1 to 1.5.1 can play together. Unstuck, ping, scare, spare ammo, black and white and
+  the host settings work when the host has 1.5.1.
 
 WHAT'S NEW IN 1.5
 - A language setting. The list at the bottom of the app picks the language of the app and
@@ -433,6 +454,12 @@ H      tell the AI companions to wait or to follow
 O      open the wardrobe (outfits) anywhere, when the bonus room is open
 Y      text chat
 K      voice chat (hold to talk)
+F3     unstuck
+G      ping: tell everyone where you are
+V      scare the nearest teammate
+Q      drop a box of spare ammo
+F6     hide or show the HUD
+T      spray your picture
 Space  when dead: respawn next to your partner after about 10 seconds
 
 UPDATES
