@@ -1706,3 +1706,10 @@ and did not turn with the camera ("like putting it in a bag"). The owner: "Fix t
   `evidence/release-1.5/smoke-source/Cry of Fear` (`--source`).
 - Still to check in game: the host's phone light turns with the camera; a guest's phone stays a spotlight while the
   host's light is on; the log line appears.
+- **Published 1.5.2 2026-11-10 10:13 PT** (the owner: "Ship it after that."): full suite 867 OK (10 skipped), fresh
+  install 401 s, the 1.5.1 -> 1.5.2 update 56 s, a save kept. GitHub `v1.5.2` latest. `release.py publish` exited 1
+  only because its 60-second wait for the latest/download link ran out ("FAIL the releases page shows the new
+  version"); a minute later `releases/latest/download/release.json` served 1.5.2 build 39, and the bot logged
+  "Posted release 1.5.2 from the releases page" at 10:15:58 PT. Zip `5E643151...`, 157,913,640 bytes. Launcher
+  `764da52`, engine `62b2f879`, FreeVGUI `24ed352`. Nothing pushed. The ModDB upload is the owner's
+  (`evidence/release-1.5.2/moddb-text.txt`).
