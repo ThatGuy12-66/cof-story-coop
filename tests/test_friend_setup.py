@@ -212,6 +212,29 @@ class FriendSetupTests(unittest.TestCase):
                      'bind "o" "cof_wardrobe"'):
             self.assertIn(line, controls)
 
+    def test_the_player_tool_keys_take_only_free_keys(self):
+        # player tools (2026-11-09): F3 unstuck, G ping, V scare, Q drop ammo, F6 the HUD, T the spray; J, K, H, Enter,
+        # O, Y and F keep theirs, and a key the player bound to anything else stays theirs
+        binds = dict(re.findall(r'bind "([^"]+)" "([^"]+)"', friend.default_controls()))
+        tools = {"F3": "cof_unstuck", "g": "cof_ping", "v": "cof_scare", "q": "cof_dropammo", "F6": "toggle hud_draw",
+                 "t": "impulse 201"}
+        for key, command in tools.items():
+            self.assertEqual(binds[key], command)
+            self.assertIn((key, command), friend.COOP_KEYS)
+        for key, command in (("j", "cof_warp"), ("k", "+voicerecord"), ("h", "cof_companion_order"),
+                             ("ENTER", "cof_skip"), ("o", "cof_wardrobe"), ("y", "messagemode"), ("f", "flashlight")):
+            self.assertEqual(binds[key], command)
+            self.assertNotIn(key.lower(), {k.lower() for k in tools})
+        self.assertEqual({c for c, _ in friend.COOP_ACTIONS} >= set(tools.values()), True)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "cryoffear").mkdir()
+            (root / "cryoffear/config.cfg").write_text('bind "q" "lastinv"\nbind "T" "messagemode2"\n', encoding="ascii")
+            missing = friend.missing_coop_binds(root)
+            self.assertNotIn('"q"', missing)
+            self.assertNotIn('"t"', missing)
+            self.assertIn('bind "F3" "cof_unstuck"\n', missing)
+
     def test_the_wardrobe_key_is_one_the_controls_leave_free(self):
         # after 1.1.9: O opens the wardrobe; K (the candidate) is the voice key, and no other key had O
         binds = re.findall(r'bind "([^"]+)" "([^"]+)"', friend.default_controls())
@@ -998,7 +1021,9 @@ class MissingCoopBindTests(unittest.TestCase):
             (root / "cryoffear/config.cfg").write_text('bind "j" "cof_warp"\nbind "H" "cof_companion_order"\n'
                                                        'bind ENTER cof_skip\nbind "KP_ENTER" "cof_skip"\n'
                                                        'name "Bob"\n', encoding="ascii")
-            self.assertEqual(friend.missing_coop_binds(root), 'bind "o" "cof_wardrobe"\n')
+            self.assertEqual(friend.missing_coop_binds(root), 'bind "o" "cof_wardrobe"\nbind "F3" "cof_unstuck"\n'
+                             'bind "g" "cof_ping"\nbind "v" "cof_scare"\nbind "q" "cof_dropammo"\n'
+                             'bind "F6" "toggle hud_draw"\nbind "t" "impulse 201"\n')
             (root / "cryoffear/config.cfg").write_text('bind "o" "+voicerecord"\nbind "j" "cof_warp"\n',
                                                        encoding="ascii")
             missing = friend.missing_coop_binds(root)
@@ -1022,13 +1047,21 @@ class CoopKeyListTests(unittest.TestCase):
             notes = []
             friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
             kb_def, kb_act = (shell / "kb_def.lst").read_bytes(), (shell / "kb_act.lst").read_bytes()
-            # j, ENTER, KP_ENTER and o added; h keeps the list's own command
+            # j, ENTER, KP_ENTER, o and the player-tool keys added; h keeps the list's own command
             self.assertEqual(kb_def, KB_DEF + b'"j"\t\t"cof_warp"\r\n"ENTER"\t\t"cof_skip"\r\n"KP_ENTER"\t\t"cof_skip"\r\n'
-                                              b'"o"\t\t"cof_wardrobe"\r\n')
+                                              b'"o"\t\t"cof_wardrobe"\r\n"F3"\t\t"cof_unstuck"\r\n"g"\t\t"cof_ping"\r\n'
+                                              b'"v"\t\t"cof_scare"\r\n"q"\t\t"cof_dropammo"\r\n'
+                                              b'"F6"\t\t"toggle hud_draw"\r\n"t"\t\t"impulse 201"\r\n')
             # cof_skip is in the menu already; the file had no last line ending
             self.assertEqual(kb_act, KB_ACT + b'\r\n"cof_warp"\t\t"Join your partner (co-op)"\r\n'
                                               b'"cof_companion_order"\t\t"AI companions: wait or follow"\r\n'
-                                              b'"cof_wardrobe"\t\t"Wardrobe (costumes)"\r\n')
+                                              b'"cof_wardrobe"\t\t"Wardrobe (costumes)"\r\n'
+                                              b'"cof_unstuck"\t\t"Unstuck (co-op)"\r\n'
+                                              b'"cof_ping"\t\t"Ping: where you are (co-op)"\r\n'
+                                              b'"cof_scare"\t\t"Scare a teammate (co-op)"\r\n'
+                                              b'"cof_dropammo"\t\t"Drop spare ammo (co-op)"\r\n'
+                                              b'"toggle hud_draw"\t\t"Hide or show the HUD"\r\n'
+                                              b'"impulse 201"\t\t"Spray"\r\n')
             self.assertEqual(len(notes), 2)
             friend.add_coop_keys(Path(temp), mock.Mock(note=notes.append))
             self.assertEqual(((shell / "kb_def.lst").read_bytes(), (shell / "kb_act.lst").read_bytes()), (kb_def, kb_act))

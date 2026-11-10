@@ -55,9 +55,20 @@ STORY_SETTINGS = (
     "rate 100000", "cl_cmdrate 100", "cl_updaterate 100", "sv_maxupdaterate 100", "ex_interp 0.1",
     "cl_forwardspeed 300", "cl_backspeed 200", "cl_sidespeed 200", "+mlook",
 )
+# Player tools (2026-11-09): the host's revive time (sv_coopcprtime, seconds of CPR), auto-respawn time
+# (cof_story_respawn_delay, this project's delay, not retail 384) and teammate outlines when far (cof_outlines, off).
+# host_launch and the menu (CoFStory_StartCommands) write them in the same order with the same ranges.
+CPR_TIME = (1, 20, 5)          # low, high, default
+RESPAWN_DELAY = (5, 90, 10)
+FOV = (70, 110, 90)            # cof_fov (engine client/cl_view.c): the hip field of view, 90 is the game's own
 DEFAULT_SETTINGS = {"name": "", "port": DEFAULT_PORT, "players": 2, "companion": False, "password": "",
                     "bonus_room": False, "first_launch_done": False, "companions": 1, "merged_maps": True,
-                    "coop_flashlight": False}
+                    "coop_flashlight": False,
+                    # comfort (comfort_config, every game the app starts) and the spray (install_spray)
+                    "fov": FOV[2], "head_bob": True, "noir": False, "faint_light": True, "hide_hud": False,
+                    "spray": "",
+                    # the last host joined over the network, offered once to rejoin until dismissed ("" none)
+                    "last_host": ""}
 MAX_COMPANIONS = 3   # the game takes four players at most
 _MAP = re.compile(r"[a-z0-9_]{1,32}\Z")
 _SLOT = re.compile(r"[a-z0-9_-]{1,24}\Z")
@@ -136,7 +147,8 @@ def merged_maps_tag(merged_maps: dict) -> str:
 def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players: int, password: str,
                 companions: int, port: int, cont: bool, video: list[str],
                 bonus_room: bool = False, merged: bool = True, coop_flashlight: bool = False,
-                maps: str = "", slot: str = "") -> tuple[list[str], str]:
+                maps: str = "", slot: str = "", cpr_time: int = CPR_TIME[2], respawn_delay: int = RESPAWN_DELAY[2],
+                outlines: bool = False) -> tuple[list[str], str]:
     """Play solo (LAN only, with AI companions) or host: the command line and the session cfg.
 
     companions: how many AI companion bots to keep (each gives its place to a friend who joins).
@@ -148,7 +160,9 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
     coop_flashlight: F gives everyone a free torch (Cry of Fear's co-op mode); off, the light is Simon's phone and
     the story's own lights, as in the single-player game.
     maps: merged_maps_tag of the host's copy, sent (cof_maps) only with merged maps on, for check_host.
-    slot: 1.3.3, the checkpoint Continue loads (Checkpoint.slot, list_checkpoints); empty, the latest."""
+    slot: 1.3.3, the checkpoint Continue loads (Checkpoint.slot, list_checkpoints); empty, the latest.
+    cpr_time, respawn_delay, outlines: player tools (2026-11-09), the host's revive time (1 to 20 s), auto-respawn time
+    (5 to 90 s) and teammate outlines when far (off by default)."""
     name = clean_name(name)
     password = "" if solo else clean_password(password)
     map_name = map_name.lower()
@@ -160,11 +174,16 @@ def host_launch(runtime: Path, *, solo: bool, name: str, map_name: str, players:
         raise ValueError("AI companions: one for each free place at most.")
     if slot and (not cont or not _SLOT.match(slot)):
         raise ValueError("Unknown checkpoint.")
+    if type(cpr_time) is not int or not CPR_TIME[0] <= cpr_time <= CPR_TIME[1]:
+        raise ValueError(f"Revive time: {CPR_TIME[0]} to {CPR_TIME[1]} seconds.")
+    if type(respawn_delay) is not int or not RESPAWN_DELAY[0] <= respawn_delay <= RESPAWN_DELAY[1]:
+        raise ValueError(f"Respawn time: {RESPAWN_DELAY[0]} to {RESPAWN_DELAY[1]} seconds.")
     lines = [f'name "{name}"', f"maxplayers {players}", f"sv_lan {1 if solo else 0}",
              f'sv_password "{password}"', f'password "{password}"', f'hostname "{name}\'s game"',
              f"cof_companion {companions}", "cof_companion_drive 0",
              f"cof_build {VERSION}", f"cof_label {VERSION_LABEL}", f"cof_continue {1 if cont else 0}", f"cof_bonus_room {1 if bonus_room else -1}",
              f"cof_merged_maps {1 if merged else 0}", f"cof_coop_flashlight {1 if coop_flashlight else 0}",
+             f"sv_coopcprtime {cpr_time}", f"cof_story_respawn_delay {respawn_delay}", f"cof_outlines {1 if outlines else 0}",
              f'cof_continue_slot "{slot}"']
     if merged and _TAG.match(maps):
         lines.append(f"cof_maps {maps}")
@@ -232,6 +251,89 @@ def join_launch(runtime: Path, *, name: str, password: str, endpoint: str, video
     args = [str(runtime / "CoFLaunchApp.exe"), *video, "-log", LOG, "-logtime",
             "+exec", STORY_CFG, "+exec", SESSION_CFG, "+connect", str(target)]
     return args, config
+
+
+# engine client/cl_main.c CL_SendBandwidthTest / CL_CheckForResend: "Connecting to %s... (retry #%i[, test #%i])"
+_CONNECTING = re.compile(r"Connecting to (\S+)\.\.\. \(retry #\d+")
+
+
+def last_remote_host(log_text: str) -> str:
+    """Player tools (2026-11-09): the last host the game connected to over the network, from its log (LOG), as a join
+    endpoint ("host:port"), or "" when it joined none. The game's own server (localhost, loopback, 127.x) is not one."""
+    for match in reversed(_CONNECTING.findall(log_text or "")):
+        try:
+            endpoint = network.parse_endpoint(match)
+        except ValueError:
+            continue
+        host = str(endpoint).rsplit(":", 1)[0].lower()
+        if host in ("localhost", "loopback") or host.startswith("127."):
+            continue
+        return str(endpoint)
+    return ""
+
+
+def read_last_host(runtime: Path) -> str:
+    """last_remote_host of the copy's last game log; "" without one."""
+    try:
+        return last_remote_host((Path(runtime) / LOG).read_bytes().decode("latin-1"))
+    except OSError:
+        return ""
+
+
+SPRAY_TYPES = ("png", "bmp")   # what the engine packs as a spray (cl_logoext, client/cl_main.c CL_CreateResourceList)
+
+
+def spray_type(path) -> str:
+    """"png" or "bmp" for a spray picture the engine takes (a name before the extension), else ""."""
+    name = Path(str(path or "")).name
+    stem, dot, ext = name.rpartition(".")
+    return ext.lower() if dot and stem and ext.lower() in SPRAY_TYPES else ""
+
+
+def install_spray(runtime: Path, picture) -> str:
+    """The player's spray: the picture copied to the copy's cryoffear/logos/remapped.png or .bmp, the file the engine
+    sends, and the session lines that pick it (cl_logoext, then @cl_logoupdate to send it again). "" with no picture,
+    one of another type, or one that cannot be read; a start never stops for it."""
+    ext = spray_type(picture)
+    if not ext:
+        return ""
+    try:
+        data = Path(picture).read_bytes()
+        if not data:
+            return ""
+        logos = Path(runtime) / "cryoffear" / "logos"
+        logos.mkdir(parents=True, exist_ok=True)
+        target = logos / f"remapped.{ext}"
+        partial = target.with_name(target.name + ".partial")
+        partial.write_bytes(data)
+        os.replace(partial, target)
+    except OSError:
+        return ""
+    return f"cl_logoext {ext}\n@cl_logoupdate 1\n"
+
+
+# The faint light around the player in the dark (client.dll, not archived: its own defaults at every start); off, no
+# radius. Client cvars: the engine may call them unknown when the session cfg runs before client.dll registers them.
+FAINT_LIGHT = (("cof_reducedlightradius", "60"), ("cof_reducedlightxangle", "50"), ("cof_reducedlightzangle", "90"),
+               ("cof_reducedlightcolour1", "0.23"), ("cof_reducedlightcolour2", "0.23"),
+               ("cof_reducedlightcolour3", "0.26"))
+HEAD_BOB = "0.01"   # client.dll cl_bob's own default
+
+
+def comfort_config(settings: dict) -> str:
+    """Player tools (2026-11-09): each player's own comfort settings, for the session cfg of every game the app starts
+    (App.launch), host or guest: the field of view (cof_fov), head bob (cl_bob), black and white (setinfo sc_noir: the
+    host's engine sends that player BlackWhite), the faint light and the HUD (hud_draw; F6 toggles it in the game).
+    Every line is written every time, so turning one off and on again restores the game's own value."""
+    values = dict(DEFAULT_SETTINGS)
+    values.update({key: value for key, value in dict(settings or {}).items()
+                   if key in DEFAULT_SETTINGS and type(value) is type(DEFAULT_SETTINGS[key])})
+    fov = values["fov"] if FOV[0] <= values["fov"] <= FOV[1] else FOV[2]
+    lines = [f"cof_fov {fov}", f"cl_bob {HEAD_BOB if values['head_bob'] else '0'}",
+             f"setinfo sc_noir {1 if values['noir'] else 0}", f"hud_draw {0 if values['hide_hud'] else 1}"]
+    lines += [f"{name} {value if values['faint_light'] or name != FAINT_LIGHT[0][0] else '0'}"
+              for name, value in FAINT_LIGHT]
+    return "\n".join(lines) + "\n"
 
 
 def check_host(info: dict, *, password: str, maps: str = "") -> None:

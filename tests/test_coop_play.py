@@ -460,6 +460,82 @@ class HostWatchTests(unittest.TestCase):
         self.assertEqual((watch.code, net.unmapped), ('', 0))
 
 
+class PlayerToolsTests(unittest.TestCase):
+    """Player tools (2026-11-09): the host's tunables, each player's comfort settings and spray, and the rejoin."""
+
+    def host(self, **extra):
+        return play.host_launch(Path('copy'), solo=False, name='Bob', map_name='c_start', players=2, password='',
+                                companions=0, port=27015, cont=False, video=[], **extra)[1]
+
+    def test_the_hosts_revive_and_respawn_times_and_outlines(self):
+        cfg = self.host()
+        for line in ('sv_coopcprtime 5', 'cof_story_respawn_delay 10', 'cof_outlines 0'):
+            self.assertIn(line + '\n', cfg)
+        cfg = self.host(cpr_time=20, respawn_delay=5, outlines=True)
+        for line in ('sv_coopcprtime 20', 'cof_story_respawn_delay 5', 'cof_outlines 1'):
+            self.assertIn(line + '\n', cfg)
+        for bad in (dict(cpr_time=0), dict(cpr_time=21), dict(respawn_delay=4), dict(respawn_delay=384),
+                    dict(cpr_time='5'), dict(respawn_delay=True)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.host(**bad)
+
+    def test_new_settings_keep_their_types(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / play.SETTINGS).write_text('{"fov": "wide", "noir": 1, "spray": 5, "last_host": "1.2.3.4:27015",'
+                                              ' "head_bob": false}', encoding='utf-8')
+            settings = play.load_settings(root)
+        self.assertEqual((settings['fov'], settings['noir'], settings['spray']), (90, False, ''))
+        self.assertEqual((settings['last_host'], settings['head_bob']), ('1.2.3.4:27015', False))
+        for key in ('fov', 'head_bob', 'noir', 'faint_light', 'hide_hud', 'spray', 'last_host'):
+            self.assertIn(key, play.DEFAULT_SETTINGS)
+
+    def test_comfort_lines_restore_the_games_own_values_by_default(self):
+        self.assertEqual(play.comfort_config({}).splitlines(), [
+            'cof_fov 90', 'cl_bob 0.01', 'setinfo sc_noir 0', 'hud_draw 1', 'cof_reducedlightradius 60',
+            'cof_reducedlightxangle 50', 'cof_reducedlightzangle 90', 'cof_reducedlightcolour1 0.23',
+            'cof_reducedlightcolour2 0.23', 'cof_reducedlightcolour3 0.26'])
+        lines = play.comfort_config(dict(fov=105, head_bob=False, noir=True, faint_light=False, hide_hud=True)).splitlines()
+        for line in ('cof_fov 105', 'cl_bob 0', 'setinfo sc_noir 1', 'hud_draw 0', 'cof_reducedlightradius 0'):
+            self.assertIn(line, lines)
+        self.assertIn('cof_fov 90', play.comfort_config(dict(fov=200)).splitlines())
+        self.assertIn('cof_fov 90', play.comfort_config(dict(fov='105')).splitlines())
+        # cof_fov is the engine's (70 to 110)
+        view = (ENGINE_SERVER.parent / 'client/cl_view.c').read_text(encoding='latin-1')
+        self.assertIn('CVAR_DEFINE_AUTO( cof_fov, "90",', view)
+        self.assertIn('bound( 70, cof_fov, 110 )', view)
+
+    def test_a_spray_is_copied_where_the_engine_sends_it_from(self):
+        self.assertEqual([play.spray_type(n) for n in ('a.png', 'B.BMP', 'c.gif', '.png', 'png', '', None)],
+                         ['png', 'bmp', '', '', '', '', ''])
+        with tempfile.TemporaryDirectory() as temp:
+            root, picture = Path(temp) / 'copy', Path(temp) / 'Me.Bmp'
+            picture.write_bytes(b'BM spray')
+            self.assertEqual(play.install_spray(root, picture), 'cl_logoext bmp\n@cl_logoupdate 1\n')
+            self.assertEqual((root / 'cryoffear/logos/remapped.bmp').read_bytes(), b'BM spray')
+            self.assertEqual(play.install_spray(root, Path(temp) / 'missing.png'), '')
+            self.assertEqual(play.install_spray(root, ''), '')
+        cl_main = (ENGINE_SERVER.parent / 'client/cl_main.c').read_text(encoding='latin-1')
+        self.assertIn('"logos/remapped.%s", cl_logoext.string', cl_main)
+        self.assertIn('CVAR_DEFINE( cl_logoupdate, "@cl_logoupdate",', cl_main)
+
+    def test_the_last_remote_host_from_the_game_log(self):
+        log = ('[2026:11:09|03:00:00] Connecting to 203.0.113.7:27016... (retry #0)\n'
+               '[2026:11:09|03:00:01] Connecting to Example.COM:28000... (retry #1, test #0)\n'
+               '[2026:11:09|03:10:00] Connecting to localhost... (retry #0)\n'
+               'Connecting to 127.0.0.1:27015... (retry #0)\nConnecting to loopback... (retry #0)\n')
+        self.assertEqual(play.last_remote_host(log), 'example.com:28000')
+        self.assertEqual(play.last_remote_host('Connecting to localhost... (retry #0)\n'), '')
+        self.assertEqual(play.last_remote_host('Connecting to bad;host... (retry #0)\n'), '')
+        self.assertEqual(play.last_remote_host(''), '')
+        cl_main = (ENGINE_SERVER.parent / 'client/cl_main.c').read_text(encoding='latin-1')
+        self.assertIn('Con_Printf( "Connecting to %s... (retry #%i)\\n", cls.servername, cls.connect_retry );', cl_main)
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(play.read_last_host(Path(temp)), '')
+            (Path(temp) / play.LOG).write_bytes(log.encode('latin-1'))
+            self.assertEqual(play.read_last_host(Path(temp)), 'example.com:28000')
+
+
 class SettingsTests(unittest.TestCase):
     def test_settings_round_trip_with_defaults(self):
         with tempfile.TemporaryDirectory() as temp:

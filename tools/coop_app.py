@@ -170,7 +170,12 @@ class ProgressPanel:
 # the co-op keys the main screen shows (friend_setup.COOP_KEYS binds them)
 COOP_KEYS = (("J", "join your partner"), ("Enter", "skip a cutscene for everyone"),
              ("H", "AI companions wait or follow"), ("O", "the wardrobe (with the bonus room)"),
-             ("Y", "text chat"), ("K", "voice chat (hold to talk)"))   # 1.3.8: bound since 1.0, never shown
+             ("Y", "text chat"), ("K", "voice chat (hold to talk)"),   # 1.3.8: bound since 1.0, never shown
+             # player tools (2026-11-09), where the player's own config left the key free
+             ("F3", "unstuck"), ("G", "ping: where you are"), ("V", "scare a teammate"),
+             ("Q", "drop spare ammo"), ("F6", "hide or show the HUD"), ("T", "spray"))
+COMFORT_CHECKS = (("head_bob", "Head bob"), ("faint_light", "Faint light"), ("noir", "Black and white"),
+                  ("hide_hud", "Hide the HUD"))
 
 # 1.1.8 (L14.2): closing the window ends a setup or update part way (its worker thread dies with the app)
 BUSY_WARNINGS = {
@@ -596,6 +601,7 @@ class App:
         self.update_slot = ttk.Frame(body)
         self.update_slot.pack(fill="x")
         self.show_offer()
+        self.show_rejoin(body)
         holder = self.row(body, "Your name", 12)
         self.name = tk.StringVar(value=getattr(self, "typed_name", None) or self.settings["name"])
         self.name.trace_add("write", lambda *_: setattr(self, "typed_name", self.name.get()))
@@ -610,7 +616,94 @@ class App:
                   style="Hint.TLabel", wraplength=760, justify="left").pack(anchor="w")
         theme.section(ttk, body, T("In the game"), top=18)
         theme.keycaps(tk, body, [(key, T(text)) for key, text in COOP_KEYS])
+        self.show_comfort(body)
         self.check_for_update()
+
+    def show_comfort(self, body):
+        """Player tools (2026-11-09): this player's comfort settings and spray, saved at once and written into every
+        game this app starts, host or guest (play.comfort_config, play.install_spray in launch)."""
+        ttk, tk = self.ttk, self.tk
+        theme.section(ttk, body, T("Comfort"), top=6)
+        row = ttk.Frame(body)
+        row.pack(fill="x")
+        ttk.Label(row, text=T("Field of view"), style="Field.TLabel").pack(side="left")
+        fov = tk.StringVar(value=str(self.settings["fov"]))
+
+        def fov_changed(*_):
+            try:
+                value = int(fov.get().strip())
+            except ValueError:
+                return
+            if play.FOV[0] <= value <= play.FOV[1] and value != self.settings.get("fov"):
+                self.remember(fov=value)
+        fov.trace_add("write", fov_changed)
+        ttk.Spinbox(row, from_=play.FOV[0], to=play.FOV[1], increment=5, width=4,
+                    textvariable=fov).pack(side="left", padx=(6, 0))
+        for key, label in COMFORT_CHECKS:
+            var = tk.BooleanVar(value=self.settings[key])
+            ttk.Checkbutton(row, text=T(label), variable=var,
+                            command=lambda k=key, v=var: self.remember(**{k: v.get()})).pack(side="left", padx=(14, 0))
+        spray = self.settings["spray"]
+        self.spray_name = tk.StringVar(value=Path(spray).name if spray else "")
+        ttk.Button(row, text=T("Spray…"), command=self.guard(self.pick_spray), style="Ghost.TButton").pack(side="right")
+        ttk.Label(row, textvariable=self.spray_name, style="Hint.TLabel").pack(side="right", padx=(0, 4))
+
+    def pick_spray(self):
+        """The spray (T in the game): a .png or .bmp picture, copied into the copy when the game starts."""
+        from tkinter import filedialog
+        chosen = filedialog.askopenfilename(parent=self.window, title=T("Your spray (a .png or .bmp picture)"),
+                                            filetypes=[(T("Spray picture"), "*.png *.bmp")])
+        if not chosen:
+            return
+        if not play.spray_type(chosen):
+            raise ValueError(T("A spray is a .png or .bmp picture."))
+        self.remember(spray=str(chosen))
+        self.spray_name.set(Path(chosen).name)
+
+    def show_rejoin(self, body):
+        """Player tools (2026-11-09): the last host this player's game joined over the network (play.read_last_host,
+        when that game ended), offered until dismissed."""
+        host = self.settings.get("last_host", "")
+        if not host:
+            return
+        ttk = self.ttk
+        box = self.tk.Frame(body, background=theme.PANEL, highlightthickness=1, highlightbackground=theme.LINE)
+        box.pack(fill="x", pady=(0, 12))
+        self.tk.Frame(box, background=theme.ACCENT, width=3).pack(side="left", fill="y")
+        inner = ttk.Frame(box, style="Card.TFrame", padding=(14, 10, 12, 10))
+        inner.pack(side="left", fill="both", expand=True)
+        ttk.Button(inner, text=T("Dismiss"), command=self.guard(self.dismiss_rejoin)).pack(side="right")
+        ttk.Button(inner, text=T("Rejoin"), command=self.guard(self.rejoin), style="Accent.TButton").pack(side="right",
+                                                                                                         padx=8)
+        ttk.Label(inner, text=T("Rejoin {host}", host=host), style="Offer.TLabel").pack(anchor="w")
+        ttk.Label(inner, text=T("The last game you joined."), style="OfferText.TLabel").pack(anchor="w")
+
+    def dismiss_rejoin(self):
+        self.remember(last_host="")
+        self.show_main(self.root, adopt=False)
+
+    def rejoin(self):
+        """Back into the last host's game (play.join_launch, no password: a game with one says so); when the player
+        leaves it, the game is at its main menu, as after Play."""
+        name = play.clean_name(self.name.get())
+        args, config = play.join_launch(self.root, name=name, password="", endpoint=self.settings["last_host"],
+                                        video=self.video())
+        self.open_button.configure(state="disabled")
+        root = self.root
+
+        def started():
+            self.show_running(play.MenuWatch(play.DEFAULT_PORT, runtime=root))
+
+        def stopped():
+            if self.open_button.winfo_exists():
+                self.open_button.configure(state="normal")
+        self.launch(args, config, started, stopped)
+
+    def game_ended(self, root):
+        """When a game ends: the host it last joined over the network, for the main screen's rejoin."""
+        host = play.read_last_host(root)
+        if host and self.root is not None and Path(root) == Path(self.root):
+            self.remember(last_host=host)
 
     def remember(self, **values):
         self.settings.update(values)
@@ -645,9 +738,11 @@ class App:
                 (root / "cryoffear" / play.STORY_CFG).write_text(play.story_config(), encoding="ascii")
                 play.write_invite(root)   # 1.3.6: no other session's join code in the game menu
                 carry_unlocks(root)       # 1.3.8: what the player has unlocked in their own Cry of Fear
-                # 1.2.0: a co-op key the player's own config leaves unbound (O in a copy set up before it) works
-                (root / "cryoffear" / play.SESSION_CFG).write_text(config + setup_lib.missing_coop_binds(root),
-                                                                   encoding="ascii")
+                # 1.2.0: a co-op key the player's own config leaves unbound (O in a copy set up before it) works;
+                # player tools (2026-11-09): this player's comfort settings and spray, in every game, host or guest
+                (root / "cryoffear" / play.SESSION_CFG).write_text(
+                    config + setup_lib.missing_coop_binds(root) + play.comfort_config(self.settings)
+                    + play.install_spray(root, self.settings.get("spray", "")), encoding="ascii")
                 setup_lib.keep_previous_log(root, play.LOG)
                 start_game(root, args)
                 self.remember(name=self.name.get().strip(), first_launch_done=True)
@@ -750,6 +845,7 @@ class App:
                     running = True
                 self.messages.put((status.set, T(watch.poll(running))))
                 time.sleep(3)
+            self.messages.put((self.game_ended, root))
         threading.Thread(target=loop, daemon=True).start()
 
 

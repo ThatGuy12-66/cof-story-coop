@@ -94,6 +94,7 @@ int main( void )
 			s.solo = Flag( 1 ); s.cont = Flag( 2 ); s.name = g_fields[3]; s.password = g_fields[4]; s.map = g_fields[5];
 			s.slot = g_fields[6]; s.maps = g_fields[7]; s.places = Int( 8 ); s.companions = Int( 9 );
 			s.bonusRoom = Flag( 10 ); s.merged = Flag( 11 ); s.flashlight = Flag( 12 );
+			s.cprTime = Int( 13 ); s.respawnDelay = Int( 14 ); s.outlines = Flag( 15 );
 			const bool ok = CoFStory_StartCommands( out, sizeof( out ), &s );
 			Answer( id, ok ? out : "REFUSED" );
 		}
@@ -144,6 +145,12 @@ int main( void )
 				CoFStory_FieldMessage( out, sizeof( out ), g_fields[5], (size_t)Int( 2 ), e == s && e - s <= (size_t)Int( 2 ));
 				Answer( id, out );
 			}
+		}
+		else if( !strcmp( what, "tunable" ))
+		{
+			// value (a float, as a cvar reads), low, high, default: what a page takes
+			snprintf( out, sizeof( out ), "%d", CoFStory_HostTunable( (float)atof( g_fields[1] ), Int( 2 ), Int( 3 ), Int( 4 )));
+			Answer( id, out );
 		}
 		else if( !strcmp( what, "build" ))
 			Answer( id, COF_STORY_BUILD );

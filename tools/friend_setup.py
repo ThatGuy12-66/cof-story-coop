@@ -462,7 +462,7 @@ def default_controls() -> str:
              "MOUSE1": "+attack", "MOUSE2": "+attack3", "MOUSE3": "+attack2", "ESCAPE": "cancelselect",
              "1": "quicksel 1", "2": "quicksel 2", "3": "quicksel 3", "y": "messagemode", "k": "+voicerecord",
              "j": "cof_warp", "h": "cof_companion_order", "ENTER": "cof_skip", "KP_ENTER": "cof_skip",
-             "o": "cof_wardrobe"}
+             "o": "cof_wardrobe", **dict(PLAYER_TOOL_KEYS)}
     return "\n".join(f'bind "{key}" "{value}"' for key, value in binds.items()) + "\n"
 
 
@@ -470,10 +470,17 @@ def default_controls() -> str:
 # defaults binds kb_def.lst, which had none of them, so J, the way out of every strand, was lost) and in its list of
 # actions (kb_act.lst: the Keybinds menu shows and rebinds only those).
 # After 1.1.9: O opens the wardrobe (cof_wardrobe) anywhere while the bonus room is open; K stays the voice key.
+# Player tools (2026-11-09): unstuck, a text ping, a scare, dropping spare ammo, the HUD and the spray (impulse 201,
+# the picture the app copies to logos/remapped.*); like every co-op key, only where nothing is bound already.
+PLAYER_TOOL_KEYS = (("F3", "cof_unstuck"), ("g", "cof_ping"), ("v", "cof_scare"), ("q", "cof_dropammo"),
+                    ("F6", "toggle hud_draw"), ("t", "impulse 201"))
 COOP_KEYS = (("j", "cof_warp"), ("h", "cof_companion_order"), ("ENTER", "cof_skip"), ("KP_ENTER", "cof_skip"),
-             ("o", "cof_wardrobe"))
+             ("o", "cof_wardrobe"), *PLAYER_TOOL_KEYS)
 COOP_ACTIONS = (("cof_warp", "Join your partner (co-op)"), ("cof_companion_order", "AI companions: wait or follow"),
-                ("cof_skip", "Skip a cutscene for everyone"), ("cof_wardrobe", "Wardrobe (costumes)"))
+                ("cof_skip", "Skip a cutscene for everyone"), ("cof_wardrobe", "Wardrobe (costumes)"),
+                ("cof_unstuck", "Unstuck (co-op)"), ("cof_ping", "Ping: where you are (co-op)"),
+                ("cof_scare", "Scare a teammate (co-op)"), ("cof_dropammo", "Drop spare ammo (co-op)"),
+                ("toggle hud_draw", "Hide or show the HUD"), ("impulse 201", "Spray"))
 _KEY_LIST_TOKEN = r'(?:"[^"\r\n]*"|[^\s"]+)'
 _KEY_LIST_LINE = re.compile(rf'\s*(?://.*)?|\s*({_KEY_LIST_TOKEN})\s+({_KEY_LIST_TOKEN})\s*(?://.*)?')
 
@@ -519,8 +526,9 @@ def missing_coop_binds(root: Path) -> str:
 
 
 def add_coop_keys(root: Path, steps=None) -> None:
-    """J, H, Enter and O in the copy's default key list and the co-op commands in its list of actions (setup and
-    update; the files come from the game or the engine payload, and an update may have put the plain ones back).
+    """J, H, Enter, O and the player-tool keys in the copy's default key list and the co-op commands in its list of
+    actions (setup and update; the files come from the game or the engine payload, and an update may have put the plain
+    ones back).
     A key the list already gives another command keeps it; the player's own binds (config.cfg) are not touched."""
     steps = steps or Steps(())
     shell = Path(root) / "cryoffear/gfx/shell"

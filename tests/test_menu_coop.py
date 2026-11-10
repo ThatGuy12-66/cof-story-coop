@@ -40,12 +40,14 @@ def flag(value):
     return '1' if value else '0'
 
 
-def app_start(*, solo, cont, name, password, map_name, slot, maps, places, companions, bonus, merged, torch):
+def app_start(*, solo, cont, name, password, map_name, slot, maps, places, companions, bonus, merged, torch,
+              cpr=play.CPR_TIME[2], respawn=play.RESPAWN_DELAY[2], outlines=False):
     """The app's text for a start: cof_story.cfg, the session cfg (without the release lines the app sets when it opens
     the game, cof_maps and cof_chapter_start always written), then the "+map"."""
     args, config = play.host_launch(ROOT, solo=solo, name=name, map_name=map_name, players=places, password=password,
                                     companions=companions, port=27015, cont=cont, video=[], bonus_room=bonus,
-                                    merged=merged, coop_flashlight=torch, maps=maps, slot=slot)
+                                    merged=merged, coop_flashlight=torch, maps=maps, slot=slot, cpr_time=cpr,
+                                    respawn_delay=respawn, outlines=outlines)
     lines = [line for line in config.splitlines() if not line.startswith(('cof_build ', 'cof_label '))]
     maps_line = next((line for line in lines if line.startswith('cof_maps ')), None)
     chapter = next((line for line in lines if line.startswith('cof_chapter_start ')), None)
@@ -88,6 +90,12 @@ class MenuLogicTests(unittest.TestCase):
         # refused alike: a bad map, too many AIs, a slot without Continue, a bad slot
         starts += [dict(starts[0], map_name='c_intro!'), dict(starts[0], companions=5), dict(starts[0], slot='tape1'),
                    dict(starts[0], cont=True, slot='Tape 1'), dict(starts[0], places=1, companions=0)]
+        # player tools (2026-11-09): the host's revive time, respawn time and outlines, at both ends of their ranges
+        # and outside them (an empty harness number is 0: every start sends its own)
+        for index in (0, 100, 200, 500):
+            starts += [dict(starts[index], cpr=1, respawn=5, outlines=True), dict(starts[index], cpr=20, respawn=90)]
+        starts += [dict(starts[0], cpr=0), dict(starts[0], cpr=21), dict(starts[0], respawn=4),
+                   dict(starts[0], respawn=91), dict(starts[0], respawn=384)]
         for start in starts:
             try:
                 answer = app_start(**start)
@@ -95,7 +103,16 @@ class MenuLogicTests(unittest.TestCase):
                 answer = 'REFUSED'
             add(('start', flag(start['solo']), flag(start['cont']), start['name'], start['password'], start['map_name'],
                  start['slot'], start['maps'], str(start['places']), str(start['companions']), flag(start['bonus']),
-                 flag(start['merged']), flag(start['torch'])), answer)
+                 flag(start['merged']), flag(start['torch']), str(start.get('cpr', play.CPR_TIME[2])),
+                 str(start.get('respawn', play.RESPAWN_DELAY[2])), flag(start.get('outlines', False))), answer)
+
+        # what a page reads from the host's cvars: kept in range, the default otherwise (0: the game has not set it)
+        for value, low, high, default, kept in (('5', 1, 20, 5, 5), ('1', 1, 20, 5, 1), ('20', 1, 20, 5, 20),
+                                                ('0', 1, 20, 5, 5), ('21', 1, 20, 5, 5), ('7.5', 1, 20, 5, 5),
+                                                ('-3', 1, 20, 5, 5), ('90', 5, 90, 10, 90), ('384', 5, 90, 10, 10),
+                                                ('4', 5, 90, 10, 10), ('1', 0, 1, 0, 1), ('2', 0, 1, 0, 0)):
+            add(('tunable', value, str(low), str(high), str(default)), str(kept))
+        self.assertEqual((play.CPR_TIME, play.RESPAWN_DELAY), ((1, 20, 5), (5, 90, 10)))
 
         # joins: addresses and join codes, good and bad, as the app's Join reads them
         endpoints = ['192.168.1.20', '192.168.1.20:27016', ' Example.COM.:28000 ', 'my-host.example.org',
@@ -180,7 +197,7 @@ class MenuLogicTests(unittest.TestCase):
 
         answers = run_cases(self, cases)
         for fields, answer, want in zip(cases, answers, expected):
-            self.assertEqual(answer, want, fields[:8])
+            self.assertEqual(answer, want, fields[:8] + fields[13:])
 
     def test_the_games_own_co_op_turns_the_story_off_as_the_app_does(self):
         args, config = play.official_launch(ROOT, name='Bob', map_name='cof_campaign_01', players=3, password='pw',
@@ -283,6 +300,27 @@ class MenuWiringTests(unittest.TestCase):
         official = body_of(OFFICIAL, 'bool CMenuCoFHost::Start( void )')
         assert_has(self, 'CoFStory_OfficialCommands( cmd, sizeof( cmd ), &o )', official)
         self.assertNotIn('"Story co-op"', text(OFFICIAL))   # the game's own campaign, not the story
+
+    def test_both_starts_read_the_hosts_tunables_from_their_cvars(self):
+        # player tools (2026-11-09): sv_coopcprtime, cof_story_respawn_delay and cof_outlines, the app's names, read
+        # where a start is built; the pages get no widgets for them
+        logic, pages = text(LOGIC), text(PAGES)
+        for define, cvar in (('COF_STORY_CVAR_CPR', 'sv_coopcprtime'), ('COF_STORY_CVAR_RESPAWN', 'cof_story_respawn_delay'),
+                             ('COF_STORY_CVAR_OUTLINES', 'cof_outlines')):
+            self.assertRegex(logic, rf'#define {define}\s+"{cvar}"')
+            _, config = play.host_launch(ROOT, solo=True, name='Bob', map_name='c_start', players=2, password='',
+                                         companions=1, port=27015, cont=False, video=[])
+            self.assertIn(f'{cvar} ', config)
+        read = body_of(PAGES, 'static void UI_CoFStoryHostTunables( cofStoryStart_t *s )')
+        for line in ('s->cprTime = CoFStory_HostTunable( EngFuncs::GetCvarFloat( COF_STORY_CVAR_CPR ),',
+                     's->respawnDelay = CoFStory_HostTunable( EngFuncs::GetCvarFloat( COF_STORY_CVAR_RESPAWN ),',
+                     's->outlines = CoFStory_HostTunable( EngFuncs::GetCvarFloat( COF_STORY_CVAR_OUTLINES ), 0, 1, 0 ) == 1;'):
+            assert_has(self, line, read)
+        for page in ('bool CMenuCoFStoryStart::Start( void )', 'bool CMenuCoFStoryContinue::Start( bool solo )'):
+            body = body_of(PAGES, page)
+            self.assertLess(body.index('UI_CoFStoryHostTunables( &s );'), body.index('CoFStory_StartCommands('))
+        self.assertEqual(pages.count('COF_STORY_CVAR_CPR'), 1)
+        self.assertNotIn('CvarRegister( COF_STORY_CVAR_CPR', pages)   # the game's own cvar, and the engine's two
 
     def test_extras_opens_its_own_window_and_continue_shows_the_options(self):
         # the review of 1.3.6: Extras still opened UI_CoFHost_Menu (now a CO-OP tab), and Unlockables, Links and

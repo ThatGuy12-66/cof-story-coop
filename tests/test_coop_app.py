@@ -222,7 +222,8 @@ class WindowTests(unittest.TestCase):
         with mock.patch.object(app, "start_game") as start:
             done(False)
         start.assert_called_once_with(root, ["game"])
-        self.assertEqual((root / "cryoffear" / app.play.SESSION_CFG).read_text(), "cfg\n")
+        # player tools (2026-11-09): the comfort lines follow, for every game the app starts
+        self.assertEqual((root / "cryoffear" / app.play.SESSION_CFG).read_text(), "cfg\n" + app.play.comfort_config({}))
         self.assertEqual(started, [1])
         self.app.launch(["game"], "cfg\n", lambda: started.append(3), lambda: stopped.append(3))
         with mock.patch.object(app, "start_game") as start:
@@ -383,7 +384,7 @@ class WindowTests(unittest.TestCase):
         with mock.patch.object(app.play, "load_settings", return_value=settings):
             self.app.show_main(self.app.root)
         shown = [w.cget("text") for w in widgets(self.app.body) if w.winfo_class() == "TButton"]
-        self.assertEqual(shown, ["Play"])
+        self.assertEqual(shown, ["Play", "Spray…"])   # player tools (2026-11-09): the spray picker beside Comfort
         for gone in ("Play solo", "Host a game", "Join a game", "Cry of Fear's own co-op"):
             self.assertNotIn(gone, texts(self.app.body))
         self.assertTrue(any("Co-op" in text and "New Game" in text for text in texts(self.app.body)))
@@ -418,6 +419,78 @@ class WindowTests(unittest.TestCase):
             heights.append(self.window.winfo_reqheight())
         self.assertLessEqual(heights[0], 688)
         self.assertLessEqual(heights[1], 760)
+
+    def test_the_main_screen_shows_the_player_tool_keys_and_comfort(self):
+        # player tools (2026-11-09): the keys friend_setup binds, and this player's comfort settings, saved at once
+        self.copy()
+        self.app.check_for_update = lambda: None
+        self.assertEqual([key for key, _ in app.COOP_KEYS][-6:], ["F3", "G", "V", "Q", "F6", "T"])
+        bound = {key.lower() for key, _ in friend.COOP_KEYS}
+        for key in ("F3", "G", "V", "Q", "F6", "T"):
+            self.assertIn(key.lower(), bound)
+        with mock.patch.object(app.play, "load_settings", return_value=dict(app.play.DEFAULT_SETTINGS, name="Bob")):
+            self.app.show_main(self.app.root)
+        shown = texts(self.app.body)
+        for text in ("unstuck", "Field of view", "Head bob", "Faint light", "Black and white", "Hide the HUD"):
+            self.assertIn(text, shown)
+        noir = next(w for w in widgets(self.app.body) if w.winfo_class() == "TCheckbutton"
+                    and w.cget("text") == "Black and white")
+        noir.invoke()
+        self.assertIs(app.play.load_settings(self.app.root)["noir"], True)
+        self.assertIn("setinfo sc_noir 1\n", app.play.comfort_config(self.app.settings))
+
+    def test_a_spray_is_a_png_or_bmp(self):
+        from tkinter import filedialog
+        self.copy()
+        self.app.check_for_update = lambda: None
+        self.app.show_main(self.app.root)
+        with mock.patch.object(filedialog, "askopenfilename", return_value=str(self.temp / "me.gif")):
+            button(self.app.body, "Spray…").invoke()
+        self.assertIn(".png or .bmp", str(self.errors[-1]))
+        self.assertEqual(self.app.settings["spray"], "")
+        picture = self.temp / "Me.PNG"
+        picture.write_bytes(b"png bytes")
+        with mock.patch.object(filedialog, "askopenfilename", return_value=str(picture)):
+            button(self.app.body, "Spray…").invoke()
+        self.assertEqual(app.play.load_settings(self.app.root)["spray"], str(picture))
+        # the start copies it and picks it for the engine
+        with mock.patch.object(friend, "validate_runtime"), mock.patch.object(friend, "game_is_running",
+                                                                               return_value=False):
+            self.app.launch(["game"], "cfg\n", lambda: None)
+            job, done, _ = self.jobs[-1]
+            running = job()
+        with mock.patch.object(app, "start_game"):
+            done(running)
+        self.assertEqual((self.app.root / "cryoffear/logos/remapped.png").read_bytes(), b"png bytes")
+        self.assertTrue((self.app.root / "cryoffear" / app.play.SESSION_CFG).read_text().endswith(
+            "cl_logoext png\n@cl_logoupdate 1\n"))
+
+    def test_the_last_host_is_offered_until_dismissed(self):
+        # player tools (2026-11-09): the last host joined over the network, from the ended game's log; Rejoin joins it
+        # with no password
+        root = self.copy()
+        self.app.check_for_update = lambda: None
+        (root / app.play.LOG).write_text("Connecting to 203.0.113.7:27016... (retry #0)\n"
+                                         "Connecting to localhost... (retry #0)\n", encoding="latin-1")
+        self.app.show_main(root)
+        self.assertNotIn("Rejoin", [w.cget("text") for w in widgets(self.app.body) if w.winfo_class() == "TButton"])
+        self.app.game_ended(root)
+        self.assertEqual(app.play.load_settings(root)["last_host"], "203.0.113.7:27016")
+        self.app.show_main(root)
+        self.assertIn("Rejoin 203.0.113.7:27016", texts(self.app.body))
+        self.app.name.set("Bob")
+        with mock.patch.object(app.play, "join_launch", wraps=app.play.join_launch) as join:
+            button(self.app.body, "Rejoin").invoke()
+        self.assertEqual(join.call_args.kwargs["password"], "")
+        self.assertEqual(join.call_args.kwargs["endpoint"], "203.0.113.7:27016")
+        with mock.patch.object(app, "start_game") as game, mock.patch.object(app.threading, "Thread"):
+            self.jobs[-1][1](False)
+        self.addCleanup(setattr, self.app.watch, "closed", True)
+        self.assertEqual(game.call_args.args[1][-2:], ["+connect", "203.0.113.7:27016"])
+        self.app.show_main(root)
+        button(self.app.body, "Dismiss").invoke()
+        self.assertEqual(app.play.load_settings(root)["last_host"], "")
+        self.assertNotIn("Rejoin 203.0.113.7:27016", texts(self.app.body))
 
     def test_a_newer_copy_offers_only_its_own_shortcut(self):
         # L14.11: the older app opened the main screen and started the newer engine with its own settings
