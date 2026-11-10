@@ -154,6 +154,8 @@ static void SV_AddEntitiesToPacket( edict_t *pViewEnt, edict_t *pClient, client_
 			SETVISBIT( ents->sended, e );
 
 			if( player ) SV_CoF_WeaponModelState( state, e );
+			// Cry of Fear story co-op: cof_outlines, a teammate far away outlined (other players only; sv_cof_tools.c)
+			if( player ) SV_CoF_ToolsOutline( pClient, state, e );
 
 			if( SV_IsValidEdict( ent->v.aiment ) && FBitSet( ent->v.aiment->v.effects, EF_MERGE_VISIBILITY ))
 			{

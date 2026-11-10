@@ -415,6 +415,7 @@ void SV_CoF_StoryInit( void )
 	SV_CoF_SectionsInit();
 	SV_CoF_BonusInit();
 	SV_CoF_LightInit();
+	SV_CoF_ToolsInit();
 	SV_CoF_BlurInit();
 	SV_CoF_GatesInit();
 	SV_CoF_VoiceInit();
@@ -636,6 +637,7 @@ void SV_CoF_StoryFrame( void )
 	SV_CoF_PickupsFrame(); // 1.1.9: map pickups taken settle, copies made, before the AI companions' commands
 	SV_CoF_CompanionFrame();
 	SV_CoF_LightFrame(); // a co-op torch the host does not allow goes off
+	SV_CoF_ToolsFrame(); // the player tools: the host's ranges, "is down", the objective reminder, noir
 	SV_CoF_ArrivalFrame(); // after it: the torches the host allows, as their players switched them
 	SV_CoF_BlurFrame(); // a story blur flipped for one player is everyone's
 	SV_CoF_TestGunFrame();

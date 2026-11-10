@@ -44,6 +44,14 @@ void SV_CoF_LightInit( void );
 void SV_CoF_LightFrame( void );
 qboolean SV_CoF_CoopFlashlightAllowed( void );
 qboolean SV_CoF_LightClientCommand( sv_client_t *cl );
+// The player tools (sv_cof_tools.c, rules in sv_cof_tools.h): cof_unstuck, cof_ping, cof_scare and cof_dropammo (client
+// commands before the guard: true when handled); each frame the host's ranges (sv_coopcprtime, cof_story_respawn_delay),
+// "<name> is down.", the objective reminder and noir; cof_outlines: another player far from the viewer sent with the
+// glow shell (sv_frame.c, after SV_CoF_WeaponModelState).
+void SV_CoF_ToolsInit( void );
+void SV_CoF_ToolsFrame( void );
+qboolean SV_CoF_ToolsClientCommand( sv_client_t *cl );
+void SV_CoF_ToolsOutline( const edict_t *viewer, entity_state_t *state, int e );
 // What a story level change leaves behind (sv_cof_arrival.c): at a carried player's sign-on their HideWeapon and
 // everyone's ScoreInfo; the co-op torch as each player switched it (around the game's F, every frame); an exit the
 // party just arrived beside is not taken by standing in it (pfnChangeLevel: true, refused).

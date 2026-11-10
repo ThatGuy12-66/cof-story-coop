@@ -3278,6 +3278,10 @@ static void SV_ExecuteClientCommand( sv_client_t *cl, const char *s )
 	if( SV_CoF_LightClientCommand( cl ))
 		return;
 
+	// Cry of Fear story co-op: the player tools (cof_unstuck, cof_ping, cof_scare, cof_dropammo)
+	if( SV_CoF_ToolsClientCommand( cl ))
+		return;
+
 	// Cry of Fear story co-op: no kick votes, no guest changing the host's server-wide settings
 	if( SV_CoF_GuardClientCommand( cl ))
 		return;
