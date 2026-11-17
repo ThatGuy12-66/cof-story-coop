@@ -1,0 +1,33 @@
+#ifndef XASH_BUILD_H
+#define XASH_BUILD_H
+#define XASH_WIN32 1
+#define XASH_POSIX 0
+#define XASH_LINUX 0
+#define XASH_APPLE 0
+#define XASH_DOS4GW 0
+#define XASH_PSP 0
+#define XASH_NSWITCH 0
+#define XASH_SDL 2
+#define XASH_GAMEDIR "valve"
+#define XASH_LOW_MEMORY 0
+#define XASH_LITTLE_ENDIAN 1
+#define XASH_BIG_ENDIAN 0
+#define XASH_64BIT 0
+#define XASH_REF_GL_ENABLED 1
+#define XASH_REF_SOFT_ENABLED 0
+#define XASH_REF_NULL_ENABLED 0
+#define XASH_TIMER TIMER_SDL
+#define XASH_VIDEO VIDEO_SDL
+#define XASH_SOUND SOUND_SDL
+#define XASH_INPUT INPUT_SDL
+#define XASH_LIB LIB_WIN32
+#define XASH_MESSAGEBOX MSGBOX_SDL
+#define XASH_AVI AVI_NULL
+#define HAVE_TGMATH_H 1
+#define HAVE_STRNICMP 1
+#define HAVE_STRICMP 1
+#define ALLOCA_H <malloc.h>
+#define XASH_BUILD_COMMIT "4857b389e6ba32ddaa68582aedcbc950c138f46a"
+#define XASH_BUILD_BRANCH "continuous"
+#define XASH_BUILD_COMMIT_DATE "2026-09-19"
+#endif
