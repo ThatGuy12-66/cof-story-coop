@@ -128,7 +128,7 @@ def untracked_hidden():
     before = exclude.read_bytes() if exclude.exists() else None
     loose = [line[3:] for line in git("status", "--porcelain", "--untracked-files=all").splitlines()
              if line.startswith("?? ")]
-    code = [p for p in loose if p.split("/")[0] in ("tools", "cofcoop", "tests")]
+    code = [p for p in loose if p.split("/")[0] in ("tools", "cofcoop", "tests", "engine")]
     if code:
         raise ValueError(f"Commit or remove these first, they would change the app: {code}")
     try:

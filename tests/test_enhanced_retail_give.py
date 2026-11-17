@@ -1,7 +1,7 @@
 """The story item give through the retail layer, against the retail harness's offline doubles (1.1.8)."""
 import unittest
 
-from tests.native import ENGINE_SERVER, run_native, strip_includes
+from tests.native import ENGINE_SERVER, ROOT, run_native, strip_includes
 
 # Replaces the retail harness's descriptor files and its give (cof_retail_give_test.c renames those away).
 GIVE_DOUBLES = r'''
@@ -38,7 +38,7 @@ static qboolean SV_CoF_StoryGiveItemEx( sv_client_t *cl, const char *classname, 
 class RetailGiveTests(unittest.TestCase):
     def test_give_presses_use_for_the_item_pickups(self):
         out = run_native(self, 'cof_retail_give_test.c', {
-            'retail_fixture.c': (ENGINE_SERVER.parents[4] / 'tests/engine/cof_retail_harness.c').read_text(),
+            'retail_fixture.c': (ROOT / 'tests/engine/cof_retail_harness.c').read_text(),
             'sv_cof_descriptor.h': (ENGINE_SERVER / 'sv_cof_descriptor.h').read_text(),
             'sv_cof_retail.h': (ENGINE_SERVER / 'sv_cof_retail.h').read_text(),
             'sv_cof_state_data.h': (ENGINE_SERVER / 'sv_cof_state_data.h').read_text(),

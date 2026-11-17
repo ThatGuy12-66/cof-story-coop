@@ -19,7 +19,7 @@ from cofcoop import core
 from tools import coop_play as play
 
 REPO = core.PROJECT_ROOT / "upstream/cof-enhanced"
-ENGINE = REPO / "xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a"
+ENGINE = core.PROJECT_ROOT / "engine"
 BUILD = ENGINE / "build-local-20260927"
 FROZEN = core.PROJECT_ROOT / "runtimes/enhanced/experiment-evidence/staged-binaries"
 # 1.1.9 (R4): the release's own label, as the engine's on-screen stamp (engine/cof_version.h): it names the payload's

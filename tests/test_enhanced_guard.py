@@ -72,7 +72,7 @@ class GuardWiringTests(unittest.TestCase):
         assert_has(self, 'NET_IsLocalAddress( cl->netchan.remote_address ) && !FBitSet( cl->flags, FCL_FAKECLIENT )', body)
 
     def test_no_printf_format_reaches_the_game_from_a_client(self):
-        reader = body_of(ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/common/net_buffer.c',
+        reader = body_of(ROOT / 'engine/engine/common/net_buffer.c',
                          'static char *MSG_ReadStringExt( sizebuf_t *sb, qboolean bLine )')
         assert_has(self, "if( c == '%' ) c = '.';", reader)
 

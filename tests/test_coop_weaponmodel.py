@@ -138,7 +138,7 @@ class WeaponModelTests(unittest.TestCase):
     def test_a_missing_model_never_reaches_the_retail_client(self):
         # the retail client merges a player's weaponmodel without a NULL check: a guest without
         # a generated file must see empty hands, not crash (pmodels-report.md section 5)
-        client = (ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/client/cl_frame.c').read_text()
+        client = (ROOT / 'engine/engine/client/cl_frame.c').read_text()
         body = client[client.index('static void CL_ProcessPlayerState'):]
         body = body[:body.index('pfnProcessPlayerState')]
         self.assertIn('!CL_ModelHandle( state->weaponmodel )', body)

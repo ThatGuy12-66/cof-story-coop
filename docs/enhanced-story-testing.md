@@ -10,7 +10,7 @@ The existing x86 Waf configuration is reused by:
 cmd /c tools\build_enhanced.cmd
 ```
 
-This loads VS 2022's `vcvarsall.bat amd64_x86`, selects `.lock-waf-local-20260927`, and incrementally builds `xash,vgui,ref_gl,menu`. It does not configure, install, or launch. The configured engine tree is `upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a`, output `build-local-20260927`. Python is `py -3.14`. The original full configure driver remains `upstream/cof-enhanced/build-local-20260927/build.cmd` if configuration must change.
+This loads VS 2022's `vcvarsall.bat amd64_x86`, selects `.lock-waf-local-20260927`, and incrementally builds `xash,vgui,ref_gl,menu`. It does not configure, install, or launch. The configured engine tree is `engine/`, output `build-local-20260927`. Python is `py -3.14`. To configure again, see "Configure once" in [building.md](building.md).
 
 After engine edits have stopped and the build has finished, inspect then explicitly create a package:
 

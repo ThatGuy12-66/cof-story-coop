@@ -12,7 +12,7 @@ from tests.test_coop_play import archive, session
 from tests.test_enhanced_sections import body_of
 from tools import coop_play as play
 
-MAINUI = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/3rdparty/mainui'
+MAINUI = ROOT / 'engine/3rdparty/mainui'
 LOGIC = MAINUI / 'menus/CoFStoryCoopLogic.h'
 PAGES = MAINUI / 'menus/CoFStoryCoop.cpp'
 MAIN = MAINUI / 'menus/Main.cpp'

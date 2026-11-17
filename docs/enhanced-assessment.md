@@ -24,7 +24,7 @@ Evidence labels: **VERIFIED** means checked on this machine, **STATIC** means re
 - `git fsck --no-progress` passed. `git lfs ls-files` returned no LFS-tracked files; `git lfs fsck` passed for both the Enhanced and engine repositories, and the source/data scan found no LFS pointer payloads.
 - No repo-local `AGENTS.md` was found. The existing `HANDOFF.md`, the user's applicable global `AGENTS.md`, and upstream build/testing instructions were inspected.
 
-The Enhanced repository contains patches/scripts/data; its engine is not a submodule of that repository. The engine and dependencies below were fetched into the ignored directory `xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a` inside that checkout. Each dependency uses its own Git metadata and detached pinned commit. The engine is intentionally modified by applying the unmodified Enhanced patch stack; these are upstream compatibility changes, not new story-co-op code.
+The Enhanced repository contains patches/scripts/data; its engine is not a submodule of that repository. The engine and dependencies below were fetched into the ignored directory `xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a` inside that checkout (since 2026-11-17 the engine is `engine/` in this repository). Each dependency uses its own Git metadata and detached pinned commit. The engine is intentionally modified by applying the unmodified Enhanced patch stack; these are upstream compatibility changes, not new story-co-op code.
 
 | Component | Downloaded commit |
 | --- | --- |

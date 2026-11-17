@@ -24,7 +24,7 @@ from tools import friend_setup as setup_lib  # noqa: E402
 from tools import package_enhanced_story as enhanced  # noqa: E402
 
 README = ROOT / "tools/player_readme.txt"
-REPOS = {"launcher": ROOT, "engine": enhanced.ENGINE, "freevgui": enhanced.ENGINE / "3rdparty/freevgui"}
+REPOS = {"repository": ROOT}  # launcher, engine and UI are one repository since 2026-11-17
 ZIP_NAME = f"CoF-Story-Coop-{play.VERSION_LABEL.replace(' ', '')}.zip"
 
 

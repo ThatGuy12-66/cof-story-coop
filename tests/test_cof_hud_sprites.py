@@ -8,7 +8,7 @@ import unittest
 from tests.native import ROOT, assert_has, run_native
 from tests.test_enhanced_sections import body_of
 
-ENGINE = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine'
+ENGINE = ROOT / 'engine/engine'
 HEADER = ENGINE / 'client/cof_hud_sprites.h'
 GAME = ENGINE / 'client/dll_int/cl_game.c'
 

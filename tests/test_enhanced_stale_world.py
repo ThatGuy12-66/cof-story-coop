@@ -11,7 +11,7 @@ import unittest
 from tests.native import assert_has
 from tests.test_enhanced_sections import body_of
 
-CLIENT = Path(__file__).resolve().parents[1] / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/client'
+CLIENT = Path(__file__).resolve().parents[1] / 'engine/engine/client'
 GUARD = ('if( !Q_strcmp( clgame.msg[i].name, "customdecal" ) && clgame.entities && clgame.entities->model &&\n'
          '\t\tcl.world_generation != Mod_WorldGeneration( ))\n\t\treturn;')
 

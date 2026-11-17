@@ -6,7 +6,7 @@ from tests.native import ROOT, run_native
 from tests.test_map_merge_bsp import MAPS, retail
 from tools.map_merge import bsp, groups, merge, rules
 
-ENGINE_COMMON = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/common'
+ENGINE_COMMON = ROOT / 'engine/engine/common'
 
 
 def fnv64(data: bytes) -> int:
@@ -92,7 +92,7 @@ class LoadWiringTests(unittest.TestCase):
         self.assertIn('Host_Error', body[merged:body.index('CoF_Lang_EntPatch( entfilename')])
 
     def test_map_checks_exits_and_landmarks_see_the_composed_entities(self):
-        server = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/server'
+        server = ROOT / 'engine/engine/server'
         text, body = self.function(server / 'sv_game.c', 'static char *SV_ReadEntityScript(')
         self.assertIn('#include "cof_merged.h"', text)
         merged = body.index('COM_CoF_IsMergedMap( filename )')
@@ -101,7 +101,7 @@ class LoadWiringTests(unittest.TestCase):
         self.assertIn('COM_CoF_MergedEntities( filename,', body)
 
 
-SERVER = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/server'
+SERVER = ROOT / 'engine/engine/server'
 
 
 def body_of(path, signature):

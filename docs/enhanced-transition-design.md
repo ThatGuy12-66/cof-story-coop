@@ -16,7 +16,7 @@
 
 - Enhanced outer commit: `e4cdbfaa260696eb886cf6c9bd4c371d53377427`, version `0.4.0-test3`.
 - Engine base: `4857b389e6ba32ddaa68582aedcbc950c138f46a`, with the prepared Enhanced patch stack.
-- Engine directory: `upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/` beneath this project.
+- Engine directory: `engine/` beneath this project.
 - All source references below are relative to that directory and use the prepared source's line numbers. The source/build inventory and isolated runtime checks are in [enhanced-assessment.md](enhanced-assessment.md).
 
 The outer checkout was clean when checked for this assessment. The successful prior build establishes compilation only; the isolated Enhanced runtime has not been launched by this assessment.

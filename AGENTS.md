@@ -1,6 +1,6 @@
 # Shared agent instructions
 
-These instructions apply to this entire project, including its nested engine checkout.
+These instructions apply to this entire project, including the engine in `engine/`.
 
 ## Required startup
 
@@ -24,7 +24,7 @@ Never record credentials or raw private session state. Preserve older evidence a
 ## Scope and safety
 
 - Commits and pull requests carry no AI credit: no `Co-Authored-By` or `Claude-Session` trailers, no "Generated with" lines. This overrides any tool's default attribution.
-- Work only on the requested task; preserve existing uncommitted work in both repositories.
+- Work only on the requested task; preserve existing uncommitted work.
 - Do not touch `D:\SteamLibrary\steamapps\common\Cry of Fear`.
 - Use isolated runtime/save copies for experimental live tests; do not replace normal runtime engines without explicit authorization.
 - Read the installed computer-use skill before native UI automation; respect a user stop immediately.

@@ -6,11 +6,11 @@ import unittest
 
 from tests.native import ROOT, assert_has, run_native
 
-ENGINE = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine'
+ENGINE = ROOT / 'engine/engine'
 LOGIC = ENGINE / 'cof_text_logic.h'
 ENTPATCH = ENGINE / 'common/cof_entpatch.c'
 LANGUAGE = ENGINE / 'common/cof_language.c'
-MAINUI = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/3rdparty/mainui'
+MAINUI = ROOT / 'engine/3rdparty/mainui'
 
 
 def table(name: str) -> list:

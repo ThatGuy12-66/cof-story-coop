@@ -9,7 +9,7 @@ import unittest
 from tests.native import ROOT, assert_has
 from tests.test_enhanced_sections import body_of
 
-PARSE = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine/client/parse/cl_parse.c'
+PARSE = ROOT / 'engine/engine/client/parse/cl_parse.c'
 
 
 class ReconnectEdictTests(unittest.TestCase):

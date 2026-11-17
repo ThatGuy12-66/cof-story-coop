@@ -7,7 +7,7 @@ import unittest
 from tests.native import ROOT, assert_has, run_native, strip_includes
 from tests.test_enhanced_sections import body_of, program_output
 
-ENGINE = ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a/engine'
+ENGINE = ROOT / 'engine/engine'
 SERVER = ENGINE / 'server'
 
 

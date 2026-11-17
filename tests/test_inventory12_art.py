@@ -10,7 +10,7 @@ from pathlib import Path
 from tools import make_inventory12_art as art
 
 ROOT = Path(__file__).resolve().parents[1]
-LOGIC = (ROOT / 'upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a'
+LOGIC = (ROOT / 'engine'
          / '3rdparty/freevgui/platform/xash3d-fwgs/cofinventory_logic.h')
 RETAIL = ROOT / 'runtimes/enhanced/cryoffear/gfx/vgui/640_inventory.tga'
 

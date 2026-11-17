@@ -28,7 +28,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-if (-not $Engine) { $Engine = Join-Path $project 'upstream\cof-enhanced\xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a\build-local-20260927\engine\xash.dll' }
+if (-not $Engine) { $Engine = Join-Path $project 'engine\build-local-20260927\engine\xash.dll' }
 if (-not $Vgui) { $Vgui = Join-Path (Split-Path -Parent (Split-Path -Parent $Engine)) '3rdparty\freevgui\vgui.dll' }
 if (-not $Root) { $Root = Join-Path $project 'evidence\story-live-20261012' }
 $Root = (Resolve-Path -LiteralPath $Root).Path
