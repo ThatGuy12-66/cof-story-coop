@@ -29,11 +29,6 @@ Stage 1 ends in a live check of the retail paths with a developer probe command.
 - **Two repositories:**
   - The engine is `upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a`, branch `story-coop`; called `$ENGINE` below.
   - Tests, tools and docs are the project root, branch `main`.
-  - Every commit message ends with:
-    ```
-    Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-    Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W
-    ```
 - **Running tests.** Run in PowerShell from the project root:
   ```powershell
   Remove-Item Env:NoDefaultCurrentDirectoryInExePath -ErrorAction SilentlyContinue
@@ -294,11 +289,9 @@ Expected: `test_descriptor_reader ... ok`
 
 ```bash
 git -C "$ENGINE" add engine/server/sv_cof_descriptor.h
-git -C "$ENGINE" commit -m "Add Cry of Fear inventory descriptor reader" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git -C "$ENGINE" commit -m "Add Cry of Fear inventory descriptor reader"
 git add tests/native.py tests/engine/cof_descriptor_test.c tests/test_enhanced_descriptor.py
-git commit -m "Test the descriptor reader; shared native harness helper" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Test the descriptor reader; shared native harness helper"
 ```
 
 ---
@@ -843,13 +836,9 @@ Expected: `'build' finished successfully`, and no `warning`/`error C` lines ment
 ```bash
 git -C "$ENGINE" add engine/server/sv_cof_retail.h engine/server/sv_cof_retail.c engine/server/sv_game.c engine/server/server.h engine/server/sv_cof_story.c
 git -C "$ENGINE" commit -m "Add the story co-op retail layer and cof_story_probe" -m "Slots, free slots, give via the game's pickup, removal via inventorydeletenamed,
-item names, ProFont and ScreenFade through SV_CoF_SendUserMessage.
-
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+item names, ProFont and ScreenFade through SV_CoF_SendUserMessage."
 git add tests/engine/cof_retail_harness.c tests/test_enhanced_retail.py
-git commit -m "Test the retail layer against engine doubles" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Test the retail layer against engine doubles"
 ```
 
 ---
@@ -949,8 +938,7 @@ Add a dated `## UPDATE` section at the top of `AGENT-HANDOFF-2026-09-27.md` cont
 
 ```bash
 git add AGENT-HANDOFF-2026-09-27.md
-git commit -m "Record stage 1 live results for the retail layer" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Record stage 1 live results for the retail layer"
 ```
 
 ---
@@ -1443,11 +1431,9 @@ Expected: `test_ledger_rules ... ok`
 
 ```bash
 git -C "$ENGINE" add engine/server/sv_cof_share_state.h
-git -C "$ENGINE" commit -m "Add the story item ledger's rules as pure state" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git -C "$ENGINE" commit -m "Add the story item ledger's rules as pure state"
 git add tests/engine/cof_share_state_test.c tests/test_enhanced_share_state.py
-git commit -m "Test the story item ledger's rules" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Test the story item ledger's rules"
 ```
 
 ---
@@ -1943,13 +1929,9 @@ Expected:
 git -C "$ENGINE" add engine/server/sv_cof_share.h engine/server/sv_cof_share.c engine/server/sv_client.c engine/server/sv_cof_story.c engine/server/sv_save.c
 git -C "$ENGINE" commit -m "Share story items between players" -m "Frame and command-scoped inventory diffs feed the ledger; deliveries go
 through the game's pickup, used-up copies through inventorydeletenamed.
-The ledger resets at session boundaries and survives story transitions.
-
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+The ledger resets at session boundaries and survives story transitions."
 git add tests/engine/cof_share_harness.c tests/test_enhanced_share.py
-git commit -m "Test the story item ledger in the engine" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Test the story item ledger in the engine"
 ```
 
 ---
@@ -2007,8 +1989,7 @@ Expected: all three tests `ok`. `test_parse_counts_finished_transitions_and_reda
 
 ```bash
 git add tools/story_run_report.py tests/test_story_run_report.py
-git commit -m "Count shared-item phases in the run report" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Count shared-item phases in the run report"
 ```
 
 ---
@@ -2087,6 +2068,5 @@ Add a dated `## UPDATE` to `AGENT-HANDOFF-2026-09-27.md` with:
 
 ```bash
 git add AGENT-HANDOFF-2026-09-27.md
-git commit -m "Record stage 2 live results for shared story items" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018mJcNynXJSSzUadjrVgU5W"
+git commit -m "Record stage 2 live results for shared story items"
 ```

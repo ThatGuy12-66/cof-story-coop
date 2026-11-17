@@ -40,8 +40,6 @@ unittest, native C harnesses (`tests/native.py` `run_native`).
 - Lightmap pages <= 256 (the renderer patch); BSP30 16-bit limits; at most 32 switchable styles (32-60 free).
 - Original map files on disk are never changed; merged files are new files in `cryoffear/maps/`.
 - Engine C files keep LF line endings (`.gitattributes`); launcher repo files CRLF as committed.
-- Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and
-  `Claude-Session: https://claude.ai/code/session_01DHp8i64Dh6ASn9VFjsi21S`.
 - No game launch without the user's go-ahead.
 
 ## Review Focus

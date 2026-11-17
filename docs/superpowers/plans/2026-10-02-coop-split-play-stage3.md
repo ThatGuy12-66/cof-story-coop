@@ -32,11 +32,6 @@
   - The engine is `upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a`, branch `story-coop`; called `$ENGINE` below.
   - Tests, tools and docs are the project root. Work on a new branch `split-play-stage3` (Task 1 creates it).
   - No worktree: the build and deploy paths are tied to this checkout.
-  - Every commit message ends with:
-    ```
-    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-    Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ
-    ```
 - **Running tests.** Run in PowerShell from the project root:
   ```powershell
   Remove-Item Env:NoDefaultCurrentDirectoryInExePath -ErrorAction SilentlyContinue
@@ -356,11 +351,9 @@ Expected: the build finishes with `'build' finished successfully` and no new war
 
 ```bash
 git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a add engine/server/sv_cof_sender.h engine/server/sv_game.c engine/server/sv_client.c engine/server/server.h engine/server/sv_cof_story.c
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Make the command's sender the first player for the game's lookups" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Make the command's sender the first player for the game's lookups"
 git add tests/engine/cof_sender_test.c tests/test_enhanced_sender.py
-git commit -m "Test the first-player lookup during a client command" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Test the first-player lookup during a client command"
 ```
 
 ---
@@ -738,11 +731,9 @@ Expected: `'build' finished successfully`.
 
 ```bash
 git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a add engine/server/sv_cof_story.c engine/server/sv_cof_story.h engine/server/sv_cof_retail.c engine/server/sv_cof_retail.h
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Add document and code-note calls to the retail layer, with probes" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Add document and code-note calls to the retail layer, with probes"
 git add tests/engine/cof_retail_harness.c
-git commit -m "Test the retail layer's document and code-note calls" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Test the retail layer's document and code-note calls"
 ```
 
 ---
@@ -868,8 +859,7 @@ Add a dated `## UPDATE` section at the top of `AGENT-HANDOFF-2026-09-27.md` cont
 
 ```bash
 git add AGENT-HANDOFF-2026-09-27.md
-git commit -m "Record the padlock fix and the stage 4 live facts" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Record the padlock fix and the stage 4 live facts"
 ```
 
 ---
@@ -1250,11 +1240,9 @@ Expected: `OK`.
 
 ```bash
 git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a add engine/server/sv_cof_exit_state.h
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Add the exit hold's rules as pure state" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Add the exit hold's rules as pure state"
 git add tests/engine/cof_exit_state_test.c tests/test_enhanced_exit_state.py
-git commit -m "Test the exit hold's rules" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Test the exit hold's rules"
 ```
 
 ---
@@ -1946,11 +1934,9 @@ Expected: `'build' finished successfully`.
 
 ```bash
 git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a add engine/server/sv_cof_exit.c engine/server/sv_cof_exit.h engine/server/sv_game.c engine/server/sv_save.c engine/server/server.h engine/server/sv_cof_party.c engine/server/sv_cof_party.h engine/server/sv_cof_story.c
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Hold a story exit until the party is at it" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Hold a story exit until the party is at it"
 git add tests/engine/cof_exit_harness.c tests/engine/cof_exit_models_test.c tests/test_enhanced_exit.py
-git commit -m "Test the exit hold's engine glue and map guard" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Test the exit hold's engine glue and map guard"
 ```
 
 ---
@@ -2173,11 +2159,9 @@ Expected: `'build' finished successfully`.
 
 ```bash
 git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a add engine/server/sv_cof_party.c
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Take only a partner beside you through doors and teleports" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Take only a partner beside you through doors and teleports"
 git add tests/engine/cof_party_harness.c
-git commit -m "Test the door and teleport radius and the cut-off prompt" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Test the door and teleport radius and the cut-off prompt"
 ```
 
 ---
@@ -2433,11 +2417,9 @@ Expected: `'build' finished successfully`.
 
 ```bash
 git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a add engine/server/sv_cof_party.c engine/server/sv_cof_party.h engine/server/sv_client.c
-git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Add cof_warp: join the partner with J" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git -C upstream/cof-enhanced/xash3d-fwgs-4857b389e6ba32ddaa68582aedcbc950c138f46a commit -m "Add cof_warp: join the partner with J"
 git add tests/engine/cof_party_harness.c tests/test_warp_bind.py tools/Start-StoryHost.ps1 tools/Start-LocalGuest.ps1 tools/friend_setup.py
-git commit -m "Bind J to cof_warp and test the warp" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Bind J to cof_warp and test the warp"
 ```
 
 ---
@@ -2505,8 +2487,7 @@ Expected: `OK`.
 
 ```bash
 git add tools/story_run_report.py tests/test_story_run_report.py
-git commit -m "Count exit, warp and cut-off phases in the run report" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Count exit, warp and cut-off phases in the run report"
 ```
 
 ---
@@ -2617,6 +2598,5 @@ Add a dated `## UPDATE` section at the top of `AGENT-HANDOFF-2026-09-27.md` cont
 
 ```bash
 git add AGENT-HANDOFF-2026-09-27.md
-git commit -m "Record stage 3 live results for the exit hold and warp" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01Fi22jQGjqHmXeCo7AvS4iJ"
+git commit -m "Record stage 3 live results for the exit hold and warp"
 ```

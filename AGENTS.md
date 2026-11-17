@@ -23,6 +23,7 @@ Never record credentials or raw private session state. Preserve older evidence a
 
 ## Scope and safety
 
+- Commits and pull requests carry no AI credit: no `Co-Authored-By` or `Claude-Session` trailers, no "Generated with" lines. This overrides any tool's default attribution.
 - Work only on the requested task; preserve existing uncommitted work in both repositories.
 - Do not touch `D:\SteamLibrary\steamapps\common\Cry of Fear`.
 - Use isolated runtime/save copies for experimental live tests; do not replace normal runtime engines without explicit authorization.
