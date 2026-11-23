@@ -15,6 +15,8 @@ Log: phase=gate name on|off (once per change), phase=gate-refused name (bytes of
 
 static CVAR_DEFINE_AUTO( cof_coop_friendly_fire, "0", 0, "Cry of Fear story co-op: players' shots and blows hurt other players, the AI companions included (0: nobody's, as the game does for humans)" );
 
+static CVAR_DEFINE_AUTO( cof_coop_mp5, "1", 0, "Cry of Fear story co-op: anyone can pick up, be given and keep the MP5, which the game keeps for its mappers alone; 0: only mappers (donator level 2-4), as the game does" );
+
 static CVAR_DEFINE_AUTO( cof_sp_carry, "1", 0, "Cry of Fear story co-op: the single-player carry limits (10 syringes, flares, full ammo); 0: the game's multiplayer limits (one syringe, a third of the ammo, no flares)" );
 
 static CVAR_DEFINE_AUTO( cof_sp_melee, "1", 0, "Cry of Fear story co-op: monsters' blows, the taller's stamp and a partner's syringe are stopped by walls, as in single player; 0: the game's multiplayer test reaches any player on the line through walls" );
@@ -70,6 +72,10 @@ static qboolean CoF_GateWanted( int gate )
 	case COF_GATE_GLOCK_BRASS:
 	case COF_GATE_INTRO_LANGUAGE:
 	case COF_GATE_BOOKSIMON_BOSS: return cof_sp_details.value != 0.0f;
+	case COF_GATE_MP5_TOUCH:
+	case COF_GATE_MP5_GIVE:
+	case COF_GATE_MP5_INIT:
+	case COF_GATE_MP5_INIT2: return cof_coop_mp5.value != 0.0f;
 	}
 	return false;
 }
@@ -94,6 +100,7 @@ qboolean SV_CoF_FriendlyFire( void )
 void SV_CoF_GatesInit( void )
 {
 	Cvar_RegisterVariable( &cof_coop_friendly_fire );
+	Cvar_RegisterVariable( &cof_coop_mp5 );
 	Cvar_RegisterVariable( &cof_sp_carry );
 	Cvar_RegisterVariable( &cof_sp_melee );
 	Cvar_RegisterVariable( &cof_sp_limp );

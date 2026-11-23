@@ -47,6 +47,18 @@ SP = [
     ('intro-language', 0xA4288, '7414', 'eb14'),       # the intro card's language
     ('booksimon-boss', 0x70AB6, '0f8447010000', 'e94801000090'),  # c_ending4b's stray Simon health bar
 ]
+# weapon_mp5 (cof_coop_mp5): the game keeps the MP5 for its mappers alone (donator level 2-4, hl.dll's Steam-ID list
+# 100E4C30, the unlock check 100AF7E0): DefaultTouch (1011C74F) answers a touch with "This is for mappers only."
+# (1011C8F1), GiveNamedItem (100E0A80) refuses to create it, and both vtables' SendInitMessage (1005BDA0, 1005BD30)
+# remove a world MP5 for such a player. Each jump past the check becomes unconditional (the first two), or to the
+# function tail past the removal (the init pair); cof_donator still carries 0/1, so hl.dll's debug commands stay
+# closed.
+MP5 = [
+    ('mp5-touch', 0x11C8B7, '754e', 'eb4e'),
+    ('mp5-give', 0xE0BA7, '7537', 'eb37'),
+    ('mp5-init', 0x5BDDE, '7409', 'eb09'),
+    ('mp5-init2', 0x5BD6E, '7427', 'eb27'),
+]
 
 
 def gate_table(test):
@@ -66,7 +78,7 @@ class GateTests(unittest.TestCase):
             'off: 1 bytes 75 06 writes 2',
             'foreign: 0 bytes 12 34 writes 2',
             'gate friendly-fire C8722 7506 9090',
-        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY + RAIN + DEATH + SP])
+        ] + [f'gate {name} {rva:X} {old} {new}' for name, rva, old, new in CARRY + RAIN + DEATH + SP + MP5])
 
     def test_every_gate_was_made_from_the_retail_bytes(self):
         if not HL_DLL.exists() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
@@ -139,6 +151,43 @@ class GateWiringTests(unittest.TestCase):
         # a crash fix, not a choice: always on while story co-op runs (no cvar)
         wanted = body_of(SERVER / 'sv_cof_gates.c', 'static qboolean CoF_GateWanted(')
         assert_has(self, 'case COF_GATE_DEATH_NOTICE: return true;', wanted)
+
+    def test_the_mp5_is_for_everyone_by_default(self):
+        module = (SERVER / 'sv_cof_gates.c').read_text(encoding='latin-1')
+        assert_has(self, 'CVAR_DEFINE_AUTO( cof_coop_mp5, "1",', module)
+        assert_has(self, 'Cvar_RegisterVariable( &cof_coop_mp5 );', body_of(SERVER / 'sv_cof_gates.c', 'void SV_CoF_GatesInit('))
+        wanted = body_of(SERVER / 'sv_cof_gates.c', 'static qboolean CoF_GateWanted(')
+        for gate in ('COF_GATE_MP5_TOUCH', 'COF_GATE_MP5_GIVE', 'COF_GATE_MP5_INIT', 'COF_GATE_MP5_INIT2'):
+            assert_has(self, f'case {gate}:', wanted)
+        assert_has(self, 'cof_coop_mp5.value != 0.0f', wanted)
+
+
+class MP5GateTests(unittest.TestCase):
+    def test_the_mp5_jumps_stay_on_their_targets(self):
+        if not HL_DLL.exists() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
+            self.skipTest('the retail hl.dll is not in runtimes/enhanced')
+        # the touch and give jumps keep their length and operand (75 -> eb), so each still takes the branch the
+        # weapon's own test took: the shared continuation after the classname checks (1011C907) and the item's
+        # creation (100E0BE0), both mov eax, gpGlobals
+        self.assertEqual(file_bytes(HL_DLL, 0x11C907, 5).hex(), 'a188312210')
+        self.assertEqual(file_bytes(HL_DLL, 0xE0BE0, 5).hex(), 'a188312210')
+        # the init pair jumps to the function tails past each removal: pop the two pushed registers, pop ebp, ret 4
+        self.assertEqual(file_bytes(HL_DLL, 0x5BDE9, 6).hex(), '5b5e5dc20400')
+        self.assertEqual(file_bytes(HL_DLL, 0x5BD97, 6).hex(), '5e5b5dc20400')
+
+    def test_the_mp5_checks_test_the_donator_level(self):
+        if not HL_DLL.exists() or hashlib.sha256(HL_DLL.read_bytes()).hexdigest() != HL_SHA:
+            self.skipTest('the retail hl.dll is not in runtimes/enhanced')
+        # each patched branch sits on hl.dll's mappers gate: the touch and the give load the level hl.dll's CmdStart
+        # copied to the player (mov eax, [edi+0xC4]; cmp eax, 2), and each init function loads it from its player
+        # argument (mov eax, [eax+0xC4]) and compares it with 2, 3 and 4
+        self.assertEqual(file_bytes(HL_DLL, 0x11C8C4, 8).hex(), '8b87c400000083f8')  # the touch (1011C8C4)
+        self.assertEqual(file_bytes(HL_DLL, 0xE0BB4, 8).hex(), '8b87c400000083f8')   # the give (100E0BB4)
+        self.assertEqual(file_bytes(HL_DLL, 0x5BD3E, 8).hex(), '8b80c400000083f8')   # init2 (1005BD30)
+        self.assertEqual(file_bytes(HL_DLL, 0x5BDAD, 8).hex(), '8b80c40000005383')   # init (1005BDA0): push ebx
+        chain = '83f802740e83f803740983f8047404'  # cmp eax, 2; je; 3; je; 4; je
+        self.assertEqual(file_bytes(HL_DLL, 0x5BD44, 15).hex(), chain)
+        self.assertEqual(file_bytes(HL_DLL, 0x5BDB4, 15).hex(), chain)
 
 
 if __name__ == '__main__':
