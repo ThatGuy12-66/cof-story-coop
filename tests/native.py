@@ -33,7 +33,7 @@ def run_native(case: unittest.TestCase, harness: str, files: dict, timeout: int 
         for name, text in files.items():
             (work / name).write_text(text)
         shutil.copyfile(ROOT / 'tests/engine' / harness, work / 'harness.c')
-        if os.name == 'nt':
+        if os.name == 'nt' and VCVARS.exists():  # without MSVC: cc, the same as everywhere else
             (work / 'build.cmd').write_text(
                 f'@call "{VCVARS}" amd64_x86 >nul\n'
                 '@cl /nologo /W4 /WX /wd4100 /wd4505 /D_CRT_SECURE_NO_WARNINGS /TC harness.c /Fe:native-test.exe\n'
@@ -57,7 +57,7 @@ def run_native_cpp(case: unittest.TestCase, harness: str, files: dict, timeout: 
         for name, text in files.items():
             (work / name).write_text(text)
         shutil.copyfile(ROOT / 'tests/engine' / harness, work / 'harness.cpp')
-        if os.name == 'nt':
+        if os.name == 'nt' and VCVARS.exists():  # without MSVC: c++, the same as everywhere else
             (work / 'build.cmd').write_text(
                 f'@call "{VCVARS}" amd64_x86 >nul\n'
                 '@cl /nologo /W4 /WX /wd4100 /D_CRT_SECURE_NO_WARNINGS /TP harness.cpp /Fe:native-test.exe\n'
