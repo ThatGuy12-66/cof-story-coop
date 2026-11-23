@@ -85,6 +85,18 @@ enum
 	COF_GATE_GLOCK_BRASS,
 	COF_GATE_INTRO_LANGUAGE,
 	COF_GATE_BOOKSIMON_BOSS,
+	// weapon_mp5 (cof_coop_mp5): the game keeps the MP5 for its mappers alone: CBasePlayerWeapon::DefaultTouch
+	// (1011C74F) answers a touch with "This is for mappers only." (1011C8F1), CBasePlayer::GiveNamedItem (100E0A80),
+	// which the game's own weapon restore goes through, refuses to create it, and both vtables' SendInitMessage
+	// (1005BDA0, 1005BD30) remove a world MP5 for a player without donator level 2-4 (or hl.dll's own Steam-ID list,
+	// 100E4C30; the game's unlock check 100AF7E0 besides), so the bonus kit's laid-out one left an empty spot. The
+	// jump past the check in the first two becomes unconditional and the two removals never take their test: anyone
+	// can pick the MP5 up, be given it and keep it. cof_donator still carries its 0/1, so hl.dll's debug commands
+	// stay closed.
+	COF_GATE_MP5_TOUCH,
+	COF_GATE_MP5_GIVE,
+	COF_GATE_MP5_INIT,
+	COF_GATE_MP5_INIT2,
 	COF_GATES
 };
 
@@ -117,6 +129,10 @@ static const cof_gate_t cof_gates[COF_GATES] =
 	{ "glock-brass", 0x47292, 6, { 0x0F, 0x85, 0x9E, 0x01, 0x00, 0x00 }, { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 } },
 	{ "intro-language", 0xA4288, 2, { 0x74, 0x14 }, { 0xEB, 0x14 } },
 	{ "booksimon-boss", 0x70AB6, 6, { 0x0F, 0x84, 0x47, 0x01, 0x00, 0x00 }, { 0xE9, 0x48, 0x01, 0x00, 0x00, 0x90 } },
+	{ "mp5-touch", 0x11C8B7, 2, { 0x75, 0x4E }, { 0xEB, 0x4E } },
+	{ "mp5-give", 0xE0BA7, 2, { 0x75, 0x37 }, { 0xEB, 0x37 } },
+	{ "mp5-init", 0x5BDDE, 2, { 0x74, 0x09 }, { 0xEB, 0x09 } },
+	{ "mp5-init2", 0x5BD6E, 2, { 0x74, 0x27 }, { 0xEB, 0x27 } },
 };
 
 // Brings one gate to the wanted state through write (which changes executable bytes); 1 when it is in that state now,

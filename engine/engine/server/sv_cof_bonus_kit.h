@@ -28,7 +28,8 @@ typedef struct
 } cof_bonus_kit_item_t;
 
 /* c_start's room (#836, #867, #895, #896, #884, #934); c_bridge's differ only in the MP5's ammo (frags 180). The MP5
- * last: it removes itself for anyone without donator level 2-4 (CMp5::SendInitMessage), leaving the last spot empty. */
+ * last: with the game the room's own MP5 removed itself for anyone without donator level 2-4 (CMp5::SendInitMessage),
+ * leaving the last spot empty, which the mp5-init gates (sv_cof_gates.h, cof_coop_mp5) now keep it from. */
 static const cof_bonus_kit_item_t cof_bonus_kit[COF_BONUS_KIT_ITEMS] =
 {
 	{ "weapon_famas", { "rendercolor", "0 0 0", "frags", "-1", NULL }, 56.0f, 39, 0 },
