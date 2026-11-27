@@ -605,6 +605,16 @@ static void CoF_MomentClearRing( edict_t *player )
 	}
 }
 
+// The ring is a looping wav on the ringed player's entity (WaitForCall 10061000, CHAN_AUTO), and the game stops it
+// only on the player who answers (CallThink 1005FD88..1005FDB0). A ring the call moves away from, drops or loses its
+// player is stopped here, or it goes on for good: on their entity, or where they stood when they left.
+static void CoF_MomentStopRing( edict_t *call, edict_t *player )
+{
+	if( !player || !SV_IsValidEdict( player )) return;
+	SV_StartSound( player, CHAN_AUTO, call->v.iuser1 ? "phone/phone_ringing.wav" : "phone/phone_ringtone.wav",
+		0.0f, ATTN_NONE, SND_STOP, PITCH_NORM );
+}
+
 static qboolean CoF_MomentHasPhone( sv_client_t *cl )
 {
 	char slots[COF_RETAIL_SLOTS][COF_RETAIL_ITEM];
@@ -720,6 +730,7 @@ static void CoF_MomentCalls( void )
 			else callee = NULL;
 			if( callee )
 			{
+				CoF_MomentStopRing( call, ringing );
 				CoF_MomentClearRing( ringing );
 				CoF_MomentSetHandle( pv, COF_CALL_PLAYER, callee );
 				pv[COF_CALL_RANG] = 0; // the new callee hears it ring
@@ -736,6 +747,7 @@ static void CoF_MomentCalls( void )
 		{
 			cof_moment_calls[slot].dropped_at = sv.time;
 			Con_Printf( "cofstory phase=call-dropped call=%s\n", SV_GetString( call->v.targetname ));
+			CoF_MomentStopRing( call, ringing ); // dropped while ringing: the loop is still on them
 		}
 		CoF_MomentClearCall( CoF_MomentHandle( pv, COF_CALL_USER ));
 		CoF_MomentClearCall( ringing );
@@ -1074,6 +1086,14 @@ void SV_CoF_MomentsDrop( sv_client_t *cl )
 		edict_t *ent = SV_EdictNum( i );
 		byte *pv = NULL;
 		float delay;
+		if( CoF_MomentClass( ent, "cof_phonecall" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_CALL_SIZE )))
+		{
+			uint32_t think;
+			memcpy( &think, pv + COF_THINK, sizeof( think ));
+			if( SV_CoF_StoryBase() && think == SV_CoF_StoryBase() + COF_CALL_WAIT && CoF_MomentHandle( pv, COF_CALL_PLAYER ) == cl->edict )
+				CoF_MomentStopRing( ent, cl->edict );
+			continue;
+		}
 		if( cl->edict->pvPrivateData && CoF_MomentClass( ent, "boat" ) && ( pv = SV_CoF_StoryEntityPrivate( ent, COF_BOAT_SIZE )))
 		{
 			CoF_MomentBoatDrop( cl, ent, pv );

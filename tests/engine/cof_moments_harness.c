@@ -178,6 +178,18 @@ static void Con_Printf( const char *fmt, ... )
 	log_length += (size_t)n;
 }
 static void client_kill( edict_t *e ) { kills[NUM_FOR_EDICT( e )]++; e->v.health = 0; }
+/* the sounds the module sends: only stops of a call's ring, counted per entity */
+#define CHAN_AUTO 0
+#define SND_STOP (1<<5)
+#define PITCH_NORM 100
+#define ATTN_NONE 0.0f
+static int rings_stopped[24];
+static char stopped_sample[64];
+static void SV_StartSound( edict_t *ent, int chan, const char *sample, float vol, float attn, int flags, int pitch )
+{
+	assert( chan == CHAN_AUTO && flags == SND_STOP && vol == 0.0f && attn == ATTN_NONE && pitch == PITCH_NORM );
+	rings_stopped[NUM_FOR_EDICT( ent )]++; snprintf( stopped_sample, sizeof( stopped_sample ), "%s", sample );
+}
 
 #include "moments_under_test.c"
 
@@ -204,6 +216,7 @@ static void setup( void )
 	memset( controls_given, 0, sizeof( controls_given )); links = 0; memset( models, 0, sizeof( models )); section_moves = 0;
 	memset( bossbars_to, 0, sizeof( bossbars_to )); bossbar_size = 0; memset( credits_to, 0, sizeof( credits_to )); credits_size = 0;
 	merged = 0; running_think = NULL;
+	memset( rings_stopped, 0, sizeof( rings_stopped )); stopped_sample[0] = 0;
 	SV_CoF_MomentsReset();
 }
 static edict_t *spawn( int i, string_t classname, string_t targetname, string_t target )
@@ -327,6 +340,38 @@ int main( void )
 	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
 	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[0] = 1; private_data[1][COF_PL_IN_CALL] = 1; SV_CoF_MomentsFrame();
 	assert( get_handle( 14, COF_CALL_PLAYER ) == guest );
+
+	/* The ringtone loops until stopped, and an answer stops only the answerer's: a call that moves on stops the
+	 * ring of the player it leaves (c_park3, three players: every phone rung before went on ringing). */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
+	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[1] = has_phone[0] = 1;
+	SV_CoF_MomentsFrame(); assert( !rings_stopped[1] && !rings_stopped[2] );
+	sv.time = 120.0; call->v.nextthink = 120.1f; SV_CoF_MomentsFrame();
+	assert( rings_stopped[2] == 1 && !rings_stopped[1] && !strcmp( stopped_sample, "phone/phone_ringtone.wav" ));
+	sv.time = 140.0; SV_CoF_MomentsFrame(); assert( rings_stopped[1] == 1 && rings_stopped[2] == 1 );
+	/* answered: the game stops that ring itself */
+	set_think( 14, COF_CALL_TALK ); sv.time = 150.0; call->v.nextthink = 150.1f; SV_CoF_MomentsFrame();
+	assert( rings_stopped[1] == 1 && rings_stopped[2] == 1 );
+	/* an outgoing call (iuser1) rings with its other sample */
+	setup(); call = spawn( 14, 5, 6, 7 ); call->v.iuser1 = 1; set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
+	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[0] = 1; SV_CoF_MomentsFrame();
+	assert( rings_stopped[2] == 1 && !strcmp( stopped_sample, "phone/phone_ringing.wav" ));
+	/* nobody else can take it: it goes on ringing */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
+	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[1] = 1; SV_CoF_MomentsFrame();
+	sv.time = 130.0; call->v.nextthink = 130.1f; SV_CoF_MomentsFrame(); assert( !rings_stopped[2] );
+	/* the game drops a ringing call: its ring is stopped, once however long the call waits */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 0;
+	set_handle( 14, COF_CALL_PLAYER, guest ); SV_CoF_MomentsFrame(); sv.time = 101; SV_CoF_MomentsFrame();
+	assert( rings_stopped[2] == 1 );
+	/* the ringing player leaves with nobody to take the call: no ring stays behind where they were */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_WAIT ); call->v.nextthink = 100.1f;
+	set_handle( 14, COF_CALL_PLAYER, guest ); has_phone[1] = 1; SV_CoF_MomentsFrame();
+	SV_CoF_MomentsDrop( &clients[0] ); assert( !rings_stopped[1] && !rings_stopped[2] ); /* another player leaving */
+	SV_CoF_MomentsDrop( &clients[1] ); assert( rings_stopped[2] == 1 );
+	/* a call being talked, or over, has no ring to stop */
+	setup(); call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_TALK ); set_handle( 14, COF_CALL_PLAYER, guest );
+	SV_CoF_MomentsDrop( &clients[1] ); set_think( 14, 0 ); SV_CoF_MomentsDrop( &clients[1] ); assert( !rings_stopped[2] );
 
 	/* The game dropped the call (the guest died talking): their lock is cleared and
 	 * the call starts again, ringing the host. */
