@@ -56,6 +56,7 @@
 #define COF_CALL_END 0x5FF90 // RVA EndCall
 #define COF_CALL_GIVE_UP 30.0
 #define COF_CALL_RETRY 3.0
+#define COF_STUCK_VIEW 2.0 // seconds free with a ladder's camera attached before it is let go
 #define COF_CALL_UNANSWERED 20.0 // seconds a call rings one person before it rings another who can take it (1.1.9, AI2)
 
 #define COF_PL_SIZE 0x281C
@@ -182,8 +183,12 @@ static struct { int userid; qboolean alive; } cof_moment_lives[MAX_CLIENTS];
 static struct { int index, serial, solid; } cof_moment_hurts[COF_MOMENT_HURTS];
 static int cof_moment_hurt_count;
 
+// Since when each client slot has been free with a ladder's camera still attached.
+static struct { int userid; double since; } cof_moment_stuck[MAX_CLIENTS];
+
 void SV_CoF_MomentsReset( void )
 {
+	memset( cof_moment_stuck, 0, sizeof( cof_moment_stuck ));
 	cof_moment_generation = -1;
 	cof_moment_floor_count = cof_moment_ladder_count = 0;
 	memset( cof_moment_floors, 0, sizeof( cof_moment_floors ));
@@ -976,6 +981,70 @@ static void CoF_MomentDropModel( edict_t *player )
 	}
 }
 
+// A camera model showing one of the map's ladder models (a model cutscene's and a strangle's show others).
+static qboolean CoF_MomentLadderCamera( const edict_t *model )
+{
+	int i;
+	if( !CoF_MomentClass( model, "camera_model" ) || !model->v.model ) return false;
+	for( i = svs.maxclients + 1; i < svgame.numEntities; i++ )
+	{
+		edict_t *manager = SV_EdictNum( i );
+		if( CoF_MomentClass( manager, "cof_ladder_manager" ) && manager->v.model &&
+			!Q_stricmp( SV_GetString( manager->v.model ), SV_GetString( model->v.model )))
+			return true;
+	}
+	return false;
+}
+
+// A climb ends only for the player its manager holds (LadderThink), and the attached camera (m_pAttachedCamera,
+// P+0x388) is saved: InitHUD (100F70F3) attaches the view to it again after every load and respawn, so a player left
+// with one stays looking at the ladder while their body walks free. A climber is frozen; one free this long with a
+// ladder's camera is not climbing, and gets what the climb's end gives back: AttachCam(0), no camera, targetable.
+static void CoF_MomentStuckViews( void )
+{
+	static const byte detach[3] = { 0, 0, 0 }; // AttachCam( short 0, byte 0 )
+	int i, j;
+	for( i = 0; i < svs.maxclients && i < MAX_CLIENTS; i++ )
+	{
+		sv_client_t *cl = &svs.clients[i];
+		edict_t *player = cl->edict, *camera = NULL;
+		byte *pv = NULL;
+		uint32_t none = 0;
+		if( cl->state == cs_spawned && !FBitSet( cl->flags, FCL_FAKECLIENT ) && SV_IsValidEdict( player ) && CoF_MomentAlive( player ) &&
+			!FBitSet( player->v.flags, FL_FROZEN ) && ( pv = SV_CoF_StoryEntityPrivate( player, COF_PL_SIZE )))
+			camera = CoF_MomentHandle( pv, COF_PL_CAMERA_HANDLE );
+		if( !camera || !CoF_MomentLadderCamera( camera ))
+		{
+			cof_moment_stuck[i].since = 0.0;
+			continue;
+		}
+		if( cof_moment_stuck[i].userid != cl->userid || !cof_moment_stuck[i].since || cof_moment_stuck[i].since > sv.time )
+		{
+			cof_moment_stuck[i].userid = cl->userid;
+			cof_moment_stuck[i].since = sv.time;
+			continue;
+		}
+		if( sv.time - cof_moment_stuck[i].since < COF_STUCK_VIEW ||
+			!SV_CoF_SendUserMessage( player, "AttachCam", detach, sizeof( detach ), true )) continue; // not sent: next frame
+		memcpy( pv + COF_PL_CAMERA_MODEL, &none, sizeof( none ));
+		memset( pv + COF_PL_CAMERA_HANDLE, 0, sizeof( cof_moment_handle_t ));
+		if( !cl->pViewEntity || cl->pViewEntity == player ) ClearBits( player->v.flags, FL_NOTARGET );
+		// no ladder goes on to move them: its think tests the climber before use, as for one who left
+		for( j = svs.maxclients + 1; j < svgame.numEntities; j++ )
+		{
+			edict_t *manager = SV_EdictNum( j );
+			byte *ladder;
+			if( !CoF_MomentClass( manager, "cof_ladder_manager" ) || manager->v.owner != player ||
+				!( ladder = SV_CoF_StoryEntityPrivate( manager, COF_LADDER_SIZE ))) continue;
+			memcpy( ladder + COF_LADDER_CLIMBER, &none, sizeof( none ));
+			manager->v.owner = NULL;
+		}
+		SetBits( camera->v.flags, FL_KILLME );
+		cof_moment_stuck[i].since = 0.0;
+		Con_Printf( "cofstory phase=ladder-view-released userid=%d model=%d\n", cl->userid, NUM_FOR_EDICT( camera ));
+	}
+}
+
 // A boat's rider pointers cleared, as Disembark leaves them (CoF_Boat.cpp), and the boat stopped: BoatUse takes
 // the next player who uses it. BoatThink tests the rider before use; Embark and Disembark, if one is due, return.
 static void CoF_MomentBoatFree( edict_t *boat, byte *pv )
@@ -1618,6 +1687,7 @@ void SV_CoF_MomentsFrame( void )
 	CoF_MomentHurts();
 	CoF_MomentBossBars();
 	CoF_MomentKeepHeld();
+	CoF_MomentStuckViews(); // after the line above: a climber a camera's end set free is frozen again first
 	CoF_MomentRootsFired();
 	CoF_MomentWheelchair();
 	CoF_MomentLadders();

@@ -26,6 +26,7 @@ typedef float vec3_t[3];
 #define CONTENTS_EMPTY -1
 #define CONTENTS_SOLID -2
 #define FL_GODMODE (1<<6)
+#define FL_NOTARGET (1<<7)
 #define FL_FROZEN (1<<12)
 #define FL_KILLME (1<<30)
 #define FCL_FAKECLIENT (1<<7)
@@ -41,6 +42,7 @@ typedef float vec3_t[3];
 #define Q_strlen strlen
 #define Q_strncmp strncmp
 #define SetBits(f,b) ((f)|=(b))
+#define ClearBits(f,b) ((f)&=~(b))
 #define FBitSet(f,b) ((f)&(b))
 #define VectorCopy(a,b) memcpy((b),(a),sizeof(vec3_t))
 #define VectorSubtract(a,b,c) ((c)[0]=(a)[0]-(b)[0],(c)[1]=(a)[1]-(b)[1],(c)[2]=(a)[2]-(b)[2])
@@ -122,6 +124,7 @@ static int logos_to[MAX_CLIENTS], logo_value, fades_to[MAX_CLIENTS], boats_to[MA
 static int bossbars_to[MAX_CLIENTS], bossbar_size, credits_to[MAX_CLIENTS], credits_size;
 static byte credits[256];
 static byte fade_value[2], bossbar[192];
+static int views_given_back[MAX_CLIENTS];
 static void SV_CoF_MomentsMessage( edict_t *to, const char *name, const byte *payload, int size );
 /* as the engine: the message goes out, and is seen by the moments hook like any other */
 static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byte *payload, int size, qboolean reliable )
@@ -131,6 +134,7 @@ static qboolean SV_CoF_SendUserMessage( edict_t *to, const char *name, const byt
 	else if( !strcmp( name, "GreyFade" )) { assert( size == 2 ); fades_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( fade_value, payload, 2 ); }
 	else if( !strcmp( name, "Credits" )) { credits_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( credits, payload, size ); credits_size = size; }
 	else if( !strcmp( name, "BossBar" )) { bossbars_to[NUM_FOR_EDICT( to ) - 1]++; memcpy( bossbar, payload, size ); bossbar_size = size; }
+	else if( !strcmp( name, "AttachCam" )) { assert( size == 3 && !payload[0] && !payload[1] && !payload[2] ); views_given_back[NUM_FOR_EDICT( to ) - 1]++; }
 	else { assert( !strcmp( name, "Boat" ) && size == 2 && payload[0] == 0xFF && payload[1] == 0xFF ); boats_to[NUM_FOR_EDICT( to ) - 1]++; }
 	SV_CoF_MomentsMessage( to, name, payload, size );
 	return true;
@@ -204,6 +208,7 @@ static void setup( void )
 	memset( controls_given, 0, sizeof( controls_given )); links = 0; memset( models, 0, sizeof( models )); section_moves = 0;
 	memset( bossbars_to, 0, sizeof( bossbars_to )); bossbar_size = 0; memset( credits_to, 0, sizeof( credits_to )); credits_size = 0;
 	merged = 0; running_think = NULL;
+	memset( views_given_back, 0, sizeof( views_given_back ));
 	SV_CoF_MomentsReset();
 }
 static edict_t *spawn( int i, string_t classname, string_t targetname, string_t target )
@@ -247,6 +252,21 @@ static void fall_trap( void )
 	set_vec( models[1].shape_min, 1800, 400, 300 ); set_vec( models[1].shape_max, 2000, 600, 450 );
 	set_vec( hurt->v.absmin, 1800, 400, 300 ); set_vec( hurt->v.absmax, 2000, 600, 450 );
 }
+/* a ladder (manager 15, models/ladder_climb.mdl) and a camera model (18) of the given model attached to the guest, as a
+ * climb leaves them (P+0x388, P+0x5AC) */
+static edict_t *attach_camera( string_t model )
+{
+	edict_t *manager = spawn( 15, 8, 10, 0 ), *camera = spawn( 18, 12, 0, 0 );
+	uint32_t scene = 0x5678;
+	manager->v.model = 38; manager->v.owner = &entities[2];
+	memcpy( private_data[15] + COF_LADDER_CLIMBER, &scene, 4 );
+	camera->v.model = model; camera->v.owner = &entities[2];
+	set_handle( 2, COF_PL_CAMERA_HANDLE, camera ); memcpy( private_data[2] + COF_PL_CAMERA_MODEL, &scene, 4 );
+	entities[2].v.flags = FL_NOTARGET;
+	return camera;
+}
+static uint32_t word( int entity, int offset ) { uint32_t v; memcpy( &v, private_data[entity] + offset, 4 ); return v; }
+static void frames( double from, double to ) { for( sv.time = from; sv.time < to + 0.001; sv.time += 0.5 ) SV_CoF_MomentsFrame(); }
 static void yesno_message( int slot, int index )
 {
 	byte payload[32]; int n = (int)strlen( "gfx/yesno.tga" ) + 1;
@@ -374,6 +394,32 @@ int main( void )
 	SV_CoF_MomentsFrame(); sv.time = 110; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] );
 	setup(); private_data[2][COF_PL_IN_CALL] = 1; call = spawn( 14, 5, 6, 7 ); set_think( 14, COF_CALL_TALK ); call->v.nextthink = 103;
 	set_handle( 14, COF_CALL_USER, guest ); SV_CoF_MomentsFrame(); sv.time = 102.5; SV_CoF_MomentsFrame(); assert( private_data[2][COF_PL_IN_CALL] );
+	/* A ladder's camera left attached to a player who is not climbing (a loaded save: the field is saved, and InitHUD
+	 * attaches the view again after every load and respawn): after 2 s free, the view and the fields are given back. */
+	setup(); ladder_camera = attach_camera( 38 );
+	frames( 100.0, 101.5 ); assert( !views_given_back[1] && get_handle( 2, COF_PL_CAMERA_HANDLE ) == ladder_camera );
+	frames( 102.0, 102.0 );
+	assert( views_given_back[1] == 1 && !views_given_back[0] && !get_handle( 2, COF_PL_CAMERA_HANDLE ));
+	assert( !word( 2, COF_PL_CAMERA_MODEL ) && ( ladder_camera->v.flags & FL_KILLME ) && !( guest->v.flags & FL_NOTARGET ));
+	assert( !word( 15, COF_LADDER_CLIMBER ) && !entities[15].v.owner && logged( "phase=ladder-view-released userid=101" ) == 1 );
+	frames( 102.5, 110.0 ); assert( views_given_back[1] == 1 );
+	/* nobody owns the ladder or the camera any more (a load): released the same */
+	setup(); ladder_camera = attach_camera( 38 ); ladder_camera->v.owner = NULL; entities[15].v.owner = NULL;
+	frames( 100.0, 102.0 ); assert( views_given_back[1] == 1 );
+	/* a climb freezes its climber: left alone however long; the 2 s count from when they are free */
+	setup(); ladder_camera = attach_camera( 38 ); guest->v.flags = FL_FROZEN; entities[15].v.owner = NULL;
+	frames( 100.0, 120.0 ); assert( !views_given_back[1] );
+	guest->v.flags = 0; frames( 120.5, 122.0 ); assert( !views_given_back[1] );
+	guest->v.flags = FL_FROZEN; frames( 122.5, 122.5 ); guest->v.flags = 0; frames( 123.0, 124.5 ); assert( !views_given_back[1] );
+	frames( 125.0, 125.0 ); assert( views_given_back[1] == 1 );
+	/* the clock going back (a loaded checkpoint) starts the count again */
+	setup(); attach_camera( 38 ); frames( 100.0, 101.0 ); frames( 50.0, 51.5 ); assert( !views_given_back[1] );
+	/* another camera model (a model cutscene that leaves its players free), a dead player, a companion, the story off */
+	setup(); attach_camera( 39 ); frames( 100.0, 110.0 ); assert( !views_given_back[1] );
+	setup(); attach_camera( 38 ); guest->v.health = 0; frames( 100.0, 110.0 ); assert( !views_given_back[1] );
+	setup(); attach_camera( 38 ); clients[1].flags = FCL_FAKECLIENT; frames( 100.0, 110.0 ); assert( !views_given_back[1] );
+	setup(); attach_camera( 38 ); gate = 0; frames( 100.0, 110.0 ); assert( !views_given_back[1] ); gate = 1;
+
 	/* Ladders: while the host climbs, nobody near its use brushes can start it. The climb freezes the climber and
 	 * hands them the ladder's camera model (P+0x5AC); its FL_GODMODE lasts one frame (PostThink clears it). */
 	setup(); manager = spawn( 15, 8, 10, 0 ); manager->v.owner = host; manager->v.model = 38; host->v.flags = FL_FROZEN;
